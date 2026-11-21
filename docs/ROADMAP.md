@@ -2,6 +2,9 @@
 
 Status: **draft**. The details of each phase are agreed with the owner before that phase is built.
 
+Sentinel is built for **any MSP**, not only ours. Each MSP self-hosts its own copy and owns its data. Reports can be
+fully white-labelled.
+
 The goal is one self-hosted product that covers an MSP client's security from three angles:
 
 | Angle | Question it answers | Phase |
@@ -33,8 +36,20 @@ Each finding records its **source** (external, internal, authenticated, or pen t
 - More reports: Change/Trend report, Compliance Evidence Pack, scheduled monthly email delivery
 - Nuclei, limited to safe detection templates, to identify products better
 - Optional monthly top-1000 port sweep inside the client's scan window
-- Email security posture: SPF, DKIM, DMARC, MTA-STS
 - Remote scanner node, so scans run from an IP other than the web server
+- SSO (OIDC, including Entra ID) alongside local logins with 2FA
+- **Email and domain security:** SPF, DKIM, DMARC, MTA-STS and DNSSEC checks, plus domain expiry warnings
+- **Lookalike domains:** detects newly registered domains that imitate a client's domain
+- **Subdomain takeover:** DNS records that still point at deleted cloud resources
+- **Web exposure basics** (safe checks only): missing security headers, exposed `.git` and `.env` files, directory
+  listing, outdated CMS
+- **Fix workflow:**
+  - assign findings to people
+  - due dates by severity, for example KEV within 7 days, critical within 14, high within 30 (configurable)
+  - overdue alerts
+  - a **"verify fix"** button that rescans just that one item
+- **MSP-wide risk dashboard:** ranks all clients by risk (KEV + EPSS + exposure), so you can see who needs attention
+  first
 
 ## Phase 2: internal scanning with the Sentinel Agent (v2.x)
 
@@ -68,8 +83,20 @@ A small **collector** installed at each client site. It can see inside the netwo
    separate program, and its license is checked before we package it.
 5. **Internal reports:** internal findings are added to the existing reports. Adds a network inventory report and a
    patch-status report (from authenticated scans).
-6. **Later candidates:** Active Directory hygiene checks (stale accounts, risky delegation, weak password policy),
-   and Wi-Fi exposure.
+6. **Hardening checks through the agent:** checks devices against public baselines, such as host firewall off,
+   disk encryption off, too many local admins, or outdated OS builds.
+7. **Microsoft 365 / Entra ID checks:**
+   - read-only API access, with the narrowest permissions possible
+   - detects misconfigurations: MFA gaps, legacy authentication still allowed, risky external sharing, mail
+     forwarding to outside addresses
+   - Align keeps *reporting* on M365. Sentinel only *detects* problems.
+8. **Breach / leaked credentials:** alerts when accounts on a client's domain appear in breach data. The data source
+   and its terms still need choosing. Sentinel stores only the account and the breach name, never passwords.
+9. **Firewall config review:** upload a firewall config export and get a check for risky rules (any-any rules,
+   admin access from the internet, unused rules). It needs no live access. Uploaded files are treated as untrusted
+   and parsed safely.
+10. **Later candidates:** Active Directory hygiene checks (stale accounts, risky delegation, weak password policy),
+    and Wi-Fi exposure.
 
 ## Phase 3: penetration testing (v3.x)
 
@@ -100,6 +127,13 @@ Until this phase ships, Sentinel is called **vulnerability scanning**, never pen
 4. **Pen-test report:** an executive summary, the engagement scope and authorisation, a methodology section, attack
    paths, findings with evidence (screenshots and request/response excerpts with secrets redacted), the fixes, and a
    **retest workflow** that issues a retest letter once fixes are verified.
+
+5. **Phishing simulation (v3.x, later):**
+   - campaigns only inside an approved engagement, with a written sign-off from the client
+   - no collection of real passwords: the landing page records the click or submit only, and never stores what was
+     typed
+   - training pages after each click, and results reported by department, not used to name and shame individuals
+   - the legal and HR points are checked before this is built
 
 Pen-test results never replace an independent third-party test where a regulator or insurer requires one. Sentinel
 helps prepare for that test and track the fixes.
@@ -133,6 +167,12 @@ These cost little in v1.0 and avoid redesigning later:
 4. **Jobs are self-contained:** each job carries its target list and its scope, so it can be signed later without
    changing the job format.
 5. **A global and per-client kill switch** exists from v1.0. It pauses all scanning straight away.
+
+## Parked ideas (not planned yet)
+
+- Client portal: read-only logins for client contacts to see their own reports
+- SIEM / syslog (CEF) export of findings
+- Multi-MSP hosting (multi-tenancy). Deliberately left out: each MSP self-hosts.
 
 ## Principles for every phase
 
