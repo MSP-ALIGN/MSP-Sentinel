@@ -72,6 +72,10 @@ Sentinel's findings through a read-only API.
 - `scan_authorisations`: the "authorised to scan" record (client, approved_by, approved_at, valid_from/to, document
   reference, notes)
 - `scope_entries` (authorisation, type ip/cidr/domain, value). **Nothing is ever scanned unless it matches an entry here.**
+  Authorisations can't be edited, only revoked once. This is enforced by the application, not by database
+  grants, so anyone with direct database access must not edit them. The audit log records every authorisation as created.
+  Scanning code calls `ScopeService::isInScope(clientId, canonicalTarget)` before touching any host, and must also
+  check every IP a hostname resolves to.
 - `target_suggestions` (client, value, source dns/crtsh, status pending/approved/rejected)
 - `assets` (client, ip/hostname, itflow_asset_id, first/last seen)
 - `services` (asset, port, protocol, product, version, cpe, banner hash, first/last seen)

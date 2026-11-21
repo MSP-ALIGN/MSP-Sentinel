@@ -14,6 +14,9 @@ declare(strict_types=1);
 use Sentinel\Auth\Role;
 use Sentinel\Controllers\AdminController;
 use Sentinel\Controllers\AuthController;
+use Sentinel\Controllers\AuthorisationController;
+use Sentinel\Controllers\ClientController;
+use Sentinel\Controllers\ScanningController;
 use Sentinel\Controllers\PageController;
 use Sentinel\Controllers\ProfileController;
 use Sentinel\Controllers\UserController;
@@ -23,6 +26,7 @@ $router = new Router();
 $public = ['auth' => 'public'];
 $pending = ['auth' => 'pending'];
 $admin = ['role' => Role::ADMIN];
+$technician = ['role' => Role::TECHNICIAN];
 $duringPasswordChange = ['allow_password_change' => true];
 
 // Sign-in flow
@@ -42,6 +46,28 @@ $router->add('GET', '/profile', [ProfileController::class, 'index']);
 $router->add('GET', '/profile/password', [ProfileController::class, 'showPassword'], $duringPasswordChange);
 $router->add('POST', '/profile/password', [ProfileController::class, 'changePassword'], $duringPasswordChange);
 $router->add('POST', '/profile/recovery-codes', [ProfileController::class, 'regenerateRecoveryCodes']);
+
+// Clients: everyone views; admins manage; technicians may pause (only admins resume)
+$router->add('GET', '/clients', [ClientController::class, 'index']);
+$router->add('GET', '/clients/new', [ClientController::class, 'create'], $admin);
+$router->add('POST', '/clients', [ClientController::class, 'store'], $admin);
+$router->add('GET', '/clients/{id}', [ClientController::class, 'show']);
+$router->add('GET', '/clients/{id}/edit', [ClientController::class, 'edit'], $admin);
+$router->add('POST', '/clients/{id}', [ClientController::class, 'update'], $admin);
+$router->add('POST', '/clients/{id}/archive', [ClientController::class, 'archive'], $admin);
+$router->add('POST', '/clients/{id}/pause', [ClientController::class, 'pause'], $technician);
+$router->add('POST', '/clients/{id}/resume', [ClientController::class, 'resume'], $admin);
+$router->add('POST', '/clients/{id}/sites', [ClientController::class, 'addSite'], $admin);
+$router->add('POST', '/sites/{id}', [ClientController::class, 'updateSite'], $admin);
+
+// Authorised-to-scan register: admins only (everyone sees it on the client page)
+$router->add('GET', '/clients/{id}/authorisations/new', [AuthorisationController::class, 'create'], $admin);
+$router->add('POST', '/clients/{id}/authorisations', [AuthorisationController::class, 'store'], $admin);
+$router->add('POST', '/authorisations/{id}/revoke', [AuthorisationController::class, 'revoke'], $admin);
+
+// Global kill switch
+$router->add('POST', '/scanning/pause', [ScanningController::class, 'pause'], $technician);
+$router->add('POST', '/scanning/resume', [ScanningController::class, 'resume'], $admin);
 
 // Admin only
 $router->add('GET', '/users', [UserController::class, 'index'], $admin);

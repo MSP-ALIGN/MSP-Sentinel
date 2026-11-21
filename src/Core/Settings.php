@@ -26,6 +26,8 @@ final class Settings
         'product_name' => 'MSP Sentinel',
         // AGPL-3.0 section 13: users interacting over a network must be offered the source.
         'source_url' => 'https://github.com/msp-align/msp-sentinel',
+        // Global kill switch: '1' stops all scanning straight away. Technicians and admins can pause; only admins resume.
+        'scanning_paused' => '0',
     ];
 
     /** @var array<string,string>|null */
@@ -49,6 +51,22 @@ final class Settings
             }
         }
         return $this->cache[$name] ?? self::DEFAULTS[$name];
+    }
+
+    /**
+     * Read a setting straight from the database, skipping the cache. Use it for
+     * values that must never be stale, such as the scanning kill switch, which
+     * long-running workers check again and again.
+     */
+    public function fresh(string $name): string
+    {
+        if (!array_key_exists($name, self::DEFAULTS)) {
+            throw new \InvalidArgumentException('Unknown setting: ' . $name);
+        }
+        $stmt = $this->db->prepare('SELECT value FROM settings WHERE name = :n');
+        $stmt->execute(['n' => $name]);
+        $value = $stmt->fetchColumn();
+        return $value === false ? self::DEFAULTS[$name] : (string) $value;
     }
 
     /** Save a setting. The caller has already validated the value. */

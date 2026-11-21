@@ -9,6 +9,10 @@ use Sentinel\Auth\Auth;
 use Sentinel\Auth\RecoveryCodes;
 use Sentinel\Auth\Role;
 use Sentinel\Auth\UserRepository;
+use Sentinel\Clients\ClientRepository;
+use Sentinel\Scope\AuthorisationRepository;
+use Sentinel\Scope\ScopeParser;
+use Sentinel\Scope\ScopeService;
 
 /**
  * Application container and HTTP kernel.
@@ -102,6 +106,33 @@ final class App
     public static function users(): UserRepository
     {
         return new UserRepository(self::db());
+    }
+
+    /** Client and site store. */
+    public static function clients(): ClientRepository
+    {
+        return new ClientRepository(self::db());
+    }
+
+    /** Scan authorisation store. */
+    public static function authorisations(): AuthorisationRepository
+    {
+        return new AuthorisationRepository(self::db());
+    }
+
+    /** The scope gatekeeper every scan must ask first. */
+    public static function scope(): ScopeService
+    {
+        return new ScopeService(self::authorisations(), self::settings(), self::clients());
+    }
+
+    /**
+     * Scope entry parser. Documentation ranges and example domains are only
+     * accepted when the config sets testing.allow_documentation_ranges (test suite only).
+     */
+    public static function scopeParser(): ScopeParser
+    {
+        return new ScopeParser((bool) self::config()->get('testing.allow_documentation_ranges', false));
     }
 
     /** Recovery code store. */

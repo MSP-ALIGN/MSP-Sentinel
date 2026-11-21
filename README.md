@@ -4,13 +4,30 @@ Self-hosted security monitoring for MSPs (managed service providers). Sentinel *
 exposure and vulnerabilities across your clients, monitors them and alerts on them. Its companion product,
 MSP Align, plans, reports and proves, using Sentinel's findings.
 
-> **Status: early development (0.1.0).** This release is the foundation: sign-in, users, roles and the audit log.
+> **Status: early development (0.2.0).** Sign-in, users, clients and the "authorised to scan" register are in place.
 > **It does not scan anything yet.** See [`docs/DESIGN.md`](docs/DESIGN.md) for the v1.0 design and
 > [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full plan (external scanning, internal agent, pen testing).
 
 Sentinel is free software under the [GNU AGPL-3.0](LICENSE). Each MSP runs its own copy and owns its data.
 
 ## What's new
+
+### 0.2.0 (2026-11-21): clients and the "authorised to scan" register
+
+- **Clients** with timezone, scan window, notes and an optional ITFlow client ID. Each client gets a default
+  **site**, and admins can add more (with optional ITFlow location IDs). Clients are archived, never deleted.
+- **"Authorised to scan" register** (admins only):
+  - each record holds who at the client approved scanning (name, role, date), the valid-from and valid-until
+    dates (2 years at most), a document reference and the exact scope;
+  - scope entries are public IPs, ranges up to /24 (IPv6 /120) and domains (`*.` for subdomains). Private,
+    reserved and internal targets are refused;
+  - authorisations can't be edited, only revoked with a reason, so the register stays trustworthy as evidence;
+  - you're warned when a new entry is already in another client's scope, to catch typos.
+- **Kill switches**: pause scanning for one client or for everything. Technicians and admins can pause;
+  only admins can resume.
+- A **scope check** that every future scan must pass: active authorisation (in the client's timezone), target in
+  scope, client not archived or paused, global switch off. It fails closed.
+- Dashboard shows clients, active authorisations and authorisations ending within 30 days.
 
 ### 0.1.0 (2026-11-21): foundation
 

@@ -69,6 +69,33 @@ for (const [path, name] of [['/', '04-dashboard'], ['/users', '05-users'], ['/us
   await shot(page, name);
 }
 
+// Clients and the authorised-to-scan register (made-up client, documentation addresses only).
+await page.goto(`${base}/clients/new`);
+await page.fill('#name', 'Contoso Example Ltd');
+await page.fill('#itflow_client_id', '17');
+await page.selectOption('#timezone', 'Europe/London');
+await shot(page, '14-client-new');
+await page.click('.app-content form button.btn-primary[type=submit]');
+await page.waitForURL(/\/clients\/\d+$/);
+const clientUrl = page.url();
+await page.goto(`${clientUrl}/authorisations/new`);
+await page.fill('#approved_by_name', 'Dana Example');
+await page.fill('#approved_by_role', 'Managing Director');
+await page.fill('#document_ref', 'TICKET-1001');
+await page.fill('#scope', '# Office and website\n203.0.113.10\n198.51.100.0/28\ncontoso.example\n*.contoso.example\n10.0.0.0/24');
+await page.check('#confirm');
+await page.click('.app-content form button.btn-primary[type=submit]');
+await shot(page, '15-authorisation-errors');
+await page.fill('#scope', '# Office and website\n203.0.113.10\n198.51.100.0/28\ncontoso.example\n*.contoso.example');
+await page.check('#confirm');
+await page.click('.app-content form button.btn-primary[type=submit]');
+await page.waitForURL(/\/clients\/\d+$/);
+await shot(page, '16-client-detail');
+await page.goto(`${base}/clients`);
+await shot(page, '17-clients');
+await page.goto(`${base}/`);
+await shot(page, '04-dashboard');
+
 const viewer = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 });
 const vpage = await signIn(viewer, 'victor', 'View-Pass-0001!', null);
 await vpage.goto(`${base}/users`);

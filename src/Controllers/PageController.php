@@ -20,7 +20,20 @@ final class PageController extends Controller
     /** GET / */
     public function dashboard(Request $request): Response
     {
-        return $this->page('dashboard', __('Dashboard'), ['version' => App::version()]);
+        $db = App::db();
+        $clients = (int) $db->query('SELECT COUNT(*) FROM clients WHERE is_archived = 0')->fetchColumn();
+        // Authorisations valid today (UTC date: a summary only; exact per-client checks use each client's timezone).
+        $active = (int) $db->query('SELECT COUNT(*) FROM scan_authorisations a JOIN clients c ON c.id = a.client_id AND c.is_archived = 0
+                                    WHERE a.revoked_at IS NULL AND a.valid_from <= UTC_DATE() AND a.valid_until >= UTC_DATE()')->fetchColumn();
+        $expiring = (int) $db->query('SELECT COUNT(*) FROM scan_authorisations a JOIN clients c ON c.id = a.client_id AND c.is_archived = 0
+                                      WHERE a.revoked_at IS NULL AND a.valid_until BETWEEN UTC_DATE() AND UTC_DATE() + INTERVAL 30 DAY')->fetchColumn();
+        return $this->page('dashboard', __('Dashboard'), [
+            'version' => App::version(),
+            'clientCount' => $clients,
+            'activeAuthorisations' => $active,
+            'expiringAuthorisations' => $expiring,
+            'globallyPaused' => App::scope()->globallyPaused(),
+        ]);
     }
 
     /** GET /help */

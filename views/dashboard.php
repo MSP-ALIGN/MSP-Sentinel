@@ -1,30 +1,41 @@
 <?php
-/** Dashboard placeholder for the skeleton release. Expects: $currentUser, $version. */
+/**
+ * Dashboard.
+ * Expects: $currentUser, $version, $clientCount, $activeAuthorisations, $expiringAuthorisations, $globallyPaused.
+ */
 ?>
+<?php if ($globallyPaused): ?>
+<?php require __DIR__ . '/partials/kill_switch.php'; ?>
+<?php endif; ?>
 <div class="row g-3">
     <div class="col-md-4">
-        <div class="small-box text-bg-secondary">
-            <div class="inner"><h3>0</h3><p><?= e(__('Clients')) ?></p></div>
+        <a class="text-decoration-none" href="<?= e(url('/clients')) ?>">
+        <div class="small-box text-bg-primary">
+            <div class="inner"><h3><?= e($clientCount) ?></h3><p><?= e(__('Clients')) ?></p></div>
             <i class="small-box-icon bi bi-building" aria-hidden="true"></i>
         </div>
+        </a>
     </div>
     <div class="col-md-4">
-        <div class="small-box text-bg-secondary">
-            <div class="inner"><h3>0</h3><p><?= e(__('Open findings')) ?></p></div>
-            <i class="small-box-icon bi bi-exclamation-octagon" aria-hidden="true"></i>
+        <div class="small-box <?= $activeAuthorisations > 0 ? 'text-bg-success' : 'text-bg-secondary' ?>">
+            <div class="inner"><h3><?= e($activeAuthorisations) ?></h3><p><?= e(__('Active scan authorisations')) ?></p></div>
+            <i class="small-box-icon bi bi-file-earmark-check" aria-hidden="true"></i>
         </div>
     </div>
     <div class="col-md-4">
-        <div class="small-box text-bg-secondary">
-            <div class="inner"><h3>—</h3><p><?= e(__('Last scan')) ?></p></div>
-            <i class="small-box-icon bi bi-clock-history" aria-hidden="true"></i>
+        <div class="small-box <?= $expiringAuthorisations > 0 ? 'text-bg-warning' : 'text-bg-secondary' ?>">
+            <div class="inner"><h3><?= e($expiringAuthorisations) ?></h3><p><?= e(__('Authorisations ending within 30 days')) ?></p></div>
+            <i class="small-box-icon bi bi-calendar-x" aria-hidden="true"></i>
         </div>
     </div>
 </div>
 <div class="card mt-3">
-    <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Welcome, {name}', ['name' => $currentUser['display_name']])) ?></h2></div>
+    <div class="card-header d-flex align-items-center flex-wrap gap-2">
+        <h2 class="card-title h5 mb-0"><?= e(__('Welcome, {name}', ['name' => $currentUser['display_name']])) ?></h2>
+        <?php if (!$globallyPaused): ?><div class="ms-auto"><?php require __DIR__ . '/partials/kill_switch.php'; ?></div><?php endif; ?>
+    </div>
     <div class="card-body">
-        <p><?= e(__('This is the foundation release ({version}): sign-in with two-factor authentication, user roles, audit log and settings.', ['version' => $version])) ?></p>
-        <p class="mb-0"><?= e(__('Client management, the "authorised to scan" register and external scanning arrive in the next releases. Nothing is scanned yet.')) ?></p>
+        <p><?= e(__('Version {version}: clients, sites and the "authorised to scan" register. Every scan Sentinel will ever run must fall inside an active authorisation.', ['version' => $version])) ?></p>
+        <p class="mb-0"><?= e(__('External scanning arrives in the next releases. Nothing is scanned yet.')) ?></p>
     </div>
 </div>

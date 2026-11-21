@@ -100,6 +100,8 @@ try {
         'app_key' => base64_encode(random_bytes(32)),
         'db' => ['host' => '127.0.0.1', 'port' => 3306, 'name' => $dbName, 'user' => $dbUser, 'pass' => $dbPass],
         'app' => ['base_path' => '', 'force_secure_cookies' => false, 'trusted_proxies' => [], 'locale' => 'en'],
+        // Tests may only use documentation addresses and *.example names, never real ones.
+        'testing' => ['allow_documentation_ranges' => true],
     ], true) . ";\n");
     chmod($configPath, 0600);
 
