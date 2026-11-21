@@ -25,11 +25,12 @@ Each finding records its **source** (external, internal, authenticated, or pen t
 - NVD, KEV and EPSS matching
 - findings and triage
 - alerts by email, webhook and in-app
+- **reports: Executive Summary and Technical Findings** (print-ready HTML/PDF, MSP branding)
 - the Align API
 
 **v1.x follow-ups:**
 - ITFlow: automatic tickets for new FAIL findings, and asset matching
-- Client-friendly reports (PDF/HTML), plus a monthly summary per client
+- More reports: Change/Trend report, Compliance Evidence Pack, scheduled monthly email delivery
 - Nuclei, limited to safe detection templates, to identify products better
 - Optional monthly top-1000 port sweep inside the client's scan window
 - Email security posture: SPF, DKIM, DMARC, MTA-STS
@@ -65,7 +66,9 @@ A small **collector** installed at each client site. It can see inside the netwo
    - credentials are encrypted at rest and never shown again after they're saved
 4. **v2.3, optional deep-scan engine:** Greenbone/OpenVAS as an add-on for full vulnerability scans. It runs as a
    separate program, and its license is checked before we package it.
-5. **Later candidates:** Active Directory hygiene checks (stale accounts, risky delegation, weak password policy),
+5. **Internal reports:** internal findings are added to the existing reports. Adds a network inventory report and a
+   patch-status report (from authenticated scans).
+6. **Later candidates:** Active Directory hygiene checks (stale accounts, risky delegation, weak password policy),
    and Wi-Fi exposure.
 
 ## Phase 3: penetration testing (v3.x)
@@ -94,12 +97,30 @@ Until this phase ships, Sentinel is called **vulnerability scanning**, never pen
 3. **v3.2, controlled exploitation:**
    - only vetted modules, only inside an approved engagement and window
    - each module is labelled with its risk (for example "may crash the service") and needs explicit opt-in
-4. **Reports:** an executive summary, technical findings with evidence, the fixes, and a retest workflow.
+4. **Pen-test report:** an executive summary, the engagement scope and authorisation, a methodology section, attack
+   paths, findings with evidence (screenshots and request/response excerpts with secrets redacted), the fixes, and a
+   **retest workflow** that issues a retest letter once fixes are verified.
 
 Pen-test results never replace an independent third-party test where a regulator or insurer requires one. Sentinel
 helps prepare for that test and track the fixes.
 
 ---
+
+## Reports across the suite
+
+One report engine serves every phase, so all reports look and read the same.
+
+| Report | Audience | Phase |
+|---|---|---|
+| Executive Summary | Client owner / management | v1.0 |
+| Technical Findings | Technicians | v1.0 |
+| Change / Trend | MSP and client, monthly | v1.x |
+| Compliance Evidence Pack | Auditors, cyber-insurance | v1.x |
+| Network Inventory and Patch Status | Technicians, Align lifecycle | v2.x |
+| Penetration Test Report and Retest Letter | Client, auditors | v3.x |
+
+Each report is a frozen snapshot that never changes after it's issued, carries the MSP's branding, prints cleanly,
+and never shows severity by colour alone.
 
 ## Built into v1.0 now, so later phases don't need a rewrite
 
