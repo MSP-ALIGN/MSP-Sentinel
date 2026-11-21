@@ -1,0 +1,104 @@
+{
+  "records": {
+    "discovery.example": {
+      "A": [
+        "203.0.113.10"
+      ],
+      "MX": [
+        "mail.discovery.example",
+        "mx1.mailhost.example"
+      ],
+      "NS": [
+        "ns1.dnshost.example",
+        "ns2.dnshost.example"
+      ]
+    },
+    "mail.discovery.example": {
+      "A": [
+        "203.0.113.20"
+      ]
+    },
+    "www.discovery.example": {
+      "CNAME": [
+        "discovery-site.cdnhost.example"
+      ]
+    },
+    "discovery-site.cdnhost.example": {
+      "A": [
+        "198.51.100.50"
+      ]
+    },
+    "vpn.discovery.example": {
+      "A": [
+        "203.0.113.30"
+      ],
+      "AAAA": [
+        "2001:db8:10::30"
+      ]
+    },
+    "intranet.discovery.example": {
+      "A": [
+        "10.0.0.5"
+      ]
+    },
+    "shop.discovery.example": {
+      "A": [
+        "203.0.113.40"
+      ]
+    },
+    "10.113.0.203.in-addr.arpa": {
+      "PTR": [
+        "gw.discovery.example"
+      ]
+    },
+    "quiet.example": {
+      "A": [
+        "203.0.113.60"
+      ]
+    },
+    "www.quiet.example": {
+      "A": [
+        "203.0.113.60"
+      ]
+    },
+    "big.quiet.example": {
+      "A": [
+        "203.0.113.61"
+      ]
+    },
+    "billing.discovery.example": {
+      "A": [
+        "203.0.113.45"
+      ]
+    },
+    "gw.discovery.example": {
+      "A": [
+        "203.0.113.10"
+      ]
+    },
+    "portal.discovery.example": {
+      "CNAME": [
+        "evilÿ.cdnhost.example"
+      ]
+    },
+    "files.discovery.example": {
+      "A": [
+        "203.0.113.70"
+      ]
+    },
+    "wrongid.quiet.example": {
+      "A": [
+        "203.0.113.62"
+      ]
+    }
+  },
+  "behaviours": {
+    "remote.discovery.example": "timeout",
+    "ftp.discovery.example": "garbage",
+    ".deadzone.example": "timeout",
+    "deadzone.example": "timeout",
+    "big.quiet.example": "truncate",
+    "files.discovery.example": "extra-answer",
+    "wrongid.quiet.example": "wrong-id"
+  }
+}

@@ -181,6 +181,10 @@ final class TestContext
 {
     /** @var array<string,string> username => TOTP secret captured at enrolment */
     public array $secrets = [];
+    /** Mock DNS server port, its query log, and the mock crt.sh base URL (all 127.0.0.1). */
+    public int $dnsPort = 0;
+    public string $dnsLog = '';
+    public string $crtshUrl = '';
 
     public function __construct(
         public readonly string $baseUrl,

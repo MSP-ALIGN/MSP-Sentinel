@@ -31,4 +31,24 @@ return [
         // Interface language (lang/<code>.php). English is the only one shipped so far.
         'locale' => 'en',
     ],
+
+    // Passive discovery (DNS lookups and certificate logs).
+    'dns' => [
+        // IP of the DNS resolver to ask. Empty = the first nameserver in /etc/resolv.conf.
+        'resolver' => '',
+        'port' => 53,
+        'timeout' => 2.0,
+    ],
+    'crtsh' => [
+        // Certificate Transparency search via crt.sh (free, public). Set false to turn it off.
+        'enabled' => true,
+        'base_url' => 'https://crt.sh',
+        'timeout' => 30,
+    ],
+    'discovery' => [
+        // Seconds a "Discover now" click may take before it stops (the weekly job has no limit).
+        'manual_budget' => 25,
+        // Pause between crt.sh requests, to be gentle with a free public service.
+        'crtsh_delay' => 1.0,
+    ],
 ];

@@ -33,18 +33,51 @@ use Sentinel\Scope\ScopeService;
 final class AuthorisationController extends Controller
 {
 
-    /** GET /clients/{id}/authorisations/new */
+    /**
+     * GET /clients/{id}/authorisations/new
+     *
+     * With ?suggestion[]=ID (approving discovery suggestions) or ?replace=1, the
+     * form is pre-filled with the client's current active scope plus the chosen
+     * suggestions, and saving it replaces (revokes) the current active
+     * authorisations. The approver fields stay empty on purpose: the extra
+     * targets need the client's approval too.
+     */
     public function create(Request $request, array $params): Response
     {
         $client = $this->clientOr404($params);
+        $clientId = (int) $client['id'];
         $today = ScopeService::today((string) $client['timezone']);
+        $scope = '';
+        $replaces = [];
+        $added = [];
+        $suggestionIds = array_map('intval', array_filter($request->queryList('suggestion'), 'ctype_digit'));
+        if ($suggestionIds !== [] || $request->query('replace') === '1') {
+            $lines = [];
+            foreach (App::authorisations()->forClient($clientId) as $a) {
+                if (ScopeService::status($a, $today) === ScopeService::STATUS_ACTIVE) {
+                    $replaces[] = (int) $a['id'];
+                    foreach ($a['entries'] as $e) {
+                        $lines[(string) $e['value']] = true;
+                    }
+                }
+            }
+            foreach (App::suggestions()->pendingByIds($clientId, $suggestionIds) as $s) {
+                if (!isset($lines[(string) $s['value']])) {
+                    $added[] = (string) $s['value'];
+                }
+            }
+            $scope = ($lines !== [] ? '# ' . __('Current scope') . "\n" . implode("\n", array_keys($lines)) . "\n" : '')
+                . ($added !== [] ? '# ' . __('Added from discovery') . "\n" . implode("\n", $added) . "\n" : '');
+        }
         return $this->page('authorisations/form', __('Record scan authorisation'), [
             'client' => $client,
             'values' => [
                 'approved_by_name' => '', 'approved_by_role' => '', 'approved_on' => $today,
                 'valid_from' => $today, 'valid_until' => (new DateTimeImmutable($today))->modify('+1 year')->format('Y-m-d'),
-                'document_ref' => '', 'notes' => '', 'scope' => '', 'confirm' => '',
+                'document_ref' => '', 'notes' => '', 'scope' => $scope, 'confirm' => '',
+                'replaces' => implode(',', $replaces),
             ],
+            'added' => $added,
             'errors' => [],
             'scopeErrors' => [],
         ]);
@@ -65,7 +98,32 @@ final class AuthorisationController extends Controller
             $values[$field] = $request->input($field);
         }
         $values['scope'] = $request->raw('scope');
+        $values['replaces'] = $request->input('replaces');
         $errors = [];
+        // Authorisations this one replaces: only active or scheduled ones of THIS client are
+        // revoked. Expired ones are left as they are, so the register's history stays true.
+        $replaceIds = [];
+        $revokedMeanwhile = [];
+        if ($values['replaces'] !== '') {
+            foreach (array_slice(explode(',', $values['replaces']), 0, 100) as $raw) {
+                $auth = ctype_digit($raw) ? App::authorisations()->find((int) $raw) : null;
+                if ($auth === null || (int) $auth['client_id'] !== $clientId) {
+                    throw new HttpException(400, __('The authorisations to replace do not belong to this client.'));
+                }
+                $status = ScopeService::status($auth, $today);
+                if ($status === ScopeService::STATUS_REVOKED) {
+                    $revokedMeanwhile[] = (int) $auth['id'];
+                } elseif ($status !== ScopeService::STATUS_EXPIRED) {
+                    $replaceIds[] = (int) $auth['id'];
+                }
+            }
+            $replaceIds = array_values(array_unique($replaceIds));
+            if ($revokedMeanwhile !== []) {
+                // Someone revoked it after this form was opened, perhaps for a reason. Don't quietly re-authorise its scope.
+                $errors['scope'] = __('Authorisation #{ids} was revoked after you opened this form. Check that its targets should still be in the scope below, then save again.', ['ids' => implode(', #', $revokedMeanwhile)]);
+                $values['replaces'] = implode(',', $replaceIds);
+            }
+        }
 
         foreach (['approved_by_name' => __('Enter the name of the person at the client who approved scanning.'),
                   'approved_by_role' => __('Enter their role, e.g. Managing Director or IT Manager.')] as $field => $message) {
@@ -97,14 +155,19 @@ final class AuthorisationController extends Controller
         if (mb_strlen($values['notes']) > 2000) {
             $errors['notes'] = __('Notes can be at most 2000 characters.');
         }
+        if ($replaceIds !== [] && !isset($errors['valid_from']) && $values['valid_from'] > $today) {
+            // Revoking the current authorisation now would leave the client without scope until the new one starts.
+            $errors['valid_from'] = __('A replacement must start today or earlier, otherwise the client has no active scope until it starts. To prepare a future renewal, record it without replacing and let the old one expire.');
+        }
         if ($values['confirm'] !== '1') {
             $errors['confirm'] = __('Confirm that the client has given this authorisation.');
         }
         $parsed = App::scopeParser()->parseLines(mb_substr($values['scope'], 0, 100000));
 
         if ($errors !== [] || $parsed['errors'] !== []) {
+            $scopeErrors = isset($errors['scope']) ? array_merge([$errors['scope']], $parsed['errors']) : $parsed['errors'];
             return $this->page('authorisations/form', __('Record scan authorisation'), [
-                'client' => $client, 'values' => $values, 'errors' => $errors, 'scopeErrors' => $parsed['errors'],
+                'client' => $client, 'values' => $values, 'errors' => $errors, 'scopeErrors' => $scopeErrors, 'added' => [],
             ], 422);
         }
 
@@ -114,16 +177,25 @@ final class AuthorisationController extends Controller
             'document_ref' => $values['document_ref'], 'notes' => $values['notes'],
         ];
         $overlaps = App::authorisations()->overlapsWithOtherClients($clientId, $parsed['entries']);
-        $id = App::authorisations()->create($clientId, $clean, $parsed['entries'], (int) $this->user()['id']);
+        $id = App::authorisations()->create($clientId, $clean, $parsed['entries'], (int) $this->user()['id'], $replaceIds);
+        App::suggestions()->markAccepted($clientId, array_map(static fn (array $e): array => [
+            'entry_type' => $e['type'], 'value' => $e['value'], 'range_start' => $e['range']?->start, 'range_end' => $e['range']?->end,
+        ], $parsed['entries']), (int) $this->user()['id']);
+        foreach ($replaceIds as $replaced) {
+            $this->audit($request, 'authorisation.revoked', 'authorisation', $replaced, ['client_id' => $clientId, 'reason' => 'Replaced by authorisation #' . $id]);
+        }
         $this->audit($request, 'authorisation.created', 'authorisation', $id, [
             'client_id' => $clientId,
             'approved_by' => $clean['approved_by_name'] . ' (' . $clean['approved_by_role'] . ')',
             'valid' => $clean['valid_from'] . ' to ' . $clean['valid_until'],
             'scope' => array_map(static fn (array $e): string => $e['value'], $parsed['entries']),
             'confirmed_by_admin' => true,
+            'replaces' => $replaceIds,
         ]);
 
-        Session::flash('success', __('Authorisation recorded with {n} scope entries.', ['n' => count($parsed['entries'])]));
+        Session::flash('success', $replaceIds === []
+            ? __('Authorisation recorded with {n} scope entries.', ['n' => count($parsed['entries'])])
+            : __('Authorisation recorded with {n} scope entries. It replaces authorisation(s) #{ids}, which are now revoked.', ['n' => count($parsed['entries']), 'ids' => implode(', #', $replaceIds)]));
         foreach (array_slice($overlaps, 0, 10) as $hit) {
             Session::flash('warning', __('{value} is also in scope for client "{client}". Check that this is not a typo.', $hit));
         }

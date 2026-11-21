@@ -28,9 +28,11 @@ final class AuthorisationRepository
      *
      * @param array{approved_by_name:string,approved_by_role:string,approved_on:string,valid_from:string,valid_until:string,document_ref:string,notes:string} $v Validated values.
      * @param list<array{type:string,value:string,range:?IpRange}> $entries Parsed scope entries.
+     * @param list<int> $replaceIds Authorisations of THIS client to revoke in the same transaction
+     *                              ("Replaced by #N"). Already-revoked ones are left alone.
      * @return int New authorisation ID.
      */
-    public function create(int $clientId, array $v, array $entries, int $userId): int
+    public function create(int $clientId, array $v, array $entries, int $userId, array $replaceIds = []): int
     {
         $this->db->beginTransaction();
         try {
@@ -54,6 +56,13 @@ final class AuthorisationRepository
                 $insert->bindValue('s', $entry['range']?->start, $entry['range'] === null ? PDO::PARAM_NULL : PDO::PARAM_LOB);
                 $insert->bindValue('e', $entry['range']?->end, $entry['range'] === null ? PDO::PARAM_NULL : PDO::PARAM_LOB);
                 $insert->execute();
+            }
+            $revoke = $this->db->prepare(
+                'UPDATE scan_authorisations SET revoked_at = UTC_TIMESTAMP(), revoked_by = :u, revoke_reason = :r
+                 WHERE id = :id AND client_id = :c AND revoked_at IS NULL'
+            );
+            foreach ($replaceIds as $replaceId) {
+                $revoke->execute(['u' => $userId, 'r' => 'Replaced by authorisation #' . $id, 'id' => $replaceId, 'c' => $clientId]);
             }
             $this->db->commit();
             return $id;

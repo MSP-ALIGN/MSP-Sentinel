@@ -86,11 +86,14 @@ await page.fill('#scope', '# Office and website\n203.0.113.10\n198.51.100.0/28\n
 await page.check('#confirm');
 await page.click('.app-content form button.btn-primary[type=submit]');
 await shot(page, '15-authorisation-errors');
-await page.fill('#scope', '# Office and website\n203.0.113.10\n198.51.100.0/28\ncontoso.example\n*.contoso.example');
+await page.fill('#scope', '# Office and website\n203.0.113.10\ndiscovery.example');
 await page.check('#confirm');
 await page.click('.app-content form button.btn-primary[type=submit]');
 await page.waitForURL(/\/clients\/\d+$/);
+await page.click('#discovery form button[type=submit]');
+await page.waitForURL(/\/clients\/\d+$/);
 await shot(page, '16-client-detail');
+await page.locator('#discovery').screenshot({ path: `${out}18-discovery.png` });
 await page.goto(`${base}/clients`);
 await shot(page, '17-clients');
 await page.goto(`${base}/`);

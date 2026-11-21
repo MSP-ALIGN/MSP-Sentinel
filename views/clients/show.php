@@ -116,7 +116,12 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
             <div class="card-header d-flex align-items-center flex-wrap gap-2">
                 <h2 class="card-title h5 mb-0"><?= e(__('Authorised to scan')) ?></h2>
                 <?php if ($isAdmin && !$archived): ?>
-                <a href="<?= e(url('/clients/' . $clientId . '/authorisations/new')) ?>" class="btn btn-primary btn-sm ms-auto"><i class="bi bi-file-earmark-plus me-1" aria-hidden="true"></i><?= e(__('Record authorisation')) ?></a>
+                <div class="ms-auto d-flex gap-2">
+                    <?php if ($activeCount > 0): ?>
+                    <a href="<?= e(url('/clients/' . $clientId . '/authorisations/new', ['replace' => '1'])) ?>" class="btn btn-outline-primary btn-sm"><i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i><?= e(__('Change scope / renew')) ?></a>
+                    <?php endif; ?>
+                    <a href="<?= e(url('/clients/' . $clientId . '/authorisations/new')) ?>" class="btn btn-primary btn-sm"><i class="bi bi-file-earmark-plus me-1" aria-hidden="true"></i><?= e(__('Record authorisation')) ?></a>
+                </div>
                 <?php endif; ?>
             </div>
             <div class="card-body">
@@ -165,5 +170,6 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
                 <?php endforeach; ?>
             </div>
         </div>
+        <?php require __DIR__ . '/discovery.php'; ?>
     </div>
 </div>

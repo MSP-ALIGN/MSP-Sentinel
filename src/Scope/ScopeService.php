@@ -119,37 +119,49 @@ final class ScopeService
             if ($entries === []) {
                 return false;
             }
-            if (filter_var($target, FILTER_VALIDATE_IP) !== false) {
-                $ip = IpRange::parse($target);
-                if ($ip === null) {
-                    return false;
-                }
-                foreach ($entries as $e) {
-                    if ($e['range_start'] !== null && strlen((string) $e['range_start']) === strlen($ip->start)
-                        && strcmp($ip->start, (string) $e['range_start']) >= 0 && strcmp($ip->start, (string) $e['range_end']) <= 0) {
-                        return true;
-                    }
-                }
-                return false;
-            }
-            foreach ($entries as $e) {
-                if ($e['entry_type'] !== 'domain') {
-                    continue;
-                }
-                $value = (string) $e['value'];
-                if ($value === $target) {
-                    return true;
-                }
-                // "*.client.example" covers "www.client.example" and "a.b.client.example", but not "client.example" itself.
-                if (str_starts_with($value, '*.') && str_ends_with($target, substr($value, 1))) {
-                    return true;
-                }
-            }
-            return false;
+            return self::matches($entries, $target);
         } catch (\Throwable $ex) {
             error_log('[msp-sentinel] scope check failed closed: ' . $ex->getMessage());
             return false;
         }
+    }
+
+    /**
+     * Does a canonical target match any of these scope entries? Pure function,
+     * no kill switch or date checks (isInScope() does those). Also used by
+     * discovery to tell new names from ones already in scope.
+     *
+     * @param list<array{entry_type:string,value:string,range_start:?string,range_end:?string}> $entries
+     */
+    public static function matches(array $entries, string $target): bool
+    {
+        if (filter_var($target, FILTER_VALIDATE_IP) !== false) {
+            $ip = IpRange::parse($target);
+            if ($ip === null) {
+                return false;
+            }
+            foreach ($entries as $e) {
+                if ($e['range_start'] !== null && strlen((string) $e['range_start']) === strlen($ip->start)
+                    && strcmp($ip->start, (string) $e['range_start']) >= 0 && strcmp($ip->start, (string) $e['range_end']) <= 0) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        foreach ($entries as $e) {
+            if ($e['entry_type'] !== 'domain') {
+                continue;
+            }
+            $value = (string) $e['value'];
+            if ($value === $target) {
+                return true;
+            }
+            // "*.client.example" covers "www.client.example" and "a.b.client.example", but not "client.example" itself.
+            if (str_starts_with($value, '*.') && str_ends_with($target, substr($value, 1))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

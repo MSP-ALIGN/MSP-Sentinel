@@ -56,6 +56,7 @@ $dbUser = 'st_' . $runId;
 $dbPass = bin2hex(random_bytes(16));
 
 $server = null;
+$mocks = [];
 $admin = new PDO(
     getenv('SENTINEL_TEST_DB_ADMIN_DSN') ?: 'mysql:unix_socket=/run/mysqld/mysqld.sock',
     getenv('SENTINEL_TEST_DB_ADMIN_USER') ?: 'root',
@@ -65,10 +66,12 @@ $admin = new PDO(
 $configPath = $outDir . '/config.php';
 $keepOutput = true;
 // Defined before anything is created, so every exit path drops the database and user again.
-$cleanup = static function () use (&$server, &$keepOutput, $admin, $dbName, $dbUser, $outDir): void {
-    if (is_resource($server)) {
-        proc_terminate($server);
-        proc_close($server);
+$cleanup = static function () use (&$server, &$mocks, &$keepOutput, $admin, $dbName, $dbUser, $outDir): void {
+    foreach (array_merge([$server], $mocks) as $proc) {
+        if (is_resource($proc)) {
+            proc_terminate($proc);
+            proc_close($proc);
+        }
     }
     $admin->exec("DROP DATABASE IF EXISTS `{$dbName}`");
     $admin->exec("DROP USER IF EXISTS '{$dbUser}'@'127.0.0.1'");
@@ -121,10 +124,31 @@ try {
         throw new RuntimeException("create-admin failed:\n" . $out);
     }
 
+    $freePort = static function (): int {
+        $sock = stream_socket_server('tcp://127.0.0.1:0');
+        $port = (int) substr(strrchr(stream_socket_get_name($sock, false), ':'), 1);
+        fclose($sock);
+        return $port;
+    };
+    // Mock outside services, all on 127.0.0.1: DNS (UDP+TCP) and crt.sh (HTTP).
+    $dnsPort = $freePort();
+    $dnsLog = $outDir . '/dns-queries.log';
+    $mocks[] = proc_open([PHP_BINARY, __DIR__ . '/mocks/dns_server.php', (string) $dnsPort, __DIR__ . '/fixtures/dns_zone.json', $dnsLog],
+        [0 => ['file', '/dev/null', 'r'], 1 => ['file', $outDir . '/mock-dns.log', 'a'], 2 => ['file', $outDir . '/mock-dns.log', 'a']], $pipes);
+    $crtshPort = $freePort();
+    $mocks[] = proc_open([PHP_BINARY, '-S', "127.0.0.1:{$crtshPort}", __DIR__ . '/mocks/crtsh_router.php'],
+        [0 => ['file', '/dev/null', 'r'], 1 => ['file', $outDir . '/mock-crtsh.log', 'a'], 2 => ['file', $outDir . '/mock-crtsh.log', 'a']], $pipes);
+    $cfg = require $configPath;
+    $cfg['dns'] = ['resolver' => '127.0.0.1', 'port' => $dnsPort, 'timeout' => 0.3];
+    $cfg['crtsh'] = ['enabled' => true, 'base_url' => "http://127.0.0.1:{$crtshPort}", 'timeout' => 5];
+    $cfg['discovery'] = ['crtsh_delay' => 0, 'manual_budget' => 25];
+    file_put_contents($configPath, '<?php return ' . var_export($cfg, true) . ";\n");
+    for ($i = 0; $i < 50 && @fsockopen('127.0.0.1', $crtshPort) === false; $i++) {
+        usleep(100000);
+    }
+
     // Built-in web server on a free local port.
-    $sock = stream_socket_server('tcp://127.0.0.1:0');
-    $port = (int) substr(strrchr(stream_socket_get_name($sock, false), ':'), 1);
-    fclose($sock);
+    $port = $freePort();
     $logFile = $outDir . '/server.log';
     $server = proc_open(
         [PHP_BINARY, '-S', "127.0.0.1:{$port}", '-t', $root . '/public', $root . '/public/index.php'],
@@ -147,6 +171,9 @@ try {
     ]);
     $db->exec("SET time_zone = '+00:00'");
     $ctx = new TestContext($baseUrl, $db, $root, $configPath);
+    $ctx->dnsPort = $dnsPort;
+    $ctx->dnsLog = $dnsLog;
+    $ctx->crtshUrl = "http://127.0.0.1:{$crtshPort}";
     \Sentinel\Core\App::boot(\Sentinel\Core\Config::fromArray($appConfig));
 
     if ($serve) {

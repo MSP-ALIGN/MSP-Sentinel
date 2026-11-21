@@ -9,8 +9,18 @@ use Sentinel\Scope\ScopeParser;
 $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' : '';
 ?>
 <p class="text-body-secondary"><?= e(__('Client: {name}', ['name' => $client['name']])) ?></p>
+<?php if (($values['replaces'] ?? '') !== ''): ?>
+<div class="alert alert-info">
+    <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>
+    <?= e(__('This new authorisation will replace authorisation(s) #{ids}. They will be revoked when you save. The scope below starts with the current scope.', ['ids' => str_replace(',', ', #', $values['replaces'])])) ?>
+    <?php if (!empty($added)): ?>
+    <div class="mt-1"><?= e(__('Added from discovery: {list}. Make sure the client has approved these too.', ['list' => implode(', ', $added)])) ?></div>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
 <form method="post" action="<?= e(url('/clients/' . (int) $client['id'] . '/authorisations')) ?>" novalidate>
 <?= Csrf::field() ?>
+<input type="hidden" name="replaces" value="<?= e($values['replaces'] ?? '') ?>">
 <div class="row g-3">
     <div class="col-lg-6">
         <div class="card h-100">

@@ -44,7 +44,8 @@ final class Migrator
     {
         $log ??= static function (string $line): void {
         };
-        $got = (int) $this->db->query("SELECT GET_LOCK('" . self::LOCK_NAME . "', 30)")->fetchColumn();
+        $lock = $this->db->quote(self::LOCK_NAME . '_' . substr(hash('sha256', (string) $this->db->query('SELECT DATABASE()')->fetchColumn()), 0, 16));
+        $got = (int) $this->db->query("SELECT GET_LOCK({$lock}, 30)")->fetchColumn();
         if ($got !== 1) {
             throw new \RuntimeException('Another migration run holds the lock. Try again shortly.');
         }
@@ -74,7 +75,7 @@ final class Migrator
             }
             return $done;
         } finally {
-            $this->db->query("SELECT RELEASE_LOCK('" . self::LOCK_NAME . "')");
+            $this->db->query("SELECT RELEASE_LOCK({$lock})");
         }
     }
 

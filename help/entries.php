@@ -46,6 +46,16 @@ return [
             ],
         ],
         [
+            'title' => 'Discovering forgotten hostnames',
+            'paragraphs' => [
+                '"Discover now" on a client page (Technician or Admin) looks for hostnames and addresses the client probably owns but has not put in scope yet. It reads DNS records for the domains in scope, tries common names such as www, mail, vpn and remote, searches public certificate logs (crt.sh), and does reverse DNS on in-scope addresses. A weekly job does the same for every client if your admin has set it up.',
+                'This is passive: Sentinel only asks DNS and a public website. Nothing connects to the client\'s systems. It still needs an active authorisation and stops when scanning is paused.',
+                'Only names under the client\'s own domains are suggested. Names that belong to other companies (such as a hosted mail service or a DNS provider) are listed under "Names at other providers" for information, and never suggested. Addresses reached through an alias at another provider are marked "Check: maybe third-party" and are not ticked by default.',
+                'Suggestions are never scanned on their own. To add them, an admin ticks them and chooses "Add selected to a new authorisation". The form opens with the current scope plus your selection. Ask the client to approve the additions, enter their details, and save. The new authorisation replaces the old one.',
+                'Dismiss suggestions you don\'t want. They stay dismissed when discovery runs again, and you can restore them from the "Dismissed suggestions" list.',
+            ],
+        ],
+        [
             'title' => 'Audit log',
             'paragraphs' => [
                 'Admins can see a record of sign-ins, failed sign-ins, user changes and settings changes under Administration > Audit log. Entries cannot be edited or deleted from the web interface.',
@@ -53,6 +63,15 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '0.3.0',
+            'date' => '2026-11-21',
+            'items' => [
+                'Passive discovery of hostnames and addresses from DNS, public certificate logs and reverse DNS, on demand and weekly.',
+                'Suggestions you approve into a new authorisation. Names at other providers are never suggested.',
+                'A "Change scope / renew" shortcut that pre-fills a replacement authorisation.',
+            ],
+        ],
         [
             'version' => '0.2.0',
             'date' => '2026-11-21',

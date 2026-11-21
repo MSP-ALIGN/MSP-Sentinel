@@ -89,6 +89,20 @@ final class Request
         return is_string($value) ? trim($value) : '';
     }
 
+    /**
+     * A repeated query parameter (?id[]=1&id[]=2) as a list of strings. Non-string items are dropped. Untrusted.
+     *
+     * @return list<string>
+     */
+    public function queryList(string $key): array
+    {
+        $value = $this->query[$key] ?? [];
+        if (!is_array($value)) {
+            return [];
+        }
+        return array_values(array_map('trim', array_filter($value, 'is_string')));
+    }
+
     /** A request header, e.g. header('X-CSRF-Token'). Untrusted. */
     public function header(string $name): string
     {

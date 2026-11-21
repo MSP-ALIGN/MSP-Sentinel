@@ -16,6 +16,7 @@ use Sentinel\Controllers\AdminController;
 use Sentinel\Controllers\AuthController;
 use Sentinel\Controllers\AuthorisationController;
 use Sentinel\Controllers\ClientController;
+use Sentinel\Controllers\DiscoveryController;
 use Sentinel\Controllers\ScanningController;
 use Sentinel\Controllers\PageController;
 use Sentinel\Controllers\ProfileController;
@@ -64,6 +65,11 @@ $router->add('POST', '/sites/{id}', [ClientController::class, 'updateSite'], $ad
 $router->add('GET', '/clients/{id}/authorisations/new', [AuthorisationController::class, 'create'], $admin);
 $router->add('POST', '/clients/{id}/authorisations', [AuthorisationController::class, 'store'], $admin);
 $router->add('POST', '/authorisations/{id}/revoke', [AuthorisationController::class, 'revoke'], $admin);
+
+// Discovery: technicians and admins run it and triage suggestions; approving into scope is admin-only (authorisation form)
+$router->add('POST', '/clients/{id}/discover', [DiscoveryController::class, 'run'], $technician);
+$router->add('POST', '/suggestions/{id}/dismiss', [DiscoveryController::class, 'dismiss'], $technician);
+$router->add('POST', '/suggestions/{id}/restore', [DiscoveryController::class, 'restore'], $technician);
 
 // Global kill switch
 $router->add('POST', '/scanning/pause', [ScanningController::class, 'pause'], $technician);

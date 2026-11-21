@@ -10,6 +10,10 @@ use Sentinel\Auth\RecoveryCodes;
 use Sentinel\Auth\Role;
 use Sentinel\Auth\UserRepository;
 use Sentinel\Clients\ClientRepository;
+use Sentinel\Discovery\CrtShClient;
+use Sentinel\Discovery\DiscoveryService;
+use Sentinel\Discovery\DnsClient;
+use Sentinel\Discovery\SuggestionRepository;
 use Sentinel\Scope\AuthorisationRepository;
 use Sentinel\Scope\ScopeParser;
 use Sentinel\Scope\ScopeService;
@@ -133,6 +137,25 @@ final class App
     public static function scopeParser(): ScopeParser
     {
         return new ScopeParser((bool) self::config()->get('testing.allow_documentation_ranges', false));
+    }
+
+    /** Target suggestion and discovery-run store. */
+    public static function suggestions(): SuggestionRepository
+    {
+        return new SuggestionRepository(self::db());
+    }
+
+    /**
+     * Passive discovery, wired from config: dns.resolver/port/timeout, crtsh.*,
+     * discovery.crtsh_delay. Throws DnsException if no resolver can be found.
+     */
+    public static function discovery(): DiscoveryService
+    {
+        $config = self::config();
+        return new DiscoveryService(
+            self::db(), self::clients(), self::authorisations(), self::suggestions(), self::scope(), self::scopeParser(),
+            DnsClient::fromConfig($config), CrtShClient::fromConfig($config), (float) $config->get('discovery.crtsh_delay', 1.0),
+        );
     }
 
     /** Recovery code store. */

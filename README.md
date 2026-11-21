@@ -4,13 +4,30 @@ Self-hosted security monitoring for MSPs (managed service providers). Sentinel *
 exposure and vulnerabilities across your clients, monitors them and alerts on them. Its companion product,
 MSP Align, plans, reports and proves, using Sentinel's findings.
 
-> **Status: early development (0.2.0).** Sign-in, users, clients and the "authorised to scan" register are in place.
-> **It does not scan anything yet.** See [`docs/DESIGN.md`](docs/DESIGN.md) for the v1.0 design and
+> **Status: early development (0.3.0).** Sign-in, users, clients, the "authorised to scan" register and passive
+> target discovery are in place. **It does not scan anything yet.** See [`docs/DESIGN.md`](docs/DESIGN.md) for the v1.0 design and
 > [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full plan (external scanning, internal agent, pen testing).
 
 Sentinel is free software under the [GNU AGPL-3.0](LICENSE). Each MSP runs its own copy and owns its data.
 
 ## What's new
+
+### 0.3.0 (2026-11-21): passive target discovery
+
+- **Discover now** on a client (technicians and admins), plus a weekly CLI job (`bin/discover.php`):
+  - looks up DNS records (A/AAAA/MX/NS/CNAME) of the domains in scope and a list of common names (www, mail, vpn,
+    remote...);
+  - checks public certificate logs (crt.sh) and reverse DNS of in-scope addresses.
+- It's **passive**: DNS lookups and one public website. Nothing connects to the client's systems. It still
+  respects the kill switches and needs an active authorisation.
+- **Suggestions, not scope:**
+  - only names under the client's own domains are suggested;
+  - names at other providers (hosted mail, DNS, CDNs) are listed for information only;
+  - addresses reached through an alias at another provider are flagged and left unticked.
+- **Approving**: an admin ticks suggestions, and the authorisation form opens with the current scope plus the
+  selection. Saving it records the client's approval and replaces the old authorisation.
+- Dismissed suggestions stay dismissed. A **Change scope / renew** shortcut pre-fills a replacement authorisation.
+- Tests run against a local fake DNS server and a fake crt.sh: no real lookups.
 
 ### 0.2.0 (2026-11-21): clients and the "authorised to scan" register
 
@@ -66,6 +83,9 @@ php bin/migrate.php                # safe to run any time, including after every
 # 3. First admin (the password is read from the terminal, hidden)
 php bin/create-admin.php --username=jdoe --name="Jane Doe" --email=jdoe@msp.example
 ```
+
+Weekly discovery (optional, recommended): add a cron job such as
+`17 3 * * 0  php /path/to/msp-sentinel/bin/discover.php`.
 
 Point the web server's document root at `public/`. Sign in, and you'll be asked to set up two-factor
 authentication.

@@ -84,6 +84,9 @@ final class ClientController extends Controller
             'authorisations' => $authorisations,
             'today' => $today,
             'globallyPaused' => App::scope()->globallyPaused(),
+            'suggestions' => App::suggestions()->forClient((int) $client['id'], 'pending'),
+            'dismissed' => App::suggestions()->forClient((int) $client['id'], 'dismissed'),
+            'lastRun' => App::suggestions()->lastRun((int) $client['id']),
         ]);
     }
 
