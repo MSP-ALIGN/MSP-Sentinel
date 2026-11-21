@@ -185,6 +185,21 @@ final class TestContext
     public int $dnsPort = 0;
     public string $dnsLog = '';
     public string $crtshUrl = '';
+    /** File where the fake nmap records the arguments of every call. */
+    public string $nmapLog = '';
+
+    /**
+     * Run a CLI script with the test config (e.g. bin/worker.php).
+     *
+     * @return array{0:int,1:string} [exit code, output]
+     */
+    public function cli(string $script, array $args = []): array
+    {
+        $proc = proc_open(array_merge([PHP_BINARY, $this->root . '/' . $script], $args), [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $this->root,
+            ['SENTINEL_CONFIG' => $this->configPath, 'PATH' => (string) getenv('PATH'), 'SENTINEL_ALLOW_ROOT' => '1']);
+        $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
+        return [proc_close($proc), $out];
+    }
 
     public function __construct(
         public readonly string $baseUrl,

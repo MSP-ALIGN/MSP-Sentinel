@@ -60,7 +60,7 @@ final class ClientRepository
     /**
      * Create a client and its default site in one transaction.
      *
-     * @param array{name:string,itflow_client_id:?int,timezone:string,scan_window_start:string,scan_window_end:string,notes:string} $v Validated values.
+     * @param array{name:string,itflow_client_id:?int,timezone:string,scan_window_start:string,scan_window_end:string,notes:string,ports_extra:string,ports_excluded:string} $v Validated values.
      * @return int New client ID.
      */
     public function create(array $v, int $userId): int
@@ -68,12 +68,13 @@ final class ClientRepository
         $this->db->beginTransaction();
         try {
             $stmt = $this->db->prepare(
-                'INSERT INTO clients (name, itflow_client_id, timezone, scan_window_start, scan_window_end, notes, created_by, created_at, updated_at)
-                 VALUES (:n, :it, :tz, :ws, :we, :notes, :uid, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
+                'INSERT INTO clients (name, itflow_client_id, timezone, scan_window_start, scan_window_end, notes, ports_extra, ports_excluded, created_by, created_at, updated_at)
+                 VALUES (:n, :it, :tz, :ws, :we, :notes, :pe, :px, :uid, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
             );
             $stmt->execute([
                 'n' => $v['name'], 'it' => $v['itflow_client_id'], 'tz' => $v['timezone'],
-                'ws' => $v['scan_window_start'], 'we' => $v['scan_window_end'], 'notes' => $v['notes'], 'uid' => $userId,
+                'ws' => $v['scan_window_start'], 'we' => $v['scan_window_end'], 'notes' => $v['notes'],
+                'pe' => $v['ports_extra'], 'px' => $v['ports_excluded'], 'uid' => $userId,
             ]);
             $id = (int) $this->db->lastInsertId();
             $this->db->prepare(
@@ -90,17 +91,18 @@ final class ClientRepository
     /**
      * Update a client's details.
      *
-     * @param array{name:string,itflow_client_id:?int,timezone:string,scan_window_start:string,scan_window_end:string,notes:string} $v Validated values.
+     * @param array{name:string,itflow_client_id:?int,timezone:string,scan_window_start:string,scan_window_end:string,notes:string,ports_extra:string,ports_excluded:string} $v Validated values.
      */
     public function update(int $id, array $v): void
     {
         $stmt = $this->db->prepare(
             'UPDATE clients SET name = :n, itflow_client_id = :it, timezone = :tz, scan_window_start = :ws, scan_window_end = :we,
-                    notes = :notes, updated_at = UTC_TIMESTAMP() WHERE id = :id'
+                    notes = :notes, ports_extra = :pe, ports_excluded = :px, updated_at = UTC_TIMESTAMP() WHERE id = :id'
         );
         $stmt->execute([
             'n' => $v['name'], 'it' => $v['itflow_client_id'], 'tz' => $v['timezone'],
-            'ws' => $v['scan_window_start'], 'we' => $v['scan_window_end'], 'notes' => $v['notes'], 'id' => $id,
+            'ws' => $v['scan_window_start'], 'we' => $v['scan_window_end'], 'notes' => $v['notes'],
+            'pe' => $v['ports_extra'], 'px' => $v['ports_excluded'], 'id' => $id,
         ]);
     }
 

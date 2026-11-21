@@ -155,6 +155,10 @@ and reports covering several clients.
 
 ## 7. Default port profile
 
+As built in 0.4.0: TCP only. UDP needs raw sockets (root), and the scanner runs unprivileged on purpose. nmap
+runs once per IP, which makes cancel, pause and window checks take effect quickly. Hostnames are scanned
+through their resolved addresses, and only addresses that are in scope themselves.
+
 TCP: 21, 22, 23, 25, 53, 80, 110, 135, 139, 143, 389, 443, 445, 465, 587, 636, 993, 995, 1433, 1521, 1723, 2049,
 3306, 3389, 4443, 5060, 5432, 5900, 5985, 5986, 6379, 8080, 8443, 9000, 9200, 10443, 27017, plus common firewall
 and VPN admin ports. UDP: 161, 500.

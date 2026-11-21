@@ -56,6 +56,16 @@ return [
             ],
         ],
         [
+            'title' => 'Port scans',
+            'paragraphs' => [
+                '"Scan now" on a client page (Technician or Admin) queues a port scan. The scan worker runs it inside the client\'s scan window. Admins can run a scan outside the window by ticking the box and giving a reason, which is recorded. Every client with an active authorisation is also scanned once a week.',
+                'Scans are gentle: an ordinary TCP connection test, polite timing, at most 50 packets per second, and one host at a time. Version detection sends a few standard, harmless protocol probes to open ports so the service can identify itself. Each client is scanned on a default list of about 40 risky and admin ports. Admins can add or exclude ports on the client\'s edit page.',
+                'Before each host, Sentinel checks again that it is in an active authorisation, that scanning is not paused, and that the window is open. Hostnames are scanned through their addresses, and only addresses that are themselves in scope. If www.client.com points at a server that is not in scope (for example a hosting company), it is skipped and the scan log says why.',
+                'Cancel a scan or pause scanning at any time: nmap stops within seconds. The scan log on the client page lists every host Sentinel touched or skipped, and when.',
+                'Open ports show what the service itself reports (product and version). That can be wrong. High-risk services such as Remote Desktop, file sharing (SMB), databases, Telnet and VNC are marked in red.',
+            ],
+        ],
+        [
             'title' => 'Audit log',
             'paragraphs' => [
                 'Admins can see a record of sign-ins, failed sign-ins, user changes and settings changes under Administration > Audit log. Entries cannot be edited or deleted from the web interface.',
@@ -63,6 +73,16 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '0.4.0',
+            'date' => '2026-11-21',
+            'items' => [
+                'Gentle external port scanning, on demand and weekly, inside each client\'s scan window.',
+                'Scope checked before every host; hostnames are only scanned through in-scope addresses.',
+                'Open ports with high-risk services marked, and a scan log of every host touched or skipped.',
+                'Per-client extra and excluded ports; cancel and pause stop scans within seconds.',
+            ],
+        ],
         [
             'version' => '0.3.0',
             'date' => '2026-11-21',

@@ -47,6 +47,19 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
             </div>
             <div class="col-12 form-text mt-1"><?= e(__('Scans only run inside this window, in the client\'s timezone. A window like 22:00 to 06:00 runs overnight.')) ?></div>
         </div>
+        <div class="row g-3 mb-3">
+            <div class="col-md-6">
+                <label for="ports_extra" class="form-label"><?= e(__('Extra ports to scan (optional)')) ?></label>
+                <input type="text" class="form-control<?= $invalid('ports_extra') ?>" id="ports_extra" name="ports_extra" value="<?= e($values['ports_extra'] ?? '') ?>" maxlength="500" placeholder="8090, 9000-9010">
+                <?php $field = 'ports_extra'; require __DIR__ . '/../partials/field_error.php'; ?>
+            </div>
+            <div class="col-md-6">
+                <label for="ports_excluded" class="form-label"><?= e(__('Ports never to scan (optional)')) ?></label>
+                <input type="text" class="form-control<?= $invalid('ports_excluded') ?>" id="ports_excluded" name="ports_excluded" value="<?= e($values['ports_excluded'] ?? '') ?>" maxlength="500" placeholder="5060">
+                <?php $field = 'ports_excluded'; require __DIR__ . '/../partials/field_error.php'; ?>
+            </div>
+            <div class="col-12 form-text mt-1"><?= e(__('TCP ports. Every client gets the default list of {n} risky and admin ports; add or remove ports here.', ['n' => count(\Sentinel\Scanning\PortProfile::DEFAULT_TCP)])) ?></div>
+        </div>
         <div class="mb-3">
             <label for="notes" class="form-label"><?= e(__('Notes (optional)')) ?></label>
             <textarea class="form-control<?= $invalid('notes') ?>" id="notes" name="notes" rows="3" maxlength="2000"><?= e($values['notes'] ?? '') ?></textarea>

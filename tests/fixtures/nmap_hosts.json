@@ -1,0 +1,60 @@
+{
+  "203.0.113.160": {
+    "open": [
+      {
+        "port": 22,
+        "name": "ssh",
+        "product": "OpenSSH",
+        "version": "8.9p1",
+        "cpe": "cpe:/a:openbsd:openssh:8.9p1"
+      },
+      {
+        "port": 443,
+        "name": "https",
+        "product": "Example httpd",
+        "version": "2.4.57",
+        "extra": "<script>alert(1)</script>"
+      },
+      {
+        "port": 3389,
+        "name": "ms-wbt-server",
+        "product": "Microsoft Terminal Services"
+      },
+      {
+        "port": 31337,
+        "name": "elite",
+        "product": "Not asked for"
+      }
+    ]
+  },
+  "203.0.113.161": {
+    "open": [
+      {
+        "port": 80,
+        "name": "http",
+        "product": "Example web"
+      }
+    ]
+  },
+  "203.0.113.162": {
+    "behaviour": "badxml"
+  },
+  "203.0.113.163": {
+    "behaviour": "exit1"
+  },
+  "203.0.113.170": {
+    "behaviour": "slow"
+  },
+  "2001:db8:10::30": {
+    "open": [
+      {
+        "port": 443,
+        "name": "https",
+        "product": "Example v6 httpd"
+      }
+    ]
+  },
+  "203.0.113.166": {
+    "behaviour": "hosttimeout"
+  }
+}

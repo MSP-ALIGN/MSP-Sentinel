@@ -9,6 +9,8 @@ use Sentinel\Core\HttpException;
 use Sentinel\Core\Request;
 use Sentinel\Core\Response;
 use Sentinel\Core\Session;
+use Sentinel\Scanning\PortProfile;
+use Sentinel\Scanning\ScanWindow;
 use Sentinel\Scope\ScopeService;
 
 /**
@@ -50,7 +52,8 @@ final class ClientController extends Controller
     {
         return $this->page('clients/form', __('Add client'), [
             'mode' => 'create',
-            'values' => ['name' => '', 'itflow_client_id' => '', 'timezone' => 'UTC', 'scan_window_start' => '22:00', 'scan_window_end' => '06:00', 'notes' => ''],
+            'values' => ['name' => '', 'itflow_client_id' => '', 'timezone' => 'UTC', 'scan_window_start' => '22:00', 'scan_window_end' => '06:00', 'notes' => '',
+                         'ports_extra' => '', 'ports_excluded' => ''],
             'errors' => [],
         ]);
     }
@@ -87,6 +90,12 @@ final class ClientController extends Controller
             'suggestions' => App::suggestions()->forClient((int) $client['id'], 'pending'),
             'dismissed' => App::suggestions()->forClient((int) $client['id'], 'dismissed'),
             'lastRun' => App::suggestions()->lastRun((int) $client['id']),
+            'openJob' => App::scans()->openJob((int) $client['id']),
+            'recentJobs' => App::scans()->recentJobs((int) $client['id']),
+            'services' => App::scans()->openServices((int) $client['id']),
+            'scanLog' => App::scans()->logForClient((int) $client['id'], 30),
+            'ports' => PortProfile::forClient($client),
+            'windowOpen' => ScanWindow::isOpen($client),
         ]);
     }
 
@@ -112,7 +121,7 @@ final class ClientController extends Controller
         }
         App::clients()->update($id, $clean);
         $changes = [];
-        foreach (['name', 'itflow_client_id', 'timezone', 'scan_window_start', 'scan_window_end'] as $field) {
+        foreach (['name', 'itflow_client_id', 'timezone', 'scan_window_start', 'scan_window_end', 'ports_extra', 'ports_excluded'] as $field) {
             $old = $field === 'scan_window_start' || $field === 'scan_window_end' ? substr((string) $client[$field], 0, 5) : (string) $client[$field];
             $new = $field === 'scan_window_start' || $field === 'scan_window_end' ? substr((string) $clean[$field], 0, 5) : (string) $clean[$field];
             if ($old !== $new) {
@@ -206,8 +215,19 @@ final class ClientController extends Controller
             'scan_window_start' => $request->input('scan_window_start'),
             'scan_window_end' => $request->input('scan_window_end'),
             'notes' => $request->input('notes'),
+            'ports_extra' => $request->input('ports_extra'),
+            'ports_excluded' => $request->input('ports_excluded'),
         ];
         $errors = [];
+        $portLists = [];
+        foreach (['ports_extra', 'ports_excluded'] as $field) {
+            $parsed = PortProfile::parseList($values[$field]);
+            if (is_string($parsed)) {
+                $errors[$field] = $parsed;
+            } else {
+                $portLists[$field] = PortProfile::toNmapArg($parsed); // stored in normalised form
+            }
+        }
         if ($values['name'] === '' || mb_strlen($values['name']) > 150 || preg_match('/[\x00-\x1F\x7F]/u', $values['name'])) {
             $errors['name'] = __('Enter a name of up to 150 characters.');
         } elseif (App::clients()->nameTaken($values['name'], $exceptId)) {
@@ -242,6 +262,8 @@ final class ClientController extends Controller
             'scan_window_start' => $values['scan_window_start'] . ':00',
             'scan_window_end' => $values['scan_window_end'] . ':00',
             'notes' => $values['notes'],
+            'ports_extra' => $portLists['ports_extra'] ?? '',
+            'ports_excluded' => $portLists['ports_excluded'] ?? '',
         ];
         return [$values, $clean, $errors];
     }

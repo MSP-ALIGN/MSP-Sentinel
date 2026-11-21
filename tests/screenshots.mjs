@@ -74,6 +74,8 @@ await page.goto(`${base}/clients/new`);
 await page.fill('#name', 'Contoso Example Ltd');
 await page.fill('#itflow_client_id', '17');
 await page.selectOption('#timezone', 'Europe/London');
+await page.fill('#scan_window_start', '00:00');
+await page.fill('#scan_window_end', '23:59');
 await shot(page, '14-client-new');
 await page.click('.app-content form button.btn-primary[type=submit]');
 await page.waitForURL(/\/clients\/\d+$/);
@@ -86,7 +88,7 @@ await page.fill('#scope', '# Office and website\n203.0.113.10\n198.51.100.0/28\n
 await page.check('#confirm');
 await page.click('.app-content form button.btn-primary[type=submit]');
 await shot(page, '15-authorisation-errors');
-await page.fill('#scope', '# Office and website\n203.0.113.10\ndiscovery.example');
+await page.fill('#scope', '# Office and website\n203.0.113.10\n203.0.113.160\ndiscovery.example');
 await page.check('#confirm');
 await page.click('.app-content form button.btn-primary[type=submit]');
 await page.waitForURL(/\/clients\/\d+$/);
@@ -94,6 +96,14 @@ await page.click('#discovery form button[type=submit]');
 await page.waitForURL(/\/clients\/\d+$/);
 await shot(page, '16-client-detail');
 await page.locator('#discovery').screenshot({ path: `${out}18-discovery.png` });
+// Port scan: queue it, run the worker once (fake nmap from the test harness, no packets sent), then show results.
+await page.click('#scans form button.btn-primary[type=submit]');
+await page.waitForURL(/\/clients\/\d+/);
+const { execFileSync } = createRequire(import.meta.url)('node:child_process');
+execFileSync('php', [new URL('../bin/worker.php', import.meta.url).pathname, '--no-schedule'],
+  { env: { ...process.env, SENTINEL_CONFIG: `${serve.dir}/config.php`, SENTINEL_ALLOW_ROOT: '1' } });
+await page.goto(clientUrl);
+await page.locator('#scans').screenshot({ path: `${out}19-port-scan.png` });
 await page.goto(`${base}/clients`);
 await shot(page, '17-clients');
 await page.goto(`${base}/`);

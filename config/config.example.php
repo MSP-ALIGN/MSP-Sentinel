@@ -45,6 +45,13 @@ return [
         'base_url' => 'https://crt.sh',
         'timeout' => 30,
     ],
+    // Port scanning. nmap is NOT bundled (its licence is the NPSL): install it with your package manager.
+    'scanner' => [
+        'nmap_path' => '/usr/bin/nmap',
+        // Seconds one host may take before nmap is stopped.
+        'host_timeout' => 1500,
+    ],
+
     'discovery' => [
         // Seconds a "Discover now" click may take before it stops (the weekly job has no limit).
         'manual_budget' => 25,

@@ -142,6 +142,12 @@ try {
     $cfg['dns'] = ['resolver' => '127.0.0.1', 'port' => $dnsPort, 'timeout' => 0.3];
     $cfg['crtsh'] = ['enabled' => true, 'base_url' => "http://127.0.0.1:{$crtshPort}", 'timeout' => 5];
     $cfg['discovery'] = ['crtsh_delay' => 0, 'manual_budget' => 25];
+    // Fake nmap: a wrapper script so the fake can record its arguments for this run. It never sends packets.
+    $nmapWrapper = $outDir . '/fake-nmap.sh';
+    file_put_contents($nmapWrapper, "#!/bin/sh\nexec " . escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/mocks/fake_nmap.php') . ' '
+        . escapeshellarg($outDir . '/nmap-args.log') . " \"\$@\"\n");
+    chmod($nmapWrapper, 0700);
+    $cfg['scanner'] = ['nmap_path' => $nmapWrapper, 'host_timeout' => 60];
     file_put_contents($configPath, '<?php return ' . var_export($cfg, true) . ";\n");
     for ($i = 0; $i < 50 && @fsockopen('127.0.0.1', $crtshPort) === false; $i++) {
         usleep(100000);
@@ -174,6 +180,7 @@ try {
     $ctx->dnsPort = $dnsPort;
     $ctx->dnsLog = $dnsLog;
     $ctx->crtshUrl = "http://127.0.0.1:{$crtshPort}";
+    $ctx->nmapLog = $outDir . '/nmap-args.log';
     \Sentinel\Core\App::boot(\Sentinel\Core\Config::fromArray($appConfig));
 
     if ($serve) {

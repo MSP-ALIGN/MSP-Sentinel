@@ -4,13 +4,28 @@ Self-hosted security monitoring for MSPs (managed service providers). Sentinel *
 exposure and vulnerabilities across your clients, monitors them and alerts on them. Its companion product,
 MSP Align, plans, reports and proves, using Sentinel's findings.
 
-> **Status: early development (0.3.0).** Sign-in, users, clients, the "authorised to scan" register and passive
-> target discovery are in place. **It does not scan anything yet.** See [`docs/DESIGN.md`](docs/DESIGN.md) for the v1.0 design and
+> **Status: early development (0.4.0).** Sign-in, users, clients, the "authorised to scan" register, passive
+> discovery and **gentle external port scanning** are in place. Vulnerability matching, findings and reports come next. See [`docs/DESIGN.md`](docs/DESIGN.md) for the v1.0 design and
 > [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full plan (external scanning, internal agent, pen testing).
 
 Sentinel is free software under the [GNU AGPL-3.0](LICENSE). Each MSP runs its own copy and owns its data.
 
 ## What's new
+
+### 0.4.0 (2026-11-21): port scanning
+
+- **Scan now** (technicians and admins) and **weekly scans** for every client with an active authorisation.
+  Scans run only inside the client's scan window. Admins can run one outside the window by giving a reason,
+  which is audited.
+- **Gentle by default**: TCP connect scan as an unprivileged user, polite timing, at most 50 packets per second,
+  one host at a time, light service/version detection. About 40 default ports, with per-client extras and
+  exclusions.
+- **Scope is checked before every host.** Hostnames are scanned by their addresses, and only addresses that are
+  themselves in an active authorisation. Anything else is skipped and logged.
+- Cancel a scan, or pause scanning (client or global), and nmap stops within seconds.
+- **Open ports** per client: high-risk services (RDP, SMB, databases, Telnet, VNC...) are marked. There is also
+  a **scan log** of every host touched or skipped.
+- A queue plus a cron worker (`bin/worker.php`). A web request never runs nmap itself.
 
 ### 0.3.0 (2026-11-21): passive target discovery
 
@@ -62,8 +77,9 @@ Sentinel is free software under the [GNU AGPL-3.0](LICENSE). Each MSP runs its o
 
 ## Requirements
 
-- PHP 8.4 (8.3 works), with the extensions `pdo_mysql`, `sodium`, `mbstring`, `openssl` and `curl`
+- PHP 8.4 (8.3 works), with the extensions `pdo_mysql`, `sodium`, `mbstring`, `openssl`, `curl` and `simplexml`
 - MariaDB 10.6 or newer
+- **nmap** 7.x for port scanning (`apt install nmap`). It is not bundled; its licence is the NPSL.
 - A web server that sends requests to `public/index.php` (Apache with the included `.htaccess`, nginx, or similar)
 - HTTPS in production
 
@@ -83,6 +99,9 @@ php bin/migrate.php                # safe to run any time, including after every
 # 3. First admin (the password is read from the terminal, hidden)
 php bin/create-admin.php --username=jdoe --name="Jane Doe" --email=jdoe@msp.example
 ```
+
+Scan worker (required for scanning): run it every minute as an **unprivileged** user (it refuses to run as root):
+`* * * * *  php /path/to/msp-sentinel/bin/worker.php`
 
 Weekly discovery (optional, recommended): add a cron job such as
 `17 3 * * 0  php /path/to/msp-sentinel/bin/discover.php`.

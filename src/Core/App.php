@@ -14,6 +14,9 @@ use Sentinel\Discovery\CrtShClient;
 use Sentinel\Discovery\DiscoveryService;
 use Sentinel\Discovery\DnsClient;
 use Sentinel\Discovery\SuggestionRepository;
+use Sentinel\Scanning\NmapRunner;
+use Sentinel\Scanning\ScanRepository;
+use Sentinel\Scanning\ScanWorker;
 use Sentinel\Scope\AuthorisationRepository;
 use Sentinel\Scope\ScopeParser;
 use Sentinel\Scope\ScopeService;
@@ -156,6 +159,28 @@ final class App
             self::db(), self::clients(), self::authorisations(), self::suggestions(), self::scope(), self::scopeParser(),
             DnsClient::fromConfig($config), CrtShClient::fromConfig($config), (float) $config->get('discovery.crtsh_delay', 1.0),
         );
+    }
+
+    /** Scan job, scan log, asset and service store. */
+    public static function scans(): ScanRepository
+    {
+        return new ScanRepository(self::db());
+    }
+
+    /**
+     * The scan worker, wired from config (scanner.nmap_path, dns.*).
+     *
+     * @param callable(string):void|null $log
+     */
+    public static function scanWorker(?callable $log = null): ScanWorker
+    {
+        $config = self::config();
+        try {
+            $dns = DnsClient::fromConfig($config);
+        } catch (\RuntimeException) {
+            $dns = null; // without a resolver, only listed IP addresses are scanned
+        }
+        return new ScanWorker(self::db(), self::clients(), self::authorisations(), self::scans(), self::scope(), NmapRunner::fromConfig($config), $dns, $log);
     }
 
     /** Recovery code store. */
