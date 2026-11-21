@@ -54,7 +54,9 @@ Sentinel's findings through a read-only API.
 ## 3. Data model (sketch)
 
 - `users`, `sessions`, `api_tokens` (hash, scope, last used, revoked)
-- `clients` (name, itflow_client_id, scan window, timezone, port profile)
+- `clients` (name, itflow_client_id, scan window, timezone, port profile, kill switch)
+- `sites` (client, name, itflow_location_id). v1 creates one default site per client. Agents attach here later.
+- `scanner_nodes` (name, type local/remote/agent, site, status, last seen). v1 has one: the local worker.
 - `scan_authorisations`: the "authorised to scan" record (client, approved_by, approved_at, valid_from/to, document
   reference, notes)
 - `scope_entries` (authorisation, type ip/cidr/domain, value). **Nothing is ever scanned unless it matches an entry here.**
@@ -62,10 +64,12 @@ Sentinel's findings through a read-only API.
 - `assets` (client, ip/hostname, itflow_asset_id, first/last seen)
 - `services` (asset, port, protocol, product, version, cpe, banner hash, first/last seen)
 - `certificates` (asset, hostname, subject, issuer, not_after, protocols, weaknesses)
-- `scans` and `scan_jobs` (type, status, start/end, who started it, error)
+- `scans` and `scan_jobs` (type, scanner node, status, start/end, who started it, error, plus a self-contained
+  payload of targets and scope so the job can be signed later)
 - `scan_log`: an append-only log of every active scan
 - `findings`:
-  - links: client, asset
+  - links: client, site, asset, engagement_id (empty until pen testing exists)
+  - source: external / internal / authenticated / pentest (v1 only writes `external`)
   - classification: type, severity FAIL/WARN/INFO, confidence confirmed/possible
   - CVE data: cve_id, KEV flag, EPSS score
   - status: open/resolved/accepted/false_positive, plus the triage note and who made it
@@ -107,6 +111,10 @@ TCP: 21, 22, 23, 25, 53, 80, 110, 135, 139, 143, 389, 443, 445, 465, 587, 636, 9
 and VPN admin ports. UDP: 161, 500.
 
 ## 7. Out of scope for v1
+
+Phased plan for the full suite (internal agent, pen testing): see `ROADMAP.md`. Version 1.0 includes scanner nodes,
+sites, a finding `source` and a global/per-client kill switch, so later phases don't need a rewrite.
+
 
 - internal collector or agent
 - nuclei
