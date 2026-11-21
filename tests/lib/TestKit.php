@@ -1,0 +1,255 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Sentinel\Tests;
+
+use PDO;
+
+/**
+ * Minimal test toolkit (no Composer, no PHPUnit): assertions, an HTTP client
+ * with a cookie jar, and the shared context handed to every test.
+ *
+ * Security assumptions: tests only ever talk to 127.0.0.1 (the PHP built-in
+ * server started by tests/run.php) and a throwaway database. No outside
+ * host is contacted.
+ */
+final class AssertionFailed extends \RuntimeException
+{
+}
+
+final class Assert
+{
+    public static function true(bool $condition, string $message): void
+    {
+        if (!$condition) {
+            throw new AssertionFailed($message);
+        }
+    }
+
+    public static function same(mixed $expected, mixed $actual, string $message = ''): void
+    {
+        if ($expected !== $actual) {
+            throw new AssertionFailed(($message !== '' ? $message . ': ' : '') . 'expected ' . var_export($expected, true) . ', got ' . var_export($actual, true));
+        }
+    }
+
+    public static function contains(string $needle, string $haystack, string $message = ''): void
+    {
+        if (!str_contains($haystack, $needle)) {
+            throw new AssertionFailed(($message !== '' ? $message . ': ' : '') . 'expected to find ' . var_export($needle, true));
+        }
+    }
+
+    public static function notContains(string $needle, string $haystack, string $message = ''): void
+    {
+        if (str_contains($haystack, $needle)) {
+            throw new AssertionFailed(($message !== '' ? $message . ': ' : '') . 'did not expect to find ' . var_export($needle, true));
+        }
+    }
+
+    public static function status(int $expected, HttpResult $res, string $message = ''): void
+    {
+        if ($res->status !== $expected) {
+            throw new AssertionFailed(($message !== '' ? $message . ': ' : '') . "expected HTTP {$expected}, got {$res->status}"
+                . ($res->location() !== null ? ' (Location: ' . $res->location() . ')' : ''));
+        }
+    }
+
+    public static function redirect(string $path, HttpResult $res, string $message = ''): void
+    {
+        if (!in_array($res->status, [301, 302, 303], true) || $res->location() !== $path) {
+            throw new AssertionFailed(($message !== '' ? $message . ': ' : '') . "expected redirect to {$path}, got HTTP {$res->status} to " . var_export($res->location(), true));
+        }
+    }
+}
+
+final class HttpResult
+{
+    /** @param array<string,list<string>> $headers lower-case name => values */
+    public function __construct(public readonly int $status, public readonly array $headers, public readonly string $body)
+    {
+    }
+
+    public function header(string $name): ?string
+    {
+        return $this->headers[strtolower($name)][0] ?? null;
+    }
+
+    public function location(): ?string
+    {
+        return $this->header('location');
+    }
+
+    /** First CSRF token found in the page. */
+    public function csrf(): string
+    {
+        if (!preg_match('/name="_csrf" value="([a-f0-9]{64})"/', $this->body, $m)) {
+            throw new AssertionFailed('No CSRF token on page (HTTP ' . $this->status . ')');
+        }
+        return $m[1];
+    }
+}
+
+/**
+ * A browser-like client: keeps cookies, never follows redirects (tests check them).
+ */
+final class HttpClient
+{
+    private \CurlHandle $curl;
+
+    public function __construct(private readonly string $baseUrl)
+    {
+        $this->curl = curl_init();
+        curl_setopt_array($this->curl, [
+            CURLOPT_COOKIEFILE => '', // in-memory cookie jar
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => false,
+            CURLOPT_TIMEOUT => 20,
+            CURLOPT_PROXY => '', // never send test traffic through a proxy
+            CURLOPT_NOPROXY => '*',
+        ]);
+    }
+
+    public function get(string $path): HttpResult
+    {
+        return $this->request('GET', $path, null);
+    }
+
+    /** @param array<string,string> $fields */
+    public function post(string $path, array $fields): HttpResult
+    {
+        return $this->request('POST', $path, $fields);
+    }
+
+    /**
+     * Load a page, take its CSRF token and post a form, like a user would.
+     *
+     * @param array<string,string> $fields
+     */
+    public function submit(string $formPage, string $action, array $fields): HttpResult
+    {
+        $page = $this->get($formPage);
+        return $this->post($action, $fields + ['_csrf' => $page->csrf()]);
+    }
+
+    /** Value of a cookie in the jar, or null. */
+    public function cookie(string $name): ?string
+    {
+        foreach (curl_getinfo($this->curl, CURLINFO_COOKIELIST) ?: [] as $line) {
+            $parts = explode("\t", $line);
+            if (($parts[5] ?? null) === $name) {
+                return $parts[6] ?? '';
+            }
+        }
+        return null;
+    }
+
+    /** @param array<string,string>|null $fields */
+    private function request(string $method, string $path, ?array $fields): HttpResult
+    {
+        $headers = [];
+        curl_setopt_array($this->curl, [
+            CURLOPT_URL => $this->baseUrl . $path,
+            CURLOPT_CUSTOMREQUEST => $method,
+            CURLOPT_POST => $method === 'POST',
+            CURLOPT_POSTFIELDS => $fields === null ? null : http_build_query($fields),
+            CURLOPT_HTTPGET => $method === 'GET',
+            CURLOPT_HEADERFUNCTION => static function ($ch, string $line) use (&$headers): int {
+                if (str_contains($line, ':')) {
+                    [$name, $value] = explode(':', $line, 2);
+                    $headers[strtolower(trim($name))][] = trim($value);
+                }
+                return strlen($line);
+            },
+        ]);
+        if ($method === 'GET') {
+            curl_setopt($this->curl, CURLOPT_POSTFIELDS, null);
+        }
+        $body = curl_exec($this->curl);
+        if ($body === false) {
+            throw new AssertionFailed('HTTP request failed: ' . curl_error($this->curl));
+        }
+        return new HttpResult((int) curl_getinfo($this->curl, CURLINFO_RESPONSE_CODE), $headers, (string) $body);
+    }
+}
+
+/**
+ * Shared state for tests: base URL, database, and helpers to sign users in.
+ */
+final class TestContext
+{
+    /** @var array<string,string> username => TOTP secret captured at enrolment */
+    public array $secrets = [];
+
+    public function __construct(
+        public readonly string $baseUrl,
+        public readonly PDO $db,
+        public readonly string $root,
+        public readonly string $configPath,
+    ) {
+    }
+
+    public function client(): HttpClient
+    {
+        return new HttpClient($this->baseUrl);
+    }
+
+    /** Current TOTP code for a user whose secret we captured. */
+    public function totp(string $username, int $offsetSteps = 0): string
+    {
+        return \Sentinel\Auth\Totp::code($this->secrets[$username], \Sentinel\Auth\Totp::currentStep() + $offsetSteps);
+    }
+
+    /**
+     * Let a user sign in again within the same 30 seconds: forget the last
+     * used step. (Replay protection itself has its own test.)
+     */
+    public function allowFreshCode(string $username): void
+    {
+        $this->db->prepare('UPDATE users SET totp_last_step = NULL WHERE username = :u')->execute(['u' => $username]);
+    }
+
+    /** Create a user straight in the database (fast test setup). */
+    public function createUser(string $username, string $role, string $password, bool $mustChange = false): int
+    {
+        $stmt = $this->db->prepare(
+            "INSERT INTO users (username, display_name, email, role, password_hash, must_change_password, is_active, session_version, created_at, updated_at)
+             VALUES (:u, :d, '', :r, :p, :m, 1, 1, UTC_TIMESTAMP(), UTC_TIMESTAMP())"
+        );
+        $stmt->execute(['u' => $username, 'd' => ucfirst($username) . ' Example', 'r' => $role, 'p' => password_hash($password, PASSWORD_ARGON2ID), 'm' => $mustChange ? 1 : 0]);
+        return (int) $this->db->lastInsertId();
+    }
+
+    /**
+     * Full sign-in for a user: password, then 2FA enrolment (first time) or a TOTP code.
+     * Returns the client, signed in.
+     */
+    public function login(string $username, string $password, ?HttpClient $client = null): HttpClient
+    {
+        $client ??= $this->client();
+        $res = $client->submit('/login', '/login', ['username' => $username, 'password' => $password]);
+        if ($res->location() === '/2fa/setup') {
+            $page = $client->get('/2fa/setup');
+            if (!preg_match('/data-testid="totp-secret">([A-Z2-7 ]+)</', $page->body, $m)) {
+                throw new AssertionFailed('No TOTP secret on the enrolment page');
+            }
+            $this->secrets[$username] = str_replace(' ', '', $m[1]);
+            $res = $client->post('/2fa/setup', ['_csrf' => $page->csrf(), 'code' => $this->totp($username)]);
+            Assert::redirect('/recovery-codes', $res, 'enrolment for ' . $username);
+            $client->get('/recovery-codes');
+            return $client;
+        }
+        Assert::redirect('/login/2fa', $res, 'password step for ' . $username);
+        $this->allowFreshCode($username);
+        $res = $client->submit('/login/2fa', '/login/2fa', ['code' => $this->totp($username)]);
+        Assert::redirect('/', $res, 'second factor for ' . $username);
+        return $client;
+    }
+
+    /** Clear login throttling between tests. */
+    public function clearThrottle(): void
+    {
+        $this->db->exec('DELETE FROM auth_throttle');
+    }
+}

@@ -1,0 +1,83 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Sentinel\Controllers;
+
+use Sentinel\Core\App;
+use Sentinel\Core\Request;
+use Sentinel\Core\Response;
+use Sentinel\Core\Session;
+
+/**
+ * Admin pages: audit log and general settings (admin only: enforced by the routes).
+ *
+ * Untrusted: the page query parameter and all settings form fields.
+ *
+ * Security assumptions:
+ * - The audit log is read-only in the UI.
+ * - Settings are validated strictly before saving: the product name is
+ *   plain text, and the source URL must be an http(s) URL. Both are escaped
+ *   wherever they're shown.
+ */
+final class AdminController extends Controller
+{
+    private const AUDIT_PAGE_SIZE = 50;
+
+    /** GET /admin/audit */
+    public function auditLog(Request $request): Response
+    {
+        $page = max(1, min(100000, (int) $request->query('page')));
+        $total = (int) App::db()->query('SELECT COUNT(*) FROM audit_log')->fetchColumn();
+        $stmt = App::db()->prepare('SELECT * FROM audit_log ORDER BY id DESC LIMIT :lim OFFSET :off');
+        $stmt->bindValue('lim', self::AUDIT_PAGE_SIZE, \PDO::PARAM_INT);
+        $stmt->bindValue('off', ($page - 1) * self::AUDIT_PAGE_SIZE, \PDO::PARAM_INT);
+        $stmt->execute();
+        return $this->page('audit/index', __('Audit log'), [
+            'entries' => $stmt->fetchAll(),
+            'page' => $page,
+            'pages' => max(1, (int) ceil($total / self::AUDIT_PAGE_SIZE)),
+        ]);
+    }
+
+    /** GET /admin/settings */
+    public function settings(Request $request): Response
+    {
+        $settings = App::settings();
+        return $this->page('settings/index', __('Settings'), [
+            'values' => ['product_name' => $settings->get('product_name'), 'source_url' => $settings->get('source_url')],
+            'errors' => [],
+        ]);
+    }
+
+    /** POST /admin/settings */
+    public function saveSettings(Request $request): Response
+    {
+        $values = ['product_name' => $request->input('product_name'), 'source_url' => $request->input('source_url')];
+        $errors = [];
+        if ($values['product_name'] === '' || mb_strlen($values['product_name']) > 60 || preg_match('/[\x00-\x1F\x7F<>]/u', $values['product_name'])) {
+            $errors['product_name'] = __('Enter a name of up to 60 characters, without < or >.');
+        }
+        $scheme = strtolower((string) parse_url($values['source_url'], PHP_URL_SCHEME));
+        if (mb_strlen($values['source_url']) > 255 || filter_var($values['source_url'], FILTER_VALIDATE_URL) === false || !in_array($scheme, ['http', 'https'], true)) {
+            $errors['source_url'] = __('Enter a full http:// or https:// address.');
+        }
+        if ($errors !== []) {
+            return $this->page('settings/index', __('Settings'), ['values' => $values, 'errors' => $errors], 422);
+        }
+
+        $settings = App::settings();
+        $changed = [];
+        foreach ($values as $name => $value) {
+            if ($settings->get($name) !== $value) {
+                $changed[$name] = $value;
+                $settings->set($name, $value);
+            }
+        }
+        if ($changed !== []) {
+            $this->audit($request, 'settings.updated', null, null, ['changed' => $changed]);
+        }
+        Session::flash('success', __('Settings saved.'));
+        return Response::redirect('/admin/settings');
+    }
+}

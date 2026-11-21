@@ -1,0 +1,8 @@
+# Local configuration holds database credentials and the app key: never commit it.
+/config/config.php
+# Runtime data
+/storage/
+# Test and screenshot output
+/tests/output/
+/node_modules/
+.DS_Store

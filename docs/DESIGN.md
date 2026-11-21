@@ -63,7 +63,9 @@ Sentinel's findings through a read-only API.
 
 ## 3. Data model (sketch)
 
-- `users`, `sessions`, `api_tokens` (hash, scope, last used, revoked)
+- `users` (with `session_version`: bumping it ends that user's sessions), `user_recovery_codes`, `auth_throttle`
+  (sessions themselves use PHP's server-side session store; no `sessions` table is needed)
+- `api_tokens` (hash, scope, last used, revoked). Added with the API in step 10.
 - `clients` (name, itflow_client_id, scan window, timezone, port profile, kill switch)
 - `sites` (client, name, itflow_location_id). v1 creates one default site per client. Agents attach here later.
 - `scanner_nodes` (name, type local/remote/agent, site, status, last seen). v1 has one: the local worker.
