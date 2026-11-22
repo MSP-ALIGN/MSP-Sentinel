@@ -17,7 +17,7 @@ final class FindingRepository
 {
     public const STATUSES = ['open', 'accepted', 'false_positive', 'resolved'];
     public const SEVERITIES = ['fail', 'warn'];
-    public const TYPES = ['port', 'tls', 'web', 'vuln'];
+    public const TYPES = ['port', 'tls', 'web', 'vuln', 'email'];
     public const PAGE_SIZE = 100;
 
     /** Works on the given connection. */

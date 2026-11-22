@@ -181,6 +181,7 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
         <?php require __DIR__ . '/scans.php'; ?>
         <?php require __DIR__ . '/vulns.php'; ?>
         <?php require __DIR__ . '/exposure.php'; ?>
+        <?php require __DIR__ . '/website.php'; ?>
         <?php require __DIR__ . '/discovery.php'; ?>
     </div>
 </div>

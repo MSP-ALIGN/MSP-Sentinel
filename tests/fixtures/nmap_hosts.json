@@ -89,5 +89,33 @@
         "product": "ExampleServer"
       }
     ]
+  },
+  "203.0.113.190": {
+    "open": [
+      {
+        "port": 80,
+        "name": "http",
+        "product": "Example web"
+      },
+      {
+        "port": 443,
+        "name": "https",
+        "product": "Example web"
+      }
+    ]
+  },
+  "203.0.113.191": {
+    "open": [
+      {
+        "port": 80,
+        "name": "http",
+        "product": "Example web"
+      },
+      {
+        "port": 443,
+        "name": "https",
+        "product": "Example web"
+      }
+    ]
   }
 }

@@ -1,0 +1,9 @@
+{
+ "*": {
+  "status": 301,
+  "headers": {
+   "Location": "https://site-good.example/"
+  },
+  "body": ""
+ }
+}

@@ -166,6 +166,11 @@ try {
         '203.0.113.180:80' => ['plain', '-', $page('plain', '<html><head><title>Welcome to Example Co</title></head><body>We sell routers and switches.</body></html>')],
         '203.0.113.181:443' => ['legacy', $certs['weak'], $page('fw', '<html><head><title>Firewall Administration</title></head><body><form><input type="password"></form></body></html>')],
         '203.0.113.182:8443' => ['modern', $certs['wrongname'], $page('router', '<html><head><title>Router Management</title></head><body><script>var x="</title>";</script><input type=password></body></html>')],
+        // Website checks: a badly configured site (190) and a well configured one (191) that answers 200 to every path.
+        '203.0.113.190:80' => ['plain', '-', __DIR__ . '/fixtures/sites/bad-http.json'],
+        '203.0.113.190:443' => ['modern', $certs['good'], __DIR__ . '/fixtures/sites/bad-https.json'],
+        '203.0.113.191:80' => ['plain', '-', __DIR__ . '/fixtures/sites/good-http.json'],
+        '203.0.113.191:443' => ['modern', $certs['good'], __DIR__ . '/fixtures/sites/good-https.json'],
     ];
     $redirects = [];
     foreach ($tlsMocks as $target => [$mode, $pem, $htmlFile]) {

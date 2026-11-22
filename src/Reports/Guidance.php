@@ -36,6 +36,7 @@ final class Guidance
             'tls' => self::tls(substr($key, (int) strrpos($key, ':') + 1)),
             'web' => self::web(substr($key, (int) strrpos($key, ':') + 1)),
             'vuln' => self::vuln($vuln),
+            'email' => self::email(substr($key, (int) strrpos($key, ':') + 1)),
             default => ['meaning' => __('This item needs a review by your IT provider.'), 'fix' => __('Review the details and decide whether to fix or accept it.')],
         };
     }
@@ -112,6 +113,54 @@ final class Guidance
     private static function web(string $category): array
     {
         return match ($category) {
+            'login_over_http' => [
+                'meaning' => __('Passwords typed on this page travel unencrypted and can be read on the way (public Wi-Fi, compromised networks).'),
+                'fix' => __('Serve the site only over HTTPS and redirect every HTTP request to HTTPS.'),
+            ],
+            'no_https_redirect' => [
+                'meaning' => __('Visitors who type the address without https:// get an unencrypted version of the site, which can be read or changed on the way.'),
+                'fix' => __('Redirect all HTTP requests to the HTTPS address (a permanent 301 redirect).'),
+            ],
+            'missing_hsts' => [
+                'meaning' => __('Browsers are not told to always use HTTPS, so a first visit or an old link can be downgraded to unencrypted HTTP.'),
+                'fix' => __('Add the header Strict-Transport-Security: max-age=31536000 (one year) once HTTPS works everywhere on the site.'),
+            ],
+            'missing_csp' => [
+                'meaning' => __('Without a Content-Security-Policy, an injected script (for example from a hacked plugin or a cross-site scripting bug) runs with no restriction.'),
+                'fix' => __('Add a Content-Security-Policy header that allows scripts and styles only from the site and the services it really uses; start in report-only mode to test it.'),
+            ],
+            'insecure_cookies' => [
+                'meaning' => __('Cookies without Secure can be sent over unencrypted connections, and session cookies without HttpOnly can be stolen by injected scripts.'),
+                'fix' => __('Set the Secure flag on all cookies of HTTPS sites and HttpOnly on session and login cookies (usually a setting in the site or framework).'),
+            ],
+            'directory_listing' => [
+                'meaning' => __('Anyone can browse the files in a folder of the website, including files that were never meant to be public.'),
+                'fix' => __('Turn off directory listing in the web server configuration (for example "Options -Indexes" in Apache, "autoindex off" in Nginx).'),
+            ],
+            'exposed_git' => [
+                'meaning' => __('The website\'s source code history can be downloaded, often including passwords, keys and the full code.'),
+                'fix' => __('Block access to the .git folder in the web server (or remove it from the web root), then change any passwords or keys it contained.'),
+            ],
+            'exposed_env' => [
+                'meaning' => __('The site\'s configuration file can be downloaded. These files usually hold database passwords and API keys.'),
+                'fix' => __('Block access to .env files (move them out of the web root), then change every password and key in the file: assume they are known.'),
+            ],
+            'exposed_backup' => [
+                'meaning' => __('A backup or database export can be downloaded by anyone, possibly including customer data and passwords.'),
+                'fix' => __('Remove the backup files from the website and store backups outside the web root. Check whether personal data was exposed.'),
+            ],
+            'exposed_phpinfo' => [
+                'meaning' => __('A diagnostic page shows the server\'s full PHP configuration, which helps attackers plan an attack.'),
+                'fix' => __('Delete the phpinfo page from the server.'),
+            ],
+            'exposed_status' => [
+                'meaning' => __('The web server\'s status page shows live requests and internal details to anyone.'),
+                'fix' => __('Allow the server-status page only from the server itself or a management network.'),
+            ],
+            'exposed_dsstore' => [
+                'meaning' => __('A file left by a Mac lists the names of files in that folder, which can reveal hidden or old files.'),
+                'fix' => __('Delete .DS_Store files from the website and block them in the web server.'),
+            ],
             'firewall_admin', 'device_admin' => [
                 'meaning' => __('The login page that controls a network device is open to the whole internet. If it is broken into, the attacker controls your network.'),
                 'fix' => __('Allow management only from inside the network or a VPN, and keep the device\'s firmware up to date.'),
@@ -127,6 +176,29 @@ final class Guidance
             default => [
                 'meaning' => __('An administrative page is reachable from the internet.'),
                 'fix' => __('Limit access to trusted networks.'),
+            ],
+        };
+    }
+
+    /** @return array{meaning:string, fix:string} */
+    private static function email(string $code): array
+    {
+        return match ($code) {
+            'spf_pass_all' => [
+                'meaning' => __('The domain\'s SPF record tells receivers that ANY server may send email as this domain, which makes fake emails from it easy.'),
+                'fix' => __('Replace "+all" with "-all" (or "~all" while testing) and list only the services that really send your email.'),
+            ],
+            'spf_missing', 'spf_weak', 'spf_multiple' => [
+                'meaning' => __('Receivers can\'t reliably tell real email from this domain apart from fakes, so phishing that pretends to be you gets through more easily.'),
+                'fix' => __('Publish one SPF record listing the services that send your email, ending in "-all" or "~all" (for example v=spf1 include:spf.protection.outlook.com -all).'),
+            ],
+            'dmarc_missing', 'dmarc_weak' => [
+                'meaning' => __('Without an enforced DMARC policy, receivers deliver emails that fake your domain, and you get no reports about them.'),
+                'fix' => __('Publish a DMARC record (start with p=none and reports, then move to p=quarantine and p=reject once your real email passes).'),
+            ],
+            default => [
+                'meaning' => __('An email security setting for this domain should be reviewed.'),
+                'fix' => __('Review the domain\'s SPF, DKIM and DMARC records.'),
             ],
         };
     }

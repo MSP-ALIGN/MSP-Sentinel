@@ -69,9 +69,19 @@ return [
             'title' => 'Certificates and exposed admin pages',
             'paragraphs' => [
                 'After each port scan, and once a day inside the scan window, Sentinel connects briefly to each TLS service it found. It reads the certificate (expiry, issuer, whether it is trusted and matches the name, key size) and checks whether old TLS 1.0 or 1.1 is still accepted.',
-                'It also requests the start page of each web port once, without logging in or guessing paths, and recognises firewall and device admin pages, VPN portals, remote desktop web access and other login pages from their wording.',
+                'It also requests the start page of each web port once, without logging in, and recognises firewall and device admin pages, VPN portals, remote desktop web access and other login pages from their wording. The website checks (see "Website and email security") then request a short fixed list of paths.',
                 'Grading: an expired certificate, or a firewall or device admin page reachable from the internet, is a Fail. A certificate expiring within 14 days, self-signed or untrusted certificates, name mismatches, old TLS and weak keys are Warnings. VPN portals and remote desktop web access are Warnings too: they are often meant to be reachable, so make sure they are patched and use MFA.',
                 'Mail services that start TLS later in the connection (STARTTLS on ports 25, 587, 143) are not checked yet.',
+            ],
+        ],
+        [
+            'title' => 'Website and email security',
+            'paragraphs' => [
+                'With each port scan, and once a day inside the scan window, Sentinel checks every website it found. It reads the start page and its response headers: whether HTTP redirects to HTTPS, whether a login form is served without encryption, the security headers (HSTS, Content-Security-Policy and others), cookie flags and directory listings.',
+                'It requests a short, fixed list of files that are often left on websites by mistake: /.git/HEAD, /.env, common backup and database dump names, /phpinfo.php, /server-status and /.DS_Store. A file is only reported when its content proves it (for example a real git reference or a zip file), so sites that answer every address with a page are not flagged. The content of these files is never stored.',
+                'It recognises WordPress, Drupal and Joomla and common JavaScript libraries (jQuery, Bootstrap, AngularJS, Lodash, Moment.js, Vue.js) from the page markup. When a version is visible, it is matched to known vulnerabilities like any other software. Sentinel never guesses a version.',
+                'For each domain in the authorisation that receives email (has MX records), Sentinel checks the SPF and DMARC records and looks for DKIM under common selectors, through DNS only. Domains without MX records are not judged.',
+                'Grading: a login over HTTP, an exposed .git folder, .env file, backup or phpinfo page, and an SPF record that allows anyone to send (+all) are Fails. A missing HTTPS redirect, HSTS or Content-Security-Policy, insecure cookies, a directory listing, the server-status page, a .DS_Store file, a missing or weak SPF and a missing or "p=none" DMARC are Warnings. Other headers and DKIM not being found under a common selector are advice only (Info): DKIM may use a selector Sentinel does not know.',
             ],
         ],
         [
@@ -153,6 +163,16 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.4.0',
+            'date' => '2026-11-22',
+            'items' => [
+                'Website checks: HTTPS and redirects, security headers, cookie flags, directory listings and exposed files (.git, .env, backups, phpinfo), with each scan and daily.',
+                'WordPress, Drupal, Joomla and common JavaScript libraries are recognised, and visible versions are matched to known vulnerabilities.',
+                'Email security: SPF, DMARC and DKIM for every authorised domain that receives email.',
+                'A new "Website and email security" card on the client page, a new Email security finding type, and plain-English fixes in reports.',
+            ],
+        ],
         [
             'version' => '1.3.0',
             'date' => '2026-11-22',

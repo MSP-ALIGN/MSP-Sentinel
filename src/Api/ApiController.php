@@ -186,7 +186,7 @@ final class ApiController
     {
         [$where, $params] = $this->scope('f.client_id');
         $this->clientFilter($where, $params, 'f.client_id');
-        foreach (['status' => ['open', 'resolved', 'accepted', 'false_positive'], 'severity' => ['fail', 'warn'], 'type' => ['port', 'tls', 'web', 'vuln']] as $key => $allowed) {
+        foreach (['status' => ['open', 'resolved', 'accepted', 'false_positive'], 'severity' => ['fail', 'warn'], 'type' => ['port', 'tls', 'web', 'vuln', 'email']] as $key => $allowed) {
             $v = $this->request->query($key);
             if ($v === '') {
                 continue;

@@ -26,6 +26,7 @@ final class DnsMessage
     public const CNAME = 5;
     public const PTR = 12;
     public const MX = 15;
+    public const TXT = 16;
     public const AAAA = 28;
 
     private const MAX_JUMPS = 16;
@@ -82,6 +83,7 @@ final class DnsMessage
                 self::AAAA => strlen($rdata) === 16 ? (string) inet_ntop($rdata) : null,
                 self::NS, self::CNAME, self::PTR => self::nameAt($packet, $rdataStart),
                 self::MX => strlen($rdata) >= 3 ? self::nameAt($packet, $rdataStart + 2) : null,
+                self::TXT => self::txt($rdata),
                 default => null,
             };
             if ($data !== null) {
@@ -89,6 +91,31 @@ final class DnsMessage
             }
         }
         return ['rcode' => $h['flags'] & 0x0f, 'truncated' => ($h['flags'] & 0x0200) !== 0, 'answers' => $answers];
+    }
+
+    /**
+     * A TXT record's character-strings joined into one string (as SPF/DMARC/DKIM
+     * expect), with anything but printable ASCII replaced by "?" and capped at 4000
+     * characters. Untrusted data: only used for pattern checks and shown escaped.
+     */
+    private static function txt(string $rdata): ?string
+    {
+        $out = '';
+        $pos = 0;
+        $len = strlen($rdata);
+        while ($pos < $len) {
+            $n = ord($rdata[$pos]);
+            $part = substr($rdata, $pos + 1, $n);
+            if (strlen($part) !== $n) {
+                return null; // malformed
+            }
+            $out .= $part;
+            $pos += $n + 1;
+            if (strlen($out) > 4000) {
+                break;
+            }
+        }
+        return substr((string) preg_replace('/[^\x20-\x7E]/', '?', $out), 0, 4000);
     }
 
     /** The reverse-lookup name for an IP, e.g. 203.0.113.5 -> 5.113.0.203.in-addr.arpa. */

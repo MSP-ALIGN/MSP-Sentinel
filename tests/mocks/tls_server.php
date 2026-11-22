@@ -7,7 +7,10 @@ declare(strict_types=1);
  *
  * Usage: php tests/mocks/tls_server.php <port> <mode> <pem-or-"-"> <html-file>
  *   mode: modern (TLS 1.2+), legacy (also TLS 1.0/1.1, weak keys allowed), plain (HTTP, no TLS)
- * Answers each connection with a fixed HTML page, then closes it.
+ * Answers each connection with a fixed HTML page, then closes it. If <html-file>
+ * ends in .json it is a route map instead: {"/path": {"status": 200, "headers":
+ * {"Name": "value" or [values]}, "body": "...", "body_b64": "..."}, "*": fallback}
+ * (unknown paths get 404, or the "*" route, e.g. a soft-404 page answering 200).
  */
 
 if (PHP_SAPI !== 'cli' || $argc < 5) {
@@ -15,6 +18,7 @@ if (PHP_SAPI !== 'cli' || $argc < 5) {
 }
 [$script, $port, $mode, $pem, $htmlFile] = $argv;
 $html = (string) file_get_contents($htmlFile);
+$routes = str_ends_with($htmlFile, '.json') ? json_decode($html, true) : null;
 $methods = [
     'modern' => STREAM_CRYPTO_METHOD_TLSv1_2_SERVER | STREAM_CRYPTO_METHOD_TLSv1_3_SERVER,
     'legacy' => STREAM_CRYPTO_METHOD_TLSv1_0_SERVER | STREAM_CRYPTO_METHOD_TLSv1_1_SERVER | STREAM_CRYPTO_METHOD_TLSv1_2_SERVER,
@@ -43,7 +47,19 @@ while (true) {
         }
         $request .= $chunk;
     }
-    if ($request !== '') {
+    if ($request !== '' && is_array($routes)) {
+        $path = preg_match('#^[A-Z]+ (\S+) HTTP#', $request, $rm) ? (string) parse_url($rm[1], PHP_URL_PATH) : '/';
+        $route = $routes[$path] ?? ($routes['*'] ?? ['status' => 404, 'body' => 'Not found']);
+        $body = isset($route['body_b64']) ? base64_decode($route['body_b64']) : (string) ($route['body'] ?? '');
+        $head = 'HTTP/1.1 ' . (int) ($route['status'] ?? 200) . " X\r\nServer: ExampleServer/1.0\r\n";
+        $headers = ($route['headers'] ?? []) + ['Content-Type' => 'text/html'];
+        foreach ($headers as $name => $values) {
+            foreach ((array) $values as $v) {
+                $head .= $name . ': ' . $v . "\r\n";
+            }
+        }
+        @fwrite($conn, $head . 'Content-Length: ' . strlen($body) . "\r\nConnection: close\r\n\r\n" . $body);
+    } elseif ($request !== '') {
         @fwrite($conn, "HTTP/1.1 200 OK\r\nServer: ExampleServer/1.0\r\nContent-Type: text/html\r\nContent-Length: " . strlen($html) . "\r\nConnection: close\r\n\r\n" . $html);
     }
     fclose($conn);

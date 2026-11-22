@@ -4,14 +4,28 @@ Self-hosted security monitoring for MSPs (managed service providers). Sentinel *
 exposure and vulnerabilities across your clients, monitors them and alerts on them. Its companion product,
 MSP Align, plans, reports and proves, using Sentinel's findings.
 
-> **Status: 1.3.0 (stable).** External exposure monitoring for MSPs: the "authorised to scan"
-> register, passive discovery, gentle port scanning, certificate and admin-page checks, vulnerability matching
+> **Status: 1.4.0 (stable).** External exposure monitoring for MSPs: the "authorised to scan"
+> register, passive discovery, gentle port scanning, certificate, admin-page, website and email checks, vulnerability matching
 > (NVD, CISA KEV, EPSS), findings with triage, alerts, branded reports, an API, and an installer. See
 > [`docs/ROADMAP.md`](docs/ROADMAP.md) for what comes next (internal agent, pen testing).
 
 Sentinel is free software under the [GNU AGPL-3.0](LICENSE). Each MSP runs its own copy and owns its data.
 
 ## What's new
+
+### 1.4.0 (2026-11-22): website and email security
+
+- **Website checks** run with each port scan and once a day: HTTP to HTTPS redirects, logins served without
+  encryption, security headers (HSTS, Content-Security-Policy and others), cookie flags and directory listings.
+- **Exposed files**: a short fixed list of paths (/.git/HEAD, /.env, backups and database dumps, /phpinfo.php,
+  /server-status, /.DS_Store). A file is only reported when its content proves it, so sites that answer every address
+  with a page aren't flagged. File contents are never stored.
+- **CMS and libraries**: WordPress, Drupal, Joomla, jQuery, Bootstrap, AngularJS, Lodash, Moment.js and Vue.js are
+  recognised from page markup; visible versions are matched to known vulnerabilities (confirmed), and unknown
+  versions only to known-exploited ones (possible).
+- **Email security**: SPF, DMARC and DKIM (common selectors) for each authorised domain that receives email, by DNS
+  only. A new **Email security** finding type.
+- A **Website and email security** card on the client page, and plain-English explanations and fixes in reports.
 
 ### 1.3.0 (2026-11-22): Administration as its own section
 

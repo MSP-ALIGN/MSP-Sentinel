@@ -9,6 +9,7 @@ use Sentinel\Scanning\EndpointRepository;
 use Sentinel\Scanning\ExposureRules;
 use Sentinel\Scanning\PortProfile;
 use Sentinel\Vulns\VulnRepository;
+use Sentinel\Web\WebsiteRepository;
 
 /**
  * Builds each client's findings from what is currently known (open services,
@@ -44,6 +45,7 @@ final class FindingsEngine
         private readonly PDO $db,
         private readonly EndpointRepository $endpoints,
         private readonly VulnRepository $vulns,
+        private readonly ?WebsiteRepository $website = null,
     ) {
     }
 
@@ -274,6 +276,55 @@ final class FindingsEngine
                 'detail' => trim(trim($v['product'] . ' ' . $v['version']) . ': ' . $how . '. ' . mb_strimwidth((string) $v['summary'], 0, 600, '…')),
                 'target' => "{$v['ip']}:{$v['port']}", 'evidence' => $v['confidence'] . '|' . $v['cpe'], 'asset_id' => null, 'cve_id' => (string) $v['cve_id'],
             ]);
+        }
+        // Website checks (headers, cookies, HTTPS, exposed files) on open web services.
+        if ($this->website !== null) {
+            foreach ($this->website->checksForClient($clientId) as $w) {
+                $target = ($w['scheme'] ?? 'http') . '://' . $w['ip'] . ':' . $w['port'];
+                $codes = array_merge((array) ($w['checks']['issues'] ?? []), (array) ($w['checks']['exposed'] ?? []));
+                foreach (array_unique($codes) as $code) {
+                    $rule = ExposureRules::websiteIssue((string) $code);
+                    if ($rule['severity'] === 'info') {
+                        continue;
+                    }
+                    $detail = $code === 'insecure_cookies' && !empty($w['checks']['cookies'])
+                        ? __('Cookies: {list}.', ['list' => implode(', ', (array) $w['checks']['cookies'])])
+                        : ($w['host_header'] !== '' ? __('Checked as {host}.', ['host' => $w['host_header']]) : '');
+                    $add("site:{$w['ip']}:{$w['port']}:{$code}", [
+                        'type' => 'web', 'severity' => $rule['severity'], 'title' => $rule['text'], 'detail' => $detail,
+                        'target' => $target, 'evidence' => (string) $code, 'asset_id' => (int) $w['asset_id'],
+                    ]);
+                }
+            }
+            // Known vulnerabilities in detected CMS and JavaScript libraries.
+            foreach ($this->website->componentVulns($clientId) as $v) {
+                $sev = ExposureRules::vulnSeverity(['confidence' => $v['confidence'], 'in_kev' => $v['in_kev'], 'cvss_score' => $v['cvss_score'], 'cvss_severity' => $v['cvss_severity']]);
+                if ($sev === 'info') {
+                    continue;
+                }
+                $kev = (int) $v['in_kev'] === 1;
+                $add("webvuln:{$v['ip']}:{$v['port']}:{$v['name']}:{$v['cve_id']}", [
+                    'type' => 'vuln', 'severity' => $sev,
+                    'title' => ($kev ? __('Known exploited: ') : '') . $v['cve_id'] . ' ' . __('in {component}', ['component' => trim($v['name'] . ' ' . $v['version'])])
+                        . ' (' . ($v['cvss_score'] ?? '?') . ' ' . ucfirst(strtolower((string) $v['cvss_severity'])) . ')',
+                    'detail' => trim(($v['confidence'] === 'confirmed' ? __('confirmed for the version on the page') : __('product found, version unknown')) . '. ' . mb_strimwidth((string) $v['summary'], 0, 600, '…')),
+                    'target' => "{$v['ip']}:{$v['port']}", 'evidence' => $v['confidence'] . '|' . $v['name'] . ' ' . $v['version'], 'asset_id' => (int) $v['asset_id'], 'cve_id' => (string) $v['cve_id'],
+                ]);
+            }
+            // Email security records (SPF, DMARC) for in-scope domains that receive mail.
+            foreach ($this->website->emailForClient($clientId) as $e) {
+                foreach ((array) ($e['issues'] ?? []) as $code) {
+                    $rule = ExposureRules::emailIssue((string) $code);
+                    if ($rule['severity'] === 'info') {
+                        continue;
+                    }
+                    $add("email:{$e['domain']}:{$code}", [
+                        'type' => 'email', 'severity' => $rule['severity'], 'title' => $rule['text'],
+                        'detail' => trim(($e['spf'] ?? '') !== '' ? 'SPF: ' . $e['spf'] : '') . ((($e['dmarc'] ?? '') !== '') ? ' DMARC: ' . $e['dmarc'] : ''),
+                        'target' => (string) $e['domain'], 'evidence' => (string) $code . '|' . ($e['spf_all'] ?? '') . '|' . ($e['dmarc_policy'] ?? ''), 'asset_id' => null,
+                    ]);
+                }
+            }
         }
         return $issues;
     }

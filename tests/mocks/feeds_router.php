@@ -40,7 +40,8 @@ if ($path === '/rest/json/cves/2.0') {
         exit;
     }
     $map = ['cpe:2.3:a:openbsd:openssh:8.9p1' => 'nvd_openssh.json', 'cpe:2.3:a:openbsd:openssh:8.9:p1' => 'nvd_openssh_split.json',
-            'cpe:2.3:a:example:webserver' => 'nvd_webserver.json'];
+            'cpe:2.3:a:example:webserver' => 'nvd_webserver.json', 'cpe:2.3:a:jquery:jquery:1.12.4' => 'nvd_jquery.json',
+            'cpe:2.3:a:wordpress:wordpress:5.0.3' => 'nvd_wordpress.json'];
     echo isset($map[$match]) ? file_get_contents($fixtures . $map[$match]) : json_encode(['totalResults' => 0, 'vulnerabilities' => []]);
     exit;
 }

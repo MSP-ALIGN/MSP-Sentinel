@@ -28,12 +28,21 @@ A short tour for technicians and viewers. The in-app **Help** page has more deta
 7. **Reports**: create an Executive summary for management and a Technical findings report for IT (Reports card on
    the client page). Print to PDF from the browser. Reports are frozen: they never change after they are made.
 
+## Website and email checks
+
+With each scan and once a day, Sentinel checks every website it found (HTTPS, headers, cookies, a short fixed list of
+commonly exposed files, and the CMS and libraries it can see) and the SPF, DMARC and DKIM records of every authorised
+domain that receives email. Results are on the client page under **Website and email security**. Exposed files are
+only reported when their content proves it, and their content is never stored. Email checks use DNS only.
+
 ## Grades
 
 - **Fail:** fix now. For example: Remote Desktop or a database open to the internet, an expired certificate, an
-  exposed firewall admin page, or a confirmed critical or known-exploited vulnerability.
+  exposed firewall admin page, a login page without HTTPS, an exposed .git folder, .env file or backup, an SPF
+  record that lets anyone send email as the domain, or a confirmed critical or known-exploited vulnerability.
 - **Warning:** fix soon. For example: a certificate expiring within 14 days, old TLS versions, an exposed VPN portal,
-  or a confirmed high-severity vulnerability.
+  a website without an HTTPS redirect, HSTS or Content-Security-Policy, insecure cookies, missing SPF or DMARC (or
+  DMARC set to p=none), or a confirmed high-severity vulnerability.
 - **Info:** shown on the client page, not a finding.
 
 Vulnerabilities say whether they are **confirmed** for the exact version or only **possible** (version unknown, or a

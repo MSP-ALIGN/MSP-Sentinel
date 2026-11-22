@@ -109,4 +109,60 @@ final class VulnMatcher
         }
         return $stats;
     }
+
+    /**
+     * Match detected website components (CMS, JavaScript libraries) of one client or all clients.
+     * Same rules as services: a known version gives "confirmed" matches; without a version only
+     * known-exploited CVEs are kept, as "possible". Data not fetched yet stays pending for the feeds job.
+     *
+     * @return array{components:int, matches:int, pending:int}
+     */
+    public function matchComponents(\Sentinel\Web\WebsiteRepository $store, ?int $clientId, int $fetchBudget = 0): array
+    {
+        $stats = ['components' => 0, 'matches' => 0, 'pending' => 0];
+        $mayFetch = $this->updater !== null && !$this->updater->nvdBlocked();
+        foreach ($store->componentsToMatch($clientId) as $comp) {
+            $stats['components']++;
+            $cpe = Cpe::parse($comp['cpe']);
+            if ($cpe === null) {
+                $store->setComponentMatches($comp['id'], '', []);
+                continue;
+            }
+            $queries = Cpe::matchStrings($cpe);
+            $fetched = [];
+            foreach ($queries as $query) {
+                $this->repo->ensureQuery($query);
+                $status = $this->repo->query($query);
+                if (($status['fetched_at'] ?? null) === null && $mayFetch && $fetchBudget > 0) {
+                    $fetchBudget--;
+                    try {
+                        $this->updater->fetchQuery($query);
+                    } catch (RateLimited) {
+                        $mayFetch = false;
+                    }
+                    $status = $this->repo->query($query);
+                }
+                if (($status['fetched_at'] ?? null) !== null) {
+                    $fetched[] = $query;
+                }
+            }
+            if ($fetched === []) {
+                $stats['pending']++;
+                continue; // keep earlier matches until the data arrives
+            }
+            $cves = [];
+            foreach ($fetched as $query) {
+                foreach ($this->repo->cvesForQuery($query) as $id) {
+                    $cves[$id] = true;
+                }
+            }
+            $matches = [];
+            foreach ($cpe['version'] !== '' ? array_keys($cves) : $this->repo->kevSubset(array_keys($cves)) as $id) {
+                $matches[$id] = $cpe['version'] !== '' ? 'confirmed' : 'possible';
+            }
+            $store->setComponentMatches($comp['id'], $queries[0], $matches);
+            $stats['matches'] += count($matches);
+        }
+        return $stats;
+    }
 }

@@ -78,7 +78,7 @@
     },
     "portal.discovery.example": {
       "CNAME": [
-        "evilÿ.cdnhost.example"
+        "evil\u00ff.cdnhost.example"
       ]
     },
     "files.discovery.example": {
@@ -94,6 +94,48 @@
     "portal.tlscheck.example": {
       "A": [
         "203.0.113.182"
+      ]
+    },
+    "mail-good.example": {
+      "MX": [
+        "mx1.mailhost.example"
+      ],
+      "TXT": [
+        "v=spf1 include:spf.mailhost.example -all",
+        "some-site-verification=abc"
+      ]
+    },
+    "_dmarc.mail-good.example": {
+      "TXT": [
+        "v=DMARC1; p=reject; rua=mailto:dmarc@mail-good.example"
+      ]
+    },
+    "selector1._domainkey.mail-good.example": {
+      "TXT": [
+        "v=DKIM1; k=rsa; p=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      ]
+    },
+    "mail-weak.example": {
+      "MX": [
+        "mx1.mailhost.example"
+      ],
+      "TXT": [
+        "v=spf1 +all"
+      ]
+    },
+    "mail-none.example": {
+      "MX": [
+        "mx1.mailhost.example"
+      ]
+    },
+    "_dmarc.mail-none.example": {
+      "TXT": [
+        "v=DMARC1; p=none"
+      ]
+    },
+    "nomail.example": {
+      "A": [
+        "203.0.113.191"
       ]
     }
   },

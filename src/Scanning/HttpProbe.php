@@ -9,7 +9,8 @@ namespace Sentinel\Scanning;
  * classifies the page using generic signatures: VPN portals, firewall or
  * device admin pages, remote desktop web access, other login pages.
  *
- * No logins, no path guessing, no form submissions.
+ * No logins, no form submissions. Besides "/", only the short fixed list of
+ * website checks (WebsiteChecker) is requested, through request().
  *
  * Security assumptions:
  * - The caller has checked the IP against the scope right before calling.
@@ -52,19 +53,60 @@ final class HttpProbe
      * @param string      $ip         Target address (in scope).
      * @param string      $scheme     'http' or 'https'.
      * @param string|null $hostHeader In-scope hostname for this address, or null to use the IP.
-     * @return array<string,mixed> Columns for web_pages plus 'ok'.
+     * @return array<string,mixed> Columns for web_pages plus 'ok' (and '_response' for the website checks).
      */
     public function fetch(string $ip, int $port, string $scheme, ?string $hostHeader): array
     {
+        $r = $this->request($ip, $port, $scheme, $hostHeader, '/', self::MAX_BODY);
+        if ($r['status'] === 0) {
+            return ['ok' => false, 'scheme' => $scheme, 'host_header' => (string) $hostHeader, 'last_error' => $r['error']];
+        }
+        $body = $r['body'];
+        $headers = $r['headers'];
+        $title = '';
+        if (preg_match('/<title[^>]*>(.*?)<\/title>/is', $body, $m)) {
+            $title = self::clean(html_entity_decode(strip_tags($m[1]), ENT_QUOTES | ENT_HTML5, 'UTF-8'), 300);
+        }
+        [$category, $label] = self::classify($title, $body, $headers);
+        return [
+            'ok' => true,
+            'scheme' => $scheme,
+            'host_header' => (string) $hostHeader,
+            'status_code' => $r['status'],
+            'title' => $title,
+            'server_header' => self::clean($headers['server'] ?? '', 200),
+            'redirect_to' => self::clean($headers['location'] ?? '', 500),
+            'category' => $category,
+            'matched' => $label,
+            'last_error' => '',
+            // Not stored as-is: handed to the website checks (headers, cookies, page HTML).
+            '_response' => $r,
+        ];
+    }
+
+    /**
+     * One GET request, pinned to the in-scope IP, no redirects followed, the body capped.
+     * Used for "/" and for the short fixed list of website checks.
+     *
+     * @param string $path      Fixed path chosen by Sentinel (never from input), starting with "/".
+     * @param int    $maxBytes  Body cap.
+     * @return array{status:int, headers:array<string,string>, header_list:list<array{0:string,1:string}>, body:string, error:string}
+     */
+    public function request(string $ip, int $port, string $scheme, ?string $hostHeader, string $path, int $maxBytes): array
+    {
+        if (!str_starts_with($path, '/') || preg_match('/[\s#]/', $path)) {
+            throw new \InvalidArgumentException('Bad path.');
+        }
         $host = $hostHeader ?? (str_contains($ip, ':') ? '[' . $ip . ']' : $ip);
-        $url = $scheme . '://' . $host . ':' . $port . '/';
+        $url = $scheme . '://' . $host . ':' . $port . $path;
         try {
             [$realHost, $realPort] = $this->connector->endpoint($ip, $port);
         } catch (\RuntimeException $ex) {
-            return ['ok' => false, 'scheme' => $scheme, 'host_header' => (string) $hostHeader, 'last_error' => self::clean($ex->getMessage(), 300)];
+            return ['status' => 0, 'headers' => [], 'header_list' => [], 'body' => '', 'error' => self::clean($ex->getMessage(), 300)];
         }
         $body = '';
         $headers = [];
+        $list = [];
         $ch = curl_init($url);
         $opts = [
             CURLOPT_RETURNTRANSFER => false,
@@ -78,18 +120,21 @@ final class HttpProbe
             CURLOPT_NOPROXY => '*',
             CURLOPT_USERAGENT => 'MSP-Sentinel exposure check',
             CURLOPT_HTTPHEADER => ['Accept: text/html,*/*;q=0.5'],
-            CURLOPT_WRITEFUNCTION => static function ($ch, string $chunk) use (&$body): int {
-                $room = self::MAX_BODY - strlen($body);
+            CURLOPT_WRITEFUNCTION => static function ($ch, string $chunk) use (&$body, $maxBytes): int {
+                $room = $maxBytes - strlen($body);
                 if ($room <= 0) {
                     return 0;
                 }
                 $body .= substr($chunk, 0, $room);
                 return strlen($chunk);
             },
-            CURLOPT_HEADERFUNCTION => static function ($ch, string $line) use (&$headers): int {
-                if (count($headers) < 100 && str_contains($line, ':')) {
+            CURLOPT_HEADERFUNCTION => static function ($ch, string $line) use (&$headers, &$list): int {
+                if (count($list) < 100 && str_contains($line, ':')) {
                     [$name, $value] = explode(':', $line, 2);
-                    $headers[strtolower(trim($name))] = trim($value);
+                    $name = strtolower(trim($name));
+                    $value = self::clean($value, 2000);
+                    $headers[$name] = $value;
+                    $list[] = [$name, $value];
                 }
                 return strlen($line);
             },
@@ -101,30 +146,12 @@ final class HttpProbe
             $opts[CURLOPT_RESOLVE] = [$hostHeader . ':' . $port . ':' . (str_contains($ip, ':') ? '[' . $ip . ']' : $ip)];
         }
         curl_setopt_array($ch, $opts);
-        $ok = curl_exec($ch);
+        curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
         $error = curl_error($ch);
         curl_close($ch);
-        if ($status === 0) {
-            return ['ok' => false, 'scheme' => $scheme, 'host_header' => (string) $hostHeader, 'last_error' => self::clean(__('No HTTP response: {e}', ['e' => $error]), 300)];
-        }
-        $title = '';
-        if (preg_match('/<title[^>]*>(.*?)<\/title>/is', $body, $m)) {
-            $title = self::clean(html_entity_decode(strip_tags($m[1]), ENT_QUOTES | ENT_HTML5, 'UTF-8'), 300);
-        }
-        [$category, $label] = self::classify($title, $body, $headers);
-        return [
-            'ok' => true,
-            'scheme' => $scheme,
-            'host_header' => (string) $hostHeader,
-            'status_code' => $status,
-            'title' => $title,
-            'server_header' => self::clean($headers['server'] ?? '', 200),
-            'redirect_to' => self::clean($headers['location'] ?? '', 500),
-            'category' => $category,
-            'matched' => $label,
-            'last_error' => $ok === false && $status === 0 ? self::clean($error, 300) : '',
-        ];
+        return ['status' => $status, 'headers' => $headers, 'header_list' => $list, 'body' => $body,
+                'error' => $status === 0 ? self::clean(__('No HTTP response: {e}', ['e' => $error]), 300) : ''];
     }
 
     /**

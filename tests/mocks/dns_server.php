@@ -9,7 +9,7 @@ declare(strict_types=1);
  * Usage: php tests/mocks/dns_server.php <port> <zone.json> [query-log-file]
  *
  * Zone file:
- *   {"records": {"name": {"A": [...], "AAAA": [...], "MX": [...], "NS": [...], "CNAME": [...], "PTR": [...]}},
+ *   {"records": {"name": {"A": [...], "AAAA": [...], "MX": [...], "NS": [...], "CNAME": [...], "PTR": [...], "TXT": [...]}},
  *    "behaviours": {"name-or-.suffix": "timeout" | "garbage" | "servfail" | "wrong-id" | "truncate" | "extra-answer"}}
  * "extra-answer" adds an unrelated A record (unrelated.example 203.0.113.99) that clients must ignore.
  * Unknown names get NXDOMAIN. Known names without the asked type get an empty NOERROR.
@@ -22,7 +22,7 @@ if (PHP_SAPI !== 'cli' || $argc < 3) {
 $port = (int) $argv[1];
 $zone = json_decode((string) file_get_contents($argv[2]), true, 16, JSON_THROW_ON_ERROR);
 $log = $argv[3] ?? null;
-$types = ['A' => 1, 'NS' => 2, 'CNAME' => 5, 'PTR' => 12, 'MX' => 15, 'AAAA' => 28];
+$types = ['A' => 1, 'NS' => 2, 'CNAME' => 5, 'PTR' => 12, 'MX' => 15, 'TXT' => 16, 'AAAA' => 28];
 $typeNames = array_flip($types);
 
 $udp = stream_socket_server("udp://127.0.0.1:{$port}", $errno, $errstr, STREAM_SERVER_BIND);
@@ -104,6 +104,8 @@ function answer(string $q, array $zone, array $types, array $typeNames, ?string 
                 $rdata = match ($typeName) {
                     'A', 'AAAA' => inet_pton($value),
                     'MX' => pack('n', 10) . encodeName($value),
+                    // TXT: split into 255-byte character-strings, like real servers do for long SPF/DKIM records.
+                    'TXT' => implode('', array_map(static fn (string $c): string => chr(strlen($c)) . $c, str_split($value, 255) ?: [''])),
                     default => encodeName($value),
                 };
                 $answers[] = $rr($name, $qtype, $rdata);

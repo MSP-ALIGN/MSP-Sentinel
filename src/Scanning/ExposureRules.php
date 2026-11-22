@@ -104,4 +104,53 @@ final class ExposureRules
             default => null,
         };
     }
+
+    /**
+     * Grade and wording of a website check code (balanced defaults). Info-only
+     * codes (advice such as missing Referrer-Policy) return severity 'info'.
+     *
+     * @return array{severity:string, text:string}
+     */
+    public static function websiteIssue(string $code): array
+    {
+        return match ($code) {
+            'login_over_http' => ['severity' => 'fail', 'text' => __('Login page served without HTTPS')],
+            'exposed_git' => ['severity' => 'fail', 'text' => __('Website source code exposed (.git folder)')],
+            'exposed_env' => ['severity' => 'fail', 'text' => __('Configuration file with secrets exposed (.env)')],
+            'exposed_backup' => ['severity' => 'fail', 'text' => __('Backup or database dump downloadable from the website')],
+            'exposed_phpinfo' => ['severity' => 'fail', 'text' => __('PHP configuration page exposed (phpinfo)')],
+            'exposed_status' => ['severity' => 'warn', 'text' => __('Web server status page exposed')],
+            'exposed_dsstore' => ['severity' => 'warn', 'text' => __('Folder listing file exposed (.DS_Store)')],
+            'directory_listing' => ['severity' => 'warn', 'text' => __('Directory listing turned on')],
+            'no_https_redirect' => ['severity' => 'warn', 'text' => __('Website also served without HTTPS (no redirect)')],
+            'missing_hsts' => ['severity' => 'warn', 'text' => __('HTTPS site without HSTS')],
+            'missing_csp' => ['severity' => 'warn', 'text' => __('No Content-Security-Policy header')],
+            'insecure_cookies' => ['severity' => 'warn', 'text' => __('Cookies without the Secure or HttpOnly flag')],
+            'short_hsts' => ['severity' => 'info', 'text' => __('HSTS lasts less than six months')],
+            'missing_frame' => ['severity' => 'info', 'text' => __('No protection against being framed (clickjacking)')],
+            'missing_nosniff' => ['severity' => 'info', 'text' => __('No X-Content-Type-Options: nosniff')],
+            'missing_referrer' => ['severity' => 'info', 'text' => __('No Referrer-Policy header')],
+            'missing_samesite' => ['severity' => 'info', 'text' => __('Cookies without a SameSite setting')],
+            default => ['severity' => 'info', 'text' => $code],
+        };
+    }
+
+    /**
+     * Grade and wording of an email record check code (balanced defaults).
+     *
+     * @return array{severity:string, text:string}
+     */
+    public static function emailIssue(string $code): array
+    {
+        return match ($code) {
+            'spf_pass_all' => ['severity' => 'fail', 'text' => __('SPF lets anyone send email as this domain (+all)')],
+            'spf_missing' => ['severity' => 'warn', 'text' => __('No SPF record')],
+            'spf_weak' => ['severity' => 'warn', 'text' => __('SPF does not reject unauthorised senders')],
+            'spf_multiple' => ['severity' => 'warn', 'text' => __('More than one SPF record (receivers treat this as an error)')],
+            'dmarc_missing' => ['severity' => 'warn', 'text' => __('No DMARC record')],
+            'dmarc_weak' => ['severity' => 'warn', 'text' => __('DMARC policy not enforced (p=none)')],
+            'dkim_not_found' => ['severity' => 'info', 'text' => __('No DKIM key found under common selectors')],
+            default => ['severity' => 'info', 'text' => $code],
+        };
+    }
 }

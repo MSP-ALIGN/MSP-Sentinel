@@ -2,6 +2,20 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.4.0 (2026-11-22): website and email security
+
+- **Website checks** run with each port scan and once a day: HTTP to HTTPS redirects, logins served without
+  encryption, security headers (HSTS, Content-Security-Policy and others), cookie flags and directory listings.
+- **Exposed files**: a short fixed list of paths (/.git/HEAD, /.env, backups and database dumps, /phpinfo.php,
+  /server-status, /.DS_Store). A file is only reported when its content proves it, so sites that answer every address
+  with a page aren't flagged. File contents are never stored.
+- **CMS and libraries**: WordPress, Drupal, Joomla, jQuery, Bootstrap, AngularJS, Lodash, Moment.js and Vue.js are
+  recognised from page markup; visible versions are matched to known vulnerabilities (confirmed), and unknown
+  versions only to known-exploited ones (possible).
+- **Email security**: SPF, DMARC and DKIM (common selectors) for each authorised domain that receives email, by DNS
+  only. A new **Email security** finding type.
+- A **Website and email security** card on the client page, and plain-English explanations and fixes in reports.
+
 ### 1.3.0 (2026-11-22): Administration as its own section
 
 - The left menu now holds only day-to-day work: Dashboard, Clients, Findings, Reports and Help.

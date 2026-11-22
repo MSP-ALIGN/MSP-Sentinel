@@ -105,6 +105,8 @@ final class ClientController extends Controller
             'findingCounts' => App::findings()->counts((int) $client['id']),
             'feeds' => App::vulns()->feedStatuses(),
             'clientReports' => App::reports()->list((int) $client['id'], 5),
+            'websiteChecks' => (new \Sentinel\Web\WebsiteRepository(App::db()))->checksForClient((int) $client['id']),
+            'emailChecks' => (new \Sentinel\Web\WebsiteRepository(App::db()))->emailForClient((int) $client['id']),
             'overview' => self::overviewData($client),
         ]);
     }

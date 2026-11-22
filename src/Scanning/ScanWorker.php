@@ -9,6 +9,9 @@ use Sentinel\Alerts\AlertService;
 use Sentinel\Alerts\Outbox;
 use Sentinel\Api\EventPublisher;
 use Sentinel\System\Housekeeping;
+use Sentinel\Web\EmailChecker;
+use Sentinel\Web\WebsiteChecker;
+use Sentinel\Web\WebsiteRepository;
 use Sentinel\Reports\ReportService;
 use Sentinel\Reports\StatsRecorder;
 use Sentinel\Clients\ClientRepository;
@@ -67,6 +70,9 @@ final class ScanWorker
         private readonly ?StatsRecorder $stats = null,
         private readonly ?EventPublisher $events = null,
         private readonly ?Housekeeping $housekeeping = null,
+        private readonly ?WebsiteChecker $website = null,
+        private readonly ?WebsiteRepository $websiteStore = null,
+        private readonly ?EmailChecker $email = null,
     ) {
         $this->log ??= static function (string $line): void {
         };
@@ -379,6 +385,10 @@ final class ScanWorker
                 // A few new products, at most ~20 seconds; everything else is left to the daily feeds job.
                 $m = $this->matcher->matchClient($clientId, 3, 20.0);
                 $summary['vulnerability_matches_for_client'] = $m['matches'];
+                if ($this->websiteStore !== null) {
+                    $wm = $this->matcher->matchComponents($this->websiteStore, $clientId, 2);
+                    $m['pending'] += $wm['pending'];
+                }
                 if ($m['pending'] > 0) {
                     $summary['messages'][] = __('{n} product(s) are waiting for vulnerability data; the daily feeds job will fetch it.', ['n' => $m['pending']]);
                 }
@@ -386,6 +396,7 @@ final class ScanWorker
                 error_log('[msp-sentinel] vulnerability matching failed for client ' . $clientId . ': ' . $ex->getMessage());
             }
         }
+        $this->checkEmail($clientId, $summary);
         $this->refreshFindings($clientId, $summary);
         $this->scans->finish($jobId, $status, $summary);
         $this->publishFinished($jobId, $clientId, 'ports', $status);
@@ -440,6 +451,7 @@ final class ScanWorker
         if ($stopReason !== null) {
             $summary['messages'][] = $stopReason;
         }
+        $this->checkEmail($clientId, $summary);
         $this->refreshFindings($clientId, $summary);
         $this->scans->finish($jobId, $status, $summary);
         $this->publishFinished($jobId, $clientId, 'tls', $status);
@@ -518,8 +530,20 @@ final class ScanWorker
                     $this->scans->logFinish($logId, 'stopped', __('Stopped during web page checks.'));
                     return;
                 }
-                $this->endpoints->saveWeb($assetId, $port, $this->http->fetch($ip, $port, $isTls ? 'https' : 'http', $names[0] ?? null));
+                $scheme = $isTls ? 'https' : 'http';
+                $page = $this->http->fetch($ip, $port, $scheme, $names[0] ?? null);
+                $this->endpoints->saveWeb($assetId, $port, $page);
                 $checked['web']++;
+                // Website checks: headers, cookies, components from the page just fetched, then the short
+                // fixed list of exposed-file requests (each one re-checks scope, window and kill switch).
+                if ($this->website !== null && $this->websiteStore !== null && !empty($page['ok']) && isset($page['_response'])) {
+                    $checks = WebsiteChecker::analyse($page['_response'], $scheme);
+                    $exposed = $this->website->exposedFiles($ip, $port, $scheme, $names[0] ?? null, fn (): bool => $shouldStop($ip));
+                    // A partial run (stopped, or a request without answer) keeps earlier results for files not re-checked.
+                    $checks['exposed'] = $exposed['complete'] ? $exposed['codes']
+                        : array_values(array_unique(array_merge($exposed['codes'], (array) ($this->websiteStore->previousChecks($assetId, $port)['exposed'] ?? []))));
+                    $this->websiteStore->saveChecks($assetId, $port, $checks);
+                }
             }
         }
         } catch (\Throwable $ex) {
@@ -638,6 +662,48 @@ final class ScanWorker
             $this->events?->publish('scan.finished', ['scan_id' => $jobId, 'client_id' => $clientId, 'job_type' => $type, 'status' => $status]);
         } catch (\Throwable $ex) {
             error_log('[msp-sentinel] event failed: ' . $ex->getMessage());
+        }
+    }
+
+    /**
+     * Email security records (SPF, DMARC, DKIM) for the client's in-scope domains, at most once a
+     * day. DNS lookups only: nothing is sent to the client's servers. Never fatal to the job.
+     *
+     * @param array<string,mixed> $summary
+     */
+    private function checkEmail(int $clientId, array &$summary): void
+    {
+        if ($this->email === null || $this->websiteStore === null) {
+            return;
+        }
+        try {
+            $last = $this->websiteStore->emailCheckedAt($clientId);
+            if ($last !== null && strtotime($last . ' UTC') > time() - 20 * 3600) {
+                return;
+            }
+            $client = $this->clients->find($clientId);
+            if ($client === null || (int) $client['scanning_paused'] === 1 || $this->scope->globallyPaused()) {
+                return; // paused means paused, even for DNS-only checks
+            }
+            $domains = [];
+            foreach ($this->authorisations->activeEntries($clientId, ScopeService::today((string) $client['timezone'])) as $e) {
+                if ($e['entry_type'] !== 'domain') {
+                    continue;
+                }
+                $d = strtolower((string) preg_replace('/^\*\./', '', (string) $e['value']));
+                $domains[$d] = true;
+                if (str_starts_with($d, 'www.') && $this->scope->isInScope($clientId, substr($d, 4))) {
+                    $domains[substr($d, 4)] = true;
+                }
+            }
+            $results = [];
+            foreach (array_slice(array_keys($domains), 0, 20) as $d) {
+                $results[] = $this->email->check($d);
+            }
+            $this->websiteStore->saveEmail($clientId, $results);
+            $summary['email_domains_checked'] = count($results);
+        } catch (\Throwable $ex) {
+            error_log('[msp-sentinel] email checks failed for client ' . $clientId . ': ' . $ex->getMessage());
         }
     }
 }
