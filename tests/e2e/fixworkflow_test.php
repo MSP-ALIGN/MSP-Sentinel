@@ -95,13 +95,14 @@ return [
         Assert::same($date . ' 23:59:59', (string) $ctx->db->query("SELECT due_at FROM findings WHERE id = {$id}")->fetchColumn(), 'not overwritten by the policy');
         $admin->submit('/findings/' . $id, '/findings/' . $id . '/due', ['reset' => '1', 'due_date' => '', 'due_note' => 'Back to normal']);
         Assert::same(14, $daysDue($ctx, $id), 'policy again');
-        // Accept, then reopen: a new 14-day deadline starts now, even if the finding is old.
+        // Accept, then reopen by hand: the original (overdue) deadline stays. Accepting and reopening is no way to reset it.
         $ctx->db->exec("UPDATE findings SET opened_at = UTC_TIMESTAMP() - INTERVAL 40 DAY WHERE id = {$id}");
         App::fixWorkflow()->recomputeDue($cid);
         $admin->submit('/findings/' . $id, '/findings/' . $id . '/triage', ['status' => 'accepted', 'note' => 'Client accepts for now']);
         Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM findings WHERE id = {$id} AND status = 'open' AND due_at < UTC_TIMESTAMP()")->fetchColumn(), 'accepted risks are never overdue');
         $admin->submit('/findings/' . $id, '/findings/' . $id . '/triage', ['status' => 'open', 'note' => 'Client changed their mind']);
-        Assert::true((int) $ctx->db->query("SELECT TIMESTAMPDIFF(MINUTE, opened_at, UTC_TIMESTAMP()) FROM findings WHERE id = {$id}")->fetchColumn() < 5 && $daysDue($ctx, $id) === 14, 'reopened: new deadline');
+        Assert::same(1, (int) $ctx->db->query("SELECT COUNT(*) FROM findings WHERE id = {$id} AND status = 'open' AND due_at < UTC_TIMESTAMP()")->fetchColumn(), 'still overdue after accept and reopen');
+        Assert::same('23:59:59', substr((string) $ctx->db->query("SELECT due_at FROM findings WHERE id = {$id}")->fetchColumn(), 11), 'due at the end of the day');
     },
     'assignment: technicians and admins assign to technicians and admins, with alerts and history' => function (TestContext $ctx) use ($setup, $fid, $userId, $withEmail): void {
         $cid = $setup($ctx);
@@ -149,7 +150,7 @@ return [
         $overdue = $tech->get('/findings?due=overdue')->body;
         Assert::contains('/findings/' . $late . '"', $overdue);
         Assert::notContains('/findings/' . $soon . '"', $overdue);
-        Assert::contains('Overdue 6 day(s)', $overdue);
+        Assert::true(preg_match('/Overdue [56] day\(s\)/', $overdue) === 1, 'overdue badge');
         Assert::contains('/findings/' . $soon . '"', $tech->get('/findings?due=soon')->body);
 
         $wf = App::fixWorkflow();
@@ -198,8 +199,59 @@ return [
         $ctx->cli('bin/worker.php', ['--no-schedule', '--job=' . $job2]);
         @unlink(dirname($ctx->nmapLog) . '/nmap-closed.json');
         Assert::same('resolved', (string) $ctx->db->query("SELECT status FROM findings WHERE id = {$id}")->fetchColumn(), 'fixed');
-        Assert::contains('no longer seen', (string) $ctx->db->query("SELECT note FROM finding_events WHERE finding_id = {$id} AND event = 'verified' ORDER BY id DESC LIMIT 1")->fetchColumn());
+        Assert::contains('no longer reachable from the internet', (string) $ctx->db->query("SELECT note FROM finding_events WHERE finding_id = {$id} AND event = 'verified' ORDER BY id DESC LIMIT 1")->fetchColumn());
         Assert::contains('Fixed', $tech->get('/findings/' . $id)->body);
+    },
+    'verify fix is honest: closed ports, aborted rechecks, already resolved, CSRF' => function (TestContext $ctx) use ($setup, $fid, $userId): void {
+        $cid = $setup($ctx);
+        $tech = $ctx->login('fixtech', 'Fixflow-Pass-0001!');
+        $techId = $userId($ctx, 'fixtech');
+        // A website finding on a port that stops answering is "no longer reachable", never "fixed".
+        $csp = $fid($ctx, $cid, 'site:203.0.113.190:443:missing_csp');
+        file_put_contents(dirname($ctx->nmapLog) . '/nmap-closed.json', json_encode(['203.0.113.190:443']));
+        $tech->submit('/findings/' . $csp, '/findings/' . $csp . '/verify', []);
+        $job = (int) $ctx->db->query("SELECT MAX(id) FROM scan_jobs WHERE client_id = {$cid} AND job_type = 'verify'")->fetchColumn();
+        $ctx->cli('bin/worker.php', ['--no-schedule', '--job=' . $job]);
+        @unlink(dirname($ctx->nmapLog) . '/nmap-closed.json');
+        Assert::contains('nothing answers on this port', (string) $ctx->db->query("SELECT note FROM finding_events WHERE finding_id = {$csp} AND event = 'verified' ORDER BY id DESC LIMIT 1")->fetchColumn());
+        Assert::same(1, (int) $ctx->db->query("SELECT COUNT(*) FROM notifications WHERE user_id = {$techId} AND title LIKE 'No longer reachable%'")->fetchColumn());
+        // A full scan brings the port (and the finding) back.
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $admin->submit('/clients/' . $cid, '/clients/' . $cid . '/scan', []);
+        $ctx->cli('bin/worker.php', ['--no-schedule', '--job=' . (int) $ctx->db->query("SELECT MAX(id) FROM scan_jobs WHERE client_id = {$cid} AND job_type = 'ports'")->fetchColumn()]);
+        Assert::same('open', (string) $ctx->db->query("SELECT status FROM findings WHERE id = {$csp}")->fetchColumn(), 'back after the scan');
+
+        // Queued, then the client is paused: the requester is told it could not finish.
+        $hsts = $fid($ctx, $cid, 'site:203.0.113.190:443:missing_hsts');
+        $tech->submit('/findings/' . $hsts, '/findings/' . $hsts . '/verify', []);
+        $job = (int) $ctx->db->query("SELECT MAX(id) FROM scan_jobs WHERE client_id = {$cid} AND job_type = 'verify'")->fetchColumn();
+        $ctx->db->exec("UPDATE clients SET scanning_paused = 1 WHERE id = {$cid}");
+        $ctx->cli('bin/worker.php', ['--no-schedule']);
+        $ctx->db->exec("UPDATE clients SET scanning_paused = 0 WHERE id = {$cid}");
+        Assert::same('cancelled', (string) $ctx->db->query("SELECT status FROM scan_jobs WHERE id = {$job}")->fetchColumn());
+        Assert::contains('scanning was paused', (string) $ctx->db->query("SELECT note FROM finding_events WHERE finding_id = {$hsts} AND event = 'verified' ORDER BY id DESC LIMIT 1")->fetchColumn());
+        // Cancelled by a user from the scans list.
+        $ctx->db->exec("UPDATE findings SET verify_requested_at = NULL WHERE id = {$hsts}");
+        $tech->submit('/findings/' . $hsts, '/findings/' . $hsts . '/verify', []);
+        $job = (int) $ctx->db->query("SELECT MAX(id) FROM scan_jobs WHERE client_id = {$cid} AND job_type = 'verify'")->fetchColumn();
+        $tech->submit('/clients/' . $cid, '/scans/' . $job . '/cancel', []);
+        Assert::contains('cancelled by a user', (string) $ctx->db->query("SELECT note FROM finding_events WHERE finding_id = {$hsts} AND event = 'verified' ORDER BY id DESC LIMIT 1")->fetchColumn());
+        // Resolved by another check before the recheck ran: "already resolved", not "fixed".
+        $ctx->db->exec("UPDATE findings SET verify_requested_at = NULL WHERE id = {$hsts}");
+        $tech->submit('/findings/' . $hsts, '/findings/' . $hsts . '/verify', []);
+        $job = (int) $ctx->db->query("SELECT MAX(id) FROM scan_jobs WHERE client_id = {$cid} AND job_type = 'verify'")->fetchColumn();
+        $ctx->db->exec("UPDATE findings SET status = 'resolved', resolved_at = UTC_TIMESTAMP() - INTERVAL 1 MINUTE WHERE id = {$hsts}");
+        $ctx->db->exec("UPDATE scan_jobs SET started_at = UTC_TIMESTAMP() WHERE id = {$job}");
+        $f = $ctx->db->query("SELECT finding_key, status, resolved_at FROM findings WHERE id = {$hsts}")->fetch();
+        $o = \Sentinel\Findings\VerifyOutcome::decide($f, 'done', gmdate('Y-m-d H:i:s'), ['refresh_ok' => true]);
+        Assert::same('already_resolved', $o['result']);
+        $ctx->db->exec("UPDATE scan_jobs SET status = 'cancelled' WHERE id = {$job}");
+        $ctx->db->exec("UPDATE findings SET status = 'open', resolved_at = NULL WHERE id = {$hsts}");
+        // CSRF is required on the new routes.
+        foreach (['assign', 'verify', 'due'] as $action) {
+            Assert::status(400, $tech->post('/findings/' . $hsts . '/' . $action, ['assignee' => 'me']), 'CSRF on ' . $action);
+        }
+        Assert::status(400, $admin->post('/admin/settings/due-dates', ['due_days_kev' => '1', 'due_days_fail' => '1', 'due_days_warn' => '1']), 'CSRF on the policy');
     },
     'verify fix: email findings by DNS; refused when out of scope or paused' => function (TestContext $ctx) use ($setup, $fid): void {
         $cid = $setup($ctx);

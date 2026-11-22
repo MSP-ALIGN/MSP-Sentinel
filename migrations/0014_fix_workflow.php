@@ -38,6 +38,11 @@ return [
         }
         // Existing findings: open since they were first seen (or last reopened; first_seen is the best known value).
         $db->exec('UPDATE findings SET opened_at = first_seen WHERE opened_at IS NULL');
+        // Due dates right away (default policy: known-exploited 7, Fail 14, Warning 30 days), so the overdue
+        // views are correct straight after the upgrade. Only rows without one; later refreshes keep them current.
+        $db->exec("UPDATE findings f LEFT JOIN kev_catalog k ON k.cve_id = f.cve_id
+                   SET f.due_at = TIMESTAMP(DATE(f.opened_at) + INTERVAL (CASE WHEN k.cve_id IS NOT NULL THEN 7 WHEN f.severity = 'fail' THEN 14 ELSE 30 END) DAY, '23:59:59')
+                   WHERE f.due_at IS NULL AND f.due_custom = 0");
 
         $type = (string) $db->query("SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'scan_jobs' AND COLUMN_NAME = 'job_type'")->fetchColumn();
         if (!str_contains($type, "'verify'")) {

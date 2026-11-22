@@ -78,8 +78,11 @@ final class ScanRepository
      */
     public function queuedJobs(): array
     {
-        // "Verify fix" rechecks first: they are one port or one domain, and someone is waiting for the answer.
-        return array_map([self::class, 'decode'], $this->db->query("SELECT * FROM scan_jobs WHERE status = 'queued' ORDER BY job_type = 'verify' DESC, id LIMIT 200")->fetchAll());
+        // "Verify fix" rechecks first (one port or one domain, and someone is waiting), each kind with its own
+        // limit, so many queued rechecks can never hide the regular scans from the worker.
+        $verify = $this->db->query("SELECT * FROM scan_jobs WHERE status = 'queued' AND job_type = 'verify' ORDER BY id LIMIT 50")->fetchAll();
+        $regular = $this->db->query("SELECT * FROM scan_jobs WHERE status = 'queued' AND job_type <> 'verify' ORDER BY id LIMIT 200")->fetchAll();
+        return array_map([self::class, 'decode'], array_merge($verify, $regular));
     }
 
     /**

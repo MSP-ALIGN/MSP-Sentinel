@@ -69,7 +69,7 @@ final class ReportBuilder
             default => ['good', __('No open problems were found in the checks we ran.')],
         };
 
-        $scans = $this->db->prepare("SELECT id, status, started_at, finished_at FROM scan_jobs WHERE client_id = :c AND finished_at IS NOT NULL ORDER BY id DESC LIMIT 10");
+        $scans = $this->db->prepare("SELECT id, status, started_at, finished_at FROM scan_jobs WHERE client_id = :c AND finished_at IS NOT NULL AND job_type <> 'verify' ORDER BY id DESC LIMIT 10");
         $scans->execute(['c' => $cid]);
         $scanRows = $scans->fetchAll();
         $today = ScopeService::today((string) $client['timezone']);

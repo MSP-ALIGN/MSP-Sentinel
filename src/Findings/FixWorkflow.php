@@ -56,13 +56,14 @@ final class FixWorkflow
 
     /**
      * Recompute the policy due dates (findings without an admin-set date), for one client or all.
+     * Due at the end of the day (UTC), like admin-set dates, so the date shown is the last day to fix it.
      * Cheap: one UPDATE. Called after each findings refresh and when the policy changes.
      */
     public function recomputeDue(?int $clientId = null): void
     {
         $p = $this->policy();
         $sql = "UPDATE findings f LEFT JOIN kev_catalog k ON k.cve_id = f.cve_id
-                SET f.due_at = COALESCE(f.opened_at, f.first_seen) + INTERVAL (CASE WHEN k.cve_id IS NOT NULL THEN :kev WHEN f.severity = 'fail' THEN :fail ELSE :warn END) DAY
+                SET f.due_at = TIMESTAMP(DATE(COALESCE(f.opened_at, f.first_seen)) + INTERVAL (CASE WHEN k.cve_id IS NOT NULL THEN :kev WHEN f.severity = 'fail' THEN :fail ELSE :warn END) DAY, '23:59:59')
                 WHERE f.due_custom = 0" . ($clientId !== null ? ' AND f.client_id = :c' : '');
         $params = ['kev' => $p['kev'], 'fail' => $p['fail'], 'warn' => $p['warn']] + ($clientId !== null ? ['c' => $clientId] : []);
         $this->db->prepare($sql)->execute($params);

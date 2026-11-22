@@ -61,7 +61,7 @@ final class DashboardData
                        COALESCE(SUM(f.status = 'open' AND f.severity = 'fail'), 0) AS fail,
                        COALESCE(SUM(f.status = 'open' AND f.severity = 'warn'), 0) AS warn,
                        COALESCE(SUM(f.status = 'open' AND f.severity = 'fail' AND k.cve_id IS NOT NULL), 0) AS kev,
-                       (SELECT MAX(j.finished_at) FROM scan_jobs j WHERE j.client_id = c.id AND j.finished_at IS NOT NULL) AS last_scan
+                       (SELECT MAX(j.finished_at) FROM scan_jobs j WHERE j.client_id = c.id AND j.finished_at IS NOT NULL AND j.job_type <> 'verify') AS last_scan
                 FROM clients c
                 LEFT JOIN findings f ON f.client_id = c.id AND f.status = 'open'
                 LEFT JOIN kev_catalog k ON k.cve_id = f.cve_id

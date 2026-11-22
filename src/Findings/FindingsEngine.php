@@ -139,13 +139,17 @@ final class FindingsEngine
                         $stats['escalated_ids'][] = $id; // an open Warning became a Fail: alert like a new Fail
                     }
                 }
+                if ($newStatus === 'open' && $status !== 'open' && (int) ($row['due_custom'] ?? 0) === 1) {
+                    $this->event($id, 'due_changed', null, __('Due date follows the policy again (the finding came back).'));
+                }
                 $update->execute([
                     'sev' => $issue['severity'], 't' => $issue['title'], 'd' => $issue['detail'], 'tg' => $issue['target'], 'ev' => $issue['evidence'],
                     'a' => $issue['asset_id'], 'cve' => $issue['cve_id'], 'st' => $newStatus, 'resolved' => 0, 'resolved2' => 0,
                     'chg' => ($row['severity'] !== $issue['severity'] || $row['title'] !== $issue['title'] || $row['detail'] !== $issue['detail']
                         || $row['target'] !== $issue['target'] || !$sameEvidence || $newStatus !== $status) ? 1 : 0,
                     'reap' => $status === 'resolved' ? 1 : 0, 'inc' => $status === 'resolved' || $newStatus !== $status ? 1 : 0, 'id' => $id,
-                    // Open again after being resolved, accepted or a false positive: a new fix deadline starts now.
+                    // Seen again after being resolved, or a false positive whose evidence changed: a new problem, so a new
+                    // fix deadline starts now (and an admin-set date no longer applies; the history says so below).
                     'reopen' => $reopen = ($newStatus === 'open' && $status !== 'open') ? 1 : 0, 'reopen2' => $reopen,
                 ]);
             }

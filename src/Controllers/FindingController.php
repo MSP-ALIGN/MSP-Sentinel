@@ -161,13 +161,45 @@ final class FindingController extends Controller
 
     /** Minimum time between two verify rechecks of the same finding. */
     private const VERIFY_INTERVAL = 600;
-    /** Most verify rechecks queued or running at once for one client. */
+    /** Most verify rechecks queued or running at once for one client, and for the whole install. */
     private const VERIFY_MAX_QUEUED = 10;
+    private const VERIFY_MAX_QUEUED_TOTAL = 50;
 
     /** POST /findings/{id}/verify: recheck just this finding now (outside the scan window too). */
     public function verify(Request $request, array $params): Response
     {
         $finding = App::findings()->find((int) ($params['id'] ?? 0)) ?? throw new HttpException(404);
+        $id = (int) $finding['id'];
+        $clientId = (int) $finding['client_id'];
+        $db = App::db();
+        // Lock the client row, so two quick clicks (or two tabs) can't both pass the limits below.
+        $db->beginTransaction();
+        try {
+            $lock = $db->prepare('SELECT id FROM clients WHERE id = :c FOR UPDATE');
+            $lock->execute(['c' => $clientId]);
+            $finding = App::findings()->find($id) ?? throw new HttpException(404);
+            $result = $this->queueVerify($request, $finding);
+            $db->commit();
+        } catch (\Throwable $ex) {
+            $db->rollBack();
+            throw $ex;
+        }
+        if ($result !== null) {
+            Session::flash('warning', $result);
+        } else {
+            Session::flash('success', __('Recheck queued. It runs within a minute (after any scan already running), and the result appears in the history.'));
+        }
+        return Response::redirect('/findings/' . $id);
+    }
+
+    /**
+     * Check the limits and queue a verify job (caller holds the client row lock).
+     *
+     * @param array<string,mixed> $finding Fresh, read under the lock.
+     * @return string|null Why it can't be queued, or null when queued.
+     */
+    private function queueVerify(Request $request, array $finding): ?string
+    {
         $id = (int) $finding['id'];
         $clientId = (int) $finding['client_id'];
         $client = App::clients()->find($clientId) ?? throw new HttpException(404);
@@ -182,12 +214,12 @@ final class FindingController extends Controller
             $target['kind'] === 'endpoint' && !in_array($target['port'], PortProfile::forClient($client), true) => __('Port {port} is no longer in this client\'s scan profile, so it can\'t be rechecked.', ['port' => $target['port']]),
             $finding['verify_status'] !== null && in_array($finding['verify_status'], ['queued', 'running'], true) => __('A recheck of this finding is already waiting or running.'),
             $finding['verify_requested_at'] !== null && strtotime($finding['verify_requested_at'] . ' UTC') > time() - self::VERIFY_INTERVAL => __('This finding was rechecked less than 10 minutes ago. Try again later.'),
-            (int) $db->query("SELECT COUNT(*) FROM scan_jobs WHERE client_id = {$clientId} AND job_type = 'verify' AND status IN ('queued','running')")->fetchColumn() >= self::VERIFY_MAX_QUEUED => __('Too many rechecks are waiting for this client. Try again in a few minutes.'),
+            (int) $db->query("SELECT COUNT(*) FROM scan_jobs WHERE client_id = {$clientId} AND job_type = 'verify' AND status IN ('queued','running')")->fetchColumn() >= self::VERIFY_MAX_QUEUED,
+            (int) $db->query("SELECT COUNT(*) FROM scan_jobs WHERE job_type = 'verify' AND status IN ('queued','running')")->fetchColumn() >= self::VERIFY_MAX_QUEUED_TOTAL => __('Too many rechecks are waiting. Try again in a few minutes.'),
             default => null,
         };
         if ($error !== null) {
-            Session::flash('warning', $error);
-            return Response::redirect('/findings/' . $id);
+            return $error;
         }
         if ($target['kind'] === 'email') {
             $payload = ['finding_id' => $id, 'email_domain' => $target['domain']];
@@ -203,8 +235,7 @@ final class FindingController extends Controller
         $db->prepare("INSERT INTO finding_events (finding_id, event, user_id, note, created_at) VALUES (:f, 'verify_requested', :u, :n, UTC_TIMESTAMP())")
             ->execute(['f' => $id, 'u' => (int) $this->user()['id'], 'n' => $target['kind'] === 'email' ? $target['domain'] : $target['ip'] . ' port ' . $target['port']]);
         $this->audit($request, 'finding.verify_requested', 'finding', $id, ['client_id' => $clientId, 'job_id' => $jobId]);
-        Session::flash('success', __('Recheck queued. It runs within a minute (after any scan already running), and the result appears in the history.'));
-        return Response::redirect('/findings/' . $id);
+        return null;
     }
 
     /** POST /findings/{id}/triage */
@@ -236,7 +267,7 @@ final class FindingController extends Controller
             return Response::redirect('/findings/' . $id);
         }
         if ($status === 'open') {
-            App::fixWorkflow()->recomputeDue((int) $finding['client_id']); // a reopened finding gets a new due date
+            App::fixWorkflow()->recomputeDue((int) $finding['client_id']); // a reopened finding is due again (same deadline)
         }
         $this->audit($request, 'finding.triaged', 'finding', $id, ['client_id' => (int) $finding['client_id'], 'from' => $previous, 'to' => $status, 'note' => mb_substr($note, 0, 300)]);
         App::events()->publish('finding.triaged', (App::events()->finding($id) ?? []) + ['previous_status' => $previous]);

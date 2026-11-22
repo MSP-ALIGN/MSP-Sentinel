@@ -174,7 +174,8 @@ final class AlertService
                 $c = (string) $f['client_name'];
                 $overdueByClient[$c] ??= ['total' => 0, 'unassigned' => 0];
                 $overdueByClient[$c]['total']++;
-                if ($f['assigned_to'] === null) {
+                // An owner who left (inactive) or can't own findings any more (viewer) gets no reminder: count it as unassigned.
+                if ($f['assigned_to'] === null || (int) $f['user_active'] !== 1 || !in_array($f['user_role'], ['technician', 'admin'], true)) {
                     $overdueByClient[$c]['unassigned']++;
                 }
             }
@@ -207,7 +208,7 @@ final class AlertService
             $title = __('{n} overdue finding(s) across {c} client(s)', ['n' => $total, 'c' => count($overdueByClient)]);
             $lines = [];
             foreach ($overdueByClient as $client => $n) {
-                $lines[] = __('{client}: {total} overdue ({unassigned} unassigned)', ['client' => $client, 'total' => $n['total'], 'unassigned' => $n['unassigned']]);
+                $lines[] = __('{client}: {total} overdue ({unassigned} without an active owner)', ['client' => $client, 'total' => $n['total'], 'unassigned' => $n['unassigned']]);
             }
             $this->queueEmail($this->teamAddresses(), '[Sentinel] ' . $title, $title . "\n\n" . implode("\n", $lines) . "\n\n" . $this->absolute('/findings?due=overdue'));
             $this->queueWebhook(['title' => $title, 'text' => __('Findings past their due date.'), 'severity' => 'warn', 'client' => '', 'items' => $lines, 'link' => $this->absolute('/findings?due=overdue')]);

@@ -91,7 +91,7 @@ final class ApiController
                                           SUM(status = 'accepted') AS accepted, SUM(status = 'false_positive') AS false_positive FROM findings WHERE client_id = :c");
         $cnt->execute(['c' => $cid]);
         $counts = array_map('intval', $cnt->fetch() ?: []) + ['fail' => 0, 'warn' => 0, 'accepted' => 0, 'false_positive' => 0];
-        $scan = $this->db->prepare("SELECT id, status, finished_at FROM scan_jobs WHERE client_id = :c AND finished_at IS NOT NULL ORDER BY id DESC LIMIT 1");
+        $scan = $this->db->prepare("SELECT id, status, finished_at FROM scan_jobs WHERE client_id = :c AND finished_at IS NOT NULL AND job_type <> 'verify' ORDER BY id DESC LIMIT 1");
         $scan->execute(['c' => $cid]);
         $last = $scan->fetch() ?: null;
         $types = $this->db->prepare("SELECT finding_type, severity, COUNT(*) AS n FROM findings WHERE client_id = :c AND status = 'open' GROUP BY finding_type, severity");

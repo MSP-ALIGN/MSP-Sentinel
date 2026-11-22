@@ -93,6 +93,9 @@ final class ScanController extends Controller
     {
         $job = App::scans()->find((int) ($params['id'] ?? 0)) ?? throw new HttpException(404);
         $result = App::scans()->cancel((int) $job['id']);
+        if ($result === 'cancelled') {
+            \Sentinel\Findings\VerifyOutcome::recordAborted(App::db(), $job, __('the recheck was cancelled by a user.'));
+        }
         if ($result !== 'not_open') {
             $this->audit($request, 'scan.cancelled', 'scan_job', (int) $job['id'], ['client_id' => (int) $job['client_id'], 'was' => $job['status']]);
         }

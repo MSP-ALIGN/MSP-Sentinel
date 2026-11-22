@@ -18,6 +18,7 @@ use Sentinel\Clients\ClientRepository;
 use Sentinel\Discovery\DnsClient;
 use Sentinel\Findings\FindingsEngine;
 use Sentinel\Findings\FixWorkflow;
+use Sentinel\Findings\VerifyOutcome;
 use Sentinel\Discovery\DnsException;
 use Sentinel\Discovery\DnsMessage;
 use Sentinel\Scope\AuthorisationRepository;
@@ -97,11 +98,16 @@ final class ScanWorker
         }
         try {
             // We hold the only worker lock, so any job still "running" belongs to a worker that died.
-            $died = $this->db->query("SELECT id, client_id FROM scan_jobs WHERE status = 'running'")->fetchAll();
+            $died = $this->db->query("SELECT id, client_id, job_type FROM scan_jobs WHERE status = 'running'")->fetchAll();
             $this->db->exec("UPDATE scan_jobs SET status = 'failed', finished_at = UTC_TIMESTAMP(),
                              summary = '{\"messages\":[\"The worker stopped unexpectedly during this job.\"]}' WHERE status = 'running'");
             $this->db->exec("UPDATE scan_log SET result = 'interrupted', finished_at = UTC_TIMESTAMP() WHERE result = 'running' AND finished_at IS NULL");
             foreach ($died as $d) {
+                if ($d['job_type'] === 'verify') {
+                    // A recheck someone is waiting for: tell them, instead of a scan-failure alert to admins.
+                    VerifyOutcome::recordAborted($this->db, $this->scans->find((int) $d['id']) ?? [], __('the worker stopped unexpectedly. Try again.'));
+                    continue;
+                }
                 $this->alerts?->scanFailed((int) $d['client_id'], (int) $d['id'], 'The worker stopped unexpectedly during this job.');
             }
             $queued = $schedule ? $this->scheduleDue() : 0;
@@ -236,6 +242,8 @@ final class ScanWorker
      */
     private function nextRunnable(?int $onlyJobId = null): ?array
     {
+        $verify = null;
+        $regular = null;
         foreach ($this->scans->queuedJobs() as $job) {
             if ($onlyJobId !== null && (int) $job['id'] !== $onlyJobId) {
                 continue;
@@ -244,13 +252,27 @@ final class ScanWorker
             if ($client === null || (int) $client['is_archived'] === 1 || (int) $client['scanning_paused'] === 1 || $this->scope->globallyPaused()) {
                 $this->scans->cancel((int) $job['id']);
                 $this->scans->finish((int) $job['id'], 'cancelled', ['message' => __('Cancelled because scanning was paused or the client was archived.')]);
+                VerifyOutcome::recordAborted($this->db, $job, __('scanning was paused or the client was archived.'));
                 continue;
             }
             if ((int) $job['outside_window'] === 1 || ScanWindow::isOpen($client)) {
-                return $job;
+                if ($job['job_type'] === 'verify') {
+                    $verify ??= $job;
+                } else {
+                    $regular ??= $job;
+                }
+                if ($verify !== null && $regular !== null) {
+                    break;
+                }
             }
         }
-        return null;
+        // Rechecks go first (someone is waiting), but never more than 3 in a row while a scan is waiting,
+        // so a burst of rechecks can't push a scan out of its window.
+        if ($verify !== null && $regular !== null) {
+            $recent = $this->db->query("SELECT job_type FROM scan_jobs WHERE started_at IS NOT NULL ORDER BY started_at DESC, id DESC LIMIT 3")->fetchAll(PDO::FETCH_COLUMN);
+            return count($recent) === 3 && array_unique($recent) === ['verify'] ? $regular : $verify;
+        }
+        return $verify ?? $regular;
     }
 
     /**
@@ -275,9 +297,24 @@ final class ScanWorker
         // with the host names already known for the address (for certificates and Host headers).
         $isVerify = ($job['job_type'] ?? 'ports') === 'verify';
         $ports = array_values(array_filter((array) ($job['payload']['ports'] ?? []), 'is_int'));
+        if ($isVerify) {
+            // The port must still be in the client's scan profile when the recheck runs (it may have changed while queued).
+            $client = $this->clients->find($clientId);
+            $ports = $client === null ? [] : array_values(array_intersect($ports, PortProfile::forClient($client)));
+        }
         $portText = PortProfile::toNmapArg($ports);
         $overrideWindow = (int) $job['outside_window'] === 1;
         $summary = ['hosts_scanned' => 0, 'hosts_skipped' => 0, 'hosts_failed' => 0, 'open_ports' => 0, 'messages' => []];
+        if ($isVerify) {
+            $summary['verify_probe'] = []; // what this recheck proved, per "ip:port" (see VerifyOutcome)
+            if ($ports === []) {
+                $summary['messages'][] = __('This port is no longer in the client\'s scan profile.');
+                $this->refreshFindings($clientId, $summary);
+                $this->recordVerification($job, 'partial', $summary);
+                $this->scans->finish($jobId, 'partial', $summary);
+                return "Verify job {$jobId} partial: port not in profile.";
+            }
+        }
         $siteId = null;
         foreach ($this->clients->sites($clientId) as $site) {
             if ((int) $site['is_default'] === 1) {
@@ -375,6 +412,13 @@ final class ScanWorker
                 continue;
             }
             $this->scans->recordHost($clientId, $siteId, (string) $ip, array_values(array_unique($hostnames)), $ports, $parsed['open'], $parsed['complete'] && $result['exit'] === 0, $jobId);
+            if (isset($summary['verify_probe'])) {
+                $openPorts = array_column($parsed['open'], 'port');
+                foreach ($ports as $p) {
+                    // Only a complete scan proves a port open or no longer reachable.
+                    $summary['verify_probe'][$ip . ':' . $p] = ['state' => $parsed['complete'] && $result['exit'] === 0 ? (in_array($p, $openPorts, true) ? 'open' : 'closed') : 'unknown'];
+                }
+            }
             $this->scans->logFinish($logId, 'scanned', __('{n} open port(s)', ['n' => count($parsed['open'])]) . ($parsed['complete'] ? '' : ' ' . __('(incomplete)')));
             $summary['hosts_scanned']++;
             $summary['open_ports'] += count($parsed['open']);
@@ -406,6 +450,7 @@ final class ScanWorker
                     $wm = $this->matcher->matchComponents($this->websiteStore, $clientId, 2);
                     $m['pending'] += $wm['pending'];
                 }
+                $summary['vuln_pending'] = (int) $m['pending'];
                 if ($m['pending'] > 0) {
                     $summary['messages'][] = __('{n} product(s) are waiting for vulnerability data; the daily feeds job will fetch it.', ['n' => $m['pending']]);
                 }
@@ -459,6 +504,7 @@ final class ScanWorker
             $ok = (int) ($summary['email_domains_checked'] ?? 0) === 1 && !isset($summary['email_error']);
             $this->scans->logFinish($logId, $ok ? 'checked' : 'error', $ok ? __('Email records checked (DNS only).') : __('The DNS lookups failed: {e}', ['e' => (string) ($summary['email_error'] ?? '?')]));
             $summary['hosts_scanned'] = $ok ? 1 : 0;
+            $summary['verify_probe'] = ['email' => $ok ? 'ok' : 'failed'];
             $summary['hosts_failed'] = $ok ? 0 : 1;
             $status = $ok ? 'done' : 'partial';
         }
@@ -470,41 +516,24 @@ final class ScanWorker
     }
 
     /**
-     * Record the outcome of a "verify fix" recheck on the finding (history) and tell the person who asked.
-     * Fixed only if the finding is now resolved; "still present" only if the recheck finished completely.
+     * Record the honest outcome of a "verify fix" recheck (VerifyOutcome) on the finding and tell the person who asked.
      *
      * @param array<string,mixed> $job
-     * @param array<string,mixed> $summary Gets verify_result (fixed|still_present|not_verified).
+     * @param array<string,mixed> $summary Gets verify_result.
      */
     private function recordVerification(array $job, string $status, array &$summary): void
     {
         $findingId = (int) ($job['payload']['finding_id'] ?? 0);
         try {
-            $stmt = $this->db->prepare('SELECT id, status, title FROM findings WHERE id = :id AND client_id = :c');
-            $stmt->execute(['id' => $findingId, 'c' => (int) $job['client_id']]);
+            $stmt = $this->db->prepare('SELECT f.finding_key, f.status, f.resolved_at, j.started_at FROM findings f JOIN scan_jobs j ON j.id = :j WHERE f.id = :id AND f.client_id = :c');
+            $stmt->execute(['j' => (int) $job['id'], 'id' => $findingId, 'c' => (int) $job['client_id']]);
             $f = $stmt->fetch();
             if ($f === false) {
                 return;
             }
-            if ($f['status'] === 'resolved') {
-                $result = 'fixed';
-                $note = __('Verify fix: the problem is no longer seen. Resolved.');
-            } elseif ($status === 'done' && (int) $summary['hosts_scanned'] > 0) {
-                $result = 'still_present';
-                $note = __('Verify fix: the problem is still seen.');
-            } else {
-                $result = 'not_verified';
-                $note = __('Verify fix could not finish: {why}', ['why' => implode(' ', array_slice(array_map('strval', (array) $summary['messages']), 0, 2)) ?: __('the check did not complete.')]);
-            }
-            $summary['verify_result'] = $result;
-            $this->db->prepare("INSERT INTO finding_events (finding_id, event, user_id, note, created_at) VALUES (:f, 'verified', NULL, :n, UTC_TIMESTAMP())")
-                ->execute(['f' => $findingId, 'n' => $note]);
-            if ($job['requested_by'] !== null) {
-                $this->db->prepare('INSERT INTO notifications (user_id, kind, severity, title, body, link, created_at) VALUES (:u, :k, :s, :t, :b, :l, UTC_TIMESTAMP())')
-                    ->execute(['u' => (int) $job['requested_by'], 'k' => 'verify', 's' => $result === 'fixed' ? 'info' : 'warn',
-                               't' => mb_substr(($result === 'fixed' ? __('Fixed: {title}', ['title' => $f['title']]) : ($result === 'still_present' ? __('Still present: {title}', ['title' => $f['title']]) : __('Not verified: {title}', ['title' => $f['title']]))), 0, 300),
-                               'b' => mb_substr($note, 0, 2000), 'l' => '/findings/' . $findingId]);
-            }
+            $outcome = VerifyOutcome::decide($f, $status, $f['started_at'] === null ? null : (string) $f['started_at'], $summary);
+            $summary['verify_result'] = $outcome['result'];
+            VerifyOutcome::record($this->db, $findingId, $job['requested_by'] === null ? null : (int) $job['requested_by'], $outcome['result'], $outcome['note']);
         } catch (\Throwable $ex) {
             error_log('[msp-sentinel] recording verification failed for finding ' . $findingId . ': ' . $ex->getMessage());
         }
@@ -624,6 +653,10 @@ final class ScanWorker
                 if ($allOk) {
                     $this->endpoints->pruneTls($assetId, $port, array_map(static fn (?string $n): string => (string) $n, $snis));
                 }
+                if (isset($summary['verify_probe'])) {
+                    $summary['verify_probe'][$ip . ':' . $port]['tls_ok'] = $allOk;
+                    $summary['verify_probe'][$ip . ':' . $port]['snis'] = array_map(static fn (?string $n): string => (string) $n, $snis);
+                }
             }
             if ($isWeb) {
                 if ($shouldStop($ip)) {
@@ -634,6 +667,10 @@ final class ScanWorker
                 $page = $this->http->fetch($ip, $port, $scheme, $names[0] ?? null);
                 $this->endpoints->saveWeb($assetId, $port, $page);
                 $checked['web']++;
+                if (isset($summary['verify_probe'])) {
+                    $summary['verify_probe'][$ip . ':' . $port]['web_ok'] = !empty($page['ok']);
+                    $summary['verify_probe'][$ip . ':' . $port]['site_complete'] = false;
+                }
                 // Website checks: headers, cookies, components from the page just fetched, then the short
                 // fixed list of exposed-file requests (each one re-checks scope, window and kill switch).
                 if ($this->website !== null && $this->websiteStore !== null && !empty($page['ok']) && isset($page['_response'])) {
@@ -644,6 +681,9 @@ final class ScanWorker
                     $kept = $exposed['complete'] ? [] : array_diff((array) ($this->websiteStore->previousChecks($assetId, $port)['exposed'] ?? []), $exposed['checked']);
                     $checks['exposed'] = array_values(array_unique(array_merge($exposed['codes'], $kept)));
                     $this->websiteStore->saveChecks($assetId, $port, $checks);
+                    if (isset($summary['verify_probe'])) {
+                        $summary['verify_probe'][$ip . ':' . $port]['site_complete'] = $exposed['complete'];
+                    }
                 }
             }
         }
@@ -674,10 +714,12 @@ final class ScanWorker
         }
         try {
             $f = $this->findings->refreshClient($clientId);
+            $summary['refresh_ok'] = true;
             $summary['findings_opened'] = $f['opened'] + $f['reopened'];
             $summary['findings_resolved'] = $f['resolved'];
             $this->alerts?->findingsChanged($clientId, $f, true);
         } catch (\Throwable $ex) {
+            $summary['refresh_ok'] ??= false; // alerts failing after a good refresh doesn't undo the refresh
             error_log('[msp-sentinel] findings refresh or alerts failed for client ' . $clientId . ': ' . $ex->getMessage());
         }
     }

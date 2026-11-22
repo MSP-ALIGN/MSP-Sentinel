@@ -131,10 +131,10 @@ final class FindingRepository
                 return null;
             }
             // A decision has been made, so the "reappeared" flag has done its job.
-            // Reopening by hand starts a new fix deadline (the caller recomputes the due date).
-            $this->db->prepare("UPDATE findings SET status = :s, triage_note = :n, triaged_by = :u, triaged_at = UTC_TIMESTAMP(), reappeared = 0, updated_at = UTC_TIMESTAMP(),
-                                       opened_at = IF(:s2 = 'open', UTC_TIMESTAMP(), opened_at), due_custom = IF(:s3 = 'open', 0, due_custom) WHERE id = :id")
-                ->execute(['s' => $status, 'n' => $note, 'u' => $userId, 's2' => $status, 's3' => $status, 'id' => $id]);
+            // Reopening by hand keeps the original deadline (opened_at and any admin-set date): accepting and
+            // reopening must never be a way to reset an overdue finding. Only admins move due dates.
+            $this->db->prepare('UPDATE findings SET status = :s, triage_note = :n, triaged_by = :u, triaged_at = UTC_TIMESTAMP(), reappeared = 0, updated_at = UTC_TIMESTAMP() WHERE id = :id')
+                ->execute(['s' => $status, 'n' => $note, 'u' => $userId, 'id' => $id]);
             $this->db->prepare('INSERT INTO finding_events (finding_id, event, user_id, note, created_at) VALUES (:f, :e, :u, :n, UTC_TIMESTAMP())')
                 ->execute(['f' => $id, 'e' => 'triaged_' . $status, 'u' => $userId, 'n' => $note]);
             $this->db->commit();
