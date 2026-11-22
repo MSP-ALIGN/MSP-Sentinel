@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 use PDO;
 use Sentinel\Alerts\AlertService;
+use Sentinel\Api\EventPublisher;
 use Sentinel\Alerts\SmtpMailer;
 
 /**
@@ -33,6 +34,7 @@ final class ReportService
         private readonly ReportRenderer $renderer,
         private readonly ReportRepository $reports,
         private readonly ?AlertService $alerts = null,
+        private readonly ?EventPublisher $events = null,
     ) {
     }
 
@@ -155,8 +157,11 @@ final class ReportService
      */
     private function store(array $client, string $kind, string $start, string $end, ?int $userId, string $source, array $snapshot, string $html): int
     {
-        return $this->reports->create((int) $client['id'], $kind, $source, ReportBuilder::title($kind, (string) $client['name'], $start, $end),
+        $id = $this->reports->create((int) $client['id'], $kind, $source, ReportBuilder::title($kind, (string) $client['name'], $start, $end),
             $start, $end, $userId, $html, $snapshot);
+        $this->events?->publish('report.created', ['report_id' => $id, 'client_id' => (int) $client['id'], 'kind' => $kind, 'source' => $source,
+            'period_start' => $start, 'period_end' => $end]);
+        return $id;
     }
 
     /**

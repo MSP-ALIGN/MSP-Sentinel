@@ -61,7 +61,7 @@ final class Outbox
             if ($claim->rowCount() !== 1) {
                 continue; // another process got it first
             }
-            $enabled = $d['channel'] === 'email' ? 'email_enabled' : 'webhook_enabled';
+            $enabled = match ($d['channel']) { 'email' => 'email_enabled', 'event' => 'event_webhook_enabled', default => 'webhook_enabled' };
             if ($this->settings->fresh($enabled) !== '1') {
                 $this->db->prepare("UPDATE deliveries SET status = 'failed', claimed_at = NULL, last_error = :e WHERE id = :id")
                     ->execute(['e' => $d['channel'] === 'email' ? 'Not sent: email alerts were turned off.' : 'Not sent: the webhook was turned off.', 'id' => $d['id']]);
@@ -76,6 +76,16 @@ final class Outbox
                         $body .= "\n\n" . 'The reports are too large to attach. Open them in MSP Sentinel under Reports (report IDs: ' . $d['report_ids'] . ').';
                     }
                     $this->mailer()->send(explode(',', (string) $d['recipient']), (string) $d['subject'], $body, $files);
+                } elseif ($d['channel'] === 'event') {
+                    // Signed at send time, so each retry carries a fresh timestamp.
+                    $secret = $this->settings->getSecret('event_webhook_secret');
+                    if ($secret === '') {
+                        throw new \RuntimeException('The event webhook has no signing secret.');
+                    }
+                    $this->webhook->sendRaw($this->settings->getSecret('event_webhook_url'), (string) $d['body'], [
+                        'X-Sentinel-Event: ' . preg_replace('/[^a-z.]/', '', (string) $d['subject']),
+                        'X-Sentinel-Signature: ' . \Sentinel\Api\EventPublisher::sign($secret, (string) $d['body'], time()),
+                    ]);
                 } else {
                     $this->webhook->send($this->settings->getSecret('webhook_url'), (array) json_decode((string) $d['body'], true));
                 }

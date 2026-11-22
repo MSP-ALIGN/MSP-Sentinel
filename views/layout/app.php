@@ -100,6 +100,7 @@ try {
                     <?= $navItem('/users', 'bi-people', __('Users')) ?>
                     <?= $navItem('/admin/audit', 'bi-journal-text', __('Audit log')) ?>
                     <?= $navItem('/admin/settings', 'bi-gear', __('Settings')) ?>
+                    <?= $navItem('/admin/api', 'bi-plug', __('API')) ?>
                     <?php endif; ?>
                     <li class="nav-header"><?= e(__('SUPPORT')) ?></li>
                     <?= $navItem('/help', 'bi-question-circle', __('Help')) ?>

@@ -9,11 +9,13 @@ declare(strict_types=1);
  * - The default for a route is "signed in with 2FA, any role" (see Router).
  *   Public and pending routes are marked explicitly, and admin routes say so.
  * - Every POST is CSRF-checked by the kernel. Nothing here needs to repeat it.
+ * - /api/... is NOT routed here: App hands it to Sentinel\Api\ApiKernel (bearer tokens, no session).
  */
 
 use Sentinel\Auth\Role;
 use Sentinel\Controllers\AdminController;
 use Sentinel\Controllers\AlertController;
+use Sentinel\Controllers\ApiAdminController;
 use Sentinel\Controllers\AuthController;
 use Sentinel\Controllers\AuthorisationController;
 use Sentinel\Controllers\ClientController;
@@ -114,5 +116,11 @@ $router->add('GET', '/admin/settings', [AdminController::class, 'settings'], $ad
 $router->add('POST', '/admin/settings', [AdminController::class, 'saveSettings'], $admin);
 $router->add('POST', '/admin/alerts', [AlertController::class, 'save'], $admin);
 $router->add('POST', '/admin/alerts/test', [AlertController::class, 'test'], $admin);
+$router->add('GET', '/admin/api', [ApiAdminController::class, 'index'], $admin);
+$router->add('POST', '/admin/api/tokens', [ApiAdminController::class, 'create'], $admin);
+$router->add('POST', '/admin/api/tokens/{id}/revoke', [ApiAdminController::class, 'revoke'], $admin);
+$router->add('POST', '/admin/api/events', [ApiAdminController::class, 'events'], $admin);
+$router->add('POST', '/admin/api/events/secret', [ApiAdminController::class, 'secret'], $admin);
+$router->add('POST', '/admin/api/events/test', [ApiAdminController::class, 'test'], $admin);
 
 return $router;

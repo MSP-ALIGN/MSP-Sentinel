@@ -6,6 +6,8 @@ namespace Sentinel\Core;
 
 use PDO;
 use Sentinel\Alerts\AlertService;
+use Sentinel\Api\EventPublisher;
+use Sentinel\Api\TokenService;
 use Sentinel\Alerts\Outbox;
 use Sentinel\Alerts\WebhookSender;
 use Sentinel\Auth\Auth;
@@ -201,7 +203,7 @@ final class App
         $connector = Connector::fromConfig($config);
         $caFile = (string) $config->get('tls.ca_file', '');
         return new ScanWorker(self::db(), self::clients(), self::authorisations(), self::scans(), self::scope(), NmapRunner::fromConfig($config), $dns, $log,
-            new TlsChecker($connector, $caFile === '' ? null : $caFile), new HttpProbe($connector), self::endpoints(), self::vulnMatcher(15), self::findingsEngine(), self::alerts(), self::outbox(), self::reportService(), new StatsRecorder(self::db()));
+            new TlsChecker($connector, $caFile === '' ? null : $caFile), new HttpProbe($connector), self::endpoints(), self::vulnMatcher(15), self::findingsEngine(), self::alerts(), self::outbox(), self::reportService(), new StatsRecorder(self::db()), self::events());
     }
 
     /** Vulnerability data and match store. */
@@ -229,7 +231,7 @@ final class App
     /** Alert creation (in-app notifications, queued emails and webhooks). */
     public static function alerts(): AlertService
     {
-        return new AlertService(self::db(), self::settings(), rtrim((string) self::config()->get('app.public_url', ''), '/'));
+        return new AlertService(self::db(), self::settings(), rtrim((string) self::config()->get('app.public_url', ''), '/'), self::events());
     }
 
     /** Sends queued emails and webhook posts. */
@@ -251,6 +253,18 @@ final class App
         return self::config()->get('testing.allow_documentation_ranges', false) === true && getenv('SENTINEL_TEST_MODE') === '1';
     }
 
+    /** Outbound events (event webhook). */
+    public static function events(): EventPublisher
+    {
+        return new EventPublisher(self::db(), self::settings());
+    }
+
+    /** API tokens. */
+    public static function apiTokens(): TokenService
+    {
+        return new TokenService(self::db(), self::crypto(), self::limiter());
+    }
+
     /** Stored reports. */
     public static function reports(): ReportRepository
     {
@@ -261,7 +275,7 @@ final class App
     public static function reportService(): ReportService
     {
         $builder = new ReportBuilder(self::db(), self::settings(), self::authorisations(), SENTINEL_ROOT . '/storage/branding', self::version());
-        return new ReportService(self::db(), $builder, new ReportRenderer(SENTINEL_ROOT . '/views/reports'), self::reports(), self::alerts());
+        return new ReportService(self::db(), $builder, new ReportRenderer(SENTINEL_ROOT . '/views/reports'), self::reports(), self::alerts(), self::events());
     }
 
     /** Report logo storage. */
@@ -327,6 +341,10 @@ final class App
         $behindProxy = in_array((string) ($_SERVER['REMOTE_ADDR'] ?? ''), $trusted, true);
         $secure = $request->isSecure($behindProxy);
 
+        // The API has its own kernel: bearer tokens, no session or cookies, JSON errors.
+        if ($request->path === '/api' || str_starts_with($request->path, '/api/')) {
+            return SecurityHeaders::apply(\Sentinel\Api\ApiKernel::handle($request), $secure);
+        }
         try {
             Session::start($secure || (bool) $config->get('app.force_secure_cookies', false), self::basePath());
             $response = self::dispatch($router, $request);

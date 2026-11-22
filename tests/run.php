@@ -239,6 +239,7 @@ try {
     $ctx->smtpPlainPort = $smtpPlain;
     $ctx->smtpTlsPort = $smtpTls;
     $ctx->webhookLog = $outDir . '/webhook-posts.log';
+    $ctx->eventLog = $outDir . '/event-posts.log';
     \Sentinel\Core\App::boot(\Sentinel\Core\Config::fromArray($appConfig));
 
     if ($serve) {

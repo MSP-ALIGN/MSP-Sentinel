@@ -53,6 +53,17 @@ if ($path === '/webhook') {
     echo '{"ok":true}';
     exit;
 }
+if ($path === '/events') {
+    // Fake event receiver: record the signature, event header and exact body (one JSON line each).
+    $log = getenv('FEEDS_LOG');
+    if (is_string($log) && $log !== '') {
+        file_put_contents(dirname($log) . '/event-posts.log', json_encode([
+            'event' => $_SERVER['HTTP_X_SENTINEL_EVENT'] ?? '', 'signature' => $_SERVER['HTTP_X_SENTINEL_SIGNATURE'] ?? '', 'body' => file_get_contents('php://input'),
+        ]) . "\n", FILE_APPEND);
+    }
+    echo '{"ok":true}';
+    exit;
+}
 if ($path === '/kev.json') {
     echo file_get_contents($fixtures . 'kev.json');
     exit;

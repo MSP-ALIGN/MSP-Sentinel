@@ -96,6 +96,15 @@ return [
             ],
         ],
         [
+            'title' => 'API and events',
+            'paragraphs' => [
+                'Other tools, such as MSP Align, can read Sentinel\'s data through the API at /api/v1. Admins create tokens under Administration, API. A token is shown once: copy it into the other system straight away. Send it as "Authorization: Bearer <token>". The full description is at /api/v1/openapi.json.',
+                'Each token covers all clients or only the ones you choose, expires after 30 to 365 days, and can be limited to certain IP addresses. Every token can read. Triage and queueing scans are separate permissions, off unless you tick them. Scans queued through the API follow the same rules as in the web interface: only in scope, never while paused, and only in the client\'s scan window. Triage through the API needs a note, which is marked with the token\'s name.',
+                'A token acts as the admin who created it and stops working if it is revoked, expires, or that admin is deactivated or is no longer an admin. Each token can make 120 requests a minute. Its last use (time and address) is shown on the API page, and every change made through the API is in the audit log.',
+                'Outbound events: Sentinel can POST to an https address when findings open, reopen, become a Fail, resolve or are triaged, when a scan finishes and when a report is created. Each request is signed: check the X-Sentinel-Signature header (t=<unix time>,v1=<HMAC-SHA256 of "time.body" with the signing secret>) and reject old timestamps. The signing secret is shown once; you can create a new one at any time.',
+            ],
+        ],
+        [
             'title' => 'Reports',
             'paragraphs' => [
                 'Open a client and use the Reports card to create a report. The Executive summary is written for the client\'s management: an overall rating, the top 5 risks in plain English, totals and a trend. The Technical findings report is for IT: every open finding with its evidence, how to fix it, what was fixed this period, and the scope and methods. Technicians and admins create reports; everyone can read them.',
@@ -125,6 +134,15 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '0.10.0',
+            'date' => '2026-11-22',
+            'items' => [
+                'API at /api/v1 for MSP Align and other tools: clients, assets, findings, scans and reports, with an OpenAPI description.',
+                'Admin-created tokens: all or chosen clients, expiry, optional IP allowlist; triage and queueing scans are opt-in.',
+                'Signed outbound events when findings change, scans finish and reports are created.',
+            ],
+        ],
         [
             'version' => '0.9.0',
             'date' => '2026-11-22',

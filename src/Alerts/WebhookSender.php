@@ -71,6 +71,22 @@ final class WebhookSender
      */
     public function send(string $url, array $payload): void
     {
+        $this->sendRaw($url, (string) json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE));
+    }
+
+    /**
+     * Send an already-encoded JSON body with extra headers (signed events).
+     *
+     * @param list<string> $headers Extra "Name: value" headers (built by Sentinel, never from input).
+     * @throws \RuntimeException with a safe message (never the URL).
+     */
+    public function sendRaw(string $url, string $body, array $headers = []): void
+    {
+        foreach ($headers as $h) {
+            if (preg_match('/[\r\n]/', $h)) {
+                throw new \RuntimeException('Refusing a header with a line break.');
+            }
+        }
         $target = $this->check($url);
         if (is_string($target)) {
             throw new \RuntimeException($target);
@@ -78,8 +94,8 @@ final class WebhookSender
         $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE),
-            CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+            CURLOPT_POSTFIELDS => $body,
+            CURLOPT_HTTPHEADER => array_merge(['Content-Type: application/json'], $headers),
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_FOLLOWLOCATION => false,
             CURLOPT_TIMEOUT => $this->timeout,

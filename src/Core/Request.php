@@ -90,6 +90,26 @@ final class Request
         return is_array($f) && is_int($f['error'] ?? null) ? $f['error'] : UPLOAD_ERR_NO_FILE;
     }
 
+    /**
+     * The request body parsed as a JSON object (API), or null if it is missing,
+     * larger than 64 KB, or not a JSON object. Untrusted.
+     *
+     * @return array<string,mixed>|null
+     */
+    public function jsonBody(): ?array
+    {
+        $raw = (string) file_get_contents('php://input', false, null, 0, 65537);
+        if ($raw === '' || strlen($raw) > 65536) {
+            return null;
+        }
+        try {
+            $data = json_decode($raw, true, 8, JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return null;
+        }
+        return is_array($data) && !array_is_list($data) ? $data : null;
+    }
+
     /** A form field as a trimmed string ('' if missing or not a string). Untrusted. */
     public function input(string $key): string
     {
@@ -112,6 +132,20 @@ final class Request
     }
 
     /**
+     * A form field sent as a list (name="clients[]"): its string values, trimmed. Untrusted.
+     *
+     * @return list<string>
+     */
+    public function postList(string $key): array
+    {
+        $value = $this->post[$key] ?? [];
+        if (!is_array($value)) {
+            return [];
+        }
+        return array_values(array_map('trim', array_filter($value, 'is_string')));
+    }
+
+    /**
      * A repeated query parameter (?id[]=1&id[]=2) as a list of strings. Non-string items are dropped. Untrusted.
      *
      * @return list<string>
@@ -129,7 +163,8 @@ final class Request
     public function header(string $name): string
     {
         $key = 'HTTP_' . strtoupper(str_replace('-', '_', $name));
-        return (string) ($this->server[$key] ?? '');
+        // Apache with CGI/FastCGI can pass Authorization only as REDIRECT_HTTP_AUTHORIZATION.
+        return (string) ($this->server[$key] ?? ($key === 'HTTP_AUTHORIZATION' ? ($this->server['REDIRECT_HTTP_AUTHORIZATION'] ?? '') : ''));
     }
 
     /** Client IP (see the class notes on trusted proxies). */

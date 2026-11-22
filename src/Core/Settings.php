@@ -47,10 +47,14 @@ final class Settings
         'brand_logo' => '',
         'report_paper' => 'A4',
         'report_powered_by' => '1',
+        // Outbound events for other systems (step 10). URL and signing secret are stored encrypted.
+        'event_webhook_enabled' => '0',
+        'event_webhook_url' => '',
+        'event_webhook_secret' => '',
     ];
 
     /** Settings that hold secrets: stored encrypted with the app key, never shown again. */
-    public const SECRETS = ['smtp_password', 'webhook_url'];
+    public const SECRETS = ['smtp_password', 'webhook_url', 'event_webhook_url', 'event_webhook_secret'];
 
     /** @var array<string,string>|null */
     private ?array $cache = null;

@@ -201,6 +201,38 @@ final class TestContext
     public int $smtpPlainPort = 0;
     public int $smtpTlsPort = 0;
     public string $webhookLog = '';
+    /** Where the fake event receiver records posts ({event, signature, body} per line). */
+    public string $eventLog = '';
+
+    /**
+     * Call the API with a bearer token (no cookies). $json is sent as the body for POST.
+     *
+     * @param array<string,mixed>|null $json
+     */
+    public function api(string $method, string $path, ?string $token, ?array $json = null, ?string $rawBody = null): HttpResult
+    {
+        $ch = curl_init($this->baseUrl . $path);
+        $headers = [];
+        $send = $rawBody ?? ($json !== null ? json_encode($json) : null);
+        curl_setopt_array($ch, [
+            CURLOPT_CUSTOMREQUEST => $method,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => array_values(array_filter([$token !== null ? 'Authorization: Bearer ' . $token : null, $send !== null ? 'Content-Type: application/json' : null])),
+            CURLOPT_POSTFIELDS => $send,
+            CURLOPT_HEADERFUNCTION => static function ($c, string $line) use (&$headers): int {
+                if (str_contains($line, ':')) {
+                    [$n, $v] = explode(':', $line, 2);
+                    $headers[strtolower(trim($n))][] = trim($v);
+                }
+                return strlen($line);
+            },
+        ]);
+        $body = curl_exec($ch);
+        if ($body === false) {
+            throw new AssertionFailed('API request failed: ' . curl_error($ch));
+        }
+        return new HttpResult((int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE), $headers, (string) $body);
+    }
 
     /**
      * Messages received by the fake mail servers, oldest first, with the decoded subject and body.

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Sentinel\Alerts;
 
 use PDO;
+use Sentinel\Api\EventPublisher;
 use Sentinel\Core\Settings;
 
 /**
@@ -41,7 +42,7 @@ final class AlertService
     private const MAX_IMMEDIATE = 20;
 
     /** @param string $publicUrl Base URL for links (config app.public_url), or '' for no links. */
-    public function __construct(private readonly PDO $db, private readonly Settings $settings, private readonly string $publicUrl)
+    public function __construct(private readonly PDO $db, private readonly Settings $settings, private readonly string $publicUrl, private readonly ?EventPublisher $events = null)
     {
     }
 
@@ -53,6 +54,7 @@ final class AlertService
      */
     public function findingsChanged(int $clientId, array $result, bool $digest): void
     {
+        $this->events?->findingsChanged($clientId, $result); // outbound events (all changes, including warnings)
         $client = (string) $this->db->query('SELECT name FROM clients WHERE id = ' . (int) $clientId)->fetchColumn();
         $newIds = array_merge($result['opened_ids'], $result['reopened_ids']);
         $new = $this->findings($newIds);

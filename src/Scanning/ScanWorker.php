@@ -7,6 +7,7 @@ namespace Sentinel\Scanning;
 use PDO;
 use Sentinel\Alerts\AlertService;
 use Sentinel\Alerts\Outbox;
+use Sentinel\Api\EventPublisher;
 use Sentinel\Reports\ReportService;
 use Sentinel\Reports\StatsRecorder;
 use Sentinel\Clients\ClientRepository;
@@ -63,6 +64,7 @@ final class ScanWorker
         private readonly ?Outbox $outbox = null,
         private readonly ?ReportService $reports = null,
         private readonly ?StatsRecorder $stats = null,
+        private readonly ?EventPublisher $events = null,
     ) {
         $this->log ??= static function (string $line): void {
         };
@@ -382,6 +384,7 @@ final class ScanWorker
         }
         $this->refreshFindings($clientId, $summary);
         $this->scans->finish($jobId, $status, $summary);
+        $this->publishFinished($jobId, $clientId, 'ports', $status);
         if ($status === 'failed') {
             try {
                 $this->alerts?->scanFailed($clientId, $jobId, implode(' ', array_slice((array) $summary['messages'], 0, 3)));
@@ -435,6 +438,7 @@ final class ScanWorker
         }
         $this->refreshFindings($clientId, $summary);
         $this->scans->finish($jobId, $status, $summary);
+        $this->publishFinished($jobId, $clientId, 'tls', $status);
         return "TLS job {$jobId} {$status}: {$summary['endpoints_checked']} endpoint(s) checked.";
     }
 
@@ -621,5 +625,15 @@ final class ScanWorker
             }
         }
         return $out;
+    }
+
+    /** Queue a scan.finished event (never lets an event problem affect the scan). */
+    private function publishFinished(int $jobId, int $clientId, string $type, string $status): void
+    {
+        try {
+            $this->events?->publish('scan.finished', ['scan_id' => $jobId, 'client_id' => $clientId, 'job_type' => $type, 'status' => $status]);
+        } catch (\Throwable $ex) {
+            error_log('[msp-sentinel] event failed: ' . $ex->getMessage());
+        }
     }
 }

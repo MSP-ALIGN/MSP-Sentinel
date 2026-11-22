@@ -13,6 +13,22 @@ Sentinel is free software under the [GNU AGPL-3.0](LICENSE). Each MSP runs its o
 
 ## What's new
 
+### 0.10.0 (2026-11-22): API
+
+- A JSON **API** at `/api/v1` for MSP Align and other tools: clients, summaries, assets with open services,
+  findings (with history), scans and reports (including the frozen HTML and CSV). Lists are paginated and accept
+  `updated_since`. The OpenAPI description is at `/api/v1/openapi.json`.
+- **Tokens** are created by admins under Administration → API and shown once. Each token:
+  - covers all clients or a chosen list;
+  - expires (30 to 365 days) and can be limited to IP addresses or networks;
+  - can always read; **triage** and **queue scans** are separate permissions, off unless ticked;
+  - stops working if revoked, or if the admin who created it is deactivated or is no longer an admin.
+- API scans follow the same rules as the web: scope, pauses and the client's scan window (no override).
+  Triage needs a note and is marked with the token's name. Every API change is in the audit log.
+- 120 requests a minute per token; repeated failed attempts from one address are blocked for a while.
+- **Outbound events**: Sentinel can POST signed JSON when findings open, reopen, escalate, resolve or are triaged,
+  when a scan finishes and when a report is created (`X-Sentinel-Signature: t=…,v1=HMAC-SHA256`).
+
 ### 0.9.0 (2026-11-22): reports
 
 - Two reports per client, in your branding:
@@ -201,7 +217,8 @@ in `config/config.php` so alert messages link back to Sentinel.
 Weekly discovery (optional, recommended): add a cron job such as
 `17 3 * * 0  php /path/to/msp-sentinel/bin/discover.php`.
 
-Point the web server's document root at `public/`. Sign in, and you'll be asked to set up two-factor
+Point the web server's document root at `public/`. For the API, the web server must pass the `Authorization`
+header to PHP (Apache with PHP-FPM: `CGIPassAuth On`, or `SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1`). Sign in, and you'll be asked to set up two-factor
 authentication.
 
 **Back up `config/config.php`.** Its `app_key` encrypts the 2FA seeds. If the key is lost, every user has to set

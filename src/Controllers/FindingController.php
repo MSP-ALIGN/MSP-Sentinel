@@ -90,6 +90,7 @@ final class FindingController extends Controller
             return Response::redirect('/findings/' . $id);
         }
         $this->audit($request, 'finding.triaged', 'finding', $id, ['client_id' => (int) $finding['client_id'], 'from' => $previous, 'to' => $status, 'note' => mb_substr($note, 0, 300)]);
+        App::events()->publish('finding.triaged', (App::events()->finding($id) ?? []) + ['previous_status' => $previous]);
         Session::flash('success', match ($status) {
             'accepted' => __('Marked as accepted risk.'),
             'false_positive' => __('Marked as false positive. It reopens automatically if the evidence changes.'),
