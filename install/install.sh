@@ -106,7 +106,7 @@ write_web_update() {
     if [ "$dry" -eq 1 ]; then echo "  [dry-run] systemctl disable --now msp-sentinel-web-update.path"; else systemctl disable --now msp-sentinel-web-update.path >/dev/null 2>&1 || true; fi
     return 0
   fi
-  if [ "$mode" = upgrade ] && [ -d "$state" ] && [ ! -f "$state/enabled" ]; then
+  if [ -d "$state" ] && [ ! -f "$state/enabled" ]; then
     echo "  Updating from the web interface stays off on this server (it was turned off)."
     return 0
   fi

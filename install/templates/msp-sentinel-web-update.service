@@ -7,6 +7,5 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 ExecStart=/usr/local/sbin/msp-sentinel-update-runner
-TimeoutStartSec=3h
-# Not killed when the PHP-FPM or Nginx it reloads restart.
-KillMode=process
+# The web interface treats a run older than 3 hours as stopped; on timeout the whole update is stopped.
+TimeoutStartSec=2h

@@ -181,12 +181,27 @@ return [
         Assert::contains('updating', (string) file_get_contents($dir . '/state/update.log'), 'output logged');
         Assert::notContains('keep me', (string) file_get_contents($dir . '/state/update.log'), 'the request is never read');
 
-        // A failing update is reported with its exit code.
+        // At most one start every 15 minutes, whoever creates the request file.
+        $started = $status()['started'] ?? '';
+        touch($dir . '/storage/update-request');
+        $run();
+        Assert::same($started, $status()['started'] ?? '', 'a second request within 15 minutes does not run');
+        Assert::contains('less than 15 minutes ago', (string) file_get_contents($dir . '/state/update.log'));
+        // A directory at the request path is removed too (else the path unit would start the runner again and again).
+        $old = static function () use ($dir, $status): void {
+            file_put_contents($dir . '/state/status.json', json_encode(['started' => gmdate('Y-m-d H:i:s', time() - 3600)] + $status()));
+        };
+        $old();
+        mkdir($dir . '/storage/update-request');
+        touch($dir . '/storage/update-request/x');
         file_put_contents($dir . '/fake-update', "#!/bin/sh\necho boom\nexit 3\n");
         $run();
+        Assert::true(!file_exists($dir . '/storage/update-request'), 'directory removed');
+        // A failing update is reported with its exit code.
         Assert::same(['failed', 3], [$status()['state'] ?? '', $status()['exit'] ?? -1]);
         // The units point at the runner and the request file.
-        Assert::contains('PathExists=__ROOT__/storage/update-request', (string) file_get_contents($root . '/install/templates/msp-sentinel-web-update.path'));
+        $unit = (string) file_get_contents($root . '/install/templates/msp-sentinel-web-update.path');
+        Assert::true(str_contains($unit, 'PathExists=__ROOT__/storage/update-request') && str_contains($unit, 'TriggerLimitBurst='), 'path unit with a trigger limit');
         Assert::contains('ExecStart=/usr/local/sbin/msp-sentinel-update-runner', (string) file_get_contents($root . '/install/templates/msp-sentinel-web-update.service'));
         exec('rm -rf ' . escapeshellarg($dir));
     },

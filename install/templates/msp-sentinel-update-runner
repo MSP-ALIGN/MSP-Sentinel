@@ -7,16 +7,29 @@
 #   and the same fixed command always runs: /usr/local/sbin/msp-sentinel-update (backup, fetch, migrate, check).
 # - Progress goes to /var/lib/msp-sentinel-update (root:sentinel 0750), which the web app can read but not write,
 #   so nothing the web app controls can redirect what root writes.
-# - One update at a time (flock); the web app re-checks the admin's password and a 2FA code before requesting.
+# - One update at a time (flock), and at most one start every 15 minutes, so code running as the web user (which can
+#   create the request file without the admin checks) can't make root upgrade, and rotate backups, over and over.
+#   The web app re-checks the admin's password and a 2FA code before requesting.
 set -uo pipefail
 umask 027
 STATE=/var/lib/msp-sentinel-update
 REQUEST=__ROOT__/storage/update-request
 
-rm -f -- "$REQUEST"
+rm -rf -- "$REQUEST"                # also a directory; rm never follows symlinks
+[ -e "$REQUEST" ] && exit 0         # could not remove it: don't run (the path unit would start us again and again)
 [ -f "$STATE/enabled" ] || exit 0   # turned off by the administrator
 exec 9>"$STATE/lock"
 flock -n 9 || exit 0                # already running
+# At most one start every 15 minutes (the last start time is in our own status file).
+last="$(sed -n 's/.*"started":"\([0-9: -]*\)".*/\1/p' "$STATE/status.json" 2>/dev/null)"
+if [ -n "$last" ] && [ $(( $(date -u +%s) - $(date -u -d "$last" +%s 2>/dev/null || echo 0) )) -lt 900 ]; then
+  echo "Update request ignored: the last one started less than 15 minutes ago ($last UTC)." >> "$STATE/update.log"
+  exit 0
+fi
+# An earlier upgrade interrupted by a reboot leaves the scheduled jobs paused: put them back (the upgrade pauses them again).
+if [ -f /etc/msp-sentinel/cron.paused ] && [ ! -f /etc/cron.d/msp-sentinel ] && ! pgrep -f 'install/install.sh --upgrade' >/dev/null; then
+  mv -f /etc/msp-sentinel/cron.paused /etc/cron.d/msp-sentinel
+fi
 
 started="$(date -u '+%Y-%m-%d %H:%M:%S')"
 status() {  # status STATE FINISHED EXIT
@@ -33,7 +46,8 @@ if [ ! -x /usr/local/sbin/msp-sentinel-update ]; then
   status failed "$(date -u '+%Y-%m-%d %H:%M:%S')" 127
   exit 0
 fi
-/usr/local/sbin/msp-sentinel-update >> "$STATE/update.log" 2>&1
+# fd 9 (the lock) is closed for the update, so no child (some run as the sentinel user) holds it.
+/usr/local/sbin/msp-sentinel-update >> "$STATE/update.log" 2>&1 9>&-
 rc=$?
 status "$( [ "$rc" -eq 0 ] && echo done || echo failed )" "$(date -u '+%Y-%m-%d %H:%M:%S')" "$rc"
 exit 0

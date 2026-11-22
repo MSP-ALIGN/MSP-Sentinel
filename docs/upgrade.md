@@ -30,6 +30,10 @@ How it works, and why it is safe:
   not change.
 - Only admins can ask, only with their password and a fresh 2FA code, at most 5 tries per 15 minutes, and every
   request (and every refusal) is in the audit log.
+- The runner itself starts at most once every 15 minutes, one update at a time. That matters because the password
+  and 2FA checks are in the web app: someone who could already run code as the web server's user could create the
+  request file directly. They could then only start the normal update (which backs up first), no more than four
+  times an hour; they could not run anything else as root.
 
 Servers installed before 1.12.0 get it with their next `sudo msp-sentinel-update`. Servers installed from a release
 download (below) don't have it: update those on the server.
@@ -41,7 +45,7 @@ sudo systemctl disable --now msp-sentinel-web-update.path
 sudo rm -f /var/lib/msp-sentinel-update/enabled
 ```
 
-To turn it back on, run the installer again from `/opt/msp-sentinel-src` after recreating the marker:
+Re-running the installer or the one-liner keeps it off. To turn it back on, recreate the marker and update:
 `sudo install -m 0644 /dev/null /var/lib/msp-sentinel-update/enabled && sudo msp-sentinel-update`. Install without it
 from the start with `SENTINEL_WEB_UPDATE=n` (one-line install) or `--no-web-update` (installer).
 

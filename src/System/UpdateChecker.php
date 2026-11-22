@@ -97,7 +97,8 @@ final class UpdateChecker
         // ahead_by = commits on the branch that the installed commit doesn't have.
         $commits = is_array($data['commits'] ?? null) ? $data['commits'] : [];
         $last = end($commits);
-        $head = is_array($last) && is_string($last['sha'] ?? null) && preg_match('/^[0-9a-f]{40}$/', $last['sha']) === 1 ? substr($last['sha'], 0, 12) : '';
+        // The compare API lists at most 250 commits: further behind, the last one listed is not the branch head.
+        $head = $data['ahead_by'] <= 250 && is_array($last) && is_string($last['sha'] ?? null) && preg_match('/^[0-9a-f]{40}$/', $last['sha']) === 1 ? substr($last['sha'], 0, 12) : '';
         $this->settings->set('update_branch_behind', (string) min($data['ahead_by'], 100000));
         $this->settings->set('update_branch_head', $head);
         $this->settings->set('update_branch_base', $this->build['sha']);

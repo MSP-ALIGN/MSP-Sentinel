@@ -83,6 +83,7 @@ final class SystemController extends Controller
         $back = Response::redirect('/admin/system#updates');
         $bucket = 'web_update:' . $id;
         if (App::limiter()->tooMany($bucket, 5, 900)) {
+            $this->audit($request, 'system.update_denied', null, null, ['reason' => 'too many attempts']);
             Session::flash('danger', __('Too many attempts. Wait 15 minutes and try again.'));
             return $back;
         }
@@ -106,6 +107,7 @@ final class SystemController extends Controller
         }
         App::limiter()->clear($bucket);
         if (!App::webUpdate()->request()) {
+            $this->audit($request, 'system.update_denied', null, null, ['reason' => App::webUpdate()->available() ? 'already waiting or running' : 'not set up on this server']);
             Session::flash('warning', App::webUpdate()->available()
                 ? __('An update is already waiting or running.')
                 : __('Updating from the web interface is not set up on this server. Run sudo msp-sentinel-update on the server.'));

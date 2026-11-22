@@ -6,6 +6,9 @@ Description=MSP Sentinel update requests from the web interface
 [Path]
 PathExists=__ROOT__/storage/update-request
 Unit=msp-sentinel-web-update.service
+# Belt and braces with the runner's own 15-minute limit: never more than 3 starts in 10 minutes.
+TriggerLimitIntervalSec=10min
+TriggerLimitBurst=3
 
 [Install]
 WantedBy=multi-user.target

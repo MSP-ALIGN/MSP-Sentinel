@@ -137,6 +137,8 @@ if [ -f "$APP_DIR/config/config.php" ]; then
   log "Existing install found: upgrading"
   args=(--upgrade)
   [ "$DRY" = 1 ] && args+=(--dry-run)
+  # Turning "Update now" off with the one-liner also works on an installed server (it is never turned ON here).
+  case "${SENTINEL_WEB_UPDATE:-}" in '') ;; y|Y|yes|YES|1) ;; n|N|no|NO|0) args+=(--no-web-update) ;; *) die "SENTINEL_WEB_UPDATE must be y or n." ;; esac
   [ "${SENTINEL_FORCE:-0}" = 1 ] && args+=(--skip-os-check)
   # The update command (and the branch it follows) is only rewritten once the upgrade worked, so a refused
   # upgrade (for example a downgrade) leaves the server following its old branch.
@@ -212,6 +214,8 @@ ask_yes SENTINEL_FAIL2BAN "Install fail2ban?" 1
 step 5 "Automatic security updates"
 note "Debian security patches are installed automatically every day (unattended-upgrades)."
 ask_yes SENTINEL_AUTO_UPDATES "Turn on automatic security updates?" 1
+# "Update now" in the web interface: on unless SENTINEL_WEB_UPDATE=n (no question; see docs/upgrade.md).
+case "${SENTINEL_WEB_UPDATE:-y}" in y|Y|yes|YES|1) SENTINEL_WEB_UPDATE=1 ;; n|N|no|NO|0) SENTINEL_WEB_UPDATE=0 ;; *) die "SENTINEL_WEB_UPDATE must be y or n." ;; esac
 
 step 6 "Backups"
 note "Sentinel backs up its database and config every night (kept 14 days). With a passphrase they are encrypted." \
@@ -263,7 +267,7 @@ args=(--domain "$SENTINEL_DOMAIN" --tls "$SENTINEL_TLS")
 [ "$SENTINEL_FIREWALL" = 1 ] || args+=(--no-firewall)
 [ "$SENTINEL_FAIL2BAN" = 1 ] || args+=(--no-fail2ban)
 [ "$SENTINEL_AUTO_UPDATES" = 1 ] || args+=(--no-auto-updates)
-case "${SENTINEL_WEB_UPDATE:-y}" in n|N|no|NO|0) args+=(--no-web-update) ;; esac
+[ "$SENTINEL_WEB_UPDATE" = 1 ] || args+=(--no-web-update)
 [ "$DRY" = 1 ] && args+=(--dry-run)
 [ "${SENTINEL_FORCE:-0}" = 1 ] && args+=(--skip-os-check)
 # The admin details and the backup passphrase travel in the environment, never on a command line.
