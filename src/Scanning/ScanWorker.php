@@ -183,7 +183,7 @@ final class ScanWorker
         $count = 0;
         foreach ($this->clients->all(false) as $client) {
             $id = (int) $client['id'];
-            if ((int) $client['scanning_paused'] === 1 || $this->scans->openJob($id) !== null) {
+            if ((int) $client['scanning_paused'] === 1 || (int) ($client['is_demo'] ?? 0) === 1 || $this->scans->openJob($id) !== null) {
                 continue;
             }
             $last = $this->scans->lastScheduledAt($id);

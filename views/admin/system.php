@@ -1,7 +1,7 @@
 <?php
 /**
  * System page (admins): health checks, version/updates, data retention.
- * Expects: $checks, $version, $build (null or branch/commit/development), $newer, $updateEnabled, $checkedAt, $retention, $retentionLast, $sourceUrl.
+ * Expects: $checks, $demoLoaded (bool), $version, $build (null or branch/commit/development), $newer, $updateEnabled, $checkedAt, $retention, $retentionLast, $sourceUrl.
  * Every value is escaped. Status is shown with an icon and a word, not colour alone.
  */
 use Sentinel\Core\Csrf;
@@ -47,6 +47,21 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
         </form>
         <?php if ($updateEnabled): ?>
         <form method="post" action="<?= e(url('/admin/system/updates')) ?>"><?= Csrf::field() ?><input type="hidden" name="action" value="check"><button type="submit" class="btn btn-outline-secondary btn-sm"><?= e(__('Check now')) ?></button></form>
+        <?php endif; ?>
+    </div>
+</div>
+<div class="card mb-3" id="demo">
+    <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Demo data')) ?></h2></div>
+    <div class="card-body small">
+        <p><?= e(__('Made-up clients with findings, devices, scan history and reports, for trying Sentinel out or training. They use *.example names and documentation addresses, are marked Demo, and are never scanned. Removing them deletes only demo clients and what belongs to them.')) ?></p>
+        <?php if ($demoLoaded): ?>
+        <form method="post" action="<?= e(url('/admin/system/demo')) ?>" data-confirm="<?= e(__('Remove all demo clients and everything that belongs to them?')) ?>"><?= Csrf::field() ?><input type="hidden" name="action" value="remove">
+            <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash me-1" aria-hidden="true"></i><?= e(__('Remove demo data')) ?></button>
+        </form>
+        <?php else: ?>
+        <form method="post" action="<?= e(url('/admin/system/demo')) ?>" data-confirm="<?= e(__('Load four demo clients? Demo findings are assigned to you.')) ?>"><?= Csrf::field() ?><input type="hidden" name="action" value="load">
+            <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-easel me-1" aria-hidden="true"></i><?= e(__('Load demo data')) ?></button>
+        </form>
         <?php endif; ?>
     </div>
 </div>

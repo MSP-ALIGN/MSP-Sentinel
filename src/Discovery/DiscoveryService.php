@@ -92,6 +92,9 @@ final class DiscoveryService
         if ($client === null || (int) $client['is_archived'] === 1) {
             return $refuse(__('Discovery is not available for archived clients.'));
         }
+        if ((int) ($client['is_demo'] ?? 0) === 1) {
+            return $refuse(__('This is a demo client with made-up data: it is never scanned.'));
+        }
         if ((int) $client['scanning_paused'] === 1 || $this->scope->globallyPaused()) {
             return $refuse(__('Scanning is paused, so discovery is paused too.'));
         }

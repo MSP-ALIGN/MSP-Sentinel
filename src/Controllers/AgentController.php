@@ -191,6 +191,7 @@ final class AgentController extends Controller
         $auth = App::agents()->activeAuthorisation((int) $site['id'], ScopeService::today((string) $client['timezone']));
         $error = match (true) {
             (int) $client['is_archived'] === 1 => __('This client is archived.'),
+            (int) ($client['is_demo'] ?? 0) === 1 => __('This is a demo client with made-up data: it is never scanned.'),
             (int) $client['scanning_paused'] === 1 || (int) $site['scanning_paused'] === 1 || App::scope()->globallyPaused() => __('Scanning is paused.'),
             $agentId === 0 => __('This site has no active agent.'),
             $auth === null => __('This site has no valid internal authorisation.'),

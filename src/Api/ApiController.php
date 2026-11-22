@@ -120,6 +120,9 @@ final class ApiController
     {
         $c = $this->clientRow((int) $p['id']);
         $cid = (int) $c['id'];
+        if ((int) ($c['is_demo'] ?? 0) === 1) {
+            throw new ApiError(409, 'This is a demo client with made-up data: it is never scanned.');
+        }
         if ((int) $c['is_archived'] === 1 || (int) $c['scanning_paused'] === 1 || App::scope()->globallyPaused()) {
             throw new ApiError(409, 'Scanning is paused or the client is archived.');
         }

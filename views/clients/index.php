@@ -38,6 +38,7 @@ $isAdmin = Role::atLeast((string) $currentUser['role'], Role::ADMIN);
                 <td>
                     <a href="<?= e(url('/clients/' . (int) $c['id'])) ?>"><?= e($c['name']) ?></a>
                     <?php if ((int) $c['is_archived'] === 1): ?><span class="badge text-bg-secondary ms-1"><?= e(__('Archived')) ?></span><?php endif; ?>
+                    <?php if ((int) ($c['is_demo'] ?? 0) === 1): ?><span class="badge text-bg-info ms-1"><?= e(__('Demo')) ?></span><?php endif; ?>
                 </td>
                 <td>
                     <?php $status = $c['auth_summary']['status']; require __DIR__ . '/../partials/auth_status.php'; ?>

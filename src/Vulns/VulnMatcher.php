@@ -47,7 +47,9 @@ final class VulnMatcher
     public function matchClient(?int $clientId, int $fetchBudget = 0, ?float $timeBudget = null): array
     {
         $started = microtime(true);
-        $sql = "SELECT s.id, s.cpe, s.product, s.version, s.extra_info FROM services s JOIN assets a ON a.id = s.asset_id WHERE s.is_open = 1"
+        // Demo clients (made-up data) keep their example matches: never re-matched, never looked up.
+        $sql = "SELECT s.id, s.cpe, s.product, s.version, s.extra_info FROM services s JOIN assets a ON a.id = s.asset_id
+                JOIN clients c ON c.id = a.client_id AND c.is_demo = 0 WHERE s.is_open = 1"
             . ($clientId === null ? '' : ' AND a.client_id = :c');
         $stmt = $this->db->prepare($sql);
         $stmt->execute($clientId === null ? [] : ['c' => $clientId]);

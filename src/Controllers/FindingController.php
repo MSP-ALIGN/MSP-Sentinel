@@ -209,6 +209,7 @@ final class FindingController extends Controller
         $error = match (true) {
             $finding['status'] === 'resolved' => __('This finding is already resolved.'),
             (int) $client['is_archived'] === 1 => __('This client is archived.'),
+            (int) ($client['is_demo'] ?? 0) === 1 => __('This is a demo client with made-up data: it is never scanned.'),
             (int) $client['scanning_paused'] === 1 || App::scope()->globallyPaused() => __('Scanning is paused, so nothing can be rechecked.'),
             $target === null => __('This finding can\'t be rechecked on its own. Run a scan of the client instead.'),
             !App::scope()->isInScope($clientId, $target['kind'] === 'email' ? $target['domain'] : $target['ip']) => __('This target is no longer in an active authorisation, so it can\'t be rechecked.'),

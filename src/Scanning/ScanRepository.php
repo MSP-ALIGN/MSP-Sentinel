@@ -36,6 +36,12 @@ final class ScanRepository
         if (!in_array($type, ['ports', 'tls', 'verify'], true)) {
             throw new \InvalidArgumentException('Unknown job type.');
         }
+        // Last line of defence: demo clients hold made-up addresses and are never scanned, whoever asks.
+        $demo = $this->db->prepare('SELECT is_demo FROM clients WHERE id = :c');
+        $demo->execute(['c' => $clientId]);
+        if ((int) $demo->fetchColumn() === 1) {
+            throw new \DomainException('Demo clients are never scanned.');
+        }
         $this->db->prepare(
             "INSERT INTO scan_jobs (client_id, job_type, trigger_type, requested_by, outside_window, override_reason, status, payload, created_at)
              VALUES (:c, :type, :t, :u, :o, :r, 'queued', :p, UTC_TIMESTAMP())"

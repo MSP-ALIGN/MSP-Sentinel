@@ -222,6 +222,8 @@ Then check everything with `sudo -u sentinel php8.4 /opt/msp-sentinel/bin/doctor
 5. Optionally, get a free **NVD API key** and set `nvd.api_key` in the config: vulnerability lookups get about ten
    times faster.
 6. If you skipped it during install, encrypt the daily backups: see [backup.md](backup.md).
+7. To look around first, load **demo data** under **Administration → System** (see
+   [operations.md](operations.md#demo-data)). Remove it before adding real clients, or keep it on a dev server.
 
 ## Manual install (other systems)
 

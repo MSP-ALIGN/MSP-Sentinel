@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.10.0](https://img.shields.io/badge/version-1.10.0-ff5a1f?style=flat-square)
+![Version 1.11.0](https://img.shields.io/badge/version-1.11.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -149,6 +149,17 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
 
 ## What's new
 
+### 1.11.0 (2026-11-22): demo data
+
+- **Demo data** for trying Sentinel out, testing or training: four made-up clients with findings of every kind
+  (open, assigned, overdue, accepted, false positive and fixed), an on-premises agent with devices and risky
+  protocols, inventory devices with patches and installed software, scan history, 90 days of trends and two reports.
+- Load or remove it under **Administration → System → Demo data**, or on the server with
+  `sudo -u sentinel php /opt/msp-sentinel/bin/demo.php --load` (`--remove`, `--status`).
+- **Demo clients are never scanned.** They use `*.example` names and documentation-only addresses, carry a Demo
+  badge, and every scan path refuses them: scheduled and manual scans, verify fix, discovery, agent jobs, inventory
+  sync and vulnerability look-ups. Removing demo data deletes only demo clients and what belongs to them.
+
 ### 1.10.0 (2026-11-22): development servers
 
 - **One-line install for a development server** that follows the `develop` branch, so changes can be tried before
@@ -158,6 +169,9 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
 - Development servers show a **Development build** badge on every page. Administration → System shows the branch
   and commit of every install made with the one-line installer.
 - See "Development server" in [docs/install.md](docs/install.md).
+
+<details>
+<summary><b>Earlier releases (1.9.0 to 1.0.0)</b></summary>
 
 ### 1.9.0 (2026-11-22): guided install
 
@@ -171,9 +185,6 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
 - Every answer can also be given as a `SENTINEL_*` environment variable for unattended installs. New installer
   options: `--tls`, `--proxy-ip`, `--no-firewall`, `--no-fail2ban`, `--no-auto-updates`.
 - Step-by-step guide in [docs/install.md](docs/install.md).
-
-<details>
-<summary><b>Earlier releases (1.8.0 to 1.0.0)</b></summary>
 
 ### 1.8.0 (2026-11-22): one-line install on Debian 13
 
@@ -319,7 +330,7 @@ The database admin used to create and drop the test database is set with `SENTIN
 | `src/` | Application code (`Core`, `Auth`, `Scope`, `Discovery`, `Scanning`, `Web`, `Vulns`, `Findings`, `Inventory`, `Agent`, `AgentClient`, `Alerts`, `Reports`, `Dashboard`, `Api`, `System`, `Controllers`) |
 | `views/` | PHP templates (every value is escaped with `e()`) |
 | `migrations/` | Idempotent database migrations |
-| `bin/` | CLI tools, including the on-premises agent (`sentinel-agent.php`) |
+| `bin/` | CLI tools, including the on-premises agent (`sentinel-agent.php`) and demo data (`demo.php`) |
 | `lang/` | Interface translations (English is the source language) |
 | `help/` | In-app help and "What's new" entries |
 | `tests/` | End-to-end and unit tests |

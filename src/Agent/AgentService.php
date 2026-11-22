@@ -82,7 +82,7 @@ final class AgentService
         $sites = $this->db->query(
             "SELECT s.id AS site_id, s.client_id, c.timezone, c.scan_window_start, c.scan_window_end, c.scanning_paused, s.scanning_paused AS site_paused,
                     (SELECT MAX(a.id) FROM agents a WHERE a.site_id = s.id AND a.status = 'active') AS agent_id
-             FROM sites s JOIN clients c ON c.id = s.client_id AND c.is_archived = 0
+             FROM sites s JOIN clients c ON c.id = s.client_id AND c.is_archived = 0 AND c.is_demo = 0
              WHERE EXISTS (SELECT 1 FROM agents a WHERE a.site_id = s.id AND a.status = 'active')"
         )->fetchAll();
         foreach ($sites as $s) {

@@ -411,7 +411,7 @@ final class InventoryRepository
     public function linksDue(string $source, int $hours, int $limit): array
     {
         $stmt = $this->db->prepare(
-            'SELECT l.* FROM source_links l JOIN clients c ON c.id = l.client_id AND c.is_archived = 0
+            'SELECT l.* FROM source_links l JOIN clients c ON c.id = l.client_id AND c.is_archived = 0 AND c.is_demo = 0
              WHERE l.source = :s AND (l.last_sync_at IS NULL OR l.last_sync_at < UTC_TIMESTAMP() - INTERVAL :h HOUR) ORDER BY l.last_sync_at IS NOT NULL, l.last_sync_at LIMIT :lim'
         );
         $stmt->bindValue('s', $source);

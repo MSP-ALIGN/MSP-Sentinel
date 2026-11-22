@@ -223,6 +223,12 @@ final class AgentRepository
      */
     public function queueJob(int $agentId, int $clientId, int $siteId, int $authorisationId, string $kind, string $trigger, ?int $userId, array $ports, int $hours, ?array $targets = null): int
     {
+        // Demo clients (made-up data) never get agent jobs, whoever asks.
+        $demo = $this->db->prepare('SELECT is_demo FROM clients WHERE id = :c');
+        $demo->execute(['c' => $clientId]);
+        if ((int) $demo->fetchColumn() === 1) {
+            throw new \DomainException('Demo clients are never scanned.');
+        }
         $this->db->prepare("INSERT INTO agent_jobs (agent_id, client_id, site_id, authorisation_id, kind, trigger_type, requested_by, status, ports, targets, created_at, expires_at)
                             VALUES (:a, :c, :s, :auth, :k, :t, :u, 'queued', :p, :tg, UTC_TIMESTAMP(), UTC_TIMESTAMP() + INTERVAL :h HOUR)")
             ->execute(['a' => $agentId, 'c' => $clientId, 's' => $siteId, 'auth' => $authorisationId, 'k' => $kind === 'light' ? 'light' : 'full',

@@ -2,6 +2,17 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.11.0 (2026-11-22): demo data
+
+- **Demo data** for trying Sentinel out, testing or training: four made-up clients with findings of every kind
+  (open, assigned, overdue, accepted, false positive and fixed), an on-premises agent with devices and risky
+  protocols, inventory devices with patches and installed software, scan history, 90 days of trends and two reports.
+- Load or remove it under **Administration → System → Demo data**, or on the server with
+  `sudo -u sentinel php /opt/msp-sentinel/bin/demo.php --load` (`--remove`, `--status`).
+- **Demo clients are never scanned.** They use `*.example` names and documentation-only addresses, carry a Demo
+  badge, and every scan path refuses them: scheduled and manual scans, verify fix, discovery, agent jobs, inventory
+  sync and vulnerability look-ups. Removing demo data deletes only demo clients and what belongs to them.
+
 ### 1.10.0 (2026-11-22): development servers
 
 - **One-line install for a development server** that follows the `develop` branch, so changes can be tried before

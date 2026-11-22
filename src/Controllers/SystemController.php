@@ -29,6 +29,7 @@ final class SystemController extends Controller
             'checks' => App::health()->run(),
             'version' => App::version(),
             'build' => App::build(),
+            'demoLoaded' => (new \Sentinel\Demo\DemoData(App::db(), (int) $this->user()['id']))->isLoaded(),
             'newer' => App::updates()->newer(),
             'updateEnabled' => $s->get('update_check_enabled') === '1',
             'checkedAt' => $s->get('update_checked_at'),
@@ -36,6 +37,35 @@ final class SystemController extends Controller
             'retentionLast' => $s->get('retention_last_run'),
             'sourceUrl' => $s->get('source_url'),
         ]);
+    }
+
+    /**
+     * POST /admin/system/demo (admins; CSRF-checked like every POST): load or remove the demo data.
+     * Untrusted: "action" (only "load" or "remove" do anything). Demo clients are never scanned (see DemoData).
+     */
+    public function demo(Request $request): Response
+    {
+        @set_time_limit(120);
+        $demo = new \Sentinel\Demo\DemoData(App::db(), (int) $this->user()['id']);
+        try {
+            if ($request->input('action') === 'remove') {
+                $r = $demo->remove();
+                $this->audit($request, 'demo.removed', null, null, $r);
+                Session::flash('success', __('Removed {n} demo client(s) and everything that belonged to them.', ['n' => $r['clients']]));
+            } elseif ($request->input('action') === 'load') {
+                if ($demo->isLoaded()) {
+                    Session::flash('info', __('Demo data is already loaded.'));
+                } else {
+                    $r = $demo->load();
+                    $this->audit($request, 'demo.loaded', null, null, $r);
+                    Session::flash('success', __('Loaded {c} demo clients with {f} findings, {d} devices and {r} reports. They are never scanned.', ['c' => $r['clients'], 'f' => $r['findings'], 'd' => $r['devices'], 'r' => $r['reports']]));
+                }
+            }
+        } catch (\Throwable $ex) {
+            error_log('MSP Sentinel demo data: ' . $ex->getMessage());
+            Session::flash('danger', __('The demo data could not be changed. The error is in the web server log.'));
+        }
+        return Response::redirect('/admin/system#demo');
     }
 
     /** POST /admin/system/retention */

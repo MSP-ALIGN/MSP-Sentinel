@@ -59,6 +59,10 @@ final class InventoryController extends Controller
             Session::flash('warning', __('This client is archived. Restore it before linking it.'));
             return Response::redirect('/clients/' . (int) $client['id']);
         }
+        if ((int) ($client['is_demo'] ?? 0) === 1) {
+            Session::flash('info', __('This is a demo client with made-up data: it can\'t be linked to a real inventory source.'));
+            return Response::redirect('/clients/' . (int) $client['id']);
+        }
         [$name, $source] = $this->source($request->input('source'));
         $orgId = $request->input('org_id');
         try {
@@ -108,6 +112,8 @@ final class InventoryController extends Controller
         [$name] = $this->source($request->input('source'));
         if ((int) $client['is_archived'] === 1) {
             Session::flash('warning', __('This client is archived.'));
+        } elseif ((int) ($client['is_demo'] ?? 0) === 1) {
+            Session::flash('info', __('This is a demo client with made-up data: it is never synced.'));
         } elseif (App::inventory()->link((int) $client['id'], $name) === null) {
             Session::flash('warning', __('This client is not linked yet.'));
         } else {

@@ -33,6 +33,41 @@ resolved findings and reports (0 keeps them forever, the default). The worker re
 writes the counts to the audit log. The audit log itself is never removed. A resolved finding that was removed and
 later comes back is treated as new.
 
+## Demo data
+
+Made-up clients for trying Sentinel out, testing a development server or training technicians. Admins load and
+remove it under **Administration → System → Demo data**, or on the server:
+
+```sh
+sudo -u sentinel php /opt/msp-sentinel/bin/demo.php --load     # --user=USERNAME picks the admin findings are assigned to
+sudo -u sentinel php /opt/msp-sentinel/bin/demo.php --status
+sudo -u sentinel php /opt/msp-sentinel/bin/demo.php --remove
+```
+
+What it adds:
+
+| Client | Shows |
+|---|---|
+| Riverside Example Ltd | Lots to fix: known exploited vulnerabilities, an exposed firewall admin page and VPN portal, expired and weak certificates, website and email problems. Also an on-premises agent site (SMBv1, Telnet, SNMP "private", RDP without NLA, a login page over HTTP) and inventory devices (unsupported Windows, antivirus off, encryption off, missing and failed patches, vulnerable Chrome and 7-Zip). |
+| Lakeshore Example Inc | An Exchange server with a possible known exploited vulnerability, a remote desktop web portal, TLS 1.0, weak SPF and DMARC. |
+| Hillcrest Example Clinic | A well-run client: no open problems, only fixed history. |
+| Bayview Example Co | MySQL open to the internet, a certificate name mismatch, and an authorisation that ends in 12 days. |
+
+Findings are built by the normal findings engine, then some are assigned to the admin who loaded the data, accepted,
+marked false positive, given a due date, or left overdue. There are also scan history, discovery suggestions,
+90 days of trend history and two reports.
+
+Safety:
+- Demo clients use `*.example` names and documentation-only addresses (`192.0.2.0/24`, `198.51.100.0/24`,
+  `203.0.113.0/24`, plus `10.20.0.0/24` for the made-up office network).
+- They carry a **Demo** badge and are **never scanned**. Scheduled and manual scans, verify fix, discovery, agent
+  scans, inventory sync and vulnerability look-ups all refuse or skip them. The demo agent's token is thrown away
+  when it is created, so nothing can ever sign in as it.
+- No user accounts are created and no alerts or emails are sent.
+- Removing deletes only demo clients and what belongs to them. The public CVE and KEV entries the demo refers to
+  stay, because they are real reference data that the daily feeds keep up to date. The audit log keeps its records
+  of loading and removing.
+
 ## Pausing scans
 
 - **Pause all scanning** (header button, technicians and admins) stops everything at once, including running scans.

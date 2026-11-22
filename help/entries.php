@@ -140,6 +140,7 @@ return [
             'paragraphs' => [
                 'Administration, System shows the health of this install: PHP, the database, migrations, nmap, whether the scan worker and the daily feeds job are running, storage, disk space, HTTPS, email and updates. Fix anything marked Problem first. The server administrator can run the same checks with php bin/doctor.php.',
                 'Once a day Sentinel asks the releases feed for the latest version (nothing else is sent) and shows it here when a newer one exists. You can turn this off. Upgrades are done on the server (sudo msp-sentinel-update, or install.sh --upgrade), which makes a backup first.',
+                'Demo data: under Demo data, admins can load four made-up clients (with findings in every state, an on-premises agent and devices, scan history, trends and reports) to try Sentinel out or train technicians, and remove them again. Demo clients use *.example names and documentation addresses, show a Demo badge and are never scanned. Removing deletes only demo clients and what belongs to them. On the server: php bin/demo.php --load or --remove.',
                 'Data retention: choose how many months to keep finished scan history, resolved findings and reports. 0 keeps them forever. Older data is removed once a day and the counts are written to the audit log. The audit log itself is always kept.',
                 'Backups are made on the server with bin/backup.php (daily, if Sentinel was installed with the installer). They contain all client data and the app key, so encrypt any copy that leaves the server. See docs/backup.md.',
                 'Installing: the one-line install asks seven questions step by step (host name; HTTPS with Let\'s Encrypt, self-signed or behind a reverse proxy; firewall; fail2ban; automatic security updates; backup encryption passphrase; first admin) and shows a summary before it changes anything. Behind a reverse proxy, Sentinel only accepts plain HTTP from the proxy\'s address and trusts its X-Forwarded-For and X-Forwarded-Proto headers. See docs/install.md.',
@@ -195,6 +196,14 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.11.0',
+            'date' => '2026-11-22',
+            'items' => [
+                'Demo data: four made-up clients with findings, devices, scan history, trends and reports. Load or remove it under Administration, System.',
+                'Demo clients are never scanned and carry a Demo badge; removing demo data deletes only demo clients.',
+            ],
+        ],
         [
             'version' => '1.10.0',
             'date' => '2026-11-22',

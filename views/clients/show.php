@@ -16,6 +16,9 @@ $paused = (int) $client['scanning_paused'] === 1;
 $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'] === 'active'));
 ?>
 <?php if ($globallyPaused): ?><?php require __DIR__ . '/../partials/kill_switch.php'; ?><?php endif; ?>
+<?php if ((int) ($client['is_demo'] ?? 0) === 1): ?>
+<div class="alert alert-info"><i class="bi bi-easel me-1" aria-hidden="true"></i><?= e(__('Demo client: made-up data for trying Sentinel out. It is never scanned. Remove all demo data under Administration, System.')) ?></div>
+<?php endif; ?>
 <?php if ($archived): ?>
 <div class="alert alert-secondary"><i class="bi bi-archive me-1" aria-hidden="true"></i><?= e(__('This client is archived. It will not be scanned.')) ?></div>
 <?php endif; ?>

@@ -54,6 +54,10 @@ final class ScanController extends Controller
                 return $back;
             }
         }
+        if ((int) ($client['is_demo'] ?? 0) === 1) {
+            Session::flash('info', __('This is a demo client with made-up data: it is never scanned.'));
+            return $back;
+        }
         $payload = App::scanWorker()->payloadFor($client);
         if ($payload === null) {
             Session::flash('danger', __('There is nothing to scan: the client has no active authorisation with IP addresses or exact hostnames.'));
