@@ -88,7 +88,7 @@ await page.fill('#scope', '# Office and website\n203.0.113.10\n198.51.100.0/28\n
 await page.check('#confirm');
 await page.click('.app-content form button.btn-primary[type=submit]');
 await shot(page, '15-authorisation-errors');
-await page.fill('#scope', '# Office and website\n203.0.113.10\n203.0.113.160\n203.0.113.180\n203.0.113.181\ndiscovery.example');
+await page.fill('#scope', '# Office and website\n203.0.113.10\n203.0.113.160\n203.0.113.180\n203.0.113.181\n203.0.113.190\ndiscovery.example\nmail-good.example\nmail-weak.example');
 await page.check('#confirm');
 await page.click('.app-content form button.btn-primary[type=submit]');
 await page.waitForURL(/\/clients\/\d+$/);
@@ -124,6 +124,7 @@ await page.goto(clientUrl);
 await page.locator('#scans').screenshot({ path: `${out}19-port-scan.png` });
 await page.locator('#vulns').screenshot({ path: `${out}21-vulnerabilities.png` });
 await page.locator('#exposure').screenshot({ path: `${out}20-certificates-web.png` });
+await page.locator('#website').screenshot({ path: `${out}39-website-email.png` });
 await page.locator('#findings').screenshot({ path: `${out}22-client-findings.png` });
 await page.goto(`${base}/`);
 await page.locator('.app-header').screenshot({ path: `${out}26-notification-bell.png` });

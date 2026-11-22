@@ -362,3 +362,4 @@ a.kpi:hover { background: rgba(var(--st-ember-rgb), .07); }
 .admin-card-status { font: .8rem var(--st-mono); }
 .admin-card-status.is-ok { color: var(--st-ok); } .admin-card-status.is-warn { color: var(--st-warn); } .admin-card-status.is-bad { color: var(--st-fail); }
 .admin-card-text { font-size: .86rem; color: var(--bs-secondary-color); }
+.sn-records { min-width: 16rem; max-width: 28rem; }
