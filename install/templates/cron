@@ -1,0 +1,12 @@
+# MSP Sentinel scheduled jobs (written by install/install.sh). Times are the server's local time.
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Scan worker: every minute (runs queued scans, sends alerts, monthly reports, housekeeping).
+* * * * * sentinel __PHP__ __ROOT__/bin/worker.php >> /var/log/msp-sentinel/worker.log 2>&1
+# Threat feeds (CISA KEV, NVD, EPSS): daily.
+41 4 * * * sentinel __PHP__ __ROOT__/bin/feeds.php >> /var/log/msp-sentinel/feeds.log 2>&1
+# Passive discovery of forgotten hostnames: weekly.
+17 3 * * 0 sentinel __PHP__ __ROOT__/bin/discover.php >> /var/log/msp-sentinel/discover.log 2>&1
+# Backup: daily, keep 14 (set SENTINEL_BACKUP_PASSPHRASE in /etc/msp-sentinel/backup.env and add --encrypt to encrypt).
+23 2 * * * sentinel sh -c '[ -f /etc/msp-sentinel/backup.env ] && . /etc/msp-sentinel/backup.env; exec __PHP__ __ROOT__/bin/backup.php --dir=/var/backups/msp-sentinel --keep=14 ${SENTINEL_BACKUP_ENCRYPT:+--encrypt}' >> /var/log/msp-sentinel/backup.log 2>&1

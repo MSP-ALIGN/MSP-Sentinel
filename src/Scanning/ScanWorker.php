@@ -8,6 +8,7 @@ use PDO;
 use Sentinel\Alerts\AlertService;
 use Sentinel\Alerts\Outbox;
 use Sentinel\Api\EventPublisher;
+use Sentinel\System\Housekeeping;
 use Sentinel\Reports\ReportService;
 use Sentinel\Reports\StatsRecorder;
 use Sentinel\Clients\ClientRepository;
@@ -65,6 +66,7 @@ final class ScanWorker
         private readonly ?ReportService $reports = null,
         private readonly ?StatsRecorder $stats = null,
         private readonly ?EventPublisher $events = null,
+        private readonly ?Housekeeping $housekeeping = null,
     ) {
         $this->log ??= static function (string $line): void {
         };
@@ -79,6 +81,8 @@ final class ScanWorker
      */
     public function tick(bool $schedule = true, ?int $onlyJobId = null): string
     {
+        // Heartbeat (proves cron runs, even while a long scan holds the worker lock); daily update check and retention.
+        $this->housekeeping?->tick();
         $lock = $this->db->quote('msp_sentinel_worker_' . substr(hash('sha256', (string) $this->db->query('SELECT DATABASE()')->fetchColumn()), 0, 16));
         if ((int) $this->db->query("SELECT GET_LOCK({$lock}, 0)")->fetchColumn() !== 1) {
             return 'Another worker is running.';

@@ -35,6 +35,12 @@ return [
         'public_url' => '',
     ],
 
+    // Update check: once a day the worker asks this releases feed for the latest version (nothing else is sent).
+    // Turn it off under Administration > System. Point it at your own mirror if you prefer.
+    'updates' => [
+        'url' => 'https://api.github.com/repos/msp-align/msp-sentinel/releases/latest',
+    ],
+
     // Passive discovery (DNS lookups and certificate logs).
     'dns' => [
         // IP of the DNS resolver to ask. Empty = the first nameserver in /etc/resolv.conf.

@@ -94,6 +94,18 @@ final class Migrator
     }
 
     /** True if the table exists in the current database. */
+    /**
+     * IDs of migrations not applied yet (for the health check).
+     *
+     * @return list<string>
+     */
+    public function pending(): array
+    {
+        $applied = $this->tableExists('schema_migrations') ? $this->db->query('SELECT id FROM schema_migrations')->fetchAll(PDO::FETCH_COLUMN) : [];
+        return array_values(array_diff(array_keys($this->files()), $applied));
+    }
+
+    /** True if the table exists in the current database. */
     public function tableExists(string $table): bool
     {
         $stmt = $this->db->prepare('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t');

@@ -23,6 +23,7 @@ use Sentinel\Controllers\DiscoveryController;
 use Sentinel\Controllers\FindingController;
 use Sentinel\Controllers\ScanController;
 use Sentinel\Controllers\ScanningController;
+use Sentinel\Controllers\SystemController;
 use Sentinel\Controllers\PageController;
 use Sentinel\Controllers\ProfileController;
 use Sentinel\Controllers\ReportController;
@@ -116,6 +117,9 @@ $router->add('GET', '/admin/settings', [AdminController::class, 'settings'], $ad
 $router->add('POST', '/admin/settings', [AdminController::class, 'saveSettings'], $admin);
 $router->add('POST', '/admin/alerts', [AlertController::class, 'save'], $admin);
 $router->add('POST', '/admin/alerts/test', [AlertController::class, 'test'], $admin);
+$router->add('GET', '/admin/system', [SystemController::class, 'index'], $admin);
+$router->add('POST', '/admin/system/retention', [SystemController::class, 'retention'], $admin);
+$router->add('POST', '/admin/system/updates', [SystemController::class, 'updates'], $admin);
 $router->add('GET', '/admin/api', [ApiAdminController::class, 'index'], $admin);
 $router->add('POST', '/admin/api/tokens', [ApiAdminController::class, 'create'], $admin);
 $router->add('POST', '/admin/api/tokens/{id}/revoke', [ApiAdminController::class, 'revoke'], $admin);

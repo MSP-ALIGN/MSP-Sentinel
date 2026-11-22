@@ -51,6 +51,16 @@ final class Settings
         'event_webhook_enabled' => '0',
         'event_webhook_url' => '',
         'event_webhook_secret' => '',
+        // Operations (step 11). Retention: months to keep (0 = keep forever). The audit log is never pruned.
+        'retention_scans_months' => '0',
+        'retention_findings_months' => '0',
+        'retention_reports_months' => '0',
+        'update_check_enabled' => '1',
+        // Written by the worker (not shown in forms).
+        'worker_last_tick' => '',
+        'update_latest_version' => '',
+        'update_checked_at' => '',
+        'retention_last_run' => '',
     ];
 
     /** Settings that hold secrets: stored encrypted with the app key, never shown again. */

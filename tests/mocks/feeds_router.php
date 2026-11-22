@@ -53,6 +53,17 @@ if ($path === '/webhook') {
     echo '{"ok":true}';
     exit;
 }
+if ($path === '/releases/latest') {
+    // Fake releases feed for the update check.
+    header('Content-Type: application/json');
+    echo json_encode(['tag_name' => 'v9.9.9', 'prerelease' => false, 'draft' => false, 'html_url' => 'javascript:alert(1)']);
+    exit;
+}
+if ($path === '/releases/pre') {
+    header('Content-Type: application/json');
+    echo json_encode(['tag_name' => 'v10.0.0', 'prerelease' => true]);
+    exit;
+}
 if ($path === '/events') {
     // Fake event receiver: record the signature, event header and exact body (one JSON line each).
     $log = getenv('FEEDS_LOG');

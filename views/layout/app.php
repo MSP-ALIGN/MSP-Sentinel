@@ -101,6 +101,7 @@ try {
                     <?= $navItem('/admin/audit', 'bi-journal-text', __('Audit log')) ?>
                     <?= $navItem('/admin/settings', 'bi-gear', __('Settings')) ?>
                     <?= $navItem('/admin/api', 'bi-plug', __('API')) ?>
+                    <?= $navItem('/admin/system', 'bi-heart-pulse', __('System')) ?>
                     <?php endif; ?>
                     <li class="nav-header"><?= e(__('SUPPORT')) ?></li>
                     <?= $navItem('/help', 'bi-question-circle', __('Help')) ?>

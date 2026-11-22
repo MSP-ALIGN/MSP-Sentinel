@@ -1,0 +1,10 @@
+/var/log/msp-sentinel/*.log {
+    weekly
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    su sentinel sentinel
+    create 0660 sentinel sentinel
+}

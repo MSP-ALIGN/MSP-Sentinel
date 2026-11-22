@@ -27,4 +27,4 @@ are not authorised to test.
 
 ## Supported versions
 
-Until 1.0.0, only the latest release gets security fixes.
+Security fixes are released for the latest 1.x version. Upgrade to it (see `docs/upgrade.md`) to stay covered.

@@ -262,7 +262,9 @@ Sentinel is a product other MSPs install themselves, so v1.0 includes the follow
 8. Reports (report engine, Executive Summary, Technical Findings)
 9. Alerts
 10. API
-11. Packaging and docs: Docker Compose, setup wizard, guides, sample authorisation form, `SECURITY.md`
+11. Packaging and docs: release archive and installer (Ubuntu 24.04 / Debian 12, Nginx), health check, backups,
+    update check, data retention, guides, sample authorisation form, responsible-use statement, `CONTRIBUTING.md`.
+    (Docker Compose and a web setup wizard were dropped in favour of the installer; they may come later.)
 
 Each feature gets tests, then an independent security review, then fixes and a re-test.
 

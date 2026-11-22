@@ -96,6 +96,15 @@ return [
             ],
         ],
         [
+            'title' => 'System, backups and updates (admins)',
+            'paragraphs' => [
+                'Administration, System shows the health of this install: PHP, the database, migrations, nmap, whether the scan worker and the daily feeds job are running, storage, disk space, HTTPS, email and updates. Fix anything marked Problem first. The server administrator can run the same checks with php bin/doctor.php.',
+                'Once a day Sentinel asks the releases feed for the latest version (nothing else is sent) and shows it here when a newer one exists. You can turn this off. Upgrades are done on the server (install.sh --upgrade), which makes a backup first.',
+                'Data retention: choose how many months to keep finished scan history, resolved findings and reports. 0 keeps them forever. Older data is removed once a day and the counts are written to the audit log. The audit log itself is always kept.',
+                'Backups are made on the server with bin/backup.php (daily, if Sentinel was installed with the installer). They contain all client data and the app key, so encrypt any copy that leaves the server. See docs/backup.md.',
+            ],
+        ],
+        [
             'title' => 'API and events',
             'paragraphs' => [
                 'Other tools, such as MSP Align, can read Sentinel\'s data through the API at /api/v1. Admins create tokens under Administration, API. A token is shown once: copy it into the other system straight away. Send it as "Authorization: Bearer <token>". The full description is at /api/v1/openapi.json.',
@@ -135,6 +144,15 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.0.0',
+            'date' => '2026-11-22',
+            'items' => [
+                'First stable release: a release archive with checksums and an installer for Ubuntu 24.04 and Debian 12 (with --upgrade).',
+                'Administration, System: health checks (also bin/doctor.php), version and update check, data retention.',
+                'Backups (bin/backup.php, optionally encrypted) and restores (bin/restore.php), plus full guides in docs/.',
+            ],
+        ],
         [
             'version' => '0.10.0',
             'date' => '2026-11-22',

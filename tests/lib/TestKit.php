@@ -268,10 +268,10 @@ final class TestContext
      *
      * @return array{0:int,1:string} [exit code, output]
      */
-    public function cli(string $script, array $args = []): array
+    public function cli(string $script, array $args = [], array $env = []): array
     {
-        $proc = proc_open(array_merge([PHP_BINARY, $this->root . '/' . $script], $args), [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $this->root,
-            ['SENTINEL_CONFIG' => $this->configPath, 'PATH' => (string) getenv('PATH'), 'SENTINEL_ALLOW_ROOT' => '1', 'SENTINEL_TEST_MODE' => '1']);
+        $proc = proc_open(array_merge([PHP_BINARY, $this->root . '/' . $script], $args), [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $this->root,
+            $env + ['SENTINEL_CONFIG' => $this->configPath, 'PATH' => (string) getenv('PATH'), 'SENTINEL_ALLOW_ROOT' => '1', 'SENTINEL_TEST_MODE' => '1']);
         $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
         return [proc_close($proc), $out];
     }

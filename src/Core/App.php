@@ -15,6 +15,10 @@ use Sentinel\Auth\RecoveryCodes;
 use Sentinel\Auth\Role;
 use Sentinel\Auth\UserRepository;
 use Sentinel\Clients\ClientRepository;
+use Sentinel\System\HealthCheck;
+use Sentinel\System\Housekeeping;
+use Sentinel\System\Retention;
+use Sentinel\System\UpdateChecker;
 use Sentinel\Reports\Branding;
 use Sentinel\Reports\ReportBuilder;
 use Sentinel\Reports\ReportRenderer;
@@ -203,7 +207,7 @@ final class App
         $connector = Connector::fromConfig($config);
         $caFile = (string) $config->get('tls.ca_file', '');
         return new ScanWorker(self::db(), self::clients(), self::authorisations(), self::scans(), self::scope(), NmapRunner::fromConfig($config), $dns, $log,
-            new TlsChecker($connector, $caFile === '' ? null : $caFile), new HttpProbe($connector), self::endpoints(), self::vulnMatcher(15), self::findingsEngine(), self::alerts(), self::outbox(), self::reportService(), new StatsRecorder(self::db()), self::events());
+            new TlsChecker($connector, $caFile === '' ? null : $caFile), new HttpProbe($connector), self::endpoints(), self::vulnMatcher(15), self::findingsEngine(), self::alerts(), self::outbox(), self::reportService(), new StatsRecorder(self::db()), self::events(), self::housekeeping());
     }
 
     /** Vulnerability data and match store. */
@@ -251,6 +255,30 @@ final class App
     public static function webhookTestMode(): bool
     {
         return self::config()->get('testing.allow_documentation_ranges', false) === true && getenv('SENTINEL_TEST_MODE') === '1';
+    }
+
+    /** Daily update check (config updates.url). */
+    public static function updates(): UpdateChecker
+    {
+        return new UpdateChecker(self::settings(), (string) self::config()->get('updates.url', UpdateChecker::DEFAULT_URL), self::version(), self::webhookTestMode());
+    }
+
+    /** Data retention (admin settings). */
+    public static function retention(): Retention
+    {
+        return new Retention(self::db(), self::settings(), self::audit());
+    }
+
+    /** Heartbeat, update check and retention, run by the worker. */
+    public static function housekeeping(): Housekeeping
+    {
+        return new Housekeeping(self::settings(), self::updates(), self::retention());
+    }
+
+    /** Install health checks (bin/doctor.php, admin System page). */
+    public static function health(): HealthCheck
+    {
+        return new HealthCheck(self::db(), self::config(), self::settings(), SENTINEL_ROOT, self::updates());
     }
 
     /** Outbound events (event webhook). */
