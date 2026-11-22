@@ -9,7 +9,7 @@
 #   so nothing the web app controls can redirect what root writes.
 # - One update at a time (flock), and at most one start every 15 minutes, so code running as the web user (which can
 #   create the request file without the admin checks) can't make root upgrade, and rotate backups, over and over.
-#   The web app re-checks the admin's password and a 2FA code before requesting.
+#   Only admins can request an update in the web app.
 set -uo pipefail
 umask 027
 STATE=/var/lib/msp-sentinel-update

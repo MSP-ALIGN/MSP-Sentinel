@@ -16,7 +16,7 @@ It fetches the branch the server follows (see `/etc/msp-sentinel/update.env`) an
 ### From the web interface
 
 On servers installed with the one-line command, admins can also click **Update now** under
-**Administration → System → Version and updates**. It asks for your password and a 2FA code, then runs exactly the
+**Administration → System → Version and updates** (admins only; it asks "Are you sure?"). It runs exactly the
 same `msp-sentinel-update` on the server: backup first, fetch the branch, database changes, health check. Sentinel
 may be unavailable for a minute while it restarts. Refresh the page to see the progress and the output.
 
@@ -28,12 +28,11 @@ How it works, and why it is safe:
   runs the same fixed command. Nothing typed in the browser reaches it.
 - Progress is written to `/var/lib/msp-sentinel-update/` (`status.json`, `update.log`), which the web app can read but
   not change.
-- Only admins can ask, only with their password and a fresh 2FA code, at most 5 tries per 15 minutes, and every
-  request (and every refusal) is in the audit log.
-- The runner itself starts at most once every 15 minutes, one update at a time. That matters because the password
-  and 2FA checks are in the web app: someone who could already run code as the web server's user could create the
-  request file directly. They could then only start the normal update (which backs up first), no more than four
-  times an hour; they could not run anything else as root.
+- Only admins see the button, and every request (and every refusal) is in the audit log.
+- The runner itself starts at most once every 15 minutes, one update at a time, and can only run the normal update
+  (which backs up first). So even someone with a stolen admin session, or who could run code as the web server's
+  user, could at worst start an unplanned update no more than four times an hour; they could not run anything
+  else as root.
 
 Servers installed before 1.12.0 get it with their next `sudo msp-sentinel-update`. Servers installed from a release
 download (below) don't have it: update those on the server.

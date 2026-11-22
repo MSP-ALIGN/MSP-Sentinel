@@ -70,11 +70,9 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
             <p class="text-body-secondary mb-2"><?= e($build !== null
                 ? __('Fetches the newest {b} branch, backs up first, applies database changes and checks health. Same as sudo msp-sentinel-update on the server.', ['b' => $build['branch']])
                 : __('Backs up first, applies database changes and checks health.')) ?></p>
-            <form method="post" action="<?= e(url('/admin/system/update')) ?>" class="row g-2 align-items-end" autocomplete="off" data-confirm="<?= e(__('Update Sentinel now? It backs up first and may be unavailable for a minute.')) ?>">
+            <form method="post" action="<?= e(url('/admin/system/update')) ?>" data-confirm="<?= e(__('Update Sentinel now? It backs up first and may be unavailable for a minute.')) ?>">
                 <?= Csrf::field() ?>
-                <div class="col-sm-5"><label class="form-label mb-0" for="upd-password"><?= e(__('Your password')) ?></label><input class="form-control form-control-sm" type="password" id="upd-password" name="password" required autocomplete="current-password"></div>
-                <div class="col-sm-3"><label class="form-label mb-0" for="upd-code"><?= e(__('2FA code')) ?></label><input class="form-control form-control-sm" id="upd-code" name="code" inputmode="numeric" pattern="[0-9 ]{6,7}" required autocomplete="one-time-code"></div>
-                <div class="col-sm-4"><button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-cloud-arrow-down me-1" aria-hidden="true"></i><?= e(__('Update now')) ?></button></div>
+                <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-cloud-arrow-down me-1" aria-hidden="true"></i><?= e(__('Update now')) ?></button>
             </form>
             <?php endif; ?>
             <?php endif; ?>

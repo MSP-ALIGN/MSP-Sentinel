@@ -139,7 +139,7 @@ return [
             'title' => 'System, backups and updates (admins)',
             'paragraphs' => [
                 'Administration, System shows the health of this install: PHP, the database, migrations, nmap, whether the scan worker and the daily feeds job are running, storage, disk space, HTTPS, email and updates. Fix anything marked Problem first. The server administrator can run the same checks with php bin/doctor.php.',
-                'Once a day Sentinel asks the releases feed for the latest version (nothing else is sent) and shows it here when a newer one exists. You can turn this off. Servers installed with the one-line command also show how many new commits their branch has. Admins can click Update now (with their password and a 2FA code): a small service on the server then runs the same update as sudo msp-sentinel-update, backing up first, and the page shows its progress. Otherwise upgrades are done on the server (sudo msp-sentinel-update, or install.sh --upgrade), which makes a backup first.',
+                'Once a day Sentinel asks the releases feed for the latest version (nothing else is sent) and shows it here when a newer one exists. You can turn this off. Servers installed with the one-line command also show how many new commits their branch has. Admins can click Update now: a small service on the server then runs the same update as sudo msp-sentinel-update, backing up first, and the page shows its progress. Otherwise upgrades are done on the server (sudo msp-sentinel-update, or install.sh --upgrade), which makes a backup first.',
                 'Demo data: under Demo data, admins can load four made-up clients (with findings in every state, an on-premises agent and devices, scan history, trends and reports) to try Sentinel out or train technicians, and remove them again. Demo clients use *.example names and documentation addresses, show a Demo badge and are never scanned. Removing deletes only demo clients and what belongs to them. On the server: php bin/demo.php --load or --remove.',
                 'Data retention: choose how many months to keep finished scan history, resolved findings and reports. 0 keeps them forever. Older data is removed once a day and the counts are written to the audit log. The audit log itself is always kept.',
                 'Backups are made on the server with bin/backup.php (daily, if Sentinel was installed with the installer). They contain all client data and the app key, so encrypt any copy that leaves the server. See docs/backup.md.',
@@ -196,6 +196,13 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.12.1',
+            'date' => '2026-11-22',
+            'items' => [
+                'Update now is one click for admins (no password or 2FA code); the server still backs up first and runs it at most once every 15 minutes.',
+            ],
+        ],
         [
             'version' => '1.12.0',
             'date' => '2026-11-22',

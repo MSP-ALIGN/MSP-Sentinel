@@ -22,7 +22,8 @@ namespace Sentinel\System;
  * - The request file carries no data, so nothing the web app writes ever reaches the root process. The runner
  *   only removes it (removing a symlink is harmless) and always runs the same fixed command.
  * - The root process never writes into a directory the web app can write to (no symlink tricks).
- * - The caller (SystemController) checks the admin role, CSRF, the password and a 2FA code before request().
+ * - The caller (SystemController) checks the admin role and CSRF before request(); the runner allows one start
+ *   every 15 minutes and only ever runs the fixed update.
  * - status.json and update.log are read as untrusted text: status fields are checked against patterns, and the
  *   log is size-capped, scrubbed of control characters and escaped by the view.
  */

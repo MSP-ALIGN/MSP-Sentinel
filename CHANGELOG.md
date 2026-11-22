@@ -2,6 +2,12 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.12.1 (2026-11-22): one-click Update now
+
+- **Update now** is a one-click admin action again (with an "Are you sure?" prompt): no password or 2FA code. The
+  server still only runs the normal update (backup first), at most once every 15 minutes, and every request is in
+  the audit log.
+
 ### 1.12.0 (2026-11-22): update from the web interface
 
 - **Update now** under **Administration → System**, on development and production servers installed with the

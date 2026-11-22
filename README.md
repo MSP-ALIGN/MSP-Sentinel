@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.12.0](https://img.shields.io/badge/version-1.12.0-ff5a1f?style=flat-square)
+![Version 1.12.1](https://img.shields.io/badge/version-1.12.1-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -149,6 +149,12 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
 
 ## What's new
 
+### 1.12.1 (2026-11-22): one-click Update now
+
+- **Update now** is a one-click admin action again (with an "Are you sure?" prompt): no password or 2FA code. The
+  server still only runs the normal update (backup first), at most once every 15 minutes, and every request is in
+  the audit log.
+
 ### 1.12.0 (2026-11-22): update from the web interface
 
 - **Update now** under **Administration → System**, on development and production servers installed with the
@@ -161,6 +167,9 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
   (part of the daily update check, or **Check now**).
 - Existing servers get both with their next `sudo msp-sentinel-update`.
 
+<details>
+<summary><b>Earlier releases (1.11.0 to 1.0.0)</b></summary>
+
 ### 1.11.0 (2026-11-22): demo data
 
 - **Demo data** for trying Sentinel out, testing or training: four made-up clients with findings of every kind
@@ -171,9 +180,6 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
 - **Demo clients are never scanned.** They use `*.example` names and documentation-only addresses, carry a Demo
   badge, and every scan path refuses them: scheduled and manual scans, verify fix, discovery, agent jobs, inventory
   sync and vulnerability look-ups. Removing demo data deletes only demo clients and what belongs to them.
-
-<details>
-<summary><b>Earlier releases (1.10.0 to 1.0.0)</b></summary>
 
 ### 1.10.0 (2026-11-22): development servers
 

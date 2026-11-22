@@ -63,7 +63,7 @@ return [
             @unlink($file);
         }
     },
-    'update now: shows how far behind the branch is; admins request it with password and 2FA' => function (TestContext $ctx): void {
+    'update now: shows how far behind the branch is; admins request it with one click' => function (TestContext $ctx): void {
         $root = dirname(__DIR__, 2);
         $build = $root . '/BUILD';
         $request = $root . '/storage/update-request';
@@ -89,28 +89,22 @@ return [
             $page = $admin->get('/admin/system')->body;
             Assert::contains('action="/admin/system/update"', $page);
 
-            // Wrong password, or a wrong 2FA code: refused, audited, nothing requested.
-            $admin->submit('/admin/system', '/admin/system/update', ['password' => 'wrong-password', 'code' => $ctx->totp('admin')]);
-            $ctx->allowFreshCode('admin');
-            $admin->submit('/admin/system', '/admin/system/update', ['password' => 'Admin-Pass-0001!', 'code' => '000000']);
-            Assert::true(!file_exists($request), 'nothing requested without the password and a valid code');
-            Assert::same(2, (int) $ctx->db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'system.update_denied'")->fetchColumn(), 'denials audited');
             // Technicians can't ask at all.
             if ((int) $ctx->db->query("SELECT COUNT(*) FROM users WHERE username = 'updtech'")->fetchColumn() === 0) {
                 $ctx->createUser('updtech', 'technician', 'Updtech-Pass-01!');
             }
             $tech = $ctx->login('updtech', 'Updtech-Pass-01!');
-            Assert::status(403, $tech->post('/admin/system/update', ['_csrf' => $tech->get('/')->csrf(), 'password' => 'Updtech-Pass-01!', 'code' => $ctx->totp('updtech')]));
+            Assert::status(403, $tech->post('/admin/system/update', ['_csrf' => $tech->get('/')->csrf()]));
+            $admin->post('/admin/system/update', []); // no CSRF token
+            Assert::true(!file_exists($request), 'nothing requested by a technician or without a CSRF token');
 
-            // Password and a fresh code: an EMPTY request file appears (nothing from the request reaches the root runner).
-            $ctx->allowFreshCode('admin');
-            $admin->submit('/admin/system', '/admin/system/update', ['password' => 'Admin-Pass-0001!', 'code' => $ctx->totp('admin')]);
+            // One click by an admin: an EMPTY request file appears (nothing from the request reaches the root runner).
+            $admin->submit('/admin/system', '/admin/system/update', []);
             Assert::true(is_file($request) && filesize($request) === 0, 'empty request file created');
             Assert::contains('Update requested', $admin->get('/admin/system')->body);
             Assert::same(1, (int) $ctx->db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'system.update_requested'")->fetchColumn(), 'audited');
             Assert::contains('The update was requested', $admin->get('/admin/system')->body);
-            $ctx->allowFreshCode('admin');
-            $admin->submit('/admin/system', '/admin/system/update', ['password' => 'Admin-Pass-0001!', 'code' => $ctx->totp('admin')]);
+            $admin->submit('/admin/system', '/admin/system/update', []);
             Assert::contains('already waiting or running', $admin->get('/admin/system')->body);
 
             // The runner's progress is shown (status checked, log scrubbed and escaped).
@@ -129,11 +123,6 @@ return [
             file_put_contents($state . '/status.json', '{"state":"<b>","started":"x"}');
             Assert::notContains('<b>', $admin->get('/admin/system')->body, 'a malformed status file is ignored');
 
-            // At most 5 tries per 15 minutes.
-            for ($i = 0; $i < 6; $i++) {
-                $admin->submit('/admin/system', '/admin/system/update', ['password' => 'wrong', 'code' => '000000']);
-            }
-            Assert::contains('Too many attempts', $admin->get('/admin/system')->body);
         } finally {
             @unlink($build);
             @unlink($request);

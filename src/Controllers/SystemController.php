@@ -72,40 +72,13 @@ final class SystemController extends Controller
 
     /**
      * POST /admin/system/update (admins; CSRF-checked like every POST): ask the server's update runner to run
-     * msp-sentinel-update. Re-checks the admin's password and a fresh 2FA code first, because this starts an
-     * upgrade as root on the server; at most 5 tries per 15 minutes per admin.
-     * Untrusted: "password" and "code" (only compared, never stored or logged).
+     * msp-sentinel-update. One click (the form asks "Are you sure?"): the runner can only run that fixed update,
+     * backs up first, and starts at most once every 15 minutes, so a second confirmation adds little.
+     * Untrusted input: none (the request carries no data).
      */
     public function update(Request $request): Response
     {
-        $user = $this->user();
-        $id = (int) $user['id'];
         $back = Response::redirect('/admin/system#updates');
-        $bucket = 'web_update:' . $id;
-        if (App::limiter()->tooMany($bucket, 5, 900)) {
-            $this->audit($request, 'system.update_denied', null, null, ['reason' => 'too many attempts']);
-            Session::flash('danger', __('Too many attempts. Wait 15 minutes and try again.'));
-            return $back;
-        }
-        App::limiter()->hit($bucket);
-        $fresh = App::db()->prepare('SELECT password_hash, totp_secret_enc, totp_enabled_at, totp_last_step FROM users WHERE id = :id');
-        $fresh->execute(['id' => $id]);
-        $row = $fresh->fetch();
-        $code = preg_replace('/\s+/', '', $request->input('code')) ?? '';
-        $ok = $row !== false && \Sentinel\Auth\Passwords::verify($request->input('password'), (string) $row['password_hash']);
-        if ($ok) {
-            // 2FA is required for every admin; a code is single-use (the step is claimed like at sign-in).
-            $step = $row['totp_enabled_at'] !== null && preg_match('/^\d{6}$/', $code) === 1
-                ? \Sentinel\Auth\Totp::verify(App::crypto()->decrypt((string) $row['totp_secret_enc']), $code, $row['totp_last_step'] === null ? null : (int) $row['totp_last_step'])
-                : null;
-            $ok = $step !== null && App::users()->claimTotpStep($id, $step);
-        }
-        if (!$ok) {
-            $this->audit($request, 'system.update_denied', null, null, ['reason' => 'password or 2FA code incorrect']);
-            Session::flash('danger', __('The password or the two-factor code is not correct.'));
-            return $back;
-        }
-        App::limiter()->clear($bucket);
         if (!App::webUpdate()->request()) {
             $this->audit($request, 'system.update_denied', null, null, ['reason' => App::webUpdate()->available() ? 'already waiting or running' : 'not set up on this server']);
             Session::flash('warning', App::webUpdate()->available()
