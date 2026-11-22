@@ -71,9 +71,15 @@ final class ReportController extends Controller
         $user = $this->user();
         $ids = [];
         foreach ($kinds as $kind) {
-            $ids[] = App::reportService()->generate($client, $kind, $start, $end, (int) $user['id'], (string) $user['display_name']);
+            try {
+                $id = App::reportService()->generate($client, $kind, $start, $end, (int) $user['id'], (string) $user['display_name']);
+            } catch (\RuntimeException $ex) {
+                Session::flash('danger', $ex->getMessage());
+                return Response::redirect('/clients/' . (int) $client['id'] . '#reports');
+            }
+            $ids[] = $id;
+            $this->audit($request, 'report.created', 'report', $id, ['client' => (int) $client['id'], 'kind' => $kind, 'period' => $start . '..' . $end]);
         }
-        $this->audit($request, 'report.created', 'client', (int) $client['id'], ['reports' => $ids, 'period' => $start . '..' . $end]);
         Session::flash('success', count($ids) === 1 ? __('Report created.') : __('{n} reports created.', ['n' => count($ids)]));
         return Response::redirect(count($ids) === 1 ? '/reports/' . $ids[0] : '/reports?client=' . (int) $client['id']);
     }
@@ -94,7 +100,7 @@ final class ReportController extends Controller
         }
         App::db()->prepare('UPDATE clients SET report_monthly = :m, report_recipients = :r, updated_at = UTC_TIMESTAMP() WHERE id = :id')
             ->execute(['m' => $on ? 1 : 0, 'r' => implode(',', $list), 'id' => (int) $client['id']]);
-        $this->audit($request, 'client.report_schedule', 'client', (int) $client['id'], ['monthly' => $on, 'recipients' => count($list)]);
+        $this->audit($request, 'client.report_schedule', 'client', (int) $client['id'], ['monthly' => $on, 'recipients' => $list]);
         Session::flash('success', $on ? __('Monthly reports turned on.') : __('Monthly report settings saved.'));
         if ($on && App::settings()->get('email_enabled') !== '1') {
             Session::flash('warning', __('Email alerts are turned off in Settings, so monthly reports will be created but not emailed.'));
@@ -164,13 +170,13 @@ final class ReportController extends Controller
             'report_powered_by' => $request->input('report_powered_by') === '1' ? '1' : '0',
         ];
         $errors = [];
-        if (mb_strlen($v['brand_name']) > 100 || preg_match('/[\x00-\x1F\x7F]/u', $v['brand_name'])) {
+        if (!mb_check_encoding($v['brand_name'], 'UTF-8') || mb_strlen($v['brand_name']) > 100 || preg_match('/[\x00-\x1F\x7F]/u', $v['brand_name'])) {
             $errors[] = __('The company name can be up to 100 characters.');
         }
         if (!preg_match('/^#[0-9a-f]{6}$/', $v['brand_color'])) {
             $errors[] = __('The colour must look like #1f4e79.');
         }
-        if (mb_strlen($v['brand_footer']) > 500 || preg_match('/[\x00-\x09\x0B-\x1F\x7F]/u', $v['brand_footer'])) {
+        if (!mb_check_encoding($v['brand_footer'], 'UTF-8') || mb_strlen($v['brand_footer']) > 500 || preg_match('/[\x00-\x09\x0B-\x1F\x7F]/u', $v['brand_footer'])) {
             $errors[] = __('The footer can be up to 500 characters.');
         }
         if (!in_array($v['report_paper'], ['A4', 'Letter'], true)) {
@@ -178,6 +184,12 @@ final class ReportController extends Controller
         }
         $logo = null;
         $upload = $request->uploadedFile('brand_logo');
+        $uploadError = $request->uploadError('brand_logo');
+        if ($upload === null && $uploadError !== UPLOAD_ERR_NO_FILE) {
+            $errors[] = in_array($uploadError, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)
+                ? __('The logo file is larger than the server accepts. Use a file of at most 2 MB.')
+                : __('The logo upload did not complete. Please try again.');
+        }
         if ($upload !== null) {
             $logo = App::branding()->storeLogo($upload);
             if (is_array($logo)) {
@@ -199,9 +211,11 @@ final class ReportController extends Controller
         }
         if (is_string($logo)) {
             $s->set('brand_logo', $logo);
+            App::branding()->deleteOthers($logo);
             $changed['brand_logo'] = 'uploaded';
         } elseif ($request->input('remove_logo') === '1' && $s->get('brand_logo') !== '') {
             $s->set('brand_logo', '');
+            App::branding()->deleteOthers('');
             $changed['brand_logo'] = 'removed';
         }
         if ($changed !== []) {

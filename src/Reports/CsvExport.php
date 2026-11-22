@@ -8,7 +8,8 @@ namespace Sentinel\Reports;
  * CSV export of a report's findings (from the frozen snapshot, so it matches the report).
  *
  * Security assumptions: cell values are scan data (untrusted). Values that a
- * spreadsheet would treat as a formula (starting with = + - @, tab or CR) are
+ * spreadsheet would treat as a formula (starting with = + - @, tab, CR, LF, or
+ * their fullwidth forms) are
  * prefixed with an apostrophe (CSV/formula injection). fputcsv quotes the rest.
  */
 final class CsvExport
@@ -37,6 +38,7 @@ final class CsvExport
     public static function cell(mixed $value): string
     {
         $v = (string) ($value ?? '');
-        return preg_match('/^[=+\-@\t\r]/', $v) ? "'" . $v : $v;
+        $pattern = mb_check_encoding($v, 'UTF-8') ? '/^[=+\-@\t\r\n\x{FF1D}\x{FF0B}\x{FF0D}\x{FF20}]/u' : '/^[=+\-@\t\r\n]/';
+        return preg_match($pattern, $v) === 1 ? "'" . $v : $v;
     }
 }

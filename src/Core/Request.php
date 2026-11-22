@@ -83,6 +83,13 @@ final class Request
         return $f['tmp_name'];
     }
 
+    /** The upload error code for a file field (UPLOAD_ERR_NO_FILE if none was sent). */
+    public function uploadError(string $key): int
+    {
+        $f = $this->files[$key] ?? null;
+        return is_array($f) && is_int($f['error'] ?? null) ? $f['error'] : UPLOAD_ERR_NO_FILE;
+    }
+
     /** A form field as a trimmed string ('' if missing or not a string). Untrusted. */
     public function input(string $key): string
     {

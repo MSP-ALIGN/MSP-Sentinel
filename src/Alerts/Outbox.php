@@ -34,6 +34,8 @@ final class Outbox
 {
     private const MAX_ATTEMPTS = 3;
     private const CLAIM_TIMEOUT_MINUTES = 10;
+    /** Report attachments larger than this in total are left out; the email then points to the reports in Sentinel. */
+    private const MAX_ATTACH_BYTES = 5_000_000;
 
     /** Needs settings (for SMTP and webhook) and an optional extra CA file for SMTP TLS. */
     public function __construct(private readonly PDO $db, private readonly Settings $settings, private readonly ?string $caFile, private readonly WebhookSender $webhook)
@@ -68,7 +70,12 @@ final class Outbox
             }
             try {
                 if ($d['channel'] === 'email') {
-                    $this->mailer()->send(explode(',', (string) $d['recipient']), (string) $d['subject'], (string) $d['body'], $this->attachments((string) ($d['report_ids'] ?? '')));
+                    $files = $this->attachments((string) ($d['report_ids'] ?? ''));
+                    $body = (string) $d['body'];
+                    if ($files === [] && (string) ($d['report_ids'] ?? '') !== '') {
+                        $body .= "\n\n" . 'The reports are too large to attach. Open them in MSP Sentinel under Reports (report IDs: ' . $d['report_ids'] . ').';
+                    }
+                    $this->mailer()->send(explode(',', (string) $d['recipient']), (string) $d['subject'], $body, $files);
                 } else {
                     $this->webhook->send($this->settings->getSecret('webhook_url'), (array) json_decode((string) $d['body'], true));
                 }
@@ -81,6 +88,12 @@ final class Outbox
                 $final = $attempts >= self::MAX_ATTEMPTS;
                 $this->db->prepare("UPDATE deliveries SET claimed_at = NULL, attempts = :a, last_error = :e, status = :s, next_attempt_at = UTC_TIMESTAMP() + INTERVAL :wait MINUTE WHERE id = :id")
                     ->execute(['a' => $attempts, 'e' => mb_substr($message, 0, 300), 's' => $final ? 'failed' : 'pending', 'wait' => $attempts === 1 ? 5 : 15, 'id' => $d['id']]);
+                if ($final && (string) ($d['report_ids'] ?? '') !== '') {
+                    // A monthly report email gave up: tell admins in-app, so it isn't lost silently.
+                    $this->db->prepare("INSERT INTO notifications (user_id, kind, severity, title, body, link, created_at)
+                                        SELECT id, 'report_failed', 'warn', :t, :b, '/reports', UTC_TIMESTAMP() FROM users WHERE is_active = 1 AND role = 'admin'")
+                        ->execute(['t' => mb_substr('A monthly report email to ' . $d['recipient'] . ' could not be sent', 0, 300), 'b' => mb_substr($message, 0, 2000)]);
+                }
                 $stats['failed']++;
             }
         }
@@ -111,6 +124,11 @@ final class Outbox
      */
     private function attachments(string $reportIds): array
     {
+        // Mail servers often refuse messages over 10-25 MB (and base64 adds a third), so large reports go as links.
+        $sizes = $reportIds === '' ? 0 : (int) $this->db->query('SELECT COALESCE(SUM(LENGTH(html)), 0) FROM reports WHERE id IN (' . implode(',', array_map('intval', explode(',', $reportIds)) ?: [0]) . ')')->fetchColumn();
+        if ($sizes > self::MAX_ATTACH_BYTES) {
+            return [];
+        }
         $files = [];
         foreach (array_filter(array_map('intval', explode(',', $reportIds))) as $id) {
             $stmt = $this->db->prepare('SELECT id, kind, period_end, html FROM reports WHERE id = :id');

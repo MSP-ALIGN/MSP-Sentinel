@@ -66,7 +66,7 @@ table.layout { width: 100%; border-collapse: collapse; } table.layout > tbody > 
 .chart .axis { stroke: #8a929c; stroke-width: 1; } .chart .val { font-size: 11px; font-weight: 700; } .chart .lbl { font-size: 10px; fill: #5b6470; }
 .legend span { margin-right: 14px; }
 .note { background: #f6f7f9; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; break-inside: avoid; }
-.asset { margin-top: 16px; }
+.asset { margin-top: 16px; } .asset > .label { break-after: avoid; page-break-after: avoid; }
 footer.doc-footer { position: fixed; bottom: 0; left: 0; right: 0; font-size: 8pt; color: var(--muted); border-top: 1px solid var(--line); padding: 4px 14mm; background: #fff; display: flex; gap: 12px; }
 footer.doc-footer .right { margin-left: auto; }
 @media screen { .footer-space { display: none; } body { background: #eef0f3; } .page { background: #fff; padding: 12mm 14mm 22mm; margin: 10px auto; box-shadow: 0 1px 4px rgba(0,0,0,.15); } footer.doc-footer { position: static; max-width: 190mm; margin: 0 auto 20px; } }
@@ -100,7 +100,7 @@ footer.doc-footer .right { margin-left: auto; }
     <div class="tile"><span class="n" style="color:var(--ok)"><?= (int) $c['fixed'] ?></span>&#10004; <?= e(__('fixed this period')) ?></div>
     <div class="tile"><span class="n"><?= (int) $c['certs_expiring'] ?></span><?= e(__('certificates expiring or expired')) ?></div>
 </div>
-<p class="small muted"><?= e(__('Last checked: {date} UTC. {n} new problem(s) this period.', ['date' => $r['last_checked'] ?? __('not yet'), 'n' => $c['new']])) ?></p>
+<p class="small muted"><?= e(__('Status on {now} UTC (last scan finished {date}). In the period: {n} new problem(s) found, {x} fixed.', ['now' => $r['generated_at'], 'date' => $r['last_checked'] ?? __('not yet'), 'n' => $c['new'], 'x' => $c['fixed']])) ?></p>
 
 <?php if ($exec): ?>
 <h2><?= e(__('Top risks')) ?></h2>

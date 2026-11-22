@@ -10,15 +10,17 @@ namespace Sentinel\Reports;
  * Security assumptions:
  * - The upload is untrusted. It must be a real PNG or JPEG (checked by
  *   decoding it with GD, not by its name or browser-sent type), at most 2 MB
- *   and 4000x4000 pixels. It is then RE-ENCODED as a fresh PNG (scaled to at
+ *   and 2500x2500 pixels (bounded decoding memory). It is then RE-ENCODED as a fresh PNG (scaled to at
  *   most 600x200), which drops metadata and anything hidden in the file.
  * - The stored file is named after its SHA-256, in the app's storage
  *   directory (never the web root). Reports embed it as a data: URI.
+ * - Permissions are 0750/0640 (group-readable), so a worker running as a
+ *   different user in the web server's group can read it for scheduled reports.
  */
 final class Branding
 {
     private const MAX_BYTES = 2_000_000;
-    private const MAX_INPUT_PIXELS = 4000;
+    private const MAX_INPUT_PIXELS = 2500;
 
     /** @param string $dir storage/branding */
     public function __construct(private readonly string $dir)
@@ -38,7 +40,7 @@ final class Branding
         $info = @getimagesize($tmpPath);
         if ($info === false || !in_array($info[2], [IMAGETYPE_PNG, IMAGETYPE_JPEG], true)
             || $info[0] < 1 || $info[1] < 1 || $info[0] > self::MAX_INPUT_PIXELS || $info[1] > self::MAX_INPUT_PIXELS) {
-            return [__('The logo must be a PNG or JPEG image of at most 4000×4000 pixels.')];
+            return [__('The logo must be a PNG or JPEG image of at most 2500×2500 pixels.')];
         }
         $src = $info[2] === IMAGETYPE_PNG ? @imagecreatefrompng($tmpPath) : @imagecreatefromjpeg($tmpPath);
         if ($src === false) {
@@ -55,18 +57,27 @@ final class Branding
         ob_start();
         imagepng($dst, null, 9);
         $png = (string) ob_get_clean();
-        if (!is_dir($this->dir) && !@mkdir($this->dir, 0700, true) && !is_dir($this->dir)) {
+        if (!is_dir($this->dir) && !@mkdir($this->dir, 0750, true) && !is_dir($this->dir)) {
             return [__('The logo could not be saved (storage folder not writable).')];
         }
         $hash = hash('sha256', $png);
         $file = $this->dir . '/logo-' . $hash . '.png';
         $tmp = $this->dir . '/.logo-' . bin2hex(random_bytes(8)) . '.tmp';
-        if (@file_put_contents($tmp, $png) === false || !@rename($tmp, $file)) {
+        if (@file_put_contents($tmp, $png) === false || !@chmod($tmp, 0640) || !@rename($tmp, $file)) {
             @unlink($tmp);
             return [__('The logo could not be saved (storage folder not writable).')];
         }
-        @chmod($file, 0600);
         return $hash;
+    }
+
+    /** Delete stored logos other than $keep (after a logo is replaced or removed). */
+    public function deleteOthers(string $keep): void
+    {
+        foreach (glob($this->dir . '/logo-*.png') ?: [] as $file) {
+            if (basename($file) !== 'logo-' . $keep . '.png') {
+                @unlink($file);
+            }
+        }
     }
 
     /** The logo as a data: URI for previews, or '' if none. */

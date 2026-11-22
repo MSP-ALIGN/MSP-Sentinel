@@ -32,6 +32,9 @@ return [
         foreach (['=HYPERLINK("http://evil.example")', '+1+1', '-2', '@SUM(A1)', "\tx"] as $bad) {
             Assert::same("'" . $bad, CsvExport::cell($bad));
         }
+        Assert::same("'\n=1", CsvExport::cell("\n=1"));
+        Assert::same("'＝SUM(A1)", CsvExport::cell('＝SUM(A1)'), 'fullwidth equals sign');
+        Assert::same("'=x\xff", CsvExport::cell("=x\xff"), 'invalid UTF-8 still neutralised');
         Assert::same('Remote Desktop', CsvExport::cell('Remote Desktop'));
         Assert::same('', CsvExport::cell(null));
     },
@@ -49,6 +52,14 @@ return [
         Assert::contains('>5</text>', $svg, 'values labelled');
         Assert::contains('role="img"', $svg);
         Assert::contains('<circle', ReportRenderer::trendChart([['label' => 'Now', 'fail' => 0, 'warn' => 0]]), 'single point works');
+    },
+    'only a locked-down document CSP may replace the app policy' => function (TestContext $ctx): void {
+        $strict = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
+        Assert::same($strict, \Sentinel\Core\SecurityHeaders::apply((new \Sentinel\Core\Response('x'))->header('Content-Security-Policy', $strict), false)->getHeader('Content-Security-Policy'));
+        foreach (["default-src *", "default-src 'none'; script-src 'unsafe-inline'; sandbox", "default-src 'none'"] as $weak) {
+            $csp = (string) \Sentinel\Core\SecurityHeaders::apply((new \Sentinel\Core\Response('x'))->header('Content-Security-Policy', $weak), false)->getHeader('Content-Security-Policy');
+            Assert::contains("script-src 'self'", $csp, 'replaced: ' . $weak);
+        }
     },
     'report periods' => function (TestContext $ctx): void {
         $now = new DateTimeImmutable('2026-03-15 10:00:00', new DateTimeZone('UTC'));

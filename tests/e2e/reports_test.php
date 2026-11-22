@@ -207,9 +207,49 @@ return [
         Assert::contains('multipart/mixed', $mails[0]['raw']);
         Assert::contains('Monthly', $admin->get('/reports?client=' . $cid)->body);
     },
+    'monthly schedule: a failing client is isolated, retried hourly, admins told; deleted reports are not remade' => function (TestContext $ctx) use ($setup): void {
+        $cid = $setup($ctx);
+        $db = $ctx->db;
+        // The failing client comes first (lower ID); a later client must still get its reports.
+        $bad = $cid;
+        $db->exec("INSERT INTO clients (name, timezone, report_monthly, report_recipients, created_at, updated_at) VALUES ('Monthly Good Example', 'UTC', 1, 'accounts@msp.example', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+        $good = (int) $db->lastInsertId();
+        $db->exec("UPDATE clients SET report_monthly = 1, report_recipients = 'accounts@msp.example' WHERE id = {$bad}");
+        // Make saving this client's TECHNICAL report fail (after its executive report was saved): nothing may be kept.
+        $db->exec("DROP TRIGGER IF EXISTS test_fail_report");
+        $db->exec("CREATE TRIGGER test_fail_report BEFORE INSERT ON reports FOR EACH ROW
+                   BEGIN IF NEW.client_id = {$bad} AND NEW.kind = 'technical' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'test failure'; END IF; END");
+        $when = new DateTimeImmutable('2027-03-05 01:00:00', new DateTimeZone('UTC'));
+        $notesBefore = (int) $db->query("SELECT COUNT(*) FROM notifications WHERE kind = 'report_failed'")->fetchColumn();
+        App::reportService()->runMonthly($when);
+        $run = $db->query("SELECT status, attempts FROM report_runs WHERE client_id = {$bad} AND period_start = '2027-02-01'")->fetch();
+        Assert::same(['failed', 1], [$run['status'], (int) $run['attempts']]);
+        Assert::same('done', $db->query("SELECT status FROM report_runs WHERE client_id = {$good} AND period_start = '2027-02-01'")->fetchColumn(), 'the next client still got its reports');
+        Assert::true((int) $db->query("SELECT COUNT(*) FROM notifications WHERE kind = 'report_failed'")->fetchColumn() > $notesBefore, 'admins told');
+        App::reportService()->runMonthly($when);
+        Assert::same(1, (int) $db->query("SELECT attempts FROM report_runs WHERE client_id = {$bad} AND period_start = '2027-02-01'")->fetchColumn(), 'not retried within the hour');
+        $db->exec("UPDATE report_runs SET last_attempt_at = UTC_TIMESTAMP() - INTERVAL 2 HOUR WHERE client_id = {$bad}");
+        App::reportService()->runMonthly($when);
+        Assert::same(2, (int) $db->query("SELECT attempts FROM report_runs WHERE client_id = {$bad} AND period_start = '2027-02-01'")->fetchColumn(), 'retried after an hour');
+        Assert::same(0, (int) $db->query("SELECT COUNT(*) FROM reports WHERE client_id = {$bad} AND period_start = '2027-02-01'")->fetchColumn(), 'nothing half-made: the executive report was rolled back too');
+        $db->exec("DROP TRIGGER test_fail_report");
+        $db->exec("UPDATE clients SET report_monthly = 0, report_recipients = '' WHERE id IN ({$bad}, {$good})");
+
+        // An admin deletes the month's reports: they are not created and emailed again.
+        Assert::contains('data:image/png', (string) $db->query("SELECT html FROM reports WHERE client_id = {$good} ORDER BY id DESC LIMIT 1")->fetchColumn(), 'logo in the document');
+        Assert::notContains('data:image/png', (string) $db->query("SELECT snapshot FROM reports WHERE client_id = {$good} ORDER BY id DESC LIMIT 1")->fetchColumn(), 'but not stored twice');
+        $db->exec("DELETE FROM reports WHERE client_id = {$good} AND period_start = '2027-02-01'");
+        $db->exec("UPDATE clients SET report_monthly = 1, report_recipients = 'accounts@msp.example' WHERE id = {$good}");
+        App::reportService()->runMonthly($when);
+        Assert::same(0, (int) $db->query("SELECT COUNT(*) FROM reports WHERE client_id = {$good} AND period_start = '2027-02-01'")->fetchColumn());
+        $db->exec("UPDATE clients SET report_monthly = 0, report_recipients = '' WHERE id = {$good}");
+        $logo = glob(SENTINEL_ROOT . '/storage/branding/logo-*.png') ?: [];
+        Assert::same(1, count($logo), 'old logos removed');
+        Assert::same('0640', substr(sprintf('%o', fileperms($logo[0])), -4), 'group-readable for the worker');
+    },
     'trend chart uses recorded monthly counts' => function (TestContext $ctx) use ($setup): void {
         $cid = $setup($ctx);
-        (new \Sentinel\Reports\StatsRecorder($ctx->db))->recordToday();
+        (new \Sentinel\Reports\StatsRecorder($ctx->db))->recordToday(true);
         Assert::same(1, (int) $ctx->db->query("SELECT COUNT(*) FROM finding_stats WHERE client_id = {$cid} AND day = UTC_DATE()")->fetchColumn());
         $ctx->db->exec("INSERT IGNORE INTO finding_stats (client_id, day, fail_open, warn_open) VALUES
             ({$cid}, LAST_DAY(UTC_DATE() - INTERVAL 2 MONTH), 7, 3), ({$cid}, LAST_DAY(UTC_DATE() - INTERVAL 1 MONTH), 4, 9)");

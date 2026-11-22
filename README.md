@@ -192,7 +192,8 @@ Threat feeds (required for vulnerability matching), once a day:
 `41 4 * * *  php /path/to/msp-sentinel/bin/feeds.php`
 
 The worker also records daily counts for the report trend chart and creates monthly reports. The `storage/`
-folder must be writable by the web server and the worker user (it holds the report logo).
+folder must be writable by the web server and the worker user (it holds the report logo, created group-readable:
+put both users in one group).
 
 Alerts are sent by the worker and the feeds job, so they need no cron job of their own. Set `app.public_url`
 in `config/config.php` so alert messages link back to Sentinel.

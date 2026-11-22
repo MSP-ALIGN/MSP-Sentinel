@@ -16,14 +16,18 @@ namespace Sentinel\Core;
  *   Static assets are served by the web server, not through here.
  * - HSTS is sent only over HTTPS.
  * - A response may set its OWN, stricter policy (stored reports: no scripts at
- *   all, sandboxed, inline styles only); it is then kept as is.
+ *   all, sandboxed, inline styles only). It is kept only if it has
+ *   default-src 'none', sandbox and no script-src; otherwise the app policy
+ *   replaces it, so a handler can never weaken the policy by accident.
  */
 final class SecurityHeaders
 {
     /** Add the headers to a response. HSTS only when $secure. */
     public static function apply(Response $response, bool $secure): Response
     {
-        if ($response->getHeader('Content-Security-Policy') === null) {
+        $own = $response->getHeader('Content-Security-Policy');
+        // Only a locked-down document policy may replace the app's (no default sources, sandboxed). Anything else is overwritten.
+        if ($own === null || !str_contains($own, "default-src 'none'") || !preg_match('/(^|;)\s*sandbox\s*(;|$)/', $own) || str_contains($own, 'script-src')) {
             $response->header('Content-Security-Policy', implode('; ', [
                 "default-src 'self'",
                 "script-src 'self'",

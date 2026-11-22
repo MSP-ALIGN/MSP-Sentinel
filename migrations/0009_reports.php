@@ -47,8 +47,23 @@ return [
             day DATE NOT NULL,
             fail_open INT UNSIGNED NOT NULL DEFAULT 0,
             warn_open INT UNSIGNED NOT NULL DEFAULT 0,
+            recorded_at DATETIME NULL,
             PRIMARY KEY (client_id, day),
             CONSTRAINT fk_stats_client FOREIGN KEY (client_id) REFERENCES clients (id) ON DELETE RESTRICT
+        ) {$opts}");
+
+        // One row per client and month for the monthly schedule: the primary key makes a second run for the
+        // same month impossible, and the row stays even if an admin deletes the reports (so they aren't remade).
+        $db->exec("CREATE TABLE IF NOT EXISTS report_runs (
+            client_id INT UNSIGNED NOT NULL,
+            period_start DATE NOT NULL,
+            status ENUM('done','failed') NOT NULL,
+            attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
+            report_ids VARCHAR(100) NOT NULL DEFAULT '',
+            last_error VARCHAR(300) NOT NULL DEFAULT '',
+            last_attempt_at DATETIME NOT NULL,
+            PRIMARY KEY (client_id, period_start),
+            CONSTRAINT fk_report_runs_client FOREIGN KEY (client_id) REFERENCES clients (id) ON DELETE RESTRICT
         ) {$opts}");
 
         $m->addColumnIfMissing('clients', 'report_monthly', 'TINYINT(1) NOT NULL DEFAULT 0');

@@ -15,6 +15,10 @@ use Sentinel\Scope\ScopeService;
  * Builds a report snapshot: everything a report shows, gathered at one moment,
  * so the stored report never changes afterwards.
  *
+ * Findings, totals and the rating show the status at the moment the report
+ * is created (stated in the document); "new" and "fixed" count what changed
+ * within the chosen period.
+ *
  * Security assumptions:
  * - Every query is filtered by the one client ID, so no data from another
  *   client can appear in the report (tests check this).
@@ -54,7 +58,7 @@ final class ReportBuilder
         $decided = array_values(array_filter($all, static fn (array $f): bool => in_array($f['status'], ['accepted', 'false_positive'], true)));
         $fixed = array_values(array_filter($all, static fn (array $f): bool => $f['status'] === 'resolved' && $f['resolved_at'] !== null
             && $f['resolved_at'] >= $start && $f['resolved_at'] <= $periodEnd));
-        $new = array_filter($open, static fn (array $f): bool => $f['first_seen'] >= $start && $f['first_seen'] <= $periodEnd);
+        $new = array_filter($all, static fn (array $f): bool => $f['first_seen'] >= $start && $f['first_seen'] <= $periodEnd);
         $fails = array_values(array_filter($open, static fn (array $f): bool => $f['severity'] === 'fail'));
         $warns = array_values(array_filter($open, static fn (array $f): bool => $f['severity'] === 'warn'));
         $certs = array_filter($open, static fn (array $f): bool => $f['finding_type'] === 'tls' && (str_ends_with((string) $f['finding_key'], ':cert_expiring') || str_ends_with((string) $f['finding_key'], ':cert_expired')));
@@ -149,7 +153,7 @@ final class ReportBuilder
     }
 
     /**
-     * Open Fail/Warning counts at the end of each of the last 12 months (where recorded), plus now.
+     * Open Fail/Warning counts at the end of each of the last 12 months (where recorded), plus today.
      *
      * @return list<array{label:string, fail:int, warn:int}>
      */
@@ -166,7 +170,7 @@ final class ReportBuilder
         foreach ($stmt->fetchAll() as $r) {
             $points[] = ['label' => (new DateTimeImmutable((string) $r['day'], new DateTimeZone('UTC')))->format('M Y'), 'fail' => (int) $r['fail_open'], 'warn' => (int) $r['warn_open']];
         }
-        $points[] = ['label' => __('Now'), 'fail' => $failNow, 'warn' => $warnNow];
+        $points[] = ['label' => gmdate('j M'), 'fail' => $failNow, 'warn' => $warnNow];
         return $points;
     }
 
