@@ -216,6 +216,8 @@ final class AgentService
                     }
                     if ($scanned) {
                         $this->savePorts($deviceId, $h['ports']); // only a finished host scan replaces what was known
+                        $snmp = is_array($h['snmp'] ?? null) ? ['snmp_public' => $h['snmp']['public'] ?? null, 'snmp_private' => $h['snmp']['private'] ?? null] : null;
+                        $this->db->prepare('UPDATE devices SET checks = :c WHERE id = :id')->execute(['c' => self::checks($snmp, ['snmp_public', 'snmp_private']), 'id' => $deviceId]);
                     }
                     $stats['accepted']++;
                 }
@@ -320,10 +322,10 @@ final class AgentService
     private function savePorts(int $deviceId, array $ports): void
     {
         $up = $this->db->prepare(
-            'INSERT INTO device_ports (device_id, port, service, product, version, extra_info, tls, web, first_seen, last_seen)
-             VALUES (:d, :p, :s, :pr, :v, :x, :tls, :web, UTC_TIMESTAMP(), UTC_TIMESTAMP())
+            'INSERT INTO device_ports (device_id, port, service, product, version, extra_info, tls, web, checks, first_seen, last_seen)
+             VALUES (:d, :p, :s, :pr, :v, :x, :tls, :web, :chk, UTC_TIMESTAMP(), UTC_TIMESTAMP())
              ON DUPLICATE KEY UPDATE service = VALUES(service), product = VALUES(product), version = VALUES(version), extra_info = VALUES(extra_info),
-                tls = VALUES(tls), web = VALUES(web), last_seen = UTC_TIMESTAMP()'
+                tls = VALUES(tls), web = VALUES(web), checks = VALUES(checks), last_seen = UTC_TIMESTAMP()'
         );
         $keep = [];
         $software = [];
@@ -336,7 +338,7 @@ final class AgentService
             $version = InventoryRepository::clean($p['version'] ?? '', 80);
             $extra = InventoryRepository::clean($p['extra'] ?? '', 200);
             $up->execute(['d' => $deviceId, 'p' => $port, 's' => InventoryRepository::clean($p['service'] ?? '', 60), 'pr' => $product, 'v' => $version, 'x' => $extra,
-                          'tls' => self::tls($p['tls'] ?? null), 'web' => self::web($p['web'] ?? null)]);
+                          'tls' => self::tls($p['tls'] ?? null), 'web' => self::web($p['web'] ?? null), 'chk' => self::checks($p['checks'] ?? null, ['smb1', 'signing_required', 'nla_required'])]);
             $keep[$port] = true;
             $cpe = \Sentinel\Vulns\Cpe::parse(is_string($p['cpe'] ?? null) ? $p['cpe'] : '');
             if ($cpe !== null && $cpe['part'] === 'a') {
@@ -426,6 +428,23 @@ final class AgentService
         ], JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
     }
 
+    /**
+     * Protocol check results from agent data: only the given keys, each true, false or null (JSON), or null.
+     *
+     * @param list<string> $keys
+     */
+    private static function checks(mixed $c, array $keys): ?string
+    {
+        if (!is_array($c)) {
+            return null;
+        }
+        $out = [];
+        foreach ($keys as $k) {
+            $out[$k] = is_bool($c[$k] ?? null) ? $c[$k] : null;
+        }
+        return json_encode($out);
+    }
+
     /** Web page summary from agent data: status, title and category only (JSON), or null. */
     private static function web(mixed $w): ?string
     {
@@ -436,6 +455,7 @@ final class AgentService
         return json_encode([
             'status' => max(0, min(999, (int) ($w['status'] ?? 0))), 'title' => InventoryRepository::clean((string) ($w['title'] ?? ''), 200),
             'category' => in_array($w['category'] ?? '', $categories, true) ? (string) $w['category'] : 'other', 'scheme' => ($w['scheme'] ?? '') === 'https' ? 'https' : 'http',
+            'login_over_http' => ($w['login_over_http'] ?? false) === true && ($w['scheme'] ?? '') !== 'https',
         ], JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
     }
 }

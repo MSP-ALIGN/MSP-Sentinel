@@ -75,4 +75,16 @@ return [
         $xml = '<?xml version="1.0"?><nmaprun><host><status state="up"/><address addr="10.0.0.5" addrtype="ipv4"/></host><host><status state="up"/><address addr="10.0.0.6"';
         Assert::same([['ip' => '10.0.0.5', 'mac' => '']], NmapXmlParser::parseDiscovery($xml));
     },
+    'protocol checks: SNMP encoding, answer parsing and grading' => function (TestContext $ctx): void {
+        $req = \Sentinel\Scanning\ProtocolProbes::snmpGet('public', 1234);
+        Assert::same('302702010104067075626c6963a01a020204d2020100020100300e300c06082b060102010101000500', bin2hex($req), 'SNMPv2c GetRequest sysDescr.0');
+        $resp = hex2bin('3028020101040770726976617465a21a020204d2020100020100300e300c06082b060102010101000400');
+        Assert::true(\Sentinel\Scanning\ProtocolProbes::snmpAnswered($resp, 1234), 'answer accepted');
+        Assert::true(!\Sentinel\Scanning\ProtocolProbes::snmpAnswered($resp, 999), 'other request id');
+        Assert::true(!\Sentinel\Scanning\ProtocolProbes::snmpAnswered("\x30\x02\x02", 1234), 'garbage');
+        $issues = static fn (array $ports, array $dev = []): array => array_column(\Sentinel\Agent\ProtocolRules::issues(['checks' => json_encode($dev)], $ports), 'severity', 'code');
+        Assert::same([], $issues([['port' => 445, 'checks' => '{"smb1":null,"signing_required":null}', 'web' => null]]), 'unknown is never a finding');
+        Assert::same(['smb1' => 'fail', 'smb_signing' => 'warn'], $issues([['port' => 445, 'checks' => '{"smb1":true,"signing_required":false}', 'web' => null], ['port' => 139, 'checks' => '{"smb1":true}', 'web' => null]]), 'one finding per code');
+        Assert::same(['snmp_public' => 'warn'], $issues([], ['snmp_public' => true, 'snmp_private' => false]));
+    },
 ];

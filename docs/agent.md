@@ -82,5 +82,12 @@ is kept). Remove: `sudo ./install/agent-install.sh --uninstall`, and revoke the 
   distribution builds are never "confirmed" (the fix may be backported).
 - Certificates: expired, still accepting TLS 1.0/1.1, or a weak key. Self-signed certificates and name mismatches
   are normal on internal devices and are not findings.
-- Version 1.7 adds risky internal protocols (SMBv1, SMB signing off, default SNMP communities, RDP without NLA,
-  cleartext Telnet and FTP).
+- Risky internal protocols (1.7), checked read-only on each device of a full scan:
+  - **Fail:** SMBv1 enabled; Telnet open; SNMP answering the default "private" community (usually read-write).
+  - **Warning:** SMB signing not required; Remote Desktop without Network Level Authentication; FTP open; SNMP
+    answering "public"; a login page served over plain HTTP.
+
+  How: SMB offers only the old SMBv1 dialect, then reads whether signing is required in a normal negotiation (no
+  session, no login). RDP asks for TLS without NLA and reads the server's answer (no login). SNMP sends one SNMPv2c
+  read of the system description with "public" and "private" (UDP 161): this is trying a well-known default
+  credential, read only. A check that can't decide is never a finding.

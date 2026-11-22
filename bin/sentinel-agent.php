@@ -31,6 +31,7 @@ use Sentinel\AgentClient\State;
 use Sentinel\Scanning\Connector;
 use Sentinel\Scanning\HttpProbe;
 use Sentinel\Scanning\NmapRunner;
+use Sentinel\Scanning\ProtocolProbes;
 use Sentinel\Scanning\TlsChecker;
 
 $argv = $_SERVER['argv'] ?? [];
@@ -114,7 +115,7 @@ switch ($command) {
         }
         $runner = new Runner($http, new JobVerifier((string) $c['server_public_key'], (int) $c['agent_id'], (int) $c['site_id'], (int) $c['client_id']), new State((string) ($c['state_file'] ?? dirname($configFile) . '/state.json')),
             new NmapRunner((string) ($c['nmap_path'] ?? '/usr/bin/nmap')), new TlsChecker($connector), new HttpProbe($connector), $say,
-            $testMode && is_string($c['testing']['arp_file'] ?? null) ? $c['testing']['arp_file'] : '/proc/net/arp');
+            $testMode && is_string($c['testing']['arp_file'] ?? null) ? $c['testing']['arp_file'] : '/proc/net/arp', new ProtocolProbes($connector));
         $say('Agent #' . $c['agent_id'] . ' started (version ' . Runner::version() . ').');
         do {
             try {

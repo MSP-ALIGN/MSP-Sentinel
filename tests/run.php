@@ -175,6 +175,7 @@ try {
         '10.90.0.10:443' => ['legacy', $certs['weak'], $page('nas', '<html><head><title>Example NAS Login</title></head><body><form><input type="password"></form></body></html>')],
         '10.90.0.20:80' => ['plain', '-', $page('printer', '<html><head><title>Example Printer Status</title></head><body>Toner OK</body></html>')],
         '10.90.0.30:8080' => ['plain', '-', $page('intranet', '<html><head><title>Intranet</title></head><body>Welcome</body></html>')],
+        '10.92.0.40:80' => ['plain', '-', $page('camera', '<html><head><title>Example Camera Login</title></head><body><form><input type="password" name="pw"></form></body></html>')],
     ];
     $redirects = [];
     foreach ($tlsMocks as $target => [$mode, $pem, $htmlFile]) {
@@ -182,6 +183,14 @@ try {
         $redirects[$target] = $localPort;
         $mocks[] = proc_open([PHP_BINARY, __DIR__ . '/mocks/tls_server.php', (string) $localPort, $mode, $pem, $htmlFile],
             [0 => ['file', '/dev/null', 'r'], 1 => ['file', $outDir . '/mock-tls.log', 'a'], 2 => ['file', $outDir . '/mock-tls.log', 'a']], $pipes);
+    }
+    // Mock SMB, RDP and SNMP servers for the risky-protocol checks (10.92.0.x: a "risky" and a "well configured" device).
+    foreach (['10.92.0.40:445' => ['smb', 'on', 'optional'], '10.92.0.40:3389' => ['rdp', 'off'], '10.92.0.40:161' => ['snmp', 'public,private'],
+              '10.92.0.41:445' => ['smb', 'off', 'required'], '10.92.0.41:3389' => ['rdp', 'required'], '10.92.0.41:161' => ['snmp', '']] as $target => $protoArgs) {
+        $p = $freePort();
+        $mocks[] = proc_open(array_merge([PHP_BINARY, __DIR__ . '/mocks/proto_server.php', (string) $p], $protoArgs),
+            [0 => ['file', '/dev/null', 'r'], 1 => ['file', $outDir . '/mock-proto.log', 'a'], 2 => ['file', $outDir . '/mock-proto.log', 'a']], $pipes);
+        $redirects[$target] = $p;
     }
     $cfg['testing']['redirect_connections'] = $redirects;
     // Inventory source (NinjaOne stand-in): tests write this file with dates relative to now.

@@ -9,7 +9,9 @@ use Sentinel\Scanning\EndpointRepository;
 use Sentinel\Scanning\HttpProbe;
 use Sentinel\Scanning\NmapRunner;
 use Sentinel\Scanning\NmapXmlParser;
+use Sentinel\Scanning\ProtocolProbes;
 use Sentinel\Scanning\TlsChecker;
+use Sentinel\Web\WebsiteChecker;
 
 /**
  * The agent's work loop: check in with Sentinel, verify each job (JobVerifier),
@@ -18,7 +20,9 @@ use Sentinel\Scanning\TlsChecker;
  * - light job: a discovery sweep of the signed networks (which devices are up);
  * - full job: the sweep, then on each device found a gentle port scan of the
  *   job's ports (TCP connect, service versions), then the certificate and
- *   start-page check on its TLS and web ports.
+ *   start-page check on its TLS and web ports, and the read-only checks of
+ *   risky protocols (SMBv1 and SMB signing on 445, NLA on 3389, default SNMP
+ *   communities on 161/udp, login pages over plain HTTP).
  * Every device is checked against the signed ranges again before it is
  * touched. While a job runs, the agent checks in every 30 seconds and stops
  * at once if Sentinel says so (kill switch, pause, cancelled job).
@@ -52,6 +56,7 @@ final class Runner
         private readonly HttpProbe $web,
         callable $log,
         private readonly string $arpFile = '/proc/net/arp',
+        private readonly ?ProtocolProbes $probes = null,
     ) {
         $this->log = $log;
     }
@@ -192,11 +197,24 @@ final class Runner
                     }
                     if (EndpointRepository::isWeb((int) $svc['port'], (string) $svc['service']) && !$shouldStop()) {
                         $w = $this->web->fetch((string) $ip, (int) $svc['port'], $isTls ? 'https' : 'http', null);
+                        // A login form served over plain HTTP (passwords readable on the network).
+                        $loginOverHttp = !$isTls && !empty($w['ok']) && isset($w['_response'])
+                            && in_array('login_over_http', WebsiteChecker::analyse($w['_response'], 'http')['issues'], true);
                         unset($w['_response']);
                         $port['web'] = ['ok' => !empty($w['ok']), 'status' => (int) ($w['status_code'] ?? 0), 'title' => (string) ($w['title'] ?? ''),
-                                        'category' => (string) ($w['category'] ?? 'other') ?: 'other', 'scheme' => $isTls ? 'https' : 'http'];
+                                        'category' => (string) ($w['category'] ?? 'other') ?: 'other', 'scheme' => $isTls ? 'https' : 'http', 'login_over_http' => $loginOverHttp];
+                    }
+                    if ($this->probes !== null && !$shouldStop()) {
+                        if ((int) $svc['port'] === 445) {
+                            $port['checks'] = $this->probes->smb((string) $ip);
+                        } elseif ((int) $svc['port'] === 3389) {
+                            $port['checks'] = $this->probes->rdp((string) $ip);
+                        }
                     }
                     $found[$ip]['ports'][] = $port;
+                }
+                if ($this->probes !== null && !$shouldStop()) {
+                    $found[$ip]['snmp'] = $this->probes->snmp((string) $ip); // UDP, not part of the TCP port scan
                 }
                 $found[$ip]['scanned'] = true;
             }

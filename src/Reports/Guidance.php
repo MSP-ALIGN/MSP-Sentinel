@@ -228,6 +228,30 @@ final class Guidance
                 'meaning' => __('Security updates have been available for more than 30 days but are not installed, so known flaws stay open on this computer.'),
                 'fix' => __('Install the listed updates (approve them in the patch policy if needed) and restart the computer.'),
             ],
+            'smb1' => [
+                'meaning' => __('This device still speaks SMBv1, the file-sharing protocol that let worms like WannaCry spread through whole networks.'),
+                'fix' => __('Turn off SMBv1 (Windows: "Turn Windows features on or off" or Set-SmbServerConfiguration -EnableSMB1Protocol $false; on a NAS or printer, in its settings). Replace devices that only speak SMBv1.'),
+            ],
+            'smb_signing' => [
+                'meaning' => __('SMB connections to this device aren\'t signed, so an attacker on the network can relay or alter them (a common way to take over a domain).'),
+                'fix' => __('Require SMB signing (Group Policy: "Microsoft network server: Digitally sign communications (always)"), starting with servers and domain controllers.'),
+            ],
+            'rdp_no_nla' => [
+                'meaning' => __('Remote Desktop shows the login screen to anyone before they authenticate, which helps password guessing and exposes the server to pre-login flaws.'),
+                'fix' => __('Turn on "Require Network Level Authentication" for Remote Desktop (System Properties > Remote, or Group Policy).'),
+            ],
+            'telnet', 'ftp' => [
+                'meaning' => __('This service sends passwords and data unencrypted, so anyone on the network can read them.'),
+                'fix' => __('Turn the service off and use SSH or SFTP instead. For network devices, switch management to SSH or HTTPS.'),
+            ],
+            'http_login' => [
+                'meaning' => __('A login page is served without encryption, so the password can be read by anyone on the network.'),
+                'fix' => __('Turn on HTTPS for the device\'s web interface and turn off plain HTTP (or redirect it to HTTPS).'),
+            ],
+            'snmp_private', 'snmp_public' => [
+                'meaning' => __('SNMP accepts a well-known default community string, so anyone on the network can read (with "private" often also change) the device\'s settings.'),
+                'fix' => __('Change the community strings to long random values, or better, switch to SNMPv3 with authentication; turn SNMP off if nothing uses it.'),
+            ],
             'patches_failed' => [
                 'meaning' => __('Updates tried to install but failed, so the computer may be missing security fixes without anyone noticing.'),
                 'fix' => __('Check the error on the device (disk space, pending restart, broken update service), fix it and retry the updates.'),

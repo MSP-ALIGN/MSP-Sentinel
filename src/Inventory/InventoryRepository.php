@@ -316,6 +316,28 @@ final class InventoryRepository
     }
 
     /**
+     * Current agent devices of a client with their open ports (for the protocol rules).
+     *
+     * @return list<array<string,mixed>> devices rows with 'ports' (device_ports rows).
+     */
+    public function agentDevicesWithPorts(int $clientId): array
+    {
+        $stmt = $this->db->prepare("SELECT id, source, source_id, name, checks FROM devices WHERE client_id = :c AND source = 'agent' AND removed_at IS NULL");
+        $stmt->execute(['c' => $clientId]);
+        $devices = [];
+        foreach ($stmt->fetchAll() as $d) {
+            $d['ports'] = [];
+            $devices[(int) $d['id']] = $d;
+        }
+        if ($devices !== []) {
+            foreach ($this->db->query('SELECT device_id, port, web, checks FROM device_ports WHERE device_id IN (' . implode(',', array_keys($devices)) . ')')->fetchAll() as $p) {
+                $devices[(int) $p['device_id']]['ports'][] = $p;
+            }
+        }
+        return array_values($devices);
+    }
+
+    /**
      * Open ports of one device (agent full scans).
      *
      * @return list<array<string,mixed>>

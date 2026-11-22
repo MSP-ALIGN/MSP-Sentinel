@@ -127,7 +127,7 @@ final class InventoryController extends Controller
         $stmt->execute(['c' => (int) $client['id'], 'd' => (int) $device['id']]);
         return $this->page('inventory/device', (string) ($device['name'] !== '' ? $device['name'] : $device['source_id']), [
             'client' => $client, 'device' => $device, 'deviceFindings' => $stmt->fetchAll(), 'ports' => App::inventory()->ports((int) $device['id']),
-            'issues' => \Sentinel\Inventory\DeviceRules::issues($device, $device['patches']),
+            'issues' => array_merge(\Sentinel\Inventory\DeviceRules::issues($device, $device['patches']), \Sentinel\Agent\ProtocolRules::issues($device, App::inventory()->ports((int) $device['id']))),
         ]);
     }
 

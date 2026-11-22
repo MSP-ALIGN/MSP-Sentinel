@@ -4,7 +4,7 @@ Self-hosted security monitoring for MSPs (managed service providers). Sentinel *
 exposure and vulnerabilities across your clients, monitors them and alerts on them. Its companion product,
 MSP Align, plans, reports and proves, using Sentinel's findings.
 
-> **Status: 1.6.0 (stable).** External exposure monitoring for MSPs: the "authorised to scan"
+> **Status: 1.7.0 (stable).** External exposure monitoring for MSPs: the "authorised to scan"
 > register, passive discovery, gentle port scanning, certificate, admin-page, website and email checks, vulnerability matching
 > (NVD, CISA KEV, EPSS), findings with triage, owners, due dates and verify fix, alerts, branded reports, an API, an installer, and on-premises agents for internal scans. See
 > [`docs/ROADMAP.md`](docs/ROADMAP.md) for what comes next (internal agent, pen testing).
@@ -12,6 +12,16 @@ MSP Align, plans, reports and proves, using Sentinel's findings.
 Sentinel is free software under the [GNU AGPL-3.0](LICENSE). Each MSP runs its own copy and owns its data.
 
 ## What's new
+
+### 1.7.0 (2026-11-22): risky internal protocols
+
+- The on-premises agent now checks each device of a full scan for risky protocols, read-only:
+  - **Fail:** SMBv1 enabled, Telnet open, SNMP answering the default "private" community.
+  - **Warning:** SMB signing not required, Remote Desktop without Network Level Authentication, FTP open, SNMP
+    answering "public", login pages over plain HTTP.
+- No logins: SMB and RDP are read from the protocol negotiation. The SNMP check sends one read request with the
+  default community names. A check that can't decide is never a finding.
+- Plain-English explanations and fixes in reports; findings show on the device page.
 
 ### 1.6.0 (2026-11-22): on-premises agents
 

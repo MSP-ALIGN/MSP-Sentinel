@@ -149,7 +149,7 @@ return [
         Assert::contains('The colour must look like', $admin->get('/admin/settings')->body);
 
         $admin->upload('/admin/settings', '/admin/branding', $fields, 'brand_logo', $dir . '/logo.png', 'image/png');
-        $hash = App::settings()->get('brand_logo');
+        $hash = App::settings()->fresh('brand_logo');
         Assert::true((bool) preg_match('/^[a-f0-9]{64}$/', $hash), 'logo stored');
         $stored = SENTINEL_ROOT . '/storage/branding/logo-' . $hash . '.png';
         $size = getimagesize($stored);

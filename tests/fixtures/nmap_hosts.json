@@ -175,5 +175,50 @@
         "version": "9.6"
       }
     ]
+  },
+  "10.92.0.40": {
+    "mac": "02:00:00:00:00:40",
+    "open": [
+      {
+        "port": 21,
+        "name": "ftp",
+        "product": "Example FTP"
+      },
+      {
+        "port": 23,
+        "name": "telnet",
+        "product": "Example telnetd"
+      },
+      {
+        "port": 80,
+        "name": "http",
+        "product": "Example camera web"
+      },
+      {
+        "port": 445,
+        "name": "microsoft-ds",
+        "product": "Example SMB"
+      },
+      {
+        "port": 3389,
+        "name": "ms-wbt-server",
+        "product": "Example RDP"
+      }
+    ]
+  },
+  "10.92.0.41": {
+    "mac": "02:00:00:00:00:41",
+    "open": [
+      {
+        "port": 445,
+        "name": "microsoft-ds",
+        "product": "Example SMB"
+      },
+      {
+        "port": 3389,
+        "name": "ms-wbt-server",
+        "product": "Example RDP"
+      }
+    ]
   }
 }

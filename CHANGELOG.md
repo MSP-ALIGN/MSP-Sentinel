@@ -2,6 +2,16 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.7.0 (2026-11-22): risky internal protocols
+
+- The on-premises agent now checks each device of a full scan for risky protocols, read-only:
+  - **Fail:** SMBv1 enabled, Telnet open, SNMP answering the default "private" community.
+  - **Warning:** SMB signing not required, Remote Desktop without Network Level Authentication, FTP open, SNMP
+    answering "public", login pages over plain HTTP.
+- No logins: SMB and RDP are read from the protocol negotiation. The SNMP check sends one read request with the
+  default community names. A check that can't decide is never a finding.
+- Plain-English explanations and fixes in reports; findings show on the device page.
+
 ### 1.6.0 (2026-11-22): on-premises agents
 
 - **Internal scans** from a small Linux appliance at the client's site (Ubuntu 24.04 or Debian 12). The agent only

@@ -361,6 +361,15 @@ final class FindingsEngine
                     ]);
                 }
             }
+            // Risky internal protocols (on-premises agent): SMBv1, SMB signing, RDP without NLA, Telnet, FTP, SNMP defaults, HTTP logins.
+            foreach ($this->inventory->agentDevicesWithPorts($clientId) as $d) {
+                foreach (\Sentinel\Agent\ProtocolRules::issues($d, $d['ports']) as $issue) {
+                    $add("proto:{$d['source']}:{$d['source_id']}:{$issue['code']}", [
+                        'type' => 'device', 'severity' => $issue['severity'], 'title' => $issue['text'], 'detail' => $issue['detail'],
+                        'target' => (string) $d['name'], 'evidence' => $issue['code'], 'source' => (string) $d['source'], 'device_id' => (int) $d['id'],
+                    ]);
+                }
+            }
             // Certificates of internal services (on-premises agent): only problems that matter inside a network
             // (expired, old TLS, weak key); self-signed and name mismatches are normal on internal devices.
             foreach ($this->inventory->internalTls($clientId) as $t) {
