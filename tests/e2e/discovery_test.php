@@ -89,7 +89,7 @@ return [
         $after = $suggestions($ctx, $id);
         Assert::same($before - 1, count($after), 'no duplicates, dismissed one not back');
         Assert::true(isset($suggestions($ctx, $id, 'dismissed')['gw.discovery.example']), 'still dismissed after re-run');
-        Assert::contains('Dismissed suggestions (1)', $ctx->clientPages($admin, (int) $id));
+        Assert::contains('Dismissed suggestions (1)', $ctx->clientSection($admin, (int) $id, 'discovery'));
         $admin->submit('/clients/' . $id, '/suggestions/' . $sid . '/restore', []);
         Assert::true(isset($suggestions($ctx, $id)['gw.discovery.example']), 'restored');
     },
@@ -113,7 +113,7 @@ return [
             'document_ref' => 'TICKET-2002', 'notes' => '', 'scope' => html_entity_decode($m[1]), 'confirm' => '1', 'replaces' => (string) $oldAuth,
         ]);
         Assert::redirect('/clients/' . $id . '/authorisations', $res);
-        Assert::contains('replaces authorisation(s) #' . $oldAuth, $ctx->clientPages($admin, (int) $id));
+        Assert::contains('replaces authorisation(s) #' . $oldAuth, $ctx->clientSection($admin, (int) $id, 'authorisations'));
         Assert::contains('Replaced by authorisation #', (string) $ctx->db->query("SELECT revoke_reason FROM scan_authorisations WHERE id = {$oldAuth}")->fetchColumn());
         Assert::true(App::scope()->isInScope($id, 'vpn.discovery.example'), 'approved name now in scope');
         Assert::true(App::scope()->isInScope($id, '203.0.113.10'), 'old scope carried over');

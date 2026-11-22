@@ -16,7 +16,7 @@ use Sentinel\Scope\ScopeService;
  * The "authorised to scan" register: record and revoke authorisations.
  *
  * Access (enforced by the routes): admins only. Everyone signed in can see
- * authorisations on the client page.
+ * authorisations on the client's pages.
  *
  * Untrusted: all form fields (approver details, dates, scope lines) and {id}.
  *

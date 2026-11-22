@@ -1,6 +1,6 @@
 <?php
 /**
- * Certificates and web pages panel on the client page.
+ * Certificates and web pages panel on the client's pages.
  * Expects: $tlsEndpoints, $webPages (rows from EndpointRepository).
  * Every value here came from a remote server (certificate fields, titles, headers): always escaped.
  * Issues come from ExposureRules, so they match the findings step later.

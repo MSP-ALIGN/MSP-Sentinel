@@ -172,7 +172,7 @@ return [
         Assert::same('cancelled', $job($ctx, $id)['status']);
 
         $admin->submit('/clients/' . $id, '/clients/' . $id . '/scan', ['outside_window' => '1', 'reason' => '']);
-        Assert::contains('Give a reason', $ctx->clientPages($admin, (int) $id));
+        Assert::contains('Give a reason', $ctx->clientSection($admin, (int) $id, 'scans'));
         $admin->submit('/clients/' . $id, '/clients/' . $id . '/scan', ['outside_window' => '1', 'reason' => 'Client asked for a re-check after a firewall change']);
         [$code, $out] = $ctx->cli('bin/worker.php', ['--no-schedule', '--job=' . $job($ctx, $id)['id']]);
         Assert::same('done', $job($ctx, $id)['status'], $out);
@@ -223,7 +223,7 @@ return [
         Assert::same('partial', $job($ctx, $id)['status']);
         Assert::contains('paused', (string) $job($ctx, $id)['summary']);
         $admin->submit('/clients/' . $id, '/clients/' . $id . '/scan', []);
-        Assert::contains('Scanning is paused', $ctx->clientPages($admin, (int) $id), 'nothing can be queued while paused');
+        Assert::contains('Scanning is paused', $ctx->clientSection($admin, (int) $id, 'scans'), 'nothing can be queued while paused');
         $admin->submit('/', '/scanning/resume', []);
     },
     'weekly schedule queues eligible clients once; orphaned jobs are recovered' => function (TestContext $ctx): void {

@@ -1,6 +1,6 @@
 <?php
 /**
- * Client overview console at the top of the client page (also served alone for the 60-second refresh).
+ * Client overview console on the client's overview (also served alone for the 60-second refresh).
  * Expects: $client, $ov (array from ClientController::overviewData()). Every value is escaped.
  */
 use Sentinel\Dashboard\Svg;

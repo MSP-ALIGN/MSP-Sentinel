@@ -16,7 +16,7 @@
             <li><?= e(__('Run, as root, in the unpacked folder:')) ?>
                 <pre class="bg-body-tertiary p-2 mt-1 mb-1"><code>sudo ./install/agent-install.sh --server <?= e($serverUrl !== '' ? $serverUrl : 'https://sentinel.example') ?> --code <?= e($code) ?></code></pre>
                 <?php if ($serverUrl === ''): ?><div class="text-warning"><?= e(__('Set app.public_url in the config so this command shows your address.')) ?></div><?php endif; ?></li>
-            <li><?= e(__('The agent appears on the client page within a minute. It only connects out to Sentinel over HTTPS; no firewall rule is needed at the site.')) ?></li>
+            <li><?= e(__('The agent appears on the Agents page of this client within a minute. It only connects out to Sentinel over HTTPS; no firewall rule is needed at the site.')) ?></li>
         </ol>
         <a class="btn btn-outline-secondary" href="<?= e(url('/clients/' . (int) $client['id'] . '/agents')) ?>"><?= e(__('Back to the client')) ?></a>
     </div>

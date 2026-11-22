@@ -83,9 +83,9 @@ return [
             + (int) $ctx->db->query('SELECT COUNT(*) FROM agent_jobs WHERE client_id IN (' . implode(',', $ids) . ") AND status IN ('queued','sent')")->fetchColumn();
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $admin->submit('/clients/' . $riverside, '/clients/' . $riverside . '/scan', []);
-        Assert::contains('never scanned', $ctx->clientPages($admin, (int) $riverside), 'manual scan refused with a clear message');
+        Assert::contains('never scanned', $ctx->clientSection($admin, (int) $riverside, 'scans'), 'manual scan refused with a clear message');
         $admin->submit('/clients/' . $riverside, '/clients/' . $riverside . '/discover', []);
-        Assert::contains('never scanned', $ctx->clientPages($admin, (int) $riverside), 'discovery refused');
+        Assert::contains('never scanned', $ctx->clientSection($admin, (int) $riverside, 'discovery'), 'discovery refused');
         $site = (int) $ctx->db->query("SELECT site_id FROM agents WHERE client_id = {$riverside}")->fetchColumn();
         $admin->submit('/clients/' . $riverside, '/clients/' . $riverside . '/sites/' . $site . '/scan', ['reason' => 'Demo test']);
         $finding = (int) $ctx->db->query("SELECT id FROM findings WHERE client_id = {$riverside} AND status = 'open' AND finding_key LIKE 'port:%' LIMIT 1")->fetchColumn();

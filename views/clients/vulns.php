@@ -1,6 +1,6 @@
 <?php
 /**
- * Vulnerabilities panel on the client page.
+ * Vulnerabilities panel on the client's pages.
  * Expects: $vulns (rows from VulnRepository::forClient, most important first), $feeds (feed status rows),
  *          $vulnCoverage (waiting/failed/no_product counts, so "nothing matched" is never overstated).
  * Shows KEV and critical/high first; lower severities are counted and can be expanded.

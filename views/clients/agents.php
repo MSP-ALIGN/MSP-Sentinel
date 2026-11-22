@@ -1,6 +1,6 @@
 <?php
 /**
- * On-premises agents card on the client page: per site, the internal authorisation, agents, kill switch and recent scans.
+ * On-premises agents card on the client's pages: per site, the internal authorisation, agents, kill switch and recent scans.
  * Expects: $client, $agentSites (ClientController::agentSites), $currentUser, $globallyPaused.
  * Agent-reported names and versions are untrusted and escaped.
  */

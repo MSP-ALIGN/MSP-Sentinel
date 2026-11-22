@@ -1,6 +1,6 @@
 <?php
 /**
- * Port scan panel on the client page.
+ * Port scan panel on the client's pages.
  * Expects: $client, $openJob (or null), $recentJobs, $services, $scanLog, $ports (list<int>), $windowOpen,
  *          $isAdmin, $isTech, $archived, $paused, $globallyPaused.
  * Values from scanned hosts (product, version, banners) are untrusted and always escaped.

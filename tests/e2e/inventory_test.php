@@ -55,7 +55,7 @@ return [
     'admins link a client to an organisation; a name match is only suggested' => function (TestContext $ctx) use ($setup): void {
         $cid = $setup($ctx);
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
-        Assert::contains('Link to an organisation', $ctx->clientPages($admin, (int) $cid));
+        Assert::contains('Link to an organisation', $ctx->clientSection($admin, (int) $cid, 'devices'));
         $form = $admin->get('/clients/' . $cid . '/inventory/link?source=ninjaone')->body;
         Assert::true(preg_match('/<option value="org-101" selected>Riverbend Example Ltd \(suggested\)/', $form) === 1, 'suggested by name, ignoring "Ltd"');
         Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM source_links WHERE client_id = {$cid}")->fetchColumn(), 'nothing linked automatically');
@@ -177,7 +177,7 @@ return [
         $r = App::inventorySync()->syncClient($cid, 'ninjaone');
         Assert::same('error', $r['status']);
         Assert::same($before, (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE client_id = {$cid} AND removed_at IS NULL")->fetchColumn(), 'a failure removes nothing');
-        Assert::contains('Sync failed', $ctx->clientPages($ctx->login('admin', 'Admin-Pass-0001!'), (int) $cid));
+        Assert::contains('Sync failed', $ctx->clientSection($ctx->login('admin', 'Admin-Pass-0001!'), (int) $cid, 'devices'));
         $ctx->db->exec("UPDATE source_links SET org_id = 'org-101' WHERE client_id = {$cid}");
         // Sync now (technicians) marks the link due; unlink (admins) removes devices and resolves their findings.
         $tech = $ctx->login('invtech', 'Invtech-Pass-0001!');

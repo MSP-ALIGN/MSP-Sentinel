@@ -99,8 +99,7 @@ final class ClientController extends Controller
         $web = static fn (): \Sentinel\Web\WebsiteRepository => new \Sentinel\Web\WebsiteRepository(App::db());
         // What each section needs (closures, so a page only runs its own queries).
         $loaders = [
-            'overview' => ['sites' => fn () => App::clients()->sites($cid), 'authorisations' => $authorisations, 'overview' => fn () => self::overviewData($client),
-                           'openJob' => fn () => App::scans()->openJob($cid), 'windowOpen' => fn () => ScanWindow::isOpen($client)],
+            'overview' => ['sites' => fn () => App::clients()->sites($cid), 'authorisations' => $authorisations, 'overview' => fn () => self::overviewData($client)],
             'findings' => ['clientFindings' => fn () => App::findings()->search(['client' => $cid, 'status' => 'open'])['rows']],
             'scans' => ['openJob' => fn () => App::scans()->openJob($cid), 'recentJobs' => fn () => App::scans()->recentJobs($cid), 'services' => fn () => App::scans()->openServices($cid),
                         'scanLog' => fn () => App::scans()->logForClient($cid, 30), 'ports' => fn () => PortProfile::forClient($client), 'windowOpen' => fn () => ScanWindow::isOpen($client)],

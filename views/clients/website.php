@@ -1,6 +1,6 @@
 <?php
 /**
- * Website and email security card on the client page.
+ * Website and email security card on the client's pages.
  * Expects: $websiteChecks (WebsiteRepository::checksForClient), $emailChecks (emailForClient).
  * Everything shown comes from scanned sites and DNS (untrusted) and is escaped.
  * Each status has an icon and a word, never colour alone.

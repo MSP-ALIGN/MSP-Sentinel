@@ -1,6 +1,6 @@
 <?php
 /**
- * Reports card on the client page: create a report (technicians and admins), the latest
+ * Reports card on the client's pages: create a report (technicians and admins), the latest
  * reports, and the monthly schedule (admins). Expects: $client, $clientReports, $currentUser.
  * Every value is escaped; the routes enforce the roles too.
  */

@@ -105,7 +105,7 @@ final class AlertService
         foreach ($resolved as $f) {
             $items[] = __('RESOLVED: {t} ({target})', ['t' => $f['title'], 'target' => $f['target']]);
         }
-        $link = '/clients/' . $clientId;
+        $link = '/clients/' . $clientId . '/findings';
         $this->notifyUsers('digest', $fails !== [] ? 'fail' : ($warns !== [] ? 'warn' : 'info'), $title, implode("\n", array_slice($items, 0, 30)), $link, null);
         $this->queueEmail($this->emailRecipients(['digest', 'both']), '[' . $client . '] ' . __('Scan summary'),
             $title . "\n\n" . implode("\n", array_slice($items, 0, 200)) . "\n\n" . $this->absolute($link));
@@ -122,7 +122,7 @@ final class AlertService
         $client = (string) $this->db->query('SELECT name FROM clients WHERE id = ' . (int) $clientId)->fetchColumn();
         $title = __('Scan #{id} for {client} failed', ['id' => $jobId, 'client' => $client]);
         $this->notifyUsers('scan_failed', 'warn', $title, $message, '/clients/' . $clientId . '/scans', 'admin');
-        $this->queueEmail($this->teamAddresses(), '[Sentinel] ' . $title, $title . "\n\n" . $message . "\n\n" . $this->absolute('/clients/' . $clientId));
+        $this->queueEmail($this->teamAddresses(), '[Sentinel] ' . $title, $title . "\n\n" . $message . "\n\n" . $this->absolute('/clients/' . $clientId . '/scans'));
     }
 
     /** A threat feed refresh failed: tell admins in-app (at most once a day per feed). */

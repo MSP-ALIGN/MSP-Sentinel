@@ -180,9 +180,9 @@ return [
         $cid = $setup($ctx);
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $admin->submit('/clients/' . $cid, '/clients/' . $cid . '/report-schedule', ['report_monthly' => '1', 'report_recipients' => "ok@msp.example, bad\r\nBcc: x@evil.example"]);
-        Assert::contains('Report recipients', $ctx->clientPages($admin, (int) $cid));
+        Assert::contains('Report recipients', $ctx->clientSection($admin, (int) $cid, 'reports'));
         $admin->submit('/clients/' . $cid, '/clients/' . $cid . '/report-schedule', ['report_monthly' => '1', 'report_recipients' => '']);
-        Assert::contains('at least one recipient', $ctx->clientPages($admin, (int) $cid));
+        Assert::contains('at least one recipient', $ctx->clientSection($admin, (int) $cid, 'reports'));
         $tech = $ctx->login('rtech', 'Rtech-Pass-0001!');
         Assert::status(403, $tech->post('/clients/' . $cid . '/report-schedule', ['_csrf' => $tech->get('/')->csrf(), 'report_monthly' => '0']));
         $admin->submit('/clients/' . $cid, '/clients/' . $cid . '/report-schedule', ['report_monthly' => '1', 'report_recipients' => 'accounts@msp.example']);

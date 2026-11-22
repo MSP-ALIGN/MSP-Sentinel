@@ -57,9 +57,9 @@ return [
         $page = $admin->get('/clients/' . $id);
         $all = $ctx->clientPages($admin, (int) $id);
         Assert::status(200, $page);
-        Assert::contains('Main site', $all);
-        Assert::contains('No authorisation recorded', $all);
-        Assert::contains('Cannot be scanned', $all);
+        Assert::contains('Main site', $page->body);
+        Assert::contains('Cannot be scanned', $page->body);
+        Assert::contains('No authorisation recorded', $ctx->clientSection($admin, (int) $id, 'authorisations'));
         $dup = $admin->submit('/clients/new', '/clients', ['name' => 'RIVERSIDE EXAMPLE LTD', 'itflow_client_id' => '', 'timezone' => 'UTC',
             'scan_window_start' => '22:00', 'scan_window_end' => '06:00', 'notes' => '']);
         Assert::contains('Another client already has this name', $dup->body);
@@ -122,9 +122,10 @@ return [
         $page = $admin->get('/clients/' . $id);
         $all = $ctx->clientPages($admin, (int) $id);
         Assert::contains('Authorisation recorded with 4 scope entries', $page->body);
-        Assert::contains('Dana Example', $all);
-        Assert::contains('*.lakeshore.example', $all);
-        Assert::contains('Can be scanned: 1 active authorisation', $all);
+        $auths = $ctx->clientSection($admin, (int) $id, 'authorisations');
+        Assert::contains('Dana Example', $auths);
+        Assert::contains('*.lakeshore.example', $auths);
+        Assert::contains('Can be scanned: 1 active authorisation', $ctx->clientSection($admin, (int) $id, 'overview'));
     },
     'scope check: only in-scope targets of an active authorisation pass' => function (TestContext $ctx) use ($makeClient, $authForm, $inScope): void {
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
@@ -163,7 +164,7 @@ return [
         $admin->submit($base . '/authorisations/new', $base . '/authorisations', $authForm('203.0.113.80', [
             'valid_from' => gmdate('Y-m-d', time() + 86400 * 10), 'valid_until' => gmdate('Y-m-d', time() + 86400 * 40)]));
         Assert::true(!$inScope($ctx, $id, '203.0.113.80'), 'not active before valid_from');
-        Assert::contains('Starts later', $ctx->clientPages($admin, (int) $id));
+        Assert::contains('Starts later', $ctx->clientSection($admin, (int) $id, 'authorisations'));
 
         $admin->submit($base . '/authorisations/new', $base . '/authorisations', $authForm('203.0.113.81'));
         Assert::true($inScope($ctx, $id, '203.0.113.81'), 'active');
@@ -171,7 +172,7 @@ return [
         // Expiry: simulate the end date passing.
         $ctx->db->exec("UPDATE scan_authorisations SET valid_from = '2025-01-01', valid_until = '2025-12-31' WHERE client_id = {$id} AND id = (SELECT MAX(id) FROM (SELECT id FROM scan_authorisations WHERE client_id = {$id}) t)");
         Assert::true(!$inScope($ctx, $id, '203.0.113.81'), 'expired');
-        Assert::contains('Expired', $ctx->clientPages($admin, (int) $id));
+        Assert::contains('Expired', $ctx->clientSection($admin, (int) $id, 'authorisations'));
 
         $admin->submit($base . '/authorisations/new', $base . '/authorisations', $authForm('203.0.113.82'));
         Assert::true($inScope($ctx, $id, '203.0.113.82'), 'new active authorisation');
@@ -247,12 +248,12 @@ return [
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $id = $makeClient($ctx, $admin, 'Sites Example');
         $admin->submit('/clients/' . $id, '/clients/' . $id . '/sites', ['name' => 'Warehouse', 'itflow_location_id' => '42']);
-        Assert::contains('Site Warehouse added', $ctx->clientPages($admin, (int) $id));
+        Assert::contains('Site Warehouse added', $ctx->clientSection($admin, (int) $id, 'overview'));
         $admin->submit('/clients/' . $id, '/clients/' . $id . '/sites', ['name' => 'warehouse', 'itflow_location_id' => '']);
-        Assert::contains('already has a site with that name', $ctx->clientPages($admin, (int) $id));
+        Assert::contains('already has a site with that name', $ctx->clientSection($admin, (int) $id, 'overview'));
         $siteId = (int) $ctx->db->query("SELECT id FROM sites WHERE client_id = {$id} AND name = 'Warehouse'")->fetchColumn();
         $admin->submit('/clients/' . $id, '/sites/' . $siteId, ['name' => 'North Warehouse', 'itflow_location_id' => 'x']);
-        Assert::contains('numeric ITFlow location ID', $ctx->clientPages($admin, (int) $id));
+        Assert::contains('numeric ITFlow location ID', $ctx->clientSection($admin, (int) $id, 'overview'));
         $admin->submit('/clients/' . $id, '/sites/' . $siteId, ['name' => 'North Warehouse', 'itflow_location_id' => '43']);
         Assert::same('North Warehouse', $ctx->db->query("SELECT name FROM sites WHERE id = {$siteId}")->fetchColumn());
     },

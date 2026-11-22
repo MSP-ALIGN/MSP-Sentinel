@@ -1,10 +1,10 @@
 <?php
 /**
- * Findings card at the top of the client page.
+ * Findings card on the client's overview.
  * Expects: $client, $clientFindings (open, most important first), $findingCounts.
  */
 require __DIR__ . '/../partials/finding_badges.php';
-$shown = array_slice($clientFindings, 0, 15);
+$shown = $clientFindings; // its own page now: a full page of findings; the rest are on the Findings list (filters, paging)
 ?>
 <div class="card mb-3" id="findings">
     <div class="card-header d-flex align-items-center flex-wrap gap-2">

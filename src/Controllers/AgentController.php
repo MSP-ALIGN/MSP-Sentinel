@@ -15,7 +15,7 @@ use Sentinel\Core\Session;
 use Sentinel\Scope\ScopeService;
 
 /**
- * On-premises agents on the client page: internal authorisations per site,
+ * On-premises agents on the client's pages: internal authorisations per site,
  * enrolment codes, revoking agents, a kill switch per site, and "scan now".
  *
  * Access (enforced by the routes): technicians may pause a site; admins do

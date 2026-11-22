@@ -1,6 +1,6 @@
 <?php
 /**
- * Internal devices card on the client page (inventory sources such as NinjaOne).
+ * Internal devices card on the client's pages (inventory sources such as NinjaOne).
  * Expects: $client, $inventorySources (name => label), $inventoryLinks (name => link row|null),
  * $devices (InventoryRepository::devicesForClient, first 500), $deviceTotal, $devicePatches (by device ID), $currentUser.
  * Device data comes from the source (untrusted) and is always escaped.

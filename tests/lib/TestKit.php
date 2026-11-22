@@ -319,9 +319,20 @@ final class TestContext
      * Full sign-in for a user: password, then 2FA enrolment (first time) or a TOTP code.
      * Returns the client, signed in.
      */
+    /** One section page of a client ('' or 'overview' for the overview); fails unless it loads (200). */
+    public function clientSection(HttpClient $client, int $clientId, string $section): string
+    {
+        $path = '/clients/' . $clientId . ($section === '' || $section === 'overview' ? '' : '/' . $section);
+        $res = $client->get($path);
+        if ($res->status !== 200) {
+            throw new \RuntimeException("{$path} returned HTTP {$res->status}");
+        }
+        return $res->body;
+    }
+
     /**
-     * All of a client's pages (overview and every section) in one string, for checks that don't care which page
-     * shows something. Every page must load (200), so a broken section fails here too.
+     * All of a client's pages joined (for checks that something appears on NO page, such as role-gated buttons).
+     * Check content on the page it belongs to with clientSection() instead.
      */
     public function clientPages(HttpClient $client, int $clientId): string
     {

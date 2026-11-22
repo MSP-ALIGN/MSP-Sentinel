@@ -103,7 +103,7 @@ return [
         App::vulnMatcher()->matchClient($id, 0);
         Assert::same(['distro'], $ctx->db->query("SELECT DISTINCT confidence FROM service_vulns WHERE service_id = {$svc}")->fetchAll(PDO::FETCH_COLUMN), 'backports possible: not confirmed');
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
-        Assert::contains('the fix may be backported', $ctx->clientPages($admin, (int) $id));
+        Assert::contains('the fix may be backported', $ctx->clientSection($admin, (int) $id, 'vulnerabilities'));
         $ctx->db->exec("UPDATE services SET extra_info = '' WHERE id = {$svc}");
 
         // Upgrade to a version NVD hasn't been asked about yet (no fetch budget): old matches go.

@@ -1,6 +1,6 @@
 <?php
 /**
- * Discovery panel on the client page: last run, pending and dismissed suggestions.
+ * Discovery panel on the client's pages: last run, pending and dismissed suggestions.
  * Expects: $client, $suggestions, $dismissed, $lastRun (or null), $isAdmin, $isTech, $archived.
  * All values escaped. Dismiss and restore forms sit outside the selection form
  * (HTML forms can't nest) and are linked with the form="" attribute.
