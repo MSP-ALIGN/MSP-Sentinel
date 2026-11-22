@@ -283,7 +283,7 @@ final class App
     /** Heartbeat, update check and retention, run by the worker. */
     public static function housekeeping(): Housekeeping
     {
-        return new Housekeeping(self::settings(), self::updates(), self::retention());
+        return new Housekeeping(self::settings(), self::updates(), self::retention(), static fn (): ?string => self::itflowSync()->syncIfDue());
     }
 
     /** Install health checks (bin/doctor.php, admin System page). */
@@ -386,12 +386,27 @@ final class App
     public static function align(bool $evenIfOff = false): ?\Sentinel\Compliance\AlignClient
     {
         $s = self::settings();
-        $url = $s->get('mspalign_url');
+        $url = $s->fresh('mspalign_url');
         $key = $s->getSecret('mspalign_api_key');
-        if ($url === '' || $key === '' || (!$evenIfOff && $s->get('mspalign_enabled') !== '1')) {
+        if ($url === '' || $key === '' || (!$evenIfOff && $s->fresh('mspalign_enabled') !== '1')) {
             return null;
         }
         return new \Sentinel\Compliance\AlignClient($url, $key, self::webhookTestMode());
+    }
+
+    /** The ITFlow API client from Administration > Integrations, or null while it isn't filled in. */
+    public static function itflow(): ?\Sentinel\Itflow\ItflowClient
+    {
+        $s = self::settings();
+        $url = $s->fresh('itflow_url'); // fresh: a long-running process sees a changed address at once
+        $key = $s->getSecret('itflow_api_key');
+        return $url === '' || $key === '' ? null : new \Sentinel\Itflow\ItflowClient($url, $key, self::webhookTestMode());
+    }
+
+    /** ITFlow client sync (worker every 15 minutes, and "Sync now"). */
+    public static function itflowSync(): \Sentinel\Itflow\ItflowSync
+    {
+        return new \Sentinel\Itflow\ItflowSync(self::db(), self::settings(), self::audit(), self::itflow(), self::align());
     }
 
     /** Inventory sync service (worker and "Sync now"). */

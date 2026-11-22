@@ -2,6 +2,16 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.17.0 (2026-11-22): clients from ITFlow
+
+- **ITFlow client sync** (phase 1 of the ITFlow plan, see [docs/ROADMAP-itflow.md](docs/ROADMAP-itflow.md)): every
+  15 minutes new ITFlow clients are added to Sentinel with their ITFlow ID, renames are applied, and archiving or
+  unarchiving in ITFlow is followed. A new client is never scanned until its written authorisation is recorded.
+- A Sentinel client with the same name is linked instead of duplicated; a client you archived yourself stays archived.
+- With MSP Align connected, clients are linked to MSP Align automatically by their ITFlow ID.
+- **Administration → Integrations → ITFlow**: address and API key (encrypted), Test connection and Sync now.
+- Next: tickets from findings in ITFlow, and closing them from ITFlow.
+
 ### 1.16.0 (2026-11-22): compliance from MSP Align
 
 - New **Compliance** page for each client: the frameworks assigned to it in MSP Align, and for every control in an

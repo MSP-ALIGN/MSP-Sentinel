@@ -32,7 +32,8 @@ if ($sub === '/api/v1/') {
         'client_ids' => null, 'api_version' => 'v1', 'app_version' => '2.41.0']]);
 }
 if ($sub === '/api/v1/clients') {
-    $page([['id' => 500, 'name' => 'Other Example Co'], ['id' => 501, 'name' => 'Harbour Align Example'], ['id' => 502, 'name' => 'Quay Example Inc']]);
+    $page([['id' => 500, 'name' => 'Other Example Co', 'psa_id' => null], ['id' => 501, 'name' => 'Harbour Align Example', 'psa_id' => null],
+           ['id' => 502, 'name' => 'Quay Example Inc', 'psa_id' => '802']]); // psa_id 802: an ITFlow client in itflow_test.php
 }
 if ($auth === $noScope) {
     $json(403, ['error' => ['status' => 403, 'message' => 'Missing scope compliance:read']]);

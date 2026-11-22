@@ -147,6 +147,9 @@ $router->add('GET', '/admin/audit', [AdminController::class, 'auditLog'], $admin
 $router->add('GET', '/admin/integrations', [IntegrationsController::class, 'index'], $admin);
 $router->add('POST', '/admin/integrations/ninjaone', [IntegrationsController::class, 'saveNinjaOne'], $admin);
 $router->add('POST', '/admin/integrations/ninjaone/test', [IntegrationsController::class, 'testNinjaOne'], $admin);
+$router->add('POST', '/admin/integrations/itflow', [IntegrationsController::class, 'saveItflow'], $admin);
+$router->add('POST', '/admin/integrations/itflow/test', [IntegrationsController::class, 'testItflow'], $admin);
+$router->add('POST', '/admin/integrations/itflow/sync', [IntegrationsController::class, 'syncItflow'], $admin);
 $router->add('POST', '/admin/integrations/mspalign', [IntegrationsController::class, 'saveAlign'], $admin);
 $router->add('POST', '/admin/integrations/mspalign/test', [IntegrationsController::class, 'testAlign'], $admin);
 $router->add('POST', '/clients/{id}/compliance/link', [ComplianceController::class, 'link'], $admin);

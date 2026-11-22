@@ -14,8 +14,9 @@ use Sentinel\Inventory\InventoryException;
 use Sentinel\Inventory\NinjaOneSource;
 
 /**
- * Administration > Integrations: outside systems Sentinel reads from: NinjaOne (read-only inventory) and MSP Align
- * (read-only compliance frameworks, shown on each linked client's Compliance page).
+ * Administration > Integrations: outside systems Sentinel works with: ITFlow (clients sync from it; tickets follow in
+ * later phases), NinjaOne (read-only inventory) and MSP Align (read-only compliance, shown on each client's Compliance
+ * page).
  *
  * Every route is admin-only (src/routes.php) and every POST is CSRF-checked (App::dispatch).
  *
@@ -38,6 +39,17 @@ final class IntegrationsController extends Controller
                 'tested_at' => $s->get('ninjaone_tested_at'),
                 'test_result' => $s->get('ninjaone_test_result'),
                 'linked' => (int) App::db()->query("SELECT COUNT(*) FROM source_links WHERE source = 'ninjaone'")->fetchColumn(),
+            ],
+            'itflow' => [
+                'enabled' => $s->get('itflow_enabled') === '1',
+                'url' => $s->get('itflow_url'),
+                'has_key' => $s->getSecret('itflow_api_key') !== '',
+                'tested_at' => $s->get('itflow_tested_at'),
+                'test_result' => $s->get('itflow_test_result'),
+                'last_sync' => $s->get('itflow_last_sync'),
+                'last_result' => $s->get('itflow_last_result'),
+                'last_ok' => $s->get('itflow_last_ok') !== '0',
+                'linked' => (int) App::db()->query('SELECT COUNT(*) FROM clients WHERE itflow_client_id IS NOT NULL AND is_demo = 0')->fetchColumn(),
             ],
             'align' => [
                 'enabled' => $s->get('mspalign_enabled') === '1',
@@ -199,6 +211,86 @@ final class IntegrationsController extends Controller
         App::settings()->set('mspalign_tested_at', gmdate('Y-m-d H:i:s'));
         App::settings()->set('mspalign_test_result', mb_substr($result, 0, 500));
         $this->audit($request, 'settings.mspalign_tested', null, null, ['ok' => $ok]);
+        return $back;
+    }
+
+    /** POST /admin/integrations/itflow: save the ITFlow address, API key and on/off. */
+    public function saveItflow(Request $request): Response
+    {
+        $back = Response::redirect('/admin/integrations#itflow');
+        $s = App::settings();
+        $url = rtrim(trim($request->input('url')), '/');
+        $url = (string) preg_replace('#/api(/v1)?$#', '', $url); // a pasted API address becomes ITFlow's address
+        $enabled = $request->input('enabled') === '1';
+        if ($url !== '' && !\Sentinel\Itflow\ItflowClient::validUrl($url, App::webhookTestMode())) {
+            Session::flash('danger', __('The ITFlow address must be an https:// address, for example https://itflow.msp.example.'));
+            return $back;
+        }
+        $changed = [];
+        foreach (['itflow_url' => $url, 'itflow_enabled' => $enabled ? '1' : '0'] as $key => $value) {
+            if ($s->get($key) !== $value) {
+                $s->set($key, $value);
+                $changed[$key] = $key === 'itflow_enabled' ? $enabled : $value;
+            }
+        }
+        $apiKey = trim($request->raw('api_key'));
+        if ($request->input('clear_key') === '1') {
+            $s->setSecret('itflow_api_key', '');
+            $changed['itflow_api_key'] = 'cleared';
+        } elseif ($apiKey !== '') {
+            if (!\Sentinel\Itflow\ItflowClient::validKey($apiKey)) {
+                Session::flash('danger', __('That does not look like an ITFlow API key. Copy it again from ITFlow (Admin, API Keys).'));
+                return $back;
+            }
+            $s->setSecret('itflow_api_key', $apiKey);
+            $changed['itflow_api_key'] = 'changed';
+        }
+        if ($changed !== []) {
+            $s->set('itflow_test_result', '');
+            $this->audit($request, 'settings.itflow_updated', null, null, ['changed' => $changed]);
+        }
+        Session::flash('success', $enabled ? __('ITFlow settings saved. Clients sync within 15 minutes, or use Sync now.') : __('ITFlow settings saved.'));
+        return $back;
+    }
+
+    /** POST /admin/integrations/itflow/test: read ITFlow's clients (nothing is changed). */
+    public function testItflow(Request $request): Response
+    {
+        $back = Response::redirect('/admin/integrations#itflow');
+        $itflow = App::itflow();
+        if ($itflow === null) {
+            Session::flash('warning', __('Fill in the ITFlow address and API key first.'));
+            return $back;
+        }
+        @set_time_limit(60);
+        $ok = false;
+        try {
+            $clients = $itflow->clients();
+            $active = count(array_filter($clients, static fn (array $c): bool => !$c['archived']));
+            $result = __('Connected: the key can see {n} client(s) in ITFlow ({a} active).', ['n' => count($clients), 'a' => $active]);
+            $ok = true;
+        } catch (\Sentinel\Itflow\ItflowException $ex) {
+            $result = __('Failed: {e}', ['e' => $ex->getMessage()]);
+        }
+        Session::flash($ok ? 'success' : 'danger', $result);
+        App::settings()->set('itflow_tested_at', gmdate('Y-m-d H:i:s'));
+        App::settings()->set('itflow_test_result', mb_substr($result, 0, 500));
+        $this->audit($request, 'settings.itflow_tested', null, null, ['ok' => $ok]);
+        return $back;
+    }
+
+    /** POST /admin/integrations/itflow/sync: sync clients now. */
+    public function syncItflow(Request $request): Response
+    {
+        $back = Response::redirect('/admin/integrations#itflow');
+        if (App::itflow() === null || App::settings()->get('itflow_enabled') !== '1') {
+            Session::flash('warning', __('Turn on the ITFlow client sync and save first.'));
+            return $back;
+        }
+        @set_time_limit(120);
+        $summary = App::itflowSync()->sync();
+        $this->audit($request, 'itflow.sync_requested', null, null, ['result' => mb_substr($summary, 0, 300)]);
+        Session::flash(str_starts_with($summary, 'Failed') ? 'danger' : 'success', __('ITFlow sync: {s}', ['s' => $summary]));
         return $back;
     }
 

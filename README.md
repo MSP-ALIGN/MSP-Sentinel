@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.16.0](https://img.shields.io/badge/version-1.16.0-ff5a1f?style=flat-square)
+![Version 1.17.0](https://img.shields.io/badge/version-1.17.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -149,6 +149,16 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
 
 ## What's new
 
+### 1.17.0 (2026-11-22): clients from ITFlow
+
+- **ITFlow client sync** (phase 1 of the ITFlow plan, see [docs/ROADMAP-itflow.md](docs/ROADMAP-itflow.md)): every
+  15 minutes new ITFlow clients are added to Sentinel with their ITFlow ID, renames are applied, and archiving or
+  unarchiving in ITFlow is followed. A new client is never scanned until its written authorisation is recorded.
+- A Sentinel client with the same name is linked instead of duplicated; a client you archived yourself stays archived.
+- With MSP Align connected, clients are linked to MSP Align automatically by their ITFlow ID.
+- **Administration → Integrations → ITFlow**: address and API key (encrypted), Test connection and Sync now.
+- Next: tickets from findings in ITFlow, and closing them from ITFlow.
+
 ### 1.16.0 (2026-11-22): compliance from MSP Align
 
 - New **Compliance** page for each client: the frameworks assigned to it in MSP Align, and for every control in an
@@ -160,6 +170,9 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
   clients:read and compliance:read is all it needs), with Test connection. Admins link each client on its
   Compliance page; the same name is suggested first.
 
+<details>
+<summary><b>Earlier releases (1.15.0 to 1.0.0)</b></summary>
+
 ### 1.15.0 (2026-11-22): tabbed settings and vulnerability data on demand
 
 - **Administration → Settings** is now in tabs: General, Alerts, Fix due dates, Report branding and Vulnerability
@@ -170,9 +183,6 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
   due (daily), so a new server has its vulnerability data within minutes of installing instead of the next morning.
   Existing servers pick up the new schedule with their next update. The health check no longer asks you to add a
   cron job that is already there.
-
-<details>
-<summary><b>Earlier releases (1.14.0 to 1.0.0)</b></summary>
 
 ### 1.14.0 (2026-11-22): NinjaOne
 

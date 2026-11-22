@@ -80,6 +80,15 @@ final class Settings
         'mspalign_tested_at' => '',
         'mspalign_test_result' => '',
         'mspalign_clients_cache' => '',
+        // ITFlow client sync (ItflowSync): address, on/off, last test and last sync. The key is in itflow_api_key (SECRETS).
+        'itflow_enabled' => '0',
+        'itflow_url' => '',
+        'itflow_api_key' => '',
+        'itflow_tested_at' => '',
+        'itflow_test_result' => '',
+        'itflow_last_sync' => '',
+        'itflow_last_result' => '',
+        'itflow_last_ok' => '',
         // Git-based installs: commits the followed branch is ahead of the installed commit, its newest commit, and
         // the installed commit the answer is for (so an answer for an older commit is never shown after updating).
         'update_branch_behind' => '',
@@ -94,7 +103,7 @@ final class Settings
     ];
 
     /** Settings that hold secrets: stored encrypted with the app key, never shown again. */
-    public const SECRETS = ['smtp_password', 'webhook_url', 'event_webhook_url', 'event_webhook_secret', 'ninjaone_client_secret', 'mspalign_api_key'];
+    public const SECRETS = ['smtp_password', 'webhook_url', 'event_webhook_url', 'event_webhook_secret', 'ninjaone_client_secret', 'mspalign_api_key', 'itflow_api_key'];
 
     /** @var array<string,string>|null */
     private ?array $cache = null;

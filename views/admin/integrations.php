@@ -1,7 +1,7 @@
 <?php
 /**
  * Administration > Integrations: outside systems Sentinel reads from (NinjaOne first).
- * Expects: $ninja (enabled, host, client_id, has_secret, tested_at, test_result, linked), $align (enabled, url, has_key,
+ * Expects: $itflow (enabled, url, has_key, tested_at, test_result, last_sync, last_result, last_ok, linked), $ninja (enabled, host, client_id, has_secret, tested_at, test_result, linked), $align (enabled, url, has_key,
  *          tested_at, test_result, linked).
  * Every value is escaped. The client secret is never sent back to the browser.
  */
@@ -10,6 +10,56 @@ use Sentinel\Core\Csrf;
 $n = $ninja;
 ?>
 <p class="text-body-secondary"><?= e(__('Systems Sentinel reads from. Sentinel only reads: it never changes anything in them.')) ?></p>
+<?php $it = $itflow; ?>
+<div class="card mb-3" id="itflow">
+    <div class="card-header d-flex align-items-center gap-2">
+        <h2 class="card-title h5 mb-0"><?= e(__('ITFlow')) ?></h2>
+        <?php if ($it['enabled'] && $it['url'] !== '' && $it['has_key']): ?>
+        <span class="badge text-bg-success"><?= e(__('On')) ?></span>
+        <?php else: ?>
+        <span class="badge text-bg-secondary"><?= e(__('Off')) ?></span>
+        <?php endif; ?>
+        <span class="ms-auto small text-body-secondary"><?= e(__('{n} client(s) from ITFlow', ['n' => $it['linked']])) ?></span>
+    </div>
+    <div class="card-body">
+        <p class="small"><?= e(__('ITFlow is the list of clients: every 15 minutes new ITFlow clients are added to Sentinel, names are kept in step, and clients archived in ITFlow are archived here. A new client is not scanned until its written authorisation is recorded. With MSP Align connected, clients are linked to MSP Align by their ITFlow ID too. Tickets from findings come in a later release.')) ?></p>
+        <details class="small mb-3">
+            <summary><?= e(__('How to create the API key in ITFlow')) ?></summary>
+            <ol class="mt-2 mb-0">
+                <li><?= e(__('In ITFlow, add an agent named MSP Sentinel with a role that can read clients (later releases will also need tickets), with access to all clients.')) ?></li>
+                <li><?= e(__('Go to Admin, API Keys, create a key for that agent with an expiry date, and copy it into the form below. Each API key acts as its agent.')) ?></li>
+            </ol>
+        </details>
+        <form method="post" action="<?= e(url('/admin/integrations/itflow')) ?>" autocomplete="off" novalidate>
+            <?= Csrf::field() ?>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label" for="itflow-url"><?= e(__('ITFlow address')) ?></label>
+                    <input class="form-control" id="itflow-url" name="url" value="<?= e($it['url']) ?>" placeholder="https://itflow.msp.example" maxlength="255">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="itflow-key"><?= e(__('API key')) ?></label>
+                    <input class="form-control" type="password" id="itflow-key" name="api_key" value="" maxlength="200" autocomplete="new-password" placeholder="<?= e($it['has_key'] ? __('Saved (leave empty to keep)') : '') ?>">
+                    <?php if ($it['has_key']): ?>
+                    <div class="form-check mt-1"><input class="form-check-input" type="checkbox" id="itflow-clear" name="clear_key" value="1"><label class="form-check-label small" for="itflow-clear"><?= e(__('Remove the saved key')) ?></label></div>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <div class="form-check mt-3"><input class="form-check-input" type="checkbox" id="itflow-enabled" name="enabled" value="1" <?= $it['enabled'] ? 'checked' : '' ?>>
+                <label class="form-check-label" for="itflow-enabled"><?= e(__('Sync clients from ITFlow')) ?></label></div>
+            <button type="submit" class="btn btn-primary btn-sm mt-3"><?= e(__('Save')) ?></button>
+        </form>
+        <hr>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <form method="post" action="<?= e(url('/admin/integrations/itflow/test')) ?>"><?= Csrf::field() ?>
+                <button type="submit" class="btn btn-outline-secondary btn-sm"><i class="bi bi-plug me-1" aria-hidden="true"></i><?= e(__('Test connection')) ?></button></form>
+            <form method="post" action="<?= e(url('/admin/integrations/itflow/sync')) ?>"><?= Csrf::field() ?>
+                <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i><?= e(__('Sync now')) ?></button></form>
+        </div>
+        <?php if ($it['test_result'] !== ''): ?><p class="small mb-1 mt-2"><?= e($it['test_result']) ?> <span class="text-body-secondary">(<?= e($it['tested_at']) ?> UTC)</span></p><?php endif; ?>
+        <?php if ($it['last_sync'] !== ''): ?><p class="small mb-0 mt-1<?= $it['last_ok'] ? '' : ' text-danger' ?>"><?= e(__('Last sync {t} UTC: {r}', ['t' => $it['last_sync'], 'r' => $it['last_result']])) ?></p><?php endif; ?>
+    </div>
+</div>
 <div class="card mb-3" id="ninjaone">
     <div class="card-header d-flex align-items-center gap-2">
         <h2 class="card-title h5 mb-0"><?= e(__('NinjaOne')) ?></h2>

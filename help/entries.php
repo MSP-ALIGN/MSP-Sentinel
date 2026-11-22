@@ -128,6 +128,13 @@ return [
             ],
         ],
         [
+            'title' => 'ITFlow',
+            'paragraphs' => [
+                'With ITFlow connected (Administration, Integrations), Sentinel adds new ITFlow clients every 15 minutes, applies renames, and archives or restores clients when they are archived or unarchived in ITFlow. A client added from ITFlow is not scanned until its written authorisation is recorded. A client you archived yourself in Sentinel stays archived. Changes appear in the audit log as itflow-sync.',
+                'Coming next: findings open tickets on the ITFlow alert board with how to fix them, and closing a ticket in ITFlow makes Sentinel recheck and close the finding (or reopen the ticket if the problem is still there).',
+            ],
+        ],
+        [
             'title' => 'Compliance (MSP Align)',
             'paragraphs' => [
                 'With MSP Align connected (Administration, Integrations) and a client linked on its Compliance page, Sentinel shows that client\'s compliance frameworks from MSP Align. For each control in an area Sentinel checks it shows the open findings that affect it, or "No problems found" with what was checked, or "Not checked yet". Controls Sentinel can\'t see (policies, training, backups) are only counted.',
@@ -204,6 +211,14 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.17.0',
+            'date' => '2026-11-22',
+            'items' => [
+                'Clients sync from ITFlow every 15 minutes: new clients, renames and archives (new clients are never scanned until authorised).',
+                'Clients are linked to MSP Align automatically by their ITFlow ID.',
+            ],
+        ],
         [
             'version' => '1.16.0',
             'date' => '2026-11-22',

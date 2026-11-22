@@ -15,8 +15,13 @@ use Sentinel\Core\Settings;
  */
 final class Housekeeping
 {
-    /** Wires the parts. */
-    public function __construct(private readonly Settings $settings, private readonly UpdateChecker $updates, private readonly Retention $retention)
+    /**
+     * Wires the parts.
+     *
+     * @param (callable(): ?string)|null $itflowSync The ITFlow client sync (it runs only when due: every 15 minutes).
+     */
+    public function __construct(private readonly Settings $settings, private readonly UpdateChecker $updates, private readonly Retention $retention,
+        private $itflowSync = null)
     {
     }
 
@@ -24,7 +29,7 @@ final class Housekeeping
     public function tick(): void
     {
         $this->settings->set('worker_last_tick', gmdate('Y-m-d H:i:s'));
-        foreach ([fn () => $this->updates->check(), fn () => $this->retention->run()] as $job) {
+        foreach ([fn () => $this->updates->check(), fn () => $this->retention->run(), fn () => $this->itflowSync === null ? null : ($this->itflowSync)()] as $job) {
             try {
                 $job();
             } catch (\Throwable $ex) {

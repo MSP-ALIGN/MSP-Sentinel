@@ -40,6 +40,31 @@ back. The client's forms (edit, new authorisation, agent enrolment, a device) ke
 7. **Reports**: create an Executive summary for management and a Technical findings report for IT (Reports card on
    the client's **Reports** page). Print to PDF from the browser. Reports are frozen: they never change after they are made.
 
+## ITFlow
+
+ITFlow is the list of clients (see [ROADMAP-itflow.md](ROADMAP-itflow.md) for where this is going: tickets from
+findings, closed from ITFlow). Today Sentinel keeps its clients in step with ITFlow:
+
+1. In ITFlow, add an agent named MSP Sentinel with a role that can read clients and access to all clients. Then go to
+   **Admin → API Keys**, create a key for that agent (with an expiry date) and copy it.
+2. In Sentinel, go to **Administration → Integrations → ITFlow**: enter ITFlow's address and the key, tick **Sync
+   clients from ITFlow**, save, and click **Test connection**, then **Sync now**.
+
+Every 15 minutes after that:
+
+- A new ITFlow client is added to Sentinel with its ITFlow ID. **It is not scanned** until someone records its
+  written authorisation, like any other client.
+- A Sentinel client with the same name and no ITFlow ID is linked instead of duplicated. If the name is taken by a
+  client linked to another ITFlow client, the new one is called "Name (ITFlow #id)".
+- A rename in ITFlow is applied in Sentinel.
+- A client archived in ITFlow is archived in Sentinel (scanning stops, history is kept); unarchiving it in ITFlow
+  restores it. A client you archived yourself in Sentinel stays archived.
+- Clients that disappear from ITFlow's answer are left alone, and demo clients are never touched.
+- With MSP Align connected, a client is also linked to its MSP Align client automatically when MSP Align has the
+  same ITFlow ID (MSP Align's PSA ID).
+
+Every change shows in the audit log as "itflow-sync".
+
 ## NinjaOne
 
 Sentinel can read each client's computers from NinjaOne. It only reads; it never changes anything in NinjaOne.
