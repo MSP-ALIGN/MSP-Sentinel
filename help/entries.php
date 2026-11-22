@@ -198,6 +198,14 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.13.1',
+            'date' => '2026-11-22',
+            'items' => [
+                'Update now explains the 15-minute wait between updates, and quick repeated clicks no longer switch the update helper off.',
+                'An upgrade no longer stops when the update helper is stuck.',
+            ],
+        ],
+        [
             'version' => '1.13.0',
             'date' => '2026-11-22',
             'items' => [

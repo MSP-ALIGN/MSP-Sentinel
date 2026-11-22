@@ -32,7 +32,8 @@ final class SystemController extends Controller
             'demoLoaded' => (new \Sentinel\Demo\DemoData(App::db(), (int) $this->user()['id']))->isLoaded(),
             'newer' => App::updates()->newer(),
             'branchStatus' => App::updates()->branchStatus(),
-            'webUpdate' => ['available' => App::webUpdate()->available(), 'pending' => App::webUpdate()->pending(), 'status' => App::webUpdate()->status(), 'log' => App::webUpdate()->log()],
+            'webUpdate' => ['available' => App::webUpdate()->available(), 'pending' => App::webUpdate()->pending(), 'unclaimed' => App::webUpdate()->unclaimed(),
+                            'wait' => App::webUpdate()->waitSeconds(), 'status' => App::webUpdate()->status(), 'log' => App::webUpdate()->log()],
             'updateEnabled' => $s->get('update_check_enabled') === '1',
             'checkedAt' => $s->get('update_checked_at'),
             'retention' => ['scans' => $s->get('retention_scans_months'), 'findings' => $s->get('retention_findings_months'), 'reports' => $s->get('retention_reports_months')],
@@ -79,11 +80,22 @@ final class SystemController extends Controller
     public function update(Request $request): Response
     {
         $back = Response::redirect('/admin/system#updates');
-        if (!App::webUpdate()->request()) {
-            $this->audit($request, 'system.update_denied', null, null, ['reason' => App::webUpdate()->available() ? 'already waiting or running' : 'not set up on this server']);
-            Session::flash('warning', App::webUpdate()->available()
-                ? __('An update is already waiting or running.')
-                : __('Updating from the web interface is not set up on this server. Run sudo msp-sentinel-update on the server.'));
+        $wu = App::webUpdate();
+        if ($request->input('action') === 'cancel') {
+            $wu->cancel();
+            $this->audit($request, 'system.update_cancelled');
+            Session::flash('info', __('The waiting update request was removed.'));
+            return $back;
+        }
+        if (!$wu->request()) {
+            $wait = $wu->waitSeconds();
+            $reason = !$wu->available() ? 'not set up on this server' : ($wait > 0 ? 'less than 15 minutes since the last update' : 'already waiting or running');
+            $this->audit($request, 'system.update_denied', null, null, ['reason' => $reason]);
+            Session::flash('warning', match (true) {
+                !$wu->available() => __('Updating from the web interface is not set up on this server. Run sudo msp-sentinel-update on the server.'),
+                $wait > 0 => __('An update ran less than 15 minutes ago. You can start the next one in {m} minute(s).', ['m' => (int) ceil($wait / 60)]),
+                default => __('An update is already waiting or running.'),
+            });
             return $back;
         }
         $this->audit($request, 'system.update_requested', null, null, ['version' => App::version(), 'build' => App::build()['commit'] ?? null]);

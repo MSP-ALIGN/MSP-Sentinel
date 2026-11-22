@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.13.0](https://img.shields.io/badge/version-1.13.0-ff5a1f?style=flat-square)
+![Version 1.13.1](https://img.shields.io/badge/version-1.13.1-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -149,6 +149,15 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
 
 ## What's new
 
+### 1.13.1 (2026-11-22): Update now fixes
+
+- Clicking **Update now** again within 15 minutes now says when the next update can start, instead of seemingly
+  doing nothing.
+- Quick repeated clicks no longer switch the server's update helper off (a too-strict systemd limit was removed;
+  the helper's own one-update-per-15-minutes rule stays).
+- An upgrade no longer stops at "Service files" when that helper is stuck; it resets it, or warns and carries on.
+- If a request is not picked up, the System page says how to fix it on the server and lets you remove the request.
+
 ### 1.13.0 (2026-11-22): client pages
 
 - Opening a client now switches the left menu to **that client's own menu**: Overview, Findings, External (scans and
@@ -157,14 +166,14 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
 - Each section is its own page with its own address (for example `/clients/12/devices`), and only loads what it shows.
 - The client's forms and device pages keep the client menu; actions return you to the page you were on.
 
+<details>
+<summary><b>Earlier releases (1.12.1 to 1.0.0)</b></summary>
+
 ### 1.12.1 (2026-11-22): one-click Update now
 
 - **Update now** is a one-click admin action again (with an "Are you sure?" prompt): no password or 2FA code. The
   server still only runs the normal update (backup first), at most once every 15 minutes, and every request is in
   the audit log.
-
-<details>
-<summary><b>Earlier releases (1.12.0 to 1.0.0)</b></summary>
 
 ### 1.12.0 (2026-11-22): update from the web interface
 

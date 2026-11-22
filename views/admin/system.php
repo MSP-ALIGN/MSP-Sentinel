@@ -54,7 +54,10 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
                 ? __('Updating from the web interface is turned off on this server. Run sudo msp-sentinel-update on the server.')
                 : __('This server was installed from a release download, so it is updated on the server: see docs/upgrade.md.')) ?></p>
             <?php else: ?>
-            <?php if ($wu['pending']): ?>
+            <?php if ($wu['pending'] && $wu['unclaimed']): ?>
+            <div class="alert alert-warning py-2 mb-2"><?= e(__('The update request was not picked up: the update helper on the server is stopped. On the server, run: sudo systemctl reset-failed msp-sentinel-web-update.path && sudo systemctl restart msp-sentinel-web-update.path (or run sudo msp-sentinel-update).')) ?>
+                <form method="post" action="<?= e(url('/admin/system/update')) ?>" class="mt-2"><?= Csrf::field() ?><input type="hidden" name="action" value="cancel"><button type="submit" class="btn btn-outline-secondary btn-sm"><?= e(__('Remove the waiting request')) ?></button></form></div>
+            <?php elseif ($wu['pending']): ?>
             <p class="mb-2"><span class="badge text-bg-info"><?= e(__('Waiting')) ?></span> <?= e(__('The update was requested and starts within a few seconds.')) ?></p>
             <?php elseif ($st['state'] === 'running' && !$st['stale']): ?>
             <p class="mb-2"><span class="badge text-bg-warning"><i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i><?= e(__('Running')) ?></span> <?= e(__('Started {t} UTC. Sentinel may be unavailable for a minute while it restarts; refresh this page to follow it.', ['t' => $st['started']])) ?></p>
@@ -66,7 +69,9 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
             <?php if ($wu['log'] !== ''): ?>
             <details class="mb-2"<?= $st['state'] === 'failed' || ($st['state'] === 'running' && !$st['stale']) ? ' open' : '' ?>><summary><?= e(__('Output of the last update')) ?></summary><pre class="small mb-0 mt-1 update-log"><?= e($wu['log']) ?></pre></details>
             <?php endif; ?>
-            <?php if (!$wu['pending'] && !($st['state'] === 'running' && !$st['stale'])): ?>
+            <?php if (!$wu['pending'] && !($st['state'] === 'running' && !$st['stale']) && $wu['wait'] > 0): ?>
+            <p class="text-body-secondary mb-0"><?= e(__('One update every 15 minutes: you can start the next one in {m} minute(s).', ['m' => (int) ceil($wu['wait'] / 60)])) ?></p>
+            <?php elseif (!$wu['pending'] && !($st['state'] === 'running' && !$st['stale'])): ?>
             <p class="text-body-secondary mb-2"><?= e($build !== null
                 ? __('Fetches the newest {b} branch, backs up first, applies database changes and checks health. Same as sudo msp-sentinel-update on the server.', ['b' => $build['branch']])
                 : __('Backs up first, applies database changes and checks health.')) ?></p>

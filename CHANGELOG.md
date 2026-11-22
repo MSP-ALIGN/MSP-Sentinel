@@ -2,6 +2,15 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.13.1 (2026-11-22): Update now fixes
+
+- Clicking **Update now** again within 15 minutes now says when the next update can start, instead of seemingly
+  doing nothing.
+- Quick repeated clicks no longer switch the server's update helper off (a too-strict systemd limit was removed;
+  the helper's own one-update-per-15-minutes rule stays).
+- An upgrade no longer stops at "Service files" when that helper is stuck; it resets it, or warns and carries on.
+- If a request is not picked up, the System page says how to fix it on the server and lets you remove the request.
+
 ### 1.13.0 (2026-11-22): client pages
 
 - Opening a client now switches the left menu to **that client's own menu**: Overview, Findings, External (scans and

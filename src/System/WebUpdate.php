@@ -31,6 +31,10 @@ final class WebUpdate
 {
     /** Longer than this "running" means the runner was stopped (e.g. a reboot): offer to try again. */
     private const STALE_SECONDS = 3 * 3600;
+    /** The runner starts at most once per this many seconds (keep in step with msp-sentinel-update-runner). */
+    public const MIN_INTERVAL = 900;
+    /** A request still waiting after this long was not picked up (the server's helper is stopped). */
+    private const UNCLAIMED_SECONDS = 120;
 
     public function __construct(private readonly string $stateDir, private readonly string $requestFile)
     {
@@ -46,6 +50,31 @@ final class WebUpdate
     public function pending(): bool
     {
         return file_exists($this->requestFile) || is_link($this->requestFile);
+    }
+
+    /** Whether a request has waited so long that nothing on the server is picking it up. */
+    public function unclaimed(): bool
+    {
+        $t = @filemtime($this->requestFile);
+        return $t !== false && $t < time() - self::UNCLAIMED_SECONDS;
+    }
+
+    /** Remove our own waiting request (the web app created it), e.g. after the server's helper was fixed. */
+    public function cancel(): void
+    {
+        if (is_file($this->requestFile) && !is_link($this->requestFile)) {
+            @unlink($this->requestFile);
+        }
+    }
+
+    /** Seconds until the runner accepts the next update (0 = now), from the last start time. */
+    public function waitSeconds(): int
+    {
+        $s = $this->status();
+        if ($s['started'] === '' || $s['stale']) {
+            return 0;
+        }
+        return max(0, (int) strtotime($s['started'] . ' UTC') + self::MIN_INTERVAL - time());
     }
 
     /**
@@ -89,8 +118,8 @@ final class WebUpdate
             return false;
         }
         $s = $this->status();
-        if ($s['state'] === 'running' && !$s['stale']) {
-            return false;
+        if (($s['state'] === 'running' && !$s['stale']) || $this->waitSeconds() > 0) {
+            return false; // running, or the runner would ignore it (one update every 15 minutes)
         }
         // Exclusive create: never follows or overwrites an existing file. Empty on purpose (see the class notes).
         $h = @fopen($this->requestFile, 'x');

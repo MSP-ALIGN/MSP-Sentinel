@@ -116,10 +116,22 @@ return [
             Assert::contains('==&gt; Backing up first', $page);
             Assert::true(!str_contains($page, '<script>alert(1)') && !str_contains($page, "\e["), 'log escaped and scrubbed');
             Assert::notContains('action="/admin/system/update"', $page, 'no second request while running');
-            file_put_contents($state . '/status.json', json_encode(['state' => 'failed', 'started' => gmdate('Y-m-d H:i:s'), 'finished' => gmdate('Y-m-d H:i:s'), 'exit' => 1]));
+            // Finished a moment ago: the page says when the next update can start, and a click is refused with that.
+            file_put_contents($state . '/status.json', json_encode(['state' => 'done', 'started' => gmdate('Y-m-d H:i:s'), 'finished' => gmdate('Y-m-d H:i:s'), 'exit' => 0]));
+            Assert::contains('One update every 15 minutes', $admin->get('/admin/system')->body);
+            $admin->submit('/admin/system', '/admin/system/update', []);
+            Assert::contains('You can start the next one in', $admin->get('/admin/system')->body);
+            Assert::true(!file_exists($request), 'no request the runner would ignore');
+            file_put_contents($state . '/status.json', json_encode(['state' => 'failed', 'started' => gmdate('Y-m-d H:i:s', time() - 3600), 'finished' => gmdate('Y-m-d H:i:s', time() - 3500), 'exit' => 1]));
             $page = $admin->get('/admin/system')->body;
             Assert::contains('stopped with an error', $page);
             Assert::contains('action="/admin/system/update"', $page, 'can try again after a failure');
+            // A request nobody picks up (the helper on the server is stopped) is pointed out and can be removed.
+            touch($request, time() - 600);
+            $page = $admin->get('/admin/system')->body;
+            Assert::contains('was not picked up', $page);
+            $admin->submit('/admin/system', '/admin/system/update', ['action' => 'cancel']);
+            Assert::true(!file_exists($request), 'waiting request removed');
             file_put_contents($state . '/status.json', '{"state":"<b>","started":"x"}');
             Assert::notContains('<b>', $admin->get('/admin/system')->body, 'a malformed status file is ignored');
 

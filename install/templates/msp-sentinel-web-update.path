@@ -6,9 +6,8 @@ Description=MSP Sentinel update requests from the web interface
 [Path]
 PathExists=__ROOT__/storage/update-request
 Unit=msp-sentinel-web-update.service
-# Belt and braces with the runner's own 15-minute limit: never more than 3 starts in 10 minutes.
-TriggerLimitIntervalSec=10min
-TriggerLimitBurst=3
+# No extra trigger limit here: a strict one switched the unit off after a few quick clicks. The runner itself
+# allows one update every 15 minutes (other starts exit at once), and systemd's default limit stops a tight loop.
 
 [Install]
 WantedBy=multi-user.target

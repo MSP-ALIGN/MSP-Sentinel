@@ -201,7 +201,9 @@ return [
         Assert::same(['failed', 3], [$status()['state'] ?? '', $status()['exit'] ?? -1]);
         // The units point at the runner and the request file.
         $unit = (string) file_get_contents($root . '/install/templates/msp-sentinel-web-update.path');
-        Assert::true(str_contains($unit, 'PathExists=__ROOT__/storage/update-request') && str_contains($unit, 'TriggerLimitBurst='), 'path unit with a trigger limit');
+        Assert::true(str_contains($unit, 'PathExists=__ROOT__/storage/update-request') && !preg_match('/^TriggerLimit/m', $unit), 'path unit without a strict trigger limit (it switched the unit off)');
+        $inst = (string) file_get_contents($root . '/install/install.sh');
+        Assert::true(str_contains($inst, 'systemctl reset-failed msp-sentinel-web-update.path') && !str_contains($inst, 'run systemctl enable --now msp-sentinel-web-update.path'), 'a stuck unit never stops an upgrade');
         Assert::contains('ExecStart=/usr/local/sbin/msp-sentinel-update-runner', (string) file_get_contents($root . '/install/templates/msp-sentinel-web-update.service'));
         exec('rm -rf ' . escapeshellarg($dir));
     },

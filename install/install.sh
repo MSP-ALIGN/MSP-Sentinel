@@ -116,7 +116,14 @@ write_web_update() {
   render msp-sentinel-web-update.service | write_file /etc/systemd/system/msp-sentinel-web-update.service 0644
   run install -m 0644 /dev/null "$state/enabled"
   run systemctl daemon-reload
-  run systemctl enable --now msp-sentinel-web-update.path
+  # Optional feature: a problem here is reported, never allowed to stop an install or upgrade.
+  if [ "$dry" -eq 1 ]; then
+    echo "  [dry-run] systemctl reset-failed + enable --now msp-sentinel-web-update.path"
+  else
+    systemctl reset-failed msp-sentinel-web-update.path >/dev/null 2>&1 || true
+    systemctl enable --now msp-sentinel-web-update.path >/dev/null 2>&1 \
+      || echo "  Warning: could not start msp-sentinel-web-update.path (Update now in the web interface). Check: systemctl status msp-sentinel-web-update.path"
+  fi
 }
 die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 # valid_ip ADDR: one IPv4 address (each part 0-255) or an IPv6 address (hex groups and colons only).
