@@ -7,6 +7,8 @@ namespace Sentinel\Scanning;
 use PDO;
 use Sentinel\Alerts\AlertService;
 use Sentinel\Alerts\Outbox;
+use Sentinel\Reports\ReportService;
+use Sentinel\Reports\StatsRecorder;
 use Sentinel\Clients\ClientRepository;
 use Sentinel\Discovery\DnsClient;
 use Sentinel\Findings\FindingsEngine;
@@ -59,6 +61,8 @@ final class ScanWorker
         private readonly ?FindingsEngine $findings = null,
         private readonly ?AlertService $alerts = null,
         private readonly ?Outbox $outbox = null,
+        private readonly ?ReportService $reports = null,
+        private readonly ?StatsRecorder $stats = null,
     ) {
         $this->log ??= static function (string $line): void {
         };
@@ -89,6 +93,16 @@ final class ScanWorker
             $queued = $schedule ? $this->scheduleDue() : 0;
             $job = $this->nextRunnable($onlyJobId);
             $result = $job === null ? "Scheduled {$queued} job(s). Nothing to run now." : "Scheduled {$queued} job(s). " . $this->runJob($job);
+            // Daily trend counts and due monthly reports (their emails go out in the flush below).
+            try {
+                $this->stats?->recordToday();
+                $monthly = $this->reports?->runMonthly() ?? 0;
+                if ($monthly > 0) {
+                    $result .= " Monthly reports: {$monthly} client(s).";
+                }
+            } catch (\Throwable $ex) {
+                error_log('[msp-sentinel] reports failed: ' . $ex->getMessage());
+            }
             // Send queued alerts (also when no job ran, so retries and test messages go out).
             if ($this->outbox !== null) {
                 try {

@@ -23,6 +23,7 @@ use Sentinel\Controllers\ScanController;
 use Sentinel\Controllers\ScanningController;
 use Sentinel\Controllers\PageController;
 use Sentinel\Controllers\ProfileController;
+use Sentinel\Controllers\ReportController;
 use Sentinel\Controllers\UserController;
 use Sentinel\Core\Router;
 
@@ -84,6 +85,17 @@ $router->add('POST', '/scans/{id}/cancel', [ScanController::class, 'cancel'], $t
 $router->add('GET', '/findings', [FindingController::class, 'index']);
 $router->add('GET', '/findings/{id}', [FindingController::class, 'show']);
 $router->add('POST', '/findings/{id}/triage', [FindingController::class, 'triage'], $technician);
+
+// Reports: everyone views and downloads saved reports; technicians and admins create; admins delete and set schedules and branding
+$router->add('GET', '/reports', [ReportController::class, 'index']);
+$router->add('POST', '/clients/{id}/reports', [ReportController::class, 'store'], $technician);
+$router->add('POST', '/clients/{id}/report-schedule', [ReportController::class, 'schedule'], $admin);
+$router->add('GET', '/reports/{id}', [ReportController::class, 'show']);
+$router->add('GET', '/reports/{id}/view', [ReportController::class, 'view']);
+$router->add('GET', '/reports/{id}/download', [ReportController::class, 'download']);
+$router->add('GET', '/reports/{id}/csv', [ReportController::class, 'csv']);
+$router->add('POST', '/reports/{id}/delete', [ReportController::class, 'delete'], $admin);
+$router->add('POST', '/admin/branding', [ReportController::class, 'branding'], $admin);
 
 // Global kill switch
 $router->add('POST', '/scanning/pause', [ScanningController::class, 'pause'], $technician);

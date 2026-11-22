@@ -103,6 +103,7 @@ final class ClientController extends Controller
             'clientFindings' => App::findings()->search(['client' => (int) $client['id'], 'status' => 'open'])['rows'],
             'findingCounts' => App::findings()->counts((int) $client['id']),
             'feeds' => App::vulns()->feedStatuses(),
+            'clientReports' => App::reports()->list((int) $client['id'], 5),
         ]);
     }
 

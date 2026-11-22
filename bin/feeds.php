@@ -58,6 +58,7 @@ try {
             $alerts->findingsChanged($clientId, $result, false);
         });
         fwrite(STDOUT, 'Findings: refreshed for ' . $n . " client(s)\n");
+        (new \Sentinel\Reports\StatsRecorder(App::db()))->recordToday(); // daily counts for report trends
         $sent = App::outbox()->flush(200);
         fwrite(STDOUT, "Alerts: {$sent['sent']} sent, {$sent['failed']} failed\n");
     } catch (\Throwable $ex) {

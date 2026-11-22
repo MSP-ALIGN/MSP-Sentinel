@@ -13,6 +13,12 @@ use Sentinel\Auth\RecoveryCodes;
 use Sentinel\Auth\Role;
 use Sentinel\Auth\UserRepository;
 use Sentinel\Clients\ClientRepository;
+use Sentinel\Reports\Branding;
+use Sentinel\Reports\ReportBuilder;
+use Sentinel\Reports\ReportRenderer;
+use Sentinel\Reports\ReportRepository;
+use Sentinel\Reports\ReportService;
+use Sentinel\Reports\StatsRecorder;
 use Sentinel\Discovery\CrtShClient;
 use Sentinel\Findings\FindingRepository;
 use Sentinel\Findings\FindingsEngine;
@@ -195,7 +201,7 @@ final class App
         $connector = Connector::fromConfig($config);
         $caFile = (string) $config->get('tls.ca_file', '');
         return new ScanWorker(self::db(), self::clients(), self::authorisations(), self::scans(), self::scope(), NmapRunner::fromConfig($config), $dns, $log,
-            new TlsChecker($connector, $caFile === '' ? null : $caFile), new HttpProbe($connector), self::endpoints(), self::vulnMatcher(15), self::findingsEngine(), self::alerts(), self::outbox());
+            new TlsChecker($connector, $caFile === '' ? null : $caFile), new HttpProbe($connector), self::endpoints(), self::vulnMatcher(15), self::findingsEngine(), self::alerts(), self::outbox(), self::reportService(), new StatsRecorder(self::db()));
     }
 
     /** Vulnerability data and match store. */
@@ -243,6 +249,25 @@ final class App
     public static function webhookTestMode(): bool
     {
         return self::config()->get('testing.allow_documentation_ranges', false) === true && getenv('SENTINEL_TEST_MODE') === '1';
+    }
+
+    /** Stored reports. */
+    public static function reports(): ReportRepository
+    {
+        return new ReportRepository(self::db());
+    }
+
+    /** Creates reports and runs the monthly schedule. */
+    public static function reportService(): ReportService
+    {
+        $builder = new ReportBuilder(self::db(), self::settings(), self::authorisations(), SENTINEL_ROOT . '/storage/branding', self::version());
+        return new ReportService(self::db(), $builder, new ReportRenderer(SENTINEL_ROOT . '/views/reports'), self::reports(), self::alerts());
+    }
+
+    /** Report logo storage. */
+    public static function branding(): Branding
+    {
+        return new Branding(SENTINEL_ROOT . '/storage/branding');
     }
 
     /** Findings store (list, history, triage). */

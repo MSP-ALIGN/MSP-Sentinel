@@ -41,9 +41,10 @@ final class SmtpMailer
      * Send one message.
      *
      * @param list<string> $to Recipient addresses (validated here again).
+     * @param list<array{name:string, type:string, content:string}> $attachments Files to attach (names are sanitised).
      * @throws \RuntimeException with a safe message on any failure.
      */
-    public function send(array $to, string $subject, string $body): void
+    public function send(array $to, string $subject, string $body, array $attachments = []): void
     {
         $to = array_values(array_filter($to, [self::class, 'validAddress']));
         if ($to === [] || !self::validAddress($this->from)) {
@@ -91,7 +92,7 @@ final class SmtpMailer
                 $this->command($sock, 'RCPT TO:<' . $rcpt . '>', [250, 251]);
             }
             $this->command($sock, 'DATA', 354);
-            $this->write($sock, self::buildMessage($this->from, $to, $subject, $body) . "\r\n.");
+            $this->write($sock, self::buildMessage($this->from, $to, $subject, $body, $attachments) . "\r\n.");
             $this->expect($sock, 250);
             // The message is accepted. A bad answer to QUIT must not make it look failed (and be sent again).
             try {
@@ -107,8 +108,9 @@ final class SmtpMailer
      * The message headers and body, dot-stuffed for DATA (public for tests).
      *
      * @param list<string> $to
+     * @param list<array{name:string, type:string, content:string}> $attachments
      */
-    public static function buildMessage(string $from, array $to, string $subject, string $body): string
+    public static function buildMessage(string $from, array $to, string $subject, string $body, array $attachments = []): string
     {
         $subject = trim((string) preg_replace('/[\r\n\t]+/', ' ', $subject));
         $headers = [
@@ -120,13 +122,28 @@ final class SmtpMailer
             'Date: ' . gmdate('D, d M Y H:i:s') . ' +0000',
             'Message-ID: <' . bin2hex(random_bytes(12)) . '@msp-sentinel>',
             'MIME-Version: 1.0',
-            'Content-Type: text/plain; charset=UTF-8',
-            'Content-Transfer-Encoding: base64',
             'Auto-Submitted: auto-generated',
         ];
-        $encoded = rtrim(chunk_split(base64_encode(str_replace(["\r\n", "\r"], "\n", $body)), 76, "\r\n"));
+        $b64 = static fn (string $data): string => rtrim(chunk_split(base64_encode($data), 76, "\r\n"));
+        $text = $b64(str_replace(["\r\n", "\r"], "\n", $body));
+        if ($attachments === []) {
+            $headers[] = 'Content-Type: text/plain; charset=UTF-8';
+            $headers[] = 'Content-Transfer-Encoding: base64';
+            $content = $text;
+        } else {
+            // multipart/mixed: the text, then each file. Everything is base64, so no part can break the structure.
+            $boundary = '=_sentinel_' . bin2hex(random_bytes(12));
+            $headers[] = 'Content-Type: multipart/mixed; boundary="' . $boundary . '"';
+            $parts = ["--{$boundary}\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n" . $text];
+            foreach ($attachments as $a) {
+                $name = substr((string) preg_replace('/[^A-Za-z0-9._-]+/', '-', $a['name']), 0, 100) ?: 'attachment';
+                $type = preg_match('#^[a-z]+/[a-z0-9.+-]+$#', $a['type']) ? $a['type'] : 'application/octet-stream';
+                $parts[] = "--{$boundary}\r\nContent-Type: {$type}; name=\"{$name}\"\r\nContent-Disposition: attachment; filename=\"{$name}\"\r\nContent-Transfer-Encoding: base64\r\n\r\n" . $b64($a['content']);
+            }
+            $content = implode("\r\n", $parts) . "\r\n--{$boundary}--";
+        }
         // Base64 lines never start with ".", but dot-stuff anyway in case the encoding ever changes.
-        $lines = preg_replace('/^\./m', '..', $encoded);
+        $lines = preg_replace('/^\./m', '..', $content);
         return implode("\r\n", $headers) . "\r\n\r\n" . $lines;
     }
 

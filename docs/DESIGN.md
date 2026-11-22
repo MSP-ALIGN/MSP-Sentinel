@@ -130,9 +130,14 @@ two minutes. A technician should be able to act on the Technical Findings report
    - accepted and false-positive findings are listed separately, with their notes
    - an appendix with the scope, scan dates and the methods used
 
-**Later (v1.x):** Change/Trend report (new, fixed and still open, with a trend chart), Compliance Evidence Pack
-(scope approvals, scan log, results, plus a clear "not a PCI ASV scan" statement), scheduled monthly email delivery,
-and reports covering several clients.
+**Also in v1.0 (0.9.0):** a trend chart (open Fail/Warning at each month end, from daily counts in
+`finding_stats`), CSV export of a report's findings, and a monthly schedule per client: both reports are created
+after each month and emailed as self-contained HTML attachments to MSP staff (not the client) for review.
+Server-side PDF through headless Chromium is not built yet; reports print to PDF from the browser.
+
+**Later (v1.x):** a full Change report (new, fixed and still open), Compliance Evidence Pack (scope approvals, scan
+log, results, plus a clear "not a PCI ASV scan" statement), optional server-side PDF, and reports covering several
+clients.
 
 **Design rules:**
 - Severity is never shown by colour alone. Every colour also has a label and an icon, so reports work printed in

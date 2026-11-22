@@ -29,6 +29,7 @@ final class Request
         private readonly array $post,
         private readonly array $server,
         private readonly string $clientIp,
+        private readonly array $files = [],
     ) {
     }
 
@@ -65,7 +66,21 @@ final class Request
             }
         }
 
-        return new self($method, $path, $_GET, $_POST, $_SERVER, $ip);
+        return new self($method, $path, $_GET, $_POST, $_SERVER, $ip, $_FILES);
+    }
+
+    /**
+     * An uploaded file's temporary path, or null if none was uploaded without
+     * error. Only files PHP itself received (is_uploaded_file) are returned.
+     * The content is untrusted.
+     */
+    public function uploadedFile(string $key): ?string
+    {
+        $f = $this->files[$key] ?? null;
+        if (!is_array($f) || !is_string($f['tmp_name'] ?? null) || ($f['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || !is_uploaded_file($f['tmp_name'])) {
+            return null;
+        }
+        return $f['tmp_name'];
     }
 
     /** A form field as a trimmed string ('' if missing or not a string). Untrusted. */

@@ -15,14 +15,16 @@ namespace Sentinel\Core;
  * - Pages are never cached, because they contain client security data.
  *   Static assets are served by the web server, not through here.
  * - HSTS is sent only over HTTPS.
+ * - A response may set its OWN, stricter policy (stored reports: no scripts at
+ *   all, sandboxed, inline styles only); it is then kept as is.
  */
 final class SecurityHeaders
 {
     /** Add the headers to a response. HSTS only when $secure. */
     public static function apply(Response $response, bool $secure): Response
     {
-        $response
-            ->header('Content-Security-Policy', implode('; ', [
+        if ($response->getHeader('Content-Security-Policy') === null) {
+            $response->header('Content-Security-Policy', implode('; ', [
                 "default-src 'self'",
                 "script-src 'self'",
                 "style-src 'self'",
@@ -33,7 +35,9 @@ final class SecurityHeaders
                 "base-uri 'none'",
                 "form-action 'self'",
                 "frame-ancestors 'none'",
-            ]))
+            ]));
+        }
+        $response
             ->header('X-Content-Type-Options', 'nosniff')
             ->header('X-Frame-Options', 'DENY')
             ->header('Referrer-Policy', 'same-origin')

@@ -133,6 +133,17 @@ final class HttpClient
         return $this->post($action, $fields + ['_csrf' => $page->csrf()]);
     }
 
+    /**
+     * Post a multipart form with one file (like a browser upload). Takes the CSRF token from $formPage.
+     *
+     * @param array<string,string> $fields
+     */
+    public function upload(string $formPage, string $action, array $fields, string $fileField, string $filePath, string $mime): HttpResult
+    {
+        $page = $this->get($formPage);
+        return $this->request('POST', $action, $fields + ['_csrf' => $page->csrf(), $fileField => new \CURLFile($filePath, $mime, basename($filePath))], true);
+    }
+
     /** Value of a cookie in the jar, or null. */
     public function cookie(string $name): ?string
     {
@@ -145,15 +156,15 @@ final class HttpClient
         return null;
     }
 
-    /** @param array<string,string>|null $fields */
-    private function request(string $method, string $path, ?array $fields): HttpResult
+    /** @param array<string,mixed>|null $fields */
+    private function request(string $method, string $path, ?array $fields, bool $multipart = false): HttpResult
     {
         $headers = [];
         curl_setopt_array($this->curl, [
             CURLOPT_URL => $this->baseUrl . $path,
             CURLOPT_CUSTOMREQUEST => $method,
             CURLOPT_POST => $method === 'POST',
-            CURLOPT_POSTFIELDS => $fields === null ? null : http_build_query($fields),
+            CURLOPT_POSTFIELDS => $fields === null ? null : ($multipart ? $fields : http_build_query($fields)),
             CURLOPT_HTTPGET => $method === 'GET',
             CURLOPT_HEADERFUNCTION => static function ($ch, string $line) use (&$headers): int {
                 if (str_contains($line, ':')) {
@@ -209,7 +220,7 @@ final class TestContext
             preg_match_all('/=\?UTF-8\?B\?([^?]*)\?=/', $sm[1] ?? '', $words);
             $subject = implode('', array_map('base64_decode', $words[1]));
             $out[] = ['from' => $m['from'], 'to' => $m['to'], 'auth_user' => $m['auth_user'], 'tls' => $m['tls'],
-                      'subject' => $subject, 'body' => (string) base64_decode(str_replace(["\r", "\n"], '', $body))];
+                      'raw' => (string) $m['data'], 'subject' => $subject, 'body' => (string) base64_decode(str_replace(["\r", "\n"], '', $body))];
         }
         return $out;
     }

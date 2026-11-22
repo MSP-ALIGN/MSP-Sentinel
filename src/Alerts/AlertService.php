@@ -142,8 +142,9 @@ final class AlertService
      * Queue the email once per recipient (nothing if email is off or there is no recipient).
      *
      * @param list<string> $recipients
+     * @param string $reportIds Comma-separated report IDs to attach (monthly reports).
      */
-    public function queueEmail(array $recipients, string $subject, string $body): void
+    public function queueEmail(array $recipients, string $subject, string $body, string $reportIds = ''): void
     {
         $recipients = array_values(array_unique(array_filter($recipients, [SmtpMailer::class, 'validAddress'])));
         if ($recipients === [] || $this->settings->get('email_enabled') !== '1') {
@@ -151,7 +152,7 @@ final class AlertService
         }
         $body .= "\n\n-- \n" . __('Sent by MSP Sentinel. Choose which emails you get on your profile page.');
         foreach ($recipients as $to) {
-            $this->queue('email', $to, $subject, $body);
+            $this->queue('email', $to, $subject, $body, $reportIds);
         }
     }
 
@@ -228,9 +229,10 @@ final class AlertService
     }
 
     /** Insert a pending delivery. */
-    private function queue(string $channel, string $recipient, string $subject, string $body): void
+    private function queue(string $channel, string $recipient, string $subject, string $body, string $reportIds = ''): void
     {
-        $this->db->prepare("INSERT INTO deliveries (channel, recipient, subject, body, status, next_attempt_at, created_at) VALUES (:c, :r, :s, :b, 'pending', UTC_TIMESTAMP(), UTC_TIMESTAMP())")
-            ->execute(['c' => $channel, 'r' => $recipient, 's' => mb_substr($subject, 0, 300), 'b' => $body]);
+        $reportIds = implode(',', array_filter(array_map('intval', explode(',', $reportIds))));
+        $this->db->prepare("INSERT INTO deliveries (channel, recipient, subject, body, status, next_attempt_at, created_at, report_ids) VALUES (:c, :r, :s, :b, 'pending', UTC_TIMESTAMP(), UTC_TIMESTAMP(), :ri)")
+            ->execute(['c' => $channel, 'r' => $recipient, 's' => mb_substr($subject, 0, 300), 'b' => $body, 'ri' => $reportIds]);
     }
 }

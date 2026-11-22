@@ -68,7 +68,7 @@ final class Outbox
             }
             try {
                 if ($d['channel'] === 'email') {
-                    $this->mailer()->send(explode(',', (string) $d['recipient']), (string) $d['subject'], (string) $d['body']);
+                    $this->mailer()->send(explode(',', (string) $d['recipient']), (string) $d['subject'], (string) $d['body'], $this->attachments((string) ($d['report_ids'] ?? '')));
                 } else {
                     $this->webhook->send($this->settings->getSecret('webhook_url'), (array) json_decode((string) $d['body'], true));
                 }
@@ -102,6 +102,25 @@ final class Outbox
     public function recent(int $limit = 10): array
     {
         return $this->db->query('SELECT id, channel, subject, status, attempts, last_error, created_at, sent_at FROM deliveries ORDER BY id DESC LIMIT ' . (int) $limit)->fetchAll();
+    }
+
+    /**
+     * Report files to attach (self-contained HTML), read when sending. A deleted report is skipped.
+     *
+     * @return list<array{name:string, type:string, content:string}>
+     */
+    private function attachments(string $reportIds): array
+    {
+        $files = [];
+        foreach (array_filter(array_map('intval', explode(',', $reportIds))) as $id) {
+            $stmt = $this->db->prepare('SELECT id, kind, period_end, html FROM reports WHERE id = :id');
+            $stmt->execute(['id' => $id]);
+            $r = $stmt->fetch();
+            if ($r !== false) {
+                $files[] = ['name' => 'report-' . $r['id'] . '-' . $r['kind'] . '-' . $r['period_end'] . '.html', 'type' => 'text/html', 'content' => (string) $r['html']];
+            }
+        }
+        return $files;
     }
 
     /** The configured SMTP mailer. */

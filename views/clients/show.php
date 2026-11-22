@@ -113,6 +113,7 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
 
     <div class="col-lg-8">
         <?php require __DIR__ . '/findings.php'; ?>
+        <?php require __DIR__ . '/reports.php'; ?>
         <div class="card">
             <div class="card-header d-flex align-items-center flex-wrap gap-2">
                 <h2 class="card-title h5 mb-0"><?= e(__('Authorised to scan')) ?></h2>

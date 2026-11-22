@@ -94,6 +94,7 @@ try {
                     <?= $navItem('/', 'bi-speedometer2', __('Dashboard')) ?>
                     <?= $navItem('/clients', 'bi-building', __('Clients')) ?>
                     <?= $navItem('/findings', 'bi-exclamation-diamond', __('Findings')) ?>
+                    <?= $navItem('/reports', 'bi-file-earmark-text', __('Reports')) ?>
                     <?php if ($isAdmin): ?>
                     <li class="nav-header"><?= e(__('ADMINISTRATION')) ?></li>
                     <?= $navItem('/users', 'bi-people', __('Users')) ?>

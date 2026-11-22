@@ -40,6 +40,13 @@ final class Settings
         'webhook_enabled' => '0',
         'webhook_url' => '',
         'webhook_format' => 'teams',
+        // Report branding (step 9). The logo is a SHA-256 naming a re-encoded PNG in storage/branding.
+        'brand_name' => '',
+        'brand_color' => '#1f4e79',
+        'brand_footer' => '',
+        'brand_logo' => '',
+        'report_paper' => 'A4',
+        'report_powered_by' => '1',
     ];
 
     /** Settings that hold secrets: stored encrypted with the app key, never shown again. */

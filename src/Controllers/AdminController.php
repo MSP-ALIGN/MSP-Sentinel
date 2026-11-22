@@ -51,6 +51,7 @@ final class AdminController extends Controller
             'nvdKeySet' => trim((string) App::config()->get('nvd.api_key', '')) !== '',
             'nvdKeyUsable' => \Sentinel\Vulns\FeedUpdater::usableKey(App::config()) !== null,
             'alerts' => self::alertSettings(),
+            'branding' => ReportController::brandingSettings(),
         ]);
     }
 
@@ -89,7 +90,7 @@ final class AdminController extends Controller
         if ($errors !== []) {
             return $this->page('settings/index', __('Settings'), ['values' => $values, 'errors' => $errors,
                 'feeds' => App::vulns()->feedStatuses(), 'nvdKeySet' => trim((string) App::config()->get('nvd.api_key', '')) !== '',
-                'nvdKeyUsable' => \Sentinel\Vulns\FeedUpdater::usableKey(App::config()) !== null, 'alerts' => self::alertSettings()], 422);
+                'nvdKeyUsable' => \Sentinel\Vulns\FeedUpdater::usableKey(App::config()) !== null, 'alerts' => self::alertSettings(), 'branding' => ReportController::brandingSettings()], 422);
         }
 
         $settings = App::settings();
