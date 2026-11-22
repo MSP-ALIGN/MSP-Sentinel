@@ -32,7 +32,7 @@ return [
             all_clients TINYINT(1) NOT NULL DEFAULT 0,
             can_triage TINYINT(1) NOT NULL DEFAULT 0,
             can_scan TINYINT(1) NOT NULL DEFAULT 0,
-            ip_allowlist VARCHAR(500) NOT NULL DEFAULT '',
+            ip_allowlist VARCHAR(1000) NOT NULL DEFAULT '',
             expires_at DATETIME NOT NULL,
             created_by INT UNSIGNED NOT NULL,
             created_at DATETIME NOT NULL,
@@ -52,11 +52,14 @@ return [
             CONSTRAINT fk_api_tc_client FOREIGN KEY (client_id) REFERENCES clients (id) ON DELETE RESTRICT
         ) {$opts}");
 
-        // Change timestamps kept by the database itself, so every update path is covered.
+        // "Changed at" timestamps for updated_since. Set by the application only when something meaningful
+        // changes (not when a scan merely sees the same thing again), so incremental syncs stay small.
+        // The connection uses UTC, so CURRENT_TIMESTAMP is UTC.
         foreach (['findings', 'assets'] as $table) {
             $exists = (int) $db->query("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{$table}' AND COLUMN_NAME = 'updated_at'")->fetchColumn();
             if ($exists === 0) {
-                $db->exec("ALTER TABLE {$table} ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, ADD KEY idx_{$table}_updated (updated_at)");
+                $db->exec("ALTER TABLE {$table} ADD COLUMN updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, ADD KEY idx_{$table}_updated (updated_at)");
+                // Backfill (harmless if repeated after an interruption: only makes the first sync larger).
                 $db->exec("UPDATE {$table} SET updated_at = last_seen");
             }
         }

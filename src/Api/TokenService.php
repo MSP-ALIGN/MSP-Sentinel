@@ -21,7 +21,9 @@ use Sentinel\Scope\IpRange;
  * - The bearer token is untrusted input. It is checked with hash_equals.
  * - A token works only while: not revoked, not expired, its creator is still
  *   an active admin, and (if set) the caller's IP is in its allowlist.
- * - Failed attempts are rate-limited per IP; successful calls per token.
+ * - Failed attempts are limited per address (IPv6 per /64); a caller with a
+ *   valid token is never blocked by others' failures, only by its own
+ *   per-token rate limit. An allowlist refusal looks like a wrong token.
  * - Tokens are shown once at creation and can't be recovered.
  */
 final class TokenService
@@ -75,9 +77,7 @@ final class TokenService
      */
     public function authenticate(string $authorization, string $ip): array
     {
-        if ($this->limiter->tooMany('api-fail:' . $ip, self::FAIL_LIMIT, 600)) {
-            return ['error' => [429, 'Too many failed attempts. Try again later.']];
-        }
+        $ip = self::normaliseIp($ip);
         if (!preg_match('/^Bearer (snt_([A-Za-z0-9]{12})_[A-Za-z0-9_-]{43})$/', $authorization, $m)) {
             return $this->fail($ip, 401, 'Missing or malformed bearer token.');
         }
@@ -90,6 +90,8 @@ final class TokenService
         if ($t === false || !hash_equals((string) $t['token_hash'], $this->crypto->hmac($m[1]))) {
             return $this->fail($ip, 401, 'Invalid token.');
         }
+        // From here the caller holds the real secret, so failures from others at the same address
+        // (NAT, a misbehaving script) never lock out a valid token; it has its own rate limit below.
         if ($t['revoked_at'] !== null || strtotime($t['expires_at'] . ' UTC') <= time()) {
             return $this->fail($ip, 401, 'This token has expired or was revoked.');
         }
@@ -97,7 +99,8 @@ final class TokenService
             return $this->fail($ip, 401, 'The admin who created this token is no longer active.');
         }
         if (!self::ipAllowed((string) $t['ip_allowlist'], $ip)) {
-            return $this->fail($ip, 403, 'Requests from this address are not allowed for this token.');
+            // Same answer as a wrong token, so a leaked token used elsewhere doesn't reveal that it is live.
+            return ['error' => [401, 'Invalid token.']];
         }
         if ($this->limiter->tooMany('api:' . $t['id'], self::RATE_PER_MINUTE, 60)) {
             return ['error' => [429, 'Rate limit reached (' . self::RATE_PER_MINUTE . ' requests per minute).']];
@@ -165,10 +168,27 @@ final class TokenService
         return $stmt->rowCount() === 1;
     }
 
-    /** Record a failed attempt and build the error. */
+    /** Record a failed attempt and build the error (429 once an address has failed too often). */
     private function fail(string $ip, int $status, string $message): array
     {
-        $this->limiter->hit('api-fail:' . $ip);
+        $bucket = 'api-fail:' . self::bucketFor($ip);
+        if ($this->limiter->tooMany($bucket, self::FAIL_LIMIT, 600)) {
+            return ['error' => [429, 'Too many failed attempts. Try again later.']];
+        }
+        $this->limiter->hit($bucket);
         return ['error' => [$status, $message]];
+    }
+
+    /** IPv4-mapped IPv6 (::ffff:203.0.113.10) as plain IPv4, so allowlists match on dual-stack servers. */
+    public static function normaliseIp(string $ip): string
+    {
+        return preg_match('/^::ffff:(\d{1,3}(\.\d{1,3}){3})$/i', $ip, $m) ? $m[1] : $ip;
+    }
+
+    /** Failure bucket: the IPv4 address, or the /64 for IPv6 (one host usually has a whole /64). */
+    private static function bucketFor(string $ip): string
+    {
+        $packed = @inet_pton($ip);
+        return ($packed !== false && strlen($packed) === 16) ? bin2hex(substr($packed, 0, 8)) . '::/64' : $ip;
     }
 }

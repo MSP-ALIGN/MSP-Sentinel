@@ -79,7 +79,7 @@ final class ApiAdminController extends Controller
             }
             $ips[] = $range->canonical();
         }
-        if (count($ips) > 20) {
+        if (count($ips) > 20 || strlen(implode(',', $ips)) > 1000) {
             $errors[] = __('At most 20 addresses or networks.');
         }
         if ($errors !== []) {

@@ -210,12 +210,21 @@ final class ScanRepository
                     'INSERT INTO assets (client_id, site_id, ip, hostnames, first_seen, last_seen, last_scanned) VALUES (:c, :s, :ip, :h, UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP())'
                 )->execute(['c' => $clientId, 's' => $siteId, 'ip' => $ip, 'h' => mb_substr(implode(',', $hostnames), 0, 1000)]);
                 $assetId = (int) $this->db->lastInsertId();
+                $names = $hostnames;
             } else {
                 $assetId = (int) $asset['id'];
                 $names = array_values(array_unique(array_filter(array_merge(explode(',', (string) $asset['hostnames']), $hostnames))));
                 $this->db->prepare('UPDATE assets SET hostnames = :h, last_seen = UTC_TIMESTAMP(), last_scanned = UTC_TIMESTAMP() WHERE id = :id')
                     ->execute(['h' => mb_substr(implode(',', $names), 0, 1000), 'id' => $assetId]);
             }
+            // What the asset looked like before, so updated_at only moves when its names or open services change.
+            $svcState = function () use ($assetId): string {
+                $q = $this->db->prepare("SELECT port, service_name, product, version FROM services WHERE asset_id = :a AND is_open = 1 ORDER BY port");
+                $q->execute(['a' => $assetId]);
+                return json_encode($q->fetchAll(\PDO::FETCH_NUM));
+            };
+            $before = $svcState();
+            $namesChanged = $asset === false || $names !== array_values(array_filter(explode(',', (string) $asset['hostnames'])));
             $upsert = $this->db->prepare(
                 "INSERT INTO services (asset_id, port, protocol, is_open, service_name, product, version, extra_info, cpe, first_seen, last_seen, last_job_id)
                  VALUES (:a, :p, 'tcp', 1, :s, :pr, :v, :x, :cpe, UTC_TIMESTAMP(), UTC_TIMESTAMP(), :j)
@@ -235,6 +244,9 @@ final class ScanRepository
                 foreach (array_diff($scannedPorts, $openPorts) as $port) {
                     $close->execute(['j' => $jobId, 'a' => $assetId, 'p' => $port]);
                 }
+            }
+            if ($namesChanged || $svcState() !== $before) {
+                $this->db->prepare('UPDATE assets SET updated_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['id' => $assetId]);
             }
             $this->db->commit();
         } catch (\Throwable $ex) {

@@ -86,7 +86,11 @@ final class ApiController
     {
         $c = $this->clientRow((int) $p['id']);
         $cid = (int) $c['id'];
-        $counts = App::findings()->counts($cid);
+        // Counted here (not FindingRepository::counts, which skips archived clients), so archived clients report their real state.
+        $cnt = $this->db->prepare("SELECT SUM(status = 'open' AND severity = 'fail') AS fail, SUM(status = 'open' AND severity = 'warn') AS warn,
+                                          SUM(status = 'accepted') AS accepted, SUM(status = 'false_positive') AS false_positive FROM findings WHERE client_id = :c");
+        $cnt->execute(['c' => $cid]);
+        $counts = array_map('intval', $cnt->fetch() ?: []) + ['fail' => 0, 'warn' => 0, 'accepted' => 0, 'false_positive' => 0];
         $scan = $this->db->prepare("SELECT id, status, finished_at FROM scan_jobs WHERE client_id = :c AND finished_at IS NOT NULL ORDER BY id DESC LIMIT 1");
         $scan->execute(['c' => $cid]);
         $last = $scan->fetch() ?: null;
@@ -100,6 +104,7 @@ final class ApiController
         return ApiKernel::json(['data' => [
             'client_id' => $cid,
             'name' => $c['name'],
+            'archived' => (int) $c['is_archived'] === 1,
             'rating' => $counts['fail'] > 0 ? 'at_risk' : ($counts['warn'] > 0 ? 'needs_attention' : 'good'),
             'open' => ['fail' => $counts['fail'], 'warn' => $counts['warn']],
             'accepted' => $counts['accepted'],

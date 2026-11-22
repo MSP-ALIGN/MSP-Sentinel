@@ -90,7 +90,8 @@ final class FindingsEngine
                 $existing[(string) $row['finding_key']] = $row;
             }
             $update = $this->db->prepare(
-                'UPDATE findings SET severity = :sev, title = :t, detail = :d, target = :tg, evidence = :ev, asset_id = :a, cve_id = :cve,
+                // updated_at first: MariaDB evaluates SET left to right, and it must only move on a real change.
+                'UPDATE findings SET updated_at = IF(:chg = 1, UTC_TIMESTAMP(), updated_at), severity = :sev, title = :t, detail = :d, target = :tg, evidence = :ev, asset_id = :a, cve_id = :cve,
                         status = :st, last_seen = UTC_TIMESTAMP(), resolved_at = IF(:resolved = 1, resolved_at, NULL),
                         resolved_from = IF(:resolved2 = 1, resolved_from, NULL),
                         reappeared = IF(:reap = 1, 1, reappeared), reopened_count = reopened_count + :inc
@@ -135,10 +136,12 @@ final class FindingsEngine
                 $update->execute([
                     'sev' => $issue['severity'], 't' => $issue['title'], 'd' => $issue['detail'], 'tg' => $issue['target'], 'ev' => $issue['evidence'],
                     'a' => $issue['asset_id'], 'cve' => $issue['cve_id'], 'st' => $newStatus, 'resolved' => 0, 'resolved2' => 0,
+                    'chg' => ($row['severity'] !== $issue['severity'] || $row['title'] !== $issue['title'] || $row['detail'] !== $issue['detail']
+                        || $row['target'] !== $issue['target'] || !$sameEvidence || $newStatus !== $status) ? 1 : 0,
                     'reap' => $status === 'resolved' ? 1 : 0, 'inc' => $status === 'resolved' || $newStatus !== $status ? 1 : 0, 'id' => $id,
                 ]);
             }
-            $resolve = $this->db->prepare("UPDATE findings SET resolved_from = status, status = 'resolved', resolved_at = UTC_TIMESTAMP() WHERE id = :id");
+            $resolve = $this->db->prepare("UPDATE findings SET resolved_from = status, status = 'resolved', resolved_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP() WHERE id = :id");
             foreach ($existing as $key => $row) {
                 if (isset($current[$key]) || $row['status'] === 'resolved') {
                     continue;

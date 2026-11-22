@@ -206,7 +206,9 @@ return [
         Assert::same(401, $ctx->api('GET', '/api/v1/me', $t2)->status, 'creator deactivated');
 
         [, $far] = $token($ctx, [$a], false, false, ['198.51.100.0/24']);
-        Assert::same(403, $ctx->api('GET', '/api/v1/me', $far)->status, 'not from an allowed address');
+        $farRes = $ctx->api('GET', '/api/v1/me', $far);
+        Assert::same(401, $farRes->status, 'not from an allowed address (looks like a wrong token)');
+        Assert::contains('Invalid token.', $farRes->body);
         [$nearId, $near] = $token($ctx, [$a], false, false, ['127.0.0.1']);
         Assert::same(200, $ctx->api('GET', '/api/v1/me', $near)->status);
 
@@ -218,8 +220,48 @@ return [
         for ($i = 0; $i < 20; $i++) {
             $ctx->api('GET', '/api/v1/me', 'snt_AAAAAAAAAAAA_' . str_repeat('x', 43));
         }
-        Assert::same(429, $ctx->api('GET', '/api/v1/me', $near)->status, 'too many failures from one address');
+        Assert::same(200, $ctx->api('GET', '/api/v1/me', $near)->status, 'others\' failures never block a valid token');
+        Assert::same(429, $ctx->api('GET', '/api/v1/me', 'snt_AAAAAAAAAAAA_' . str_repeat('y', 43))->status, 'but more bad attempts from that address are refused');
         $ctx->db->exec("DELETE FROM auth_throttle");
+    },
+    'updated_since only reports real changes; archived clients keep real totals; events retry for longer' => function (TestContext $ctx) use ($setup, $token): void {
+        [$a, $b] = $setup($ctx);
+        [, $plain] = $token($ctx, []);
+        sleep(1);
+        $since = gmdate('Y-m-d\TH:i:s\Z');
+        sleep(1);
+        App::findingsEngine()->refreshClient($a); // sees the same things again
+        $q = static fn () => json_decode($ctx->api('GET', '/api/v1/findings?client_id=' . $a . '&updated_since=' . $since, $plain)->body, true)['meta']['total'];
+        Assert::same(0, $q(), 'a re-check that changes nothing is not an update');
+        $f = (int) $ctx->db->query("SELECT id FROM findings WHERE client_id = {$a} AND status = 'open' ORDER BY id LIMIT 1")->fetchColumn();
+        App::findings()->triage($f, 'accepted', 'Test.', (int) $ctx->db->query("SELECT id FROM users WHERE username = 'admin'")->fetchColumn());
+        Assert::same(1, $q(), 'a triage is an update');
+        $assetsSince = json_decode($ctx->api('GET', '/api/v1/assets?client_id=' . $a . '&updated_since=' . $since, $plain)->body, true)['meta']['total'];
+        Assert::same(0, $assetsSince, 'assets unchanged');
+
+        $ctx->db->exec("UPDATE clients SET is_archived = 1 WHERE id = {$b}");
+        $sum = json_decode($ctx->api('GET', '/api/v1/clients/' . $b . '/summary', $plain)->body, true)['data'];
+        Assert::true($sum['archived'] === true && $sum['open']['fail'] > 0 && $sum['rating'] === 'at_risk', 'archived client shows real totals');
+        $ctx->db->exec("UPDATE clients SET is_archived = 0 WHERE id = {$b}");
+
+        // Events: retried with growing gaps, not dropped after 20 minutes.
+        $s = App::settings();
+        $s->set('event_webhook_enabled', '1');
+        $s->setSecret('event_webhook_url', 'http://127.0.0.1:1/down');
+        $s->setSecret('event_webhook_secret', 'whsec_test');
+        App::events()->publish('ping', ['message' => 'retry test']);
+        $id = (int) $ctx->db->query("SELECT MAX(id) FROM deliveries WHERE channel = 'event'")->fetchColumn();
+        for ($i = 0; $i < 3; $i++) {
+            $ctx->db->exec("UPDATE deliveries SET next_attempt_at = UTC_TIMESTAMP() WHERE id = {$id}");
+            App::outbox()->flush(5, $id);
+        }
+        $row = $ctx->db->query("SELECT status, attempts, TIMESTAMPDIFF(MINUTE, UTC_TIMESTAMP(), next_attempt_at) AS wait FROM deliveries WHERE id = {$id}")->fetch();
+        Assert::same(['pending', 3], [$row['status'], (int) $row['attempts']], 'still retrying after 3 failures');
+        Assert::true((int) $row['wait'] >= 55, 'next try about an hour later');
+        $ctx->db->exec("UPDATE deliveries SET status = 'failed' WHERE id = {$id}");
+        $s->set('event_webhook_enabled', '0');
+        $s->setSecret('event_webhook_secret', '');
+        $s->setSecret('event_webhook_url', '');
     },
     'outbound events: signed, shown-once secret, SSRF checks, all event kinds' => function (TestContext $ctx) use ($setup, $token): void {
         [$a] = $setup($ctx);

@@ -31,8 +31,9 @@ final class OpenApi
                 'title' => 'MSP Sentinel API',
                 'version' => $version,
                 'description' => "Read clients, assets, findings, scans and reports; triage findings and queue scans (if the token has those permissions).\n"
-                    . "Authenticate with \"Authorization: Bearer snt_...\". Lists are paginated: {data, meta: {page, per_page, total, next_page}}. Times are UTC (ISO 8601).\n"
-                    . "Outbound events (if configured) are POSTed as JSON with X-Sentinel-Event and X-Sentinel-Signature: t=<unix>,v1=<hex HMAC-SHA256(secret, t.body)>.",
+                    . "Authenticate with \"Authorization: Bearer snt_...\". Lists are paginated: {data, meta: {page, per_page, total, next_page}}. Times are UTC (ISO 8601). updated_since on findings and assets matches real changes (status, grade, evidence, triage, open services), not every re-scan.\n"
+                    . "Newest-first lists (scans, reports) use offset paging: items created while you page can shift pages, so dedupe by id.\n"
+                    . "Outbound events (if configured) are POSTed as JSON with X-Sentinel-Event and X-Sentinel-Signature: t=<unix>,v1=<hex HMAC-SHA256(secret, t.body)>. Events are retried for about two days and may arrive late or out of order: dedupe by the event id.",
             ],
             'servers' => [['url' => '/api/v1']],
             'security' => [['bearer' => []]],

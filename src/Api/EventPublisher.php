@@ -16,6 +16,10 @@ use Sentinel\Core\Settings;
  * Payload: {"id", "type", "created_at", "data": {...IDs and short fields}}.
  * Receivers fetch details through the API.
  *
+ * Delivery: retried with growing gaps for about two days (see Outbox), so a
+ * receiver may get events late or out of order: dedupe by "id" and use the
+ * API to resync. Header X-Sentinel-Delivery carries the outbox ID.
+ *
  * Signature (checked by the receiver): header X-Sentinel-Signature:
  * "t=<unix time>,v1=<hex HMAC-SHA256(secret, t + "." + body)>". The receiver
  * should reject old timestamps (for example over 5 minutes) to stop replays.
@@ -43,6 +47,21 @@ final class EventPublisher
         if (!in_array($type, self::TYPES, true) || $this->settings->get('event_webhook_enabled') !== '1') {
             return;
         }
+        // An event must never break the change that caused it (a triage, a report, an alert): log and go on.
+        try {
+            $this->queue($type, $data);
+        } catch (\Throwable $ex) {
+            error_log('[msp-sentinel] could not queue event ' . $type . ': ' . $ex->getMessage());
+        }
+    }
+
+    /**
+     * Insert the event into the outbox.
+     *
+     * @param array<string,mixed> $data
+     */
+    private function queue(string $type, array $data): void
+    {
         $body = json_encode([
             'id' => 'evt_' . bin2hex(random_bytes(12)),
             'type' => $type,

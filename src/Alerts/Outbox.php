@@ -12,7 +12,8 @@ use Sentinel\Core\Settings;
  * Sends queued emails and webhook posts (called by the worker every minute,
  * and right away for the "Send test" buttons).
  *
- * Retries: up to 3 attempts, 5 and 15 minutes apart. Then the delivery is
+ * Retries: up to 3 attempts, 5 and 15 minutes apart (outbound events: 8
+ * attempts over about two days). Then the delivery is
  * marked failed and the error kept (shown on the Settings page). If the
  * channel has been turned off since the message was queued, it is dropped
  * (marked failed) instead of sent.
@@ -33,6 +34,8 @@ use Sentinel\Core\Settings;
 final class Outbox
 {
     private const MAX_ATTEMPTS = 3;
+    /** Outbound events retry longer (receivers may be down for a while): gaps in minutes after each failed attempt. */
+    private const EVENT_BACKOFF = [5, 15, 60, 180, 360, 720, 1440];
     private const CLAIM_TIMEOUT_MINUTES = 10;
     /** Report attachments larger than this in total are left out; the email then points to the reports in Sentinel. */
     private const MAX_ATTACH_BYTES = 5_000_000;
@@ -51,7 +54,7 @@ final class Outbox
     {
         // Claims left by a process that died: back to the queue (or failed after the last attempt).
         $this->db->exec("UPDATE deliveries SET attempts = attempts + 1, claimed_at = NULL, last_error = 'Interrupted while sending.',
-                         status = IF(attempts + 1 >= " . self::MAX_ATTEMPTS . ", 'failed', 'pending')
+                         status = IF(attempts + 1 >= IF(channel = 'event', " . (count(self::EVENT_BACKOFF) + 1) . ', ' . self::MAX_ATTEMPTS . "), 'failed', 'pending')
                          WHERE status = 'sending' AND claimed_at < UTC_TIMESTAMP() - INTERVAL " . self::CLAIM_TIMEOUT_MINUTES . ' MINUTE');
         $sql = "SELECT * FROM deliveries WHERE status = 'pending' AND next_attempt_at <= UTC_TIMESTAMP()" . ($onlyId !== null ? ' AND id = ' . (int) $onlyId : '') . ' ORDER BY id LIMIT ' . (int) $limit;
         $stats = ['sent' => 0, 'failed' => 0];
@@ -84,6 +87,7 @@ final class Outbox
                     }
                     $this->webhook->sendRaw($this->settings->getSecret('event_webhook_url'), (string) $d['body'], [
                         'X-Sentinel-Event: ' . preg_replace('/[^a-z.]/', '', (string) $d['subject']),
+                        'X-Sentinel-Delivery: ' . (int) $d['id'],
                         'X-Sentinel-Signature: ' . \Sentinel\Api\EventPublisher::sign($secret, (string) $d['body'], time()),
                     ]);
                 } else {
@@ -95,9 +99,11 @@ final class Outbox
                 // Any error (not only RuntimeException) is recorded, so one bad row can't block the queue.
                 $message = $ex instanceof \RuntimeException ? $ex->getMessage() : 'Unexpected error while sending.';
                 $attempts = (int) $d['attempts'] + 1;
-                $final = $attempts >= self::MAX_ATTEMPTS;
+                $isEvent = $d['channel'] === 'event';
+                $final = $attempts >= ($isEvent ? count(self::EVENT_BACKOFF) + 1 : self::MAX_ATTEMPTS);
+                $wait = $isEvent ? self::EVENT_BACKOFF[min($attempts, count(self::EVENT_BACKOFF)) - 1] : ($attempts === 1 ? 5 : 15);
                 $this->db->prepare("UPDATE deliveries SET claimed_at = NULL, attempts = :a, last_error = :e, status = :s, next_attempt_at = UTC_TIMESTAMP() + INTERVAL :wait MINUTE WHERE id = :id")
-                    ->execute(['a' => $attempts, 'e' => mb_substr($message, 0, 300), 's' => $final ? 'failed' : 'pending', 'wait' => $attempts === 1 ? 5 : 15, 'id' => $d['id']]);
+                    ->execute(['a' => $attempts, 'e' => mb_substr($message, 0, 300), 's' => $final ? 'failed' : 'pending', 'wait' => $wait, 'id' => $d['id']]);
                 if ($final && (string) ($d['report_ids'] ?? '') !== '') {
                     // A monthly report email gave up: tell admins in-app, so it isn't lost silently.
                     $this->db->prepare("INSERT INTO notifications (user_id, kind, severity, title, body, link, created_at)
