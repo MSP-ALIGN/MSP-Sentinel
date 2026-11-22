@@ -112,7 +112,26 @@ final class ClientController extends Controller
             'inventoryLinks' => array_map(fn (\Sentinel\Inventory\InventorySource $s): ?array => App::inventory()->link((int) $client['id'], $s->name()), App::inventorySources()),
             'devices' => App::inventory()->devicesForClient((int) $client['id']),
             'devicePatches' => App::inventory()->patchesByDevice((int) $client['id']),
+            'agentSites' => self::agentSites($client),
         ]);
+    }
+
+    /**
+     * Per site: the active internal authorisation, all authorisations, agents and recent agent jobs.
+     *
+     * @param array<string,mixed> $client
+     * @return list<array<string,mixed>>
+     */
+    private static function agentSites(array $client): array
+    {
+        $today = \Sentinel\Scope\ScopeService::today((string) $client['timezone']);
+        $repo = App::agents();
+        $out = [];
+        foreach (App::clients()->sites((int) $client['id']) as $site) {
+            $out[] = ['site' => $site, 'active' => $repo->activeAuthorisation((int) $site['id'], $today), 'authorisations' => $repo->authorisations((int) $site['id']),
+                      'agents' => $repo->agents((int) $site['id']), 'jobs' => $repo->recentJobs((int) $site['id'], 5)];
+        }
+        return $out;
     }
 
     /** GET /clients/{id}/overview: the overview panel alone, for the 60-second refresh (any signed-in role). */

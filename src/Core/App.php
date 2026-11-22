@@ -209,7 +209,7 @@ final class App
         return new ScanWorker(self::db(), self::clients(), self::authorisations(), self::scans(), self::scope(), NmapRunner::fromConfig($config), $dns, $log,
             new TlsChecker($connector, $caFile === '' ? null : $caFile), new HttpProbe($connector), self::endpoints(), self::vulnMatcher(15), self::findingsEngine(), self::alerts(), self::outbox(), self::reportService(), new StatsRecorder(self::db()), self::events(), self::housekeeping(),
             new \Sentinel\Web\WebsiteChecker(new HttpProbe($connector)), new \Sentinel\Web\WebsiteRepository(self::db()), $dns === null ? null : new \Sentinel\Web\EmailChecker($dns), self::fixWorkflow(),
-            self::inventorySources() === [] ? null : self::inventorySync());
+            self::inventorySources() === [] ? null : self::inventorySync(), self::agentService());
     }
 
     /** Vulnerability data and match store. */
@@ -354,6 +354,24 @@ final class App
         return new \Sentinel\Inventory\InventorySync(self::db(), self::inventory(), self::inventorySources(), self::vulnMatcher(15), self::findingsEngine(), self::alerts());
     }
 
+    /** Signs internal authorisations and agent jobs (key derived from the config file's app key). */
+    public static function agentSigner(): \Sentinel\Agent\Signer
+    {
+        return \Sentinel\Agent\Signer::fromAppKey(self::config()->appKey());
+    }
+
+    /** Agents, enrolment codes, internal authorisations and agent jobs. */
+    public static function agents(): \Sentinel\Agent\AgentRepository
+    {
+        return new \Sentinel\Agent\AgentRepository(self::db(), self::crypto(), self::agentSigner());
+    }
+
+    /** Agent scheduling, job signing and results. */
+    public static function agentService(): \Sentinel\Agent\AgentService
+    {
+        return new \Sentinel\Agent\AgentService(self::db(), self::agents(), self::agentSigner(), self::scope(), self::inventory(), self::vulnMatcher(15), self::findingsEngine(), self::alerts());
+    }
+
     /** Internal devices from inventory sources. */
     public static function inventory(): \Sentinel\Inventory\InventoryRepository
     {
@@ -411,6 +429,10 @@ final class App
         $behindProxy = in_array((string) ($_SERVER['REMOTE_ADDR'] ?? ''), $trusted, true);
         $secure = $request->isSecure($behindProxy);
 
+        // On-premises agents have their own kernel too: agent tokens, signed jobs, JSON only.
+        if (str_starts_with($request->path, '/agent/v1/')) {
+            return SecurityHeaders::apply(\Sentinel\Agent\AgentKernel::handle($request), $secure);
+        }
         // The API has its own kernel: bearer tokens, no session or cookies, JSON errors.
         if ($request->path === '/api' || str_starts_with($request->path, '/api/')) {
             return SecurityHeaders::apply(\Sentinel\Api\ApiKernel::handle($request), $secure);

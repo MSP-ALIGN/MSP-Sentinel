@@ -35,10 +35,21 @@ final class Connector
     /** Build from config. In production the redirect map is always empty. */
     public static function fromConfig(Config $config): self
     {
+        return self::fromTesting((array) $config->get('testing', []));
+    }
+
+    /**
+     * Build from a "testing" settings block (the server config's, or the agent's own in test mode).
+     * Redirects apply only together with allow_documentation_ranges; without it this is a direct connector.
+     *
+     * @param array<string,mixed> $testing
+     */
+    public static function fromTesting(array $testing): self
+    {
         $map = [];
-        $testMode = $config->get('testing.allow_documentation_ranges', false) === true;
+        $testMode = ($testing['allow_documentation_ranges'] ?? false) === true;
         if ($testMode) {
-            foreach ((array) $config->get('testing.redirect_connections', []) as $from => $toPort) {
+            foreach ((array) ($testing['redirect_connections'] ?? []) as $from => $toPort) {
                 if (is_string($from) && is_int($toPort) && $toPort > 0 && $toPort < 65536) {
                     $map[$from] = $toPort;
                 }

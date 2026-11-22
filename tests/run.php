@@ -171,6 +171,10 @@ try {
         '203.0.113.190:443' => ['modern', $certs['good'], __DIR__ . '/fixtures/sites/bad-https.json'],
         '203.0.113.191:80' => ['plain', '-', __DIR__ . '/fixtures/sites/good-http.json'],
         '203.0.113.191:443' => ['modern', $certs['good'], __DIR__ . '/fixtures/sites/good-https.json'],
+        // Internal devices for the on-premises agent tests (reached only through these redirects; nothing real is contacted).
+        '10.90.0.10:443' => ['legacy', $certs['weak'], $page('nas', '<html><head><title>Example NAS Login</title></head><body><form><input type="password"></form></body></html>')],
+        '10.90.0.20:80' => ['plain', '-', $page('printer', '<html><head><title>Example Printer Status</title></head><body>Toner OK</body></html>')],
+        '10.90.0.30:8080' => ['plain', '-', $page('intranet', '<html><head><title>Intranet</title></head><body>Welcome</body></html>')],
     ];
     $redirects = [];
     foreach ($tlsMocks as $target => [$mode, $pem, $htmlFile]) {

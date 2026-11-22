@@ -51,7 +51,9 @@ $chip = static function (string $sev, string $text): string {
             <?php foreach ($devices as $d): $issues = DeviceRules::issues($d, $devicePatches[(int) $d['id']] ?? []); ?>
             <tr>
                 <td><a href="<?= e(url('/clients/' . (int) $client['id'] . '/devices/' . (int) $d['id'])) ?>"><?= e($d['name'] !== '' ? $d['name'] : $d['source_id']) ?></a>
-                    <div class="text-body-secondary"><?= e(match ($d['device_class']) { 'server' => __('Server'), 'workstation' => __('Workstation'), default => __('Other') }) ?></div></td>
+                    <div class="text-body-secondary"><?= e(match ($d['device_class']) { 'server' => __('Server'), 'workstation' => __('Workstation'), default => __('Other') }) ?>
+                        <?php if ($d['ip_addresses'] !== ''): ?> · <span class="font-monospace"><?= e(str_replace(',', ', ', mb_strimwidth((string) $d['ip_addresses'], 0, 60, '…'))) ?></span><?php endif; ?>
+                        <?php if ($d['source'] === 'agent'): ?> · <?= e(__('found by agent')) ?><?php endif; ?></div></td>
                 <td><?= e($d['os_name'] ?: '?') ?><?php if ($d['os_build'] !== ''): ?> <span class="text-body-secondary font-monospace"><?= e($d['os_build']) ?></span><?php endif; ?></td>
                 <td><?php if ($issues === []): ?><?= $chip('ok', __('No problems found')) ?><?php endif; ?>
                     <?php foreach ($issues as $i): ?><?= $chip($i['severity'], $i['text']) ?><?php endforeach; ?></td>

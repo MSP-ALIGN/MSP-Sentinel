@@ -85,7 +85,59 @@ final class NmapRunner
      */
     public function scan(string $ip, array $ports, callable $shouldStop): array
     {
-        $args = $this->arguments($ip, $ports);
+        return $this->run($this->arguments($ip, $ports), $shouldStop, $this->hostTimeoutSeconds);
+    }
+
+    /**
+     * The command line for a host-discovery sweep (on-premises agent): which hosts in the given networks are up.
+     * Unprivileged (TCP connect to common ports, no raw packets), slow timing and a rate limit, no DNS, no port scan.
+     *
+     * @param list<string> $cidrs Canonical CIDRs of ONE address family, already checked against the signed scope.
+     * @return list<string>
+     */
+    public function discoveryArguments(array $cidrs): array
+    {
+        if ($cidrs === [] || count($cidrs) > 64) {
+            throw new \InvalidArgumentException('Between 1 and 64 networks.');
+        }
+        $v6 = null;
+        foreach ($cidrs as $c) {
+            if (!is_string($c) || !preg_match('#^([0-9a-f:.]+)/(\d{1,3})$#', $c, $m) || @inet_pton($m[1]) === false || inet_ntop((string) inet_pton($m[1])) !== $m[1]) {
+                throw new \InvalidArgumentException('Networks must be canonical CIDRs.');
+            }
+            $isV6 = str_contains($m[1], ':');
+            if ($v6 !== null && $v6 !== $isV6) {
+                throw new \InvalidArgumentException('One address family per sweep.');
+            }
+            $v6 = $isV6;
+        }
+        $args = [$this->nmapPath, '-sn', '--unprivileged', '-n', '-T2', '--max-rate', '50', '--max-retries', '1', '--host-timeout', '2m', '-oX', '-'];
+        if ($v6) {
+            $args[] = '-6';
+        }
+        return array_merge($args, $cidrs);
+    }
+
+    /**
+     * Host-discovery sweep (see discoveryArguments()).
+     *
+     * @param list<string>   $cidrs
+     * @param callable():bool $shouldStop
+     * @return array{exit:int, xml:string, stderr:string, stopped:bool, timed_out:bool, overflow:bool}
+     */
+    public function discover(array $cidrs, callable $shouldStop, int $timeoutSeconds = 14400): array
+    {
+        return $this->run($this->discoveryArguments($cidrs), $shouldStop, $timeoutSeconds);
+    }
+
+    /**
+     * Run nmap with fixed arguments (no shell), reading its XML, polling $shouldStop every second.
+     *
+     * @param list<string> $args
+     * @return array{exit:int, xml:string, stderr:string, stopped:bool, timed_out:bool, overflow:bool}
+     */
+    private function run(array $args, callable $shouldStop, int $timeoutSeconds): array
+    {
         $proc = proc_open($args, [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, ['PATH' => '/usr/bin:/bin', 'LANG' => 'C']);
         if (!is_resource($proc)) {
             throw new \RuntimeException('Could not start nmap.');
@@ -98,7 +150,7 @@ final class NmapRunner
         $timedOut = false;
         $overflow = false;
         $exit = -1;
-        $deadline = time() + $this->hostTimeoutSeconds;
+        $deadline = time() + $timeoutSeconds;
         $lastPoll = 0.0;
         try {
         while (true) {

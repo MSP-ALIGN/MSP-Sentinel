@@ -361,6 +361,18 @@ final class FindingsEngine
                     ]);
                 }
             }
+            // Certificates of internal services (on-premises agent): only problems that matter inside a network
+            // (expired, old TLS, weak key); self-signed and name mismatches are normal on internal devices.
+            foreach ($this->inventory->internalTls($clientId) as $t) {
+                foreach (\Sentinel\Agent\AgentService::internalTlsIssues($t['tls']) as $issue) {
+                    $add("dport:{$t['source']}:{$t['source_id']}:{$t['port']}:{$issue['code']}", [
+                        'type' => 'tls', 'severity' => $issue['severity'], 'title' => $issue['text'],
+                        'detail' => __('Certificate {cn} issued by {issuer}, valid until {until} UTC.', ['cn' => $t['tls']['subject_cn'] ?: '?', 'issuer' => $t['tls']['issuer'] ?: '?', 'until' => $t['tls']['not_after'] ?? '?']),
+                        'target' => $t['device_name'] . ':' . $t['port'], 'evidence' => $issue['code'] . '|' . ($t['tls']['subject_cn'] ?? '') . '|' . ($t['tls']['not_after'] ?? ''),
+                        'source' => (string) $t['source'], 'device_id' => (int) $t['device_id'],
+                    ]);
+                }
+            }
             // One finding per device and program (not per CVE): it lists the CVEs and takes the grade of the worst one,
             // so a few months of browser updates can't turn into thousands of findings.
             $groups = [];

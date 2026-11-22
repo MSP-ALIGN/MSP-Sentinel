@@ -217,6 +217,24 @@ final class AlertService
         return ['assignees' => count($byUser), 'team' => $team];
     }
 
+    /**
+     * New devices found by an on-premises agent (not known to an inventory source): in-app for everyone, email to
+     * users who chose immediate alerts plus the team addresses, and the webhook. One summary per scan.
+     *
+     * @param list<array{ip:string, hostname:string, mac:string}> $devices
+     */
+    public function newDevices(int $clientId, string $site, array $devices): void
+    {
+        $client = (string) $this->db->query('SELECT name FROM clients WHERE id = ' . (int) $clientId)->fetchColumn();
+        $title = __('{n} new device(s) on the {site} network of {client}', ['n' => count($devices), 'site' => $site, 'client' => $client]);
+        $items = array_map(static fn (array $d): string => trim($d['ip'] . ' ' . ($d['hostname'] !== '' ? '(' . $d['hostname'] . ')' : '') . ($d['mac'] !== '' ? ' ' . $d['mac'] : '')), array_slice($devices, 0, 50));
+        $link = '/clients/' . $clientId . '#devices';
+        $this->notifyUsers('new_device', 'warn', $title, implode("\n", array_slice($items, 0, 20)), $link, null);
+        $this->queueEmail($this->emailRecipients(['immediate', 'both']), '[' . $client . '] ' . $title,
+            $title . "\n\n" . implode("\n", $items) . "\n\n" . __('If you don\'t recognise a device, find out what it is and who connected it.') . "\n\n" . $this->absolute($link));
+        $this->queueWebhook(['title' => $title, 'text' => __('Devices not seen on this network before.'), 'severity' => 'warn', 'client' => $client, 'items' => $items, 'link' => $this->absolute($link)]);
+    }
+
     /** One in-app notification for one user. */
     private function notifyUser(int $userId, string $kind, string $severity, string $title, string $body, string $link): void
     {

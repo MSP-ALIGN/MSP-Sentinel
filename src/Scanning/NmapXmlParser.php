@@ -21,6 +21,52 @@ final class NmapXmlParser
     private const MAX_BYTES = 5_000_000;
 
     /**
+     * Hosts that are up in a discovery sweep (nmap -sn), with the MAC address when nmap reports one.
+     *
+     * @return list<array{ip:string, mac:string}>
+     * @throws \RuntimeException when the output is not usable nmap XML.
+     */
+    public static function parseDiscovery(string $xml, int $max = 70000): array
+    {
+        if ($xml === '' || strlen($xml) > self::MAX_BYTES * 20) {
+            throw new \RuntimeException('nmap produced no usable output.');
+        }
+        $previous = libxml_use_internal_errors(true);
+        try {
+            $doc = simplexml_load_string($xml, \SimpleXMLElement::class, LIBXML_NONET | LIBXML_NOCDATA);
+        } finally {
+            libxml_clear_errors();
+            libxml_use_internal_errors($previous);
+        }
+        if ($doc === false || $doc->getName() !== 'nmaprun') {
+            throw new \RuntimeException('nmap output is not valid XML.');
+        }
+        $out = [];
+        foreach ($doc->host as $host) {
+            if ((string) ($host->status['state'] ?? '') !== 'up') {
+                continue;
+            }
+            $ip = '';
+            $mac = '';
+            foreach ($host->address as $a) {
+                $type = (string) $a['addrtype'];
+                if (($type === 'ipv4' || $type === 'ipv6') && filter_var((string) $a['addr'], FILTER_VALIDATE_IP) !== false) {
+                    $ip = inet_ntop((string) inet_pton((string) $a['addr']));
+                } elseif ($type === 'mac' && preg_match('/^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/', (string) $a['addr'])) {
+                    $mac = strtolower((string) $a['addr']);
+                }
+            }
+            if ($ip !== '') {
+                $out[$ip] = ['ip' => $ip, 'mac' => $mac];
+            }
+            if (count($out) >= $max) {
+                break;
+            }
+        }
+        return array_values($out);
+    }
+
+    /**
      * @param string $xml       nmap -oX output for one host.
      * @param string $expectIp  The address that was scanned. Hosts with any other address are ignored.
      * @return array{complete:bool, open:list<array{port:int,service:string,product:string,version:string,extra:string,cpe:string}>}

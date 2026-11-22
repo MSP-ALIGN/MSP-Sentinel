@@ -1,7 +1,7 @@
 <?php
 /**
  * One internal device: status, problems, open findings, installed software (catalogue matches and CVEs) and missing updates.
- * Expects: $client, $device (with software, patches), $deviceFindings, $issues.
+ * Expects: $client, $device (with software, patches), $deviceFindings, $issues, $ports (agent-found open ports).
  * All device data comes from the inventory source (untrusted) and is escaped.
  */
 require __DIR__ . '/../partials/finding_badges.php';
@@ -48,6 +48,21 @@ $other = count($device['software']) - count($matched);
         </div>
     </div>
     <div class="col-lg-7">
+        <?php if ($ports !== []): ?>
+        <div class="card mb-3">
+            <div class="card-header"><h2 class="card-title h6 mb-0"><?= e(__('Open services (found by the agent)')) ?></h2></div>
+            <div class="card-body small p-0">
+                <table class="table table-sm mb-0"><thead><tr><th><?= e(__('Port')) ?></th><th><?= e(__('Service')) ?></th><th><?= e(__('Certificate / page')) ?></th></tr></thead><tbody>
+                <?php foreach ($ports as $p): $tls = json_decode((string) ($p['tls'] ?? ''), true); $web = json_decode((string) ($p['web'] ?? ''), true); ?>
+                <tr><td class="font-monospace"><?= e($p['port']) ?>/tcp</td>
+                    <td><?= e(trim($p['service'] . ' · ' . trim($p['product'] . ' ' . $p['version']), ' ·')) ?></td>
+                    <td><?php if (is_array($tls)): ?><div><?= e(__('Certificate {cn}, until {until}', ['cn' => $tls['subject_cn'] ?: '?', 'until' => substr((string) ($tls['not_after'] ?? '?'), 0, 10)])) ?></div><?php endif; ?>
+                        <?php if (is_array($web)): ?><div class="text-body-secondary"><?= e(($web['title'] ?? '') !== '' ? $web['title'] : __('(no title)')) ?> · HTTP <?= e($web['status'] ?? '?') ?></div><?php endif; ?></td></tr>
+                <?php endforeach; ?>
+                </tbody></table>
+            </div>
+        </div>
+        <?php endif; ?>
         <div class="card">
             <div class="card-header"><h2 class="card-title h6 mb-0"><?= e(__('Installed software')) ?></h2></div>
             <div class="card-body small p-0">

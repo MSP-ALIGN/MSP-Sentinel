@@ -12,12 +12,51 @@ declare(strict_types=1);
  * Fixture behaviours per IP: "slow" (sleeps 30 s, for cancel and kill-switch tests),
  * "badxml", "exit1", "hosttimeout" (nmap's own host timeout). Unknown IPs have no open ports.
  * A test can "close" ports (as if the client fixed them) by listing "ip:port" strings in
- * nmap-closed.json next to the args log.
+ * nmap-closed.json next to the args log, and take hosts off the network (discovery) with
+ * nmap-down.json. Discovery sweeps (-sn) report the fixture hosts inside the given networks.
  */
 
 $log = $argv[1];
 $args = array_slice($argv, 2);
 file_put_contents($log, json_encode($args) . "\n", FILE_APPEND);
+
+// Discovery sweep (on-premises agent): exact gentle arguments, then the fixture hosts inside the given networks.
+if (in_array('-sn', $args, true)) {
+    $want = ['-sn', '--unprivileged', '-n', '-T2', '--max-rate', '50', '--max-retries', '1', '--host-timeout', '2m', '-oX', '-'];
+    if (array_slice($args, 0, count($want)) !== $want) {
+        fwrite(STDERR, "fake nmap: discovery arguments not as promised\n");
+        exit(2);
+    }
+    foreach ($args as $a) {
+        if (in_array($a, ['-sS', '-sU', '-O', '-A', '--script', '-T4', '-T5', '--privileged', '-PE', '-PP'], true)) {
+            fwrite(STDERR, "fake nmap: forbidden argument {$a}\n");
+            exit(2);
+        }
+    }
+    $cidrs = array_values(array_filter(array_slice($args, count($want)), static fn (string $a): bool => $a !== '-6'));
+    $inside = static function (string $ip, string $cidr): bool {
+        [$net, $bits] = explode('/', $cidr);
+        $a = inet_pton($ip); $b = inet_pton($net);
+        if ($a === false || $b === false || strlen($a) !== strlen($b)) { return false; }
+        for ($i = 0, $n = (int) $bits; $n > 0; $i++, $n -= 8) {
+            $m = $n >= 8 ? 0xFF : (0xFF << (8 - $n)) & 0xFF;
+            if ((ord($a[$i]) & $m) !== (ord($b[$i]) & $m)) { return false; }
+        }
+        return true;
+    };
+    $hosts = json_decode((string) file_get_contents(__DIR__ . '/../fixtures/nmap_hosts.json'), true);
+    $gone = is_file(dirname($log) . '/nmap-down.json') ? (array) json_decode((string) file_get_contents(dirname($log) . '/nmap-down.json'), true) : [];
+    echo "<?xml version=\"1.0\"?>\n<nmaprun scanner=\"nmap\" args=\"fake\">\n";
+    foreach ($hosts as $ip => $h) {
+        $in = false;
+        foreach ($cidrs as $c) { $in = $in || $inside((string) $ip, $c); }
+        if (!$in || in_array($ip, $gone, true)) { continue; }
+        echo '<host><status state="up" reason="syn-ack"/><address addr="' . htmlspecialchars((string) $ip) . '" addrtype="' . (str_contains((string) $ip, ':') ? 'ipv6' : 'ipv4') . '"/>'
+            . (isset($h['mac']) ? '<address addr="' . htmlspecialchars($h['mac']) . '" addrtype="mac"/>' : '') . "</host>\n";
+    }
+    echo "<runstats><finished exit=\"success\"/></runstats></nmaprun>\n";
+    exit(0);
+}
 
 $required = ['-sT', '--unprivileged', '-Pn', '-n', '-T2', '--max-rate', '50', '--max-retries', '2', '--host-timeout', '20m', '-sV', '--version-light', '--noninteractive', '-oX', '-'];
 $pos = 0;

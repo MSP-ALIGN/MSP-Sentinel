@@ -77,6 +77,7 @@ final class ScanWorker
         private readonly ?EmailChecker $email = null,
         private readonly ?FixWorkflow $workflow = null,
         private readonly ?\Sentinel\Inventory\InventorySync $inventory = null,
+        private readonly ?\Sentinel\Agent\AgentService $agentService = null,
     ) {
         $this->log ??= static function (string $line): void {
         };
@@ -123,6 +124,15 @@ final class ScanWorker
                 }
             } catch (\Throwable $ex) {
                 error_log('[msp-sentinel] reports failed: ' . $ex->getMessage());
+            }
+            // On-premises agents: queue due weekly full scans and daily light sweeps (the agents fetch them).
+            try {
+                $agentJobs = $this->agentService?->scheduleDue() ?? 0;
+                if ($agentJobs > 0) {
+                    $result .= " Agent jobs queued: {$agentJobs}.";
+                }
+            } catch (\Throwable $ex) {
+                error_log('[msp-sentinel] agent scheduling failed: ' . $ex->getMessage());
             }
             // Internal devices from inventory sources (NinjaOne): a few due clients per tick.
             try {

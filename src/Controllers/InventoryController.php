@@ -126,7 +126,7 @@ final class InventoryController extends Controller
         $stmt = App::db()->prepare("SELECT id, severity, status, title FROM findings WHERE client_id = :c AND device_id = :d AND status <> 'resolved' ORDER BY severity = 'fail' DESC, id");
         $stmt->execute(['c' => (int) $client['id'], 'd' => (int) $device['id']]);
         return $this->page('inventory/device', (string) ($device['name'] !== '' ? $device['name'] : $device['source_id']), [
-            'client' => $client, 'device' => $device, 'deviceFindings' => $stmt->fetchAll(),
+            'client' => $client, 'device' => $device, 'deviceFindings' => $stmt->fetchAll(), 'ports' => App::inventory()->ports((int) $device['id']),
             'issues' => \Sentinel\Inventory\DeviceRules::issues($device, $device['patches']),
         ]);
     }

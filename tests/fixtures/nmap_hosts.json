@@ -126,5 +126,54 @@
         "product": "Example remote desktop"
       }
     ]
+  },
+  "10.90.0.10": {
+    "mac": "02:00:00:00:00:10",
+    "open": [
+      {
+        "port": 22,
+        "name": "ssh",
+        "product": "OpenSSH",
+        "version": "8.9p1 Ubuntu 3ubuntu0.6",
+        "extra": "Ubuntu Linux; protocol 2.0",
+        "cpe": "cpe:/a:openbsd:openssh:8.9p1"
+      },
+      {
+        "port": 443,
+        "name": "https",
+        "product": "Example NAS web"
+      }
+    ]
+  },
+  "10.90.0.20": {
+    "mac": "02:00:00:00:00:20",
+    "open": [
+      {
+        "port": 80,
+        "name": "http",
+        "product": "Example printer web"
+      }
+    ]
+  },
+  "10.90.0.30": {
+    "open": [
+      {
+        "port": 8080,
+        "name": "http",
+        "product": "Example webserver",
+        "version": "2.4.1",
+        "cpe": "cpe:/a:example:webserver:2.4.1"
+      }
+    ]
+  },
+  "10.91.0.5": {
+    "open": [
+      {
+        "port": 22,
+        "name": "ssh",
+        "product": "OpenSSH",
+        "version": "9.6"
+      }
+    ]
   }
 }

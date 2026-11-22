@@ -290,6 +290,38 @@ final class InventoryRepository
     }
 
     /**
+     * Certificate summaries of internal services on a client's current devices (agent full scans).
+     *
+     * @return list<array{device_id:int, source:string, source_id:string, device_name:string, port:int, tls:array<string,mixed>}>
+     */
+    public function internalTls(int $clientId): array
+    {
+        $stmt = $this->db->prepare('SELECT d.id AS device_id, d.source, d.source_id, d.name AS device_name, p.port, p.tls FROM device_ports p JOIN devices d ON d.id = p.device_id
+                                    WHERE d.client_id = :c AND d.removed_at IS NULL AND p.tls IS NOT NULL');
+        $stmt->execute(['c' => $clientId]);
+        $out = [];
+        foreach ($stmt->fetchAll() as $r) {
+            $tls = json_decode((string) $r['tls'], true);
+            if (is_array($tls)) {
+                $out[] = ['device_id' => (int) $r['device_id'], 'source' => (string) $r['source'], 'source_id' => (string) $r['source_id'], 'device_name' => (string) $r['device_name'], 'port' => (int) $r['port'], 'tls' => $tls];
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Open ports of one device (agent full scans).
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function ports(int $deviceId): array
+    {
+        $stmt = $this->db->prepare('SELECT * FROM device_ports WHERE device_id = :d ORDER BY port');
+        $stmt->execute(['d' => $deviceId]);
+        return $stmt->fetchAll();
+    }
+
+    /**
      * Distinct catalogue CPEs installed on current devices (for one client or all), for matching.
      *
      * @return list<string>

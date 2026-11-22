@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 use Sentinel\Auth\Role;
 use Sentinel\Controllers\AdminController;
+use Sentinel\Controllers\AgentController;
 use Sentinel\Controllers\AlertController;
 use Sentinel\Controllers\ApiAdminController;
 use Sentinel\Controllers\AuthController;
@@ -86,6 +87,15 @@ $router->add('POST', '/suggestions/{id}/restore', [DiscoveryController::class, '
 
 // Port scans: technicians and admins queue and cancel (the outside-window override is admin-only, checked in the controller)
 $router->add('POST', '/clients/{id}/scan', [ScanController::class, 'queue'], $technician);
+// On-premises agents: technicians pause a site; admins manage authorisations, enrolment, agents, resume and scan now.
+$router->add('GET', '/clients/{id}/sites/{site}/internal-authorisations/new', [AgentController::class, 'authorisationForm'], $admin);
+$router->add('POST', '/clients/{id}/sites/{site}/internal-authorisations', [AgentController::class, 'storeAuthorisation'], $admin);
+$router->add('POST', '/clients/{id}/internal-authorisations/{auth}/revoke', [AgentController::class, 'revokeAuthorisation'], $admin);
+$router->add('POST', '/clients/{id}/sites/{site}/enrol', [AgentController::class, 'enrol'], $admin);
+$router->add('POST', '/clients/{id}/agents/{agent}/revoke', [AgentController::class, 'revokeAgent'], $admin);
+$router->add('POST', '/clients/{id}/sites/{site}/pause', [AgentController::class, 'pause'], $technician);
+$router->add('POST', '/clients/{id}/sites/{site}/resume', [AgentController::class, 'resume'], $admin);
+$router->add('POST', '/clients/{id}/sites/{site}/scan', [AgentController::class, 'scan'], $admin);
 // Internal devices (inventory sources): everyone views; technicians ask for a sync; admins link and unlink.
 $router->add('GET', '/clients/{id}/devices/{device}', [InventoryController::class, 'device']);
 $router->add('GET', '/clients/{id}/inventory/link', [InventoryController::class, 'linkForm'], $admin);
