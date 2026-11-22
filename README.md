@@ -4,14 +4,30 @@ Self-hosted security monitoring for MSPs (managed service providers). Sentinel *
 exposure and vulnerabilities across your clients, monitors them and alerts on them. Its companion product,
 MSP Align, plans, reports and proves, using Sentinel's findings.
 
-> **Status: 1.4.0 (stable).** External exposure monitoring for MSPs: the "authorised to scan"
+> **Status: 1.5.0 (stable).** External exposure monitoring for MSPs: the "authorised to scan"
 > register, passive discovery, gentle port scanning, certificate, admin-page, website and email checks, vulnerability matching
-> (NVD, CISA KEV, EPSS), findings with triage, alerts, branded reports, an API, and an installer. See
+> (NVD, CISA KEV, EPSS), findings with triage, owners, due dates and verify fix, alerts, branded reports, an API, and an installer. See
 > [`docs/ROADMAP.md`](docs/ROADMAP.md) for what comes next (internal agent, pen testing).
 
 Sentinel is free software under the [GNU AGPL-3.0](LICENSE). Each MSP runs its own copy and owns its data.
 
 ## What's new
+
+### 1.5.0 (2026-11-22): fix workflow
+
+- **Owners:** technicians and admins assign findings to an active technician or admin ("Assign to me" for yourself).
+  The new owner gets a notification and an email. Viewers see owners but can't change them.
+- **Due dates** for every open finding: known-exploited 7 days, other Fail 14 days, Warnings 30 days, counted from when
+  it was first seen or reopened. Admins change the days in Settings, or set one finding's date with a reason.
+  Accepted risks and false positives are never due.
+- **Overdue at a glance:** overdue and due-soon badges, owner and due filters, and quick links ("Assigned to me",
+  "Unassigned", "Overdue", "Due within 2 days").
+- **Daily reminders** after 07:00 UTC: each owner's overdue and due-soon findings (one note and one email), and an
+  overdue summary per client for the team addresses and webhook.
+- **Verify fix:** recheck one finding straight away (one address and port, or one domain's email records), also
+  outside the scan window, only while it is in scope and scanning isn't paused. Once every 10 minutes per finding.
+  Resolves the finding when the problem is gone.
+- The API returns each finding's owner and due date.
 
 ### 1.4.0 (2026-11-22): website and email security
 

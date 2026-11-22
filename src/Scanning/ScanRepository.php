@@ -28,11 +28,12 @@ final class ScanRepository
      * Queue a job.
      *
      * @param array<string,mixed> $payload Targets at queue time: ips/hostnames/ports for 'ports' jobs, endpoints for 'tls' jobs.
-     * @param string $type 'ports' (port scan) or 'tls' (daily certificate and web page re-check).
+     * @param string $type 'ports' (port scan), 'tls' (daily certificate and web page re-check) or 'verify'
+     *        ("verify fix" recheck of one finding: one address and port, or one domain; payload finding_id).
      */
     public function queue(int $clientId, string $trigger, ?int $userId, bool $outsideWindow, ?string $reason, array $payload, string $type = 'ports'): int
     {
-        if (!in_array($type, ['ports', 'tls'], true)) {
+        if (!in_array($type, ['ports', 'tls', 'verify'], true)) {
             throw new \InvalidArgumentException('Unknown job type.');
         }
         $this->db->prepare(
@@ -57,26 +58,28 @@ final class ScanRepository
     }
 
     /**
-     * The client's queued or running job (of one type, or any type), if any.
+     * The client's queued or running job (of one type, or any type except "verify fix" rechecks), if any.
+     * Verify jobs are tiny and never block a scan or the schedule.
      *
      * @return array<string,mixed>|null
      */
     public function openJob(int $clientId, ?string $type = null): ?array
     {
-        $stmt = $this->db->prepare("SELECT * FROM scan_jobs WHERE client_id = :c AND status IN ('queued','running') AND (:t IS NULL OR job_type = :t2) ORDER BY id LIMIT 1");
+        $stmt = $this->db->prepare("SELECT * FROM scan_jobs WHERE client_id = :c AND status IN ('queued','running') AND ((:t IS NULL AND job_type <> 'verify') OR job_type = :t2) ORDER BY id LIMIT 1");
         $stmt->execute(['c' => $clientId, 't' => $type, 't2' => $type]);
         $row = $stmt->fetch();
         return $row === false ? null : self::decode($row);
     }
 
     /**
-     * All queued jobs, oldest first.
+     * All queued jobs: verify rechecks first, then oldest first.
      *
      * @return list<array<string,mixed>>
      */
     public function queuedJobs(): array
     {
-        return array_map([self::class, 'decode'], $this->db->query("SELECT * FROM scan_jobs WHERE status = 'queued' ORDER BY id LIMIT 200")->fetchAll());
+        // "Verify fix" rechecks first: they are one port or one domain, and someone is waiting for the answer.
+        return array_map([self::class, 'decode'], $this->db->query("SELECT * FROM scan_jobs WHERE status = 'queued' ORDER BY job_type = 'verify' DESC, id LIMIT 200")->fetchAll());
     }
 
     /**

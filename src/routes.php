@@ -91,6 +91,10 @@ $router->add('POST', '/scans/{id}/cancel', [ScanController::class, 'cancel'], $t
 $router->add('GET', '/findings', [FindingController::class, 'index']);
 $router->add('GET', '/findings/{id}', [FindingController::class, 'show']);
 $router->add('POST', '/findings/{id}/triage', [FindingController::class, 'triage'], $technician);
+// Fix workflow: technicians and admins assign and verify; only admins set a finding's own due date.
+$router->add('POST', '/findings/{id}/assign', [FindingController::class, 'assign'], $technician);
+$router->add('POST', '/findings/{id}/verify', [FindingController::class, 'verify'], $technician);
+$router->add('POST', '/findings/{id}/due', [FindingController::class, 'due'], $admin);
 
 // Reports: everyone views and downloads saved reports; technicians and admins create; admins delete and set schedules and branding
 $router->add('GET', '/reports', [ReportController::class, 'index']);
@@ -119,6 +123,7 @@ $router->add('GET', '/admin', [AdminController::class, 'index'], $admin);
 $router->add('GET', '/admin/audit', [AdminController::class, 'auditLog'], $admin);
 $router->add('GET', '/admin/settings', [AdminController::class, 'settings'], $admin);
 $router->add('POST', '/admin/settings', [AdminController::class, 'saveSettings'], $admin);
+$router->add('POST', '/admin/settings/due-dates', [AdminController::class, 'saveDuePolicy'], $admin);
 $router->add('POST', '/admin/alerts', [AlertController::class, 'save'], $admin);
 $router->add('POST', '/admin/alerts/test', [AlertController::class, 'test'], $admin);
 $router->add('GET', '/admin/system', [SystemController::class, 'index'], $admin);

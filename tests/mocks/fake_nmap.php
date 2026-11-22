@@ -11,6 +11,8 @@ declare(strict_types=1);
  *
  * Fixture behaviours per IP: "slow" (sleeps 30 s, for cancel and kill-switch tests),
  * "badxml", "exit1", "hosttimeout" (nmap's own host timeout). Unknown IPs have no open ports.
+ * A test can "close" ports (as if the client fixed them) by listing "ip:port" strings in
+ * nmap-closed.json next to the args log.
  */
 
 $log = $argv[1];
@@ -44,6 +46,8 @@ foreach (explode(',', $args[$pIndex + 1]) as $part) {
 $ip = end($args);
 $hosts = json_decode((string) file_get_contents(__DIR__ . '/../fixtures/nmap_hosts.json'), true);
 $host = $hosts[$ip] ?? ['open' => []];
+$closed = is_file(dirname($log) . '/nmap-closed.json') ? (array) json_decode((string) file_get_contents(dirname($log) . '/nmap-closed.json'), true) : [];
+$host['open'] = array_values(array_filter($host['open'] ?? [], static fn (array $s): bool => !in_array($ip . ':' . $s['port'], $closed, true)));
 
 switch ($host['behaviour'] ?? '') {
     case 'slow':

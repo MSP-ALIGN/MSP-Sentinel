@@ -2,6 +2,22 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.5.0 (2026-11-22): fix workflow
+
+- **Owners:** technicians and admins assign findings to an active technician or admin ("Assign to me" for yourself).
+  The new owner gets a notification and an email. Viewers see owners but can't change them.
+- **Due dates** for every open finding: known-exploited 7 days, other Fail 14 days, Warnings 30 days, counted from when
+  it was first seen or reopened. Admins change the days in Settings, or set one finding's date with a reason.
+  Accepted risks and false positives are never due.
+- **Overdue at a glance:** overdue and due-soon badges, owner and due filters, and quick links ("Assigned to me",
+  "Unassigned", "Overdue", "Due within 2 days").
+- **Daily reminders** after 07:00 UTC: each owner's overdue and due-soon findings (one note and one email), and an
+  overdue summary per client for the team addresses and webhook.
+- **Verify fix:** recheck one finding straight away (one address and port, or one domain's email records), also
+  outside the scan window, only while it is in scope and scanning isn't paused. Once every 10 minutes per finding.
+  Resolves the finding when the problem is gone.
+- The API returns each finding's owner and due date.
+
 ### 1.4.0 (2026-11-22): website and email security
 
 - **Website checks** run with each port scan and once a day: HTTP to HTTPS redirects, logins served without

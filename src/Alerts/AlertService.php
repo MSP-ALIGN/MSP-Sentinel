@@ -24,7 +24,12 @@ use Sentinel\Core\Settings;
  *   client (new warnings, new fails, resolved findings): in-app; email to users
  *   who chose "digest" or "both", plus the team addresses; webhook;
  * - a failed scan job: in-app for admins and an email to the team addresses;
- * - a failed feed refresh: in-app for admins only, at most once a day per feed.
+ * - a failed feed refresh: in-app for admins only, at most once a day per feed;
+ * - fix workflow: a finding assigned to someone (in-app and email to that
+ *   person, unless they assigned it to themselves or chose no emails); once a
+ *   day, each assignee's overdue and due-within-2-days findings (one in-app
+ *   note and one email), and a team summary of overdue findings per client,
+ *   including unassigned ones (team addresses and webhook).
  * Feed refreshes (bin/feeds.php) send immediate alerts only, no digest: new
  * warnings and resolved items from them show in the next scan's client page
  * and the findings list.
@@ -124,6 +129,99 @@ final class AlertService
             return;
         }
         $this->notifyUsers('feed_failed', 'warn', $title, $message, '/admin/settings', 'admin');
+    }
+
+    /**
+     * A finding was assigned: tell the assignee (in-app; email unless they chose no emails).
+     * Nothing when people assign findings to themselves.
+     */
+    public function findingAssigned(int $findingId, int $assigneeId, int $byUserId): void
+    {
+        if ($assigneeId === $byUserId) {
+            return;
+        }
+        $stmt = $this->db->prepare('SELECT f.id, f.title, f.target, f.severity, f.due_at, c.name AS client_name, u.email, u.alert_email, u.is_active, b.username AS by_name
+                                    FROM findings f JOIN clients c ON c.id = f.client_id JOIN users u ON u.id = :u LEFT JOIN users b ON b.id = :b WHERE f.id = :f');
+        $stmt->execute(['u' => $assigneeId, 'b' => $byUserId, 'f' => $findingId]);
+        $f = $stmt->fetch();
+        if ($f === false || (int) $f['is_active'] !== 1) {
+            return;
+        }
+        $title = __('Assigned to you: {title}', ['title' => $f['title']]);
+        $text = __('{client}: {target}', ['client' => $f['client_name'], 'target' => $f['target']]) . "\n"
+            . __('Assigned by {user}. Due {date} UTC.', ['user' => $f['by_name'] ?? '?', 'date' => $f['due_at'] !== null ? substr((string) $f['due_at'], 0, 10) : '-']);
+        $link = '/findings/' . (int) $f['id'];
+        $this->notifyUser($assigneeId, 'assigned', (string) $f['severity'], $title, $text, $link);
+        if ((string) $f['alert_email'] !== 'none') {
+            $this->queueEmail([(string) $f['email']], '[' . $f['client_name'] . '] ' . $title, $title . "\n\n" . $text . "\n\n" . $this->absolute($link));
+        }
+    }
+
+    /**
+     * Daily fix reminders: each active assignee gets one note and one email listing their overdue findings and
+     * the ones due within 2 days; the team gets a summary of overdue findings per client (assigned or not).
+     *
+     * @param list<array<string,mixed>> $items From FixWorkflow::dueItems() (open findings of active clients).
+     * @return array{assignees:int, team:bool}
+     */
+    public function fixReminders(array $items): array
+    {
+        $byUser = [];
+        $overdueByClient = [];
+        foreach ($items as $f) {
+            $overdue = (int) $f['overdue'] === 1;
+            if ($overdue) {
+                $c = (string) $f['client_name'];
+                $overdueByClient[$c] ??= ['total' => 0, 'unassigned' => 0];
+                $overdueByClient[$c]['total']++;
+                if ($f['assigned_to'] === null) {
+                    $overdueByClient[$c]['unassigned']++;
+                }
+            }
+            if ($f['assigned_to'] !== null && (int) $f['user_active'] === 1 && in_array($f['user_role'], ['technician', 'admin'], true)) {
+                $byUser[(int) $f['assigned_to']]['user'] = $f;
+                $byUser[(int) $f['assigned_to']][$overdue ? 'overdue' : 'soon'][] = $f;
+            }
+        }
+        foreach ($byUser as $uid => $data) {
+            $overdue = $data['overdue'] ?? [];
+            $soon = $data['soon'] ?? [];
+            $title = __('Your findings: {o} overdue, {s} due within {d} days', ['o' => count($overdue), 's' => count($soon), 'd' => \Sentinel\Findings\FixWorkflow::DUE_SOON_DAYS]);
+            $lines = [];
+            foreach ($overdue as $f) {
+                $lines[] = __('OVERDUE since {date}: [{client}] {title} ({target})', ['date' => substr((string) $f['due_at'], 0, 10), 'client' => $f['client_name'], 'title' => $f['title'], 'target' => $f['target']]);
+            }
+            foreach ($soon as $f) {
+                $lines[] = __('Due {date}: [{client}] {title} ({target})', ['date' => substr((string) $f['due_at'], 0, 10), 'client' => $f['client_name'], 'title' => $f['title'], 'target' => $f['target']]);
+            }
+            $this->notifyUser($uid, 'due', $overdue !== [] ? 'fail' : 'warn', $title, implode("\n", array_slice($lines, 0, 30)), '/findings?assignee=me&due=' . ($overdue !== [] ? 'overdue' : 'soon'));
+            $u = $data['user'];
+            if ((string) $u['alert_email'] !== 'none') {
+                $this->queueEmail([(string) $u['email']], '[Sentinel] ' . $title, $title . "\n\n" . implode("\n", array_slice($lines, 0, 200)) . "\n\n" . $this->absolute('/findings?assignee=me'));
+            }
+        }
+        $team = false;
+        if ($overdueByClient !== []) {
+            ksort($overdueByClient);
+            $total = array_sum(array_column($overdueByClient, 'total'));
+            $title = __('{n} overdue finding(s) across {c} client(s)', ['n' => $total, 'c' => count($overdueByClient)]);
+            $lines = [];
+            foreach ($overdueByClient as $client => $n) {
+                $lines[] = __('{client}: {total} overdue ({unassigned} unassigned)', ['client' => $client, 'total' => $n['total'], 'unassigned' => $n['unassigned']]);
+            }
+            $this->queueEmail($this->teamAddresses(), '[Sentinel] ' . $title, $title . "\n\n" . implode("\n", $lines) . "\n\n" . $this->absolute('/findings?due=overdue'));
+            $this->queueWebhook(['title' => $title, 'text' => __('Findings past their due date.'), 'severity' => 'warn', 'client' => '', 'items' => $lines, 'link' => $this->absolute('/findings?due=overdue')]);
+            $team = true;
+        }
+        return ['assignees' => count($byUser), 'team' => $team];
+    }
+
+    /** One in-app notification for one user. */
+    private function notifyUser(int $userId, string $kind, string $severity, string $title, string $body, string $link): void
+    {
+        $this->db->prepare('INSERT INTO notifications (user_id, kind, severity, title, body, link, created_at) VALUES (:u, :k, :s, :t, :b, :l, UTC_TIMESTAMP())')
+            ->execute(['u' => $userId, 'k' => $kind, 's' => in_array($severity, ['fail', 'warn', 'info'], true) ? $severity : 'info',
+                       't' => mb_substr($title, 0, 300), 'b' => mb_substr($body, 0, 2000), 'l' => mb_substr($link, 0, 300)]);
     }
 
     /**

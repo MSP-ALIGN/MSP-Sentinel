@@ -26,6 +26,7 @@ $shown = array_slice($clientFindings, 0, 15);
             <a href="<?= e(url('/findings/' . (int) $f['id'])) ?>"><?= e($f['title']) ?></a>
             <code class="small"><?= e($f['target']) ?></code>
             <?php if ((int) $f['reappeared'] === 1): ?><span class="badge text-bg-dark"><?= e(__('Reappeared')) ?></span><?php endif; ?>
+            <span class="ms-auto d-flex gap-2 align-items-center small"><?php if (($f['assignee_username'] ?? null) !== null): ?><span class="text-body-secondary"><i class="bi bi-person me-1" aria-hidden="true"></i><?= e($f['assignee_username']) ?></span><?php endif; ?><?= $findingDueBadge($f) ?></span>
         </li>
         <?php endforeach; ?>
     </ul>

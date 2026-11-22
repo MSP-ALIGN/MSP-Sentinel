@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Sentinel\Controllers;
 
 use Sentinel\Core\App;
+use Sentinel\Findings\FixWorkflow;
 use Sentinel\Core\Request;
 use Sentinel\Core\Response;
 use Sentinel\Core\Session;
@@ -75,7 +76,33 @@ final class AdminController extends Controller
             'nvdKeyUsable' => \Sentinel\Vulns\FeedUpdater::usableKey(App::config()) !== null,
             'alerts' => self::alertSettings(),
             'branding' => ReportController::brandingSettings(),
+            'duePolicy' => App::fixWorkflow()->policy(),
         ]);
+    }
+
+    /** POST /admin/settings/due-dates: days to fix by severity (known-exploited, Fail, Warning). */
+    public function saveDuePolicy(Request $request): Response
+    {
+        $s = App::settings();
+        $new = [];
+        foreach (['kev', 'fail', 'warn'] as $k) {
+            $v = $request->input('due_days_' . $k);
+            if (!ctype_digit($v) || str_starts_with($v, '0') || (int) $v < FixWorkflow::MIN_DAYS || (int) $v > FixWorkflow::MAX_DAYS) {
+                Session::flash('danger', __('Enter whole days from {min} to {max}.', ['min' => FixWorkflow::MIN_DAYS, 'max' => FixWorkflow::MAX_DAYS]));
+                return Response::redirect('/admin/settings#due-dates');
+            }
+            $new[$k] = (int) $v;
+        }
+        $old = App::fixWorkflow()->policy();
+        foreach ($new as $k => $v) {
+            $s->set('due_days_' . $k, (string) $v);
+        }
+        App::fixWorkflow()->recomputeDue(null); // every finding that follows the policy gets its new date now
+        if ($old !== $new) {
+            $this->audit($request, 'settings.due_policy_updated', null, null, ['from' => $old, 'to' => $new]);
+        }
+        Session::flash('success', __('Due dates saved. Findings that follow the policy were updated.'));
+        return Response::redirect('/admin/settings#due-dates');
     }
 
     /**
@@ -113,7 +140,7 @@ final class AdminController extends Controller
         if ($errors !== []) {
             return $this->page('settings/index', __('Settings'), ['values' => $values, 'errors' => $errors,
                 'feeds' => App::vulns()->feedStatuses(), 'nvdKeySet' => trim((string) App::config()->get('nvd.api_key', '')) !== '',
-                'nvdKeyUsable' => \Sentinel\Vulns\FeedUpdater::usableKey(App::config()) !== null, 'alerts' => self::alertSettings(), 'branding' => ReportController::brandingSettings()], 422);
+                'nvdKeyUsable' => \Sentinel\Vulns\FeedUpdater::usableKey(App::config()) !== null, 'alerts' => self::alertSettings(), 'branding' => ReportController::brandingSettings(), 'duePolicy' => App::fixWorkflow()->policy()], 422);
         }
 
         $settings = App::settings();

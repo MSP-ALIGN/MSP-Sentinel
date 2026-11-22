@@ -117,5 +117,14 @@
         "product": "Example web"
       }
     ]
+  },
+  "203.0.113.192": {
+    "open": [
+      {
+        "port": 3389,
+        "name": "ms-wbt-server",
+        "product": "Example remote desktop"
+      }
+    ]
   }
 }

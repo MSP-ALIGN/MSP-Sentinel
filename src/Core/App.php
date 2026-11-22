@@ -208,7 +208,7 @@ final class App
         $caFile = (string) $config->get('tls.ca_file', '');
         return new ScanWorker(self::db(), self::clients(), self::authorisations(), self::scans(), self::scope(), NmapRunner::fromConfig($config), $dns, $log,
             new TlsChecker($connector, $caFile === '' ? null : $caFile), new HttpProbe($connector), self::endpoints(), self::vulnMatcher(15), self::findingsEngine(), self::alerts(), self::outbox(), self::reportService(), new StatsRecorder(self::db()), self::events(), self::housekeeping(),
-            new \Sentinel\Web\WebsiteChecker(new HttpProbe($connector)), new \Sentinel\Web\WebsiteRepository(self::db()), $dns === null ? null : new \Sentinel\Web\EmailChecker($dns));
+            new \Sentinel\Web\WebsiteChecker(new HttpProbe($connector)), new \Sentinel\Web\WebsiteRepository(self::db()), $dns === null ? null : new \Sentinel\Web\EmailChecker($dns), self::fixWorkflow());
     }
 
     /** Vulnerability data and match store. */
@@ -328,7 +328,13 @@ final class App
     /** Builds findings from the current scan data. */
     public static function findingsEngine(): FindingsEngine
     {
-        return new FindingsEngine(self::db(), self::endpoints(), self::vulns(), new \Sentinel\Web\WebsiteRepository(self::db()));
+        return new FindingsEngine(self::db(), self::endpoints(), self::vulns(), new \Sentinel\Web\WebsiteRepository(self::db()), self::fixWorkflow());
+    }
+
+    /** Fix workflow: assignment, due dates. */
+    public static function fixWorkflow(): \Sentinel\Findings\FixWorkflow
+    {
+        return new \Sentinel\Findings\FixWorkflow(self::db(), self::settings());
     }
 
     /** TLS endpoint and web page store. */

@@ -97,6 +97,16 @@ return [
             ],
         ],
         [
+            'title' => 'Fix workflow: owners, due dates and verify fix',
+            'paragraphs' => [
+                'Every open finding has a due date: 7 days for known-exploited vulnerabilities (CISA KEV), 14 days for other Fail findings and 30 days for Warnings, counted from when it was first seen or last reopened. Admins can change these days under Administration > Settings > Due dates, and can set a different date on one finding (with a reason). Accepted risks, false positives and resolved findings are never due.',
+                'Technicians and admins can assign a finding to an active technician or admin, or take it with "Assign to me". Viewers see who owns what but cannot change it. The new owner gets a notification and an email (unless they chose no emails, or assigned it to themselves). Every change is in the finding\'s history and the audit log.',
+                'Use the buttons above the findings list for "Assigned to me", "Unassigned", "Overdue" and "Due within 2 days", or the Owner and Due filters.',
+                'Once a day after 07:00 UTC, each owner gets one note and one email listing their overdue findings and those due within 2 days. The team addresses (and the webhook) get a summary of overdue findings per client, including unassigned ones.',
+                '"Verify fix" rechecks only that finding, straight away and also outside the scan window: one address and port (a port scan of just that port, then its certificate and web checks), or one domain\'s email records by DNS. It runs only while the target is in an active authorisation and scanning is not paused, respects the kill switch, is logged in the scan log, and can be used once every 10 minutes per finding. If the problem is gone the finding is resolved; the result is in the history and you get a notification. It runs within a minute, or after a scan that is already running.',
+            ],
+        ],
+        [
             'title' => 'Findings and triage',
             'paragraphs' => [
                 'Findings bring together everything Sentinel grades as Fail or Warning for a client: high-risk services open to the internet, certificate problems, exposed admin pages and portals, and vulnerabilities. Info items are not findings; they stay visible in the client panels.',
@@ -163,6 +173,16 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.5.0',
+            'date' => '2026-11-22',
+            'items' => [
+                'Fix workflow: assign findings to technicians and admins, with a notification and email for the new owner.',
+                'Due dates by severity (known-exploited 7 days, Fail 14, Warning 30), set by admins, with overdue and due-soon badges and filters.',
+                'Daily reminders: each owner\'s overdue and due-soon findings, and an overdue summary per client for the team.',
+                '"Verify fix" rechecks one finding straight away, in scope, and resolves it when the problem is gone.',
+            ],
+        ],
         [
             'version' => '1.4.0',
             'date' => '2026-11-22',

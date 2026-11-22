@@ -105,7 +105,7 @@ $canQueue = $isTech && !$archived && !$paused && !$globallyPaused;
             <?php [$bc, $bi, $bl] = $jobBadges[$job['status']] ?? $jobBadges['failed']; $sum = $job['summary']; ?>
             <li class="mb-1">
                 <span class="badge <?= e($bc) ?>"><i class="bi <?= e($bi) ?> me-1" aria-hidden="true"></i><?= e($bl) ?></span>
-                #<?= e($job['id']) ?> · <?= e(($job['job_type'] ?? 'ports') === 'tls' ? __('daily certificate check') : ($job['trigger_type'] === 'manual' ? __('manual by {user}', ['user' => $job['requested_by_username'] ?? '?']) : __('weekly'))) ?>
+                #<?= e($job['id']) ?> · <?= e(($job['job_type'] ?? 'ports') === 'tls' ? __('daily certificate check') : (($job['job_type'] ?? 'ports') === 'verify' ? __('verify fix by {user}', ['user' => $job['requested_by_username'] ?? '?']) : ($job['trigger_type'] === 'manual' ? __('manual by {user}', ['user' => $job['requested_by_username'] ?? '?']) : __('weekly')))) ?>
                 · <?= e($job['finished_at'] ?? $job['created_at']) ?> UTC
                 <?php if ($sum !== [] && ($job['job_type'] ?? 'ports') === 'tls'): ?>· <?= e(__('{n} endpoint check(s), {k} skipped', ['n' => $sum['endpoints_checked'] ?? 0, 'k' => $sum['hosts_skipped'] ?? 0])) ?>
                 <?php elseif ($sum !== []): ?>· <?= e(__('{s} scanned, {k} skipped, {f} failed, {o} open ports', ['s' => $sum['hosts_scanned'] ?? 0, 'k' => $sum['hosts_skipped'] ?? 0, 'f' => $sum['hosts_failed'] ?? 0, 'o' => $sum['open_ports'] ?? 0])) ?><?php endif; ?>

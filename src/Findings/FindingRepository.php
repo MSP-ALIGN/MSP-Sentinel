@@ -28,7 +28,8 @@ final class FindingRepository
     /**
      * Findings matching the filters, most important first (fail before warn, then newest).
      *
-     * @param array{client?:int,status?:string,severity?:string,type?:string} $f Validated filters.
+     * @param array{client?:int,status?:string,severity?:string,type?:string,assignee?:string,due?:string} $f Validated filters.
+     *        assignee: 'none' or a user ID (digits); due: 'overdue' or 'soon' (open findings only).
      * @return array{rows:list<array<string,mixed>>, total:int}
      */
     public function search(array $f, int $page = 1): array
@@ -46,13 +47,25 @@ final class FindingRepository
                 $params[$key] = $f[$key];
             }
         }
+        if (($f['assignee'] ?? '') === 'none') {
+            $where[] = 'f.assigned_to IS NULL';
+        } elseif (ctype_digit((string) ($f['assignee'] ?? ''))) {
+            $where[] = 'f.assigned_to = :assignee';
+            $params['assignee'] = (int) $f['assignee'];
+        }
+        if (($f['due'] ?? '') === 'overdue') {
+            $where[] = "f.status = 'open' AND f.due_at < UTC_TIMESTAMP()";
+        } elseif (($f['due'] ?? '') === 'soon') {
+            $where[] = "f.status = 'open' AND f.due_at >= UTC_TIMESTAMP() AND f.due_at < UTC_TIMESTAMP() + INTERVAL " . FixWorkflow::DUE_SOON_DAYS . ' DAY';
+        }
+        $order = ($f['due'] ?? '') !== '' ? 'f.due_at, f.id' : "f.status = 'open' DESC, f.severity = 'fail' DESC, f.reappeared DESC, f.first_seen DESC, f.id DESC";
         $sqlWhere = implode(' AND ', $where);
         $count = $this->db->prepare("SELECT COUNT(*) FROM findings f JOIN clients c ON c.id = f.client_id WHERE {$sqlWhere}");
         $count->execute($params);
         $stmt = $this->db->prepare(
-            "SELECT f.*, c.name AS client_name, u.username AS triaged_by_username FROM findings f
-             JOIN clients c ON c.id = f.client_id LEFT JOIN users u ON u.id = f.triaged_by
-             WHERE {$sqlWhere} ORDER BY f.status = 'open' DESC, f.severity = 'fail' DESC, f.reappeared DESC, f.first_seen DESC, f.id DESC
+            "SELECT f.*, c.name AS client_name, u.username AS triaged_by_username, au.username AS assignee_username FROM findings f
+             JOIN clients c ON c.id = f.client_id LEFT JOIN users u ON u.id = f.triaged_by LEFT JOIN users au ON au.id = f.assigned_to
+             WHERE {$sqlWhere} ORDER BY {$order}
              LIMIT :lim OFFSET :off"
         );
         foreach ($params as $k => $v) {
@@ -71,9 +84,12 @@ final class FindingRepository
      */
     public function find(int $id): ?array
     {
-        $stmt = $this->db->prepare('SELECT f.*, c.name AS client_name, c.is_archived AS client_archived, u.username AS triaged_by_username, a.last_scanned AS asset_last_scanned
+        $stmt = $this->db->prepare('SELECT f.*, c.name AS client_name, c.is_archived AS client_archived, u.username AS triaged_by_username, a.last_scanned AS asset_last_scanned,
+                                           au.username AS assignee_username, au.is_active AS assignee_active, ab.username AS assigned_by_username,
+                                           vj.status AS verify_status, vj.summary AS verify_summary, vj.finished_at AS verify_finished_at
                                     FROM findings f JOIN clients c ON c.id = f.client_id LEFT JOIN users u ON u.id = f.triaged_by
-                                    LEFT JOIN assets a ON a.id = f.asset_id WHERE f.id = :id');
+                                    LEFT JOIN assets a ON a.id = f.asset_id LEFT JOIN users au ON au.id = f.assigned_to LEFT JOIN users ab ON ab.id = f.assigned_by
+                                    LEFT JOIN scan_jobs vj ON vj.id = f.verify_job_id WHERE f.id = :id');
         $stmt->execute(['id' => $id]);
         $row = $stmt->fetch();
         return $row === false ? null : $row;
@@ -115,8 +131,10 @@ final class FindingRepository
                 return null;
             }
             // A decision has been made, so the "reappeared" flag has done its job.
-            $this->db->prepare('UPDATE findings SET status = :s, triage_note = :n, triaged_by = :u, triaged_at = UTC_TIMESTAMP(), reappeared = 0, updated_at = UTC_TIMESTAMP() WHERE id = :id')
-                ->execute(['s' => $status, 'n' => $note, 'u' => $userId, 'id' => $id]);
+            // Reopening by hand starts a new fix deadline (the caller recomputes the due date).
+            $this->db->prepare("UPDATE findings SET status = :s, triage_note = :n, triaged_by = :u, triaged_at = UTC_TIMESTAMP(), reappeared = 0, updated_at = UTC_TIMESTAMP(),
+                                       opened_at = IF(:s2 = 'open', UTC_TIMESTAMP(), opened_at), due_custom = IF(:s3 = 'open', 0, due_custom) WHERE id = :id")
+                ->execute(['s' => $status, 'n' => $note, 'u' => $userId, 's2' => $status, 's3' => $status, 'id' => $id]);
             $this->db->prepare('INSERT INTO finding_events (finding_id, event, user_id, note, created_at) VALUES (:f, :e, :u, :n, UTC_TIMESTAMP())')
                 ->execute(['f' => $id, 'e' => 'triaged_' . $status, 'u' => $userId, 'n' => $note]);
             $this->db->commit();

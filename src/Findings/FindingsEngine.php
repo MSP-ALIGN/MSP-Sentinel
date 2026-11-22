@@ -46,6 +46,7 @@ final class FindingsEngine
         private readonly EndpointRepository $endpoints,
         private readonly VulnRepository $vulns,
         private readonly ?WebsiteRepository $website = null,
+        private readonly ?FixWorkflow $workflow = null,
     ) {
     }
 
@@ -65,7 +66,9 @@ final class FindingsEngine
             throw new \RuntimeException('Another findings refresh for this client is still running.');
         }
         try {
-            return $this->refreshLocked($clientId);
+            $result = $this->refreshLocked($clientId);
+            $this->workflow?->recomputeDue($clientId); // due dates follow severity and KEV changes
+            return $result;
         } finally {
             $this->db->query("SELECT RELEASE_LOCK({$lock})");
         }
@@ -96,7 +99,8 @@ final class FindingsEngine
                 'UPDATE findings SET updated_at = IF(:chg = 1, UTC_TIMESTAMP(), updated_at), severity = :sev, title = :t, detail = :d, target = :tg, evidence = :ev, asset_id = :a, cve_id = :cve,
                         status = :st, last_seen = UTC_TIMESTAMP(), resolved_at = IF(:resolved = 1, resolved_at, NULL),
                         resolved_from = IF(:resolved2 = 1, resolved_from, NULL),
-                        reappeared = IF(:reap = 1, 1, reappeared), reopened_count = reopened_count + :inc
+                        reappeared = IF(:reap = 1, 1, reappeared), reopened_count = reopened_count + :inc,
+                        opened_at = IF(:reopen = 1, UTC_TIMESTAMP(), opened_at), due_custom = IF(:reopen2 = 1, 0, due_custom)
                  WHERE id = :id'
             );
             foreach ($current as $key => $issue) {
@@ -141,6 +145,8 @@ final class FindingsEngine
                     'chg' => ($row['severity'] !== $issue['severity'] || $row['title'] !== $issue['title'] || $row['detail'] !== $issue['detail']
                         || $row['target'] !== $issue['target'] || !$sameEvidence || $newStatus !== $status) ? 1 : 0,
                     'reap' => $status === 'resolved' ? 1 : 0, 'inc' => $status === 'resolved' || $newStatus !== $status ? 1 : 0, 'id' => $id,
+                    // Open again after being resolved, accepted or a false positive: a new fix deadline starts now.
+                    'reopen' => $reopen = ($newStatus === 'open' && $status !== 'open') ? 1 : 0, 'reopen2' => $reopen,
                 ]);
             }
             $resolve = $this->db->prepare("UPDATE findings SET resolved_from = status, status = 'resolved', resolved_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP() WHERE id = :id");
@@ -333,8 +339,8 @@ final class FindingsEngine
     private function insert(int $clientId, string $key, array $issue): int
     {
         $this->db->prepare(
-            'INSERT INTO findings (client_id, asset_id, finding_key, finding_type, severity, title, detail, target, evidence, cve_id, status, first_seen, last_seen)
-             VALUES (:c, :a, :k, :type, :sev, :t, :d, :tg, :ev, :cve, \'open\', UTC_TIMESTAMP(), UTC_TIMESTAMP())'
+            'INSERT INTO findings (client_id, asset_id, finding_key, finding_type, severity, title, detail, target, evidence, cve_id, status, first_seen, last_seen, opened_at)
+             VALUES (:c, :a, :k, :type, :sev, :t, :d, :tg, :ev, :cve, \'open\', UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP())'
         )->execute([
             'c' => $clientId, 'a' => $issue['asset_id'], 'k' => $key, 'type' => $issue['type'], 'sev' => $issue['severity'],
             't' => mb_substr($issue['title'], 0, 300), 'd' => mb_substr($issue['detail'], 0, 1000), 'tg' => mb_substr($issue['target'], 0, 320),

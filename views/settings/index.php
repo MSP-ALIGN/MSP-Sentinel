@@ -27,6 +27,7 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
     </form>
 </div>
 <?php require __DIR__ . '/alerts.php'; ?>
+<?php require __DIR__ . '/due.php'; ?>
 <?php require __DIR__ . '/branding.php'; ?>
 <div class="card mt-3">
     <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Vulnerability data')) ?></h2></div>

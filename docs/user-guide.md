@@ -23,6 +23,10 @@ A short tour for technicians and viewers. The in-app **Help** page has more deta
    - **false positive** (it isn't really a problem; it reopens if the evidence changes).
 
    Findings resolve by themselves when a check no longer sees the problem.
+
+   **Fix them on time:** assign each finding to a technician (or "Assign to me"). Every open finding has a due date
+   (known-exploited 7 days, Fail 14, Warning 30; admins can change these). Owners get a daily reminder of overdue and
+   due-soon findings. After fixing something, press **Verify fix** to recheck just that finding straight away.
 6. **Alerts**: new and returning Fail findings are announced straight away (bell, email, Teams or Slack); a summary
    follows each scan. Choose your emails on your profile.
 7. **Reports**: create an Executive summary for management and a Technical findings report for IT (Reports card on

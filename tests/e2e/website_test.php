@@ -116,7 +116,8 @@ return [
         Assert::true($full['complete'] && in_array('exposed_git', $full['checked'], true) && count($full['checked']) === 6, 'a full run checks every code');
         // A component whose version changed while its data is pending loses the old version's matches.
         $store = new WebsiteRepository($ctx->db);
-        $comp = (int) $ctx->db->query("SELECT wc.id FROM web_components wc JOIN component_vulns cv ON cv.component_id = wc.id WHERE wc.name = 'jQuery' LIMIT 1")->fetchColumn();
+        $comp = (int) $ctx->db->query("SELECT wc.id FROM web_components wc JOIN component_vulns cv ON cv.component_id = wc.id JOIN web_pages w ON w.id = wc.web_page_id
+                                   JOIN assets a ON a.id = w.asset_id WHERE wc.name = 'jQuery' AND a.client_id = {$cid} LIMIT 1")->fetchColumn();
         Assert::true($comp > 0, 'jQuery has a match to start with');
         $ctx->db->exec("UPDATE web_components SET version = '1.12.5', cpe = 'cpe:/a:jquery:jquery:1.12.5' WHERE id = {$comp}");
         App::vulnMatcher()->matchComponents($store, $cid, 0);

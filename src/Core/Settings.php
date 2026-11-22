@@ -61,6 +61,11 @@ final class Settings
         'update_latest_version' => '',
         'update_checked_at' => '',
         'retention_last_run' => '',
+        // Fix workflow: days to fix by severity (known-exploited first), and the last daily reminder run (Y-m-d, UTC).
+        'due_days_kev' => '7',
+        'due_days_fail' => '14',
+        'due_days_warn' => '30',
+        'fix_reminders_last_run' => '',
     ];
 
     /** Settings that hold secrets: stored encrypted with the app key, never shown again. */
@@ -83,13 +88,13 @@ final class Settings
         $this->set($name, $value === '' ? '' : $this->crypto->encrypt($value));
     }
 
-    /** Read a secret setting (decrypted), or '' if unset or unreadable (e.g. the app key changed). */
+    /** Read a secret setting (decrypted, straight from the database), or '' if unset or unreadable (e.g. the app key changed). */
     public function getSecret(string $name): string
     {
         if (!in_array($name, self::SECRETS, true) || $this->crypto === null) {
             throw new \InvalidArgumentException('Not a secret setting: ' . $name);
         }
-        $stored = $this->get($name);
+        $stored = $this->fresh($name); // never stale: a changed password applies at once, also in long-running processes
         if ($stored === '') {
             return '';
         }

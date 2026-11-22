@@ -17,6 +17,7 @@ use Sentinel\Reports\StatsRecorder;
 use Sentinel\Clients\ClientRepository;
 use Sentinel\Discovery\DnsClient;
 use Sentinel\Findings\FindingsEngine;
+use Sentinel\Findings\FixWorkflow;
 use Sentinel\Discovery\DnsException;
 use Sentinel\Discovery\DnsMessage;
 use Sentinel\Scope\AuthorisationRepository;
@@ -73,6 +74,7 @@ final class ScanWorker
         private readonly ?WebsiteChecker $website = null,
         private readonly ?WebsiteRepository $websiteStore = null,
         private readonly ?EmailChecker $email = null,
+        private readonly ?FixWorkflow $workflow = null,
     ) {
         $this->log ??= static function (string $line): void {
         };
@@ -114,6 +116,15 @@ final class ScanWorker
                 }
             } catch (\Throwable $ex) {
                 error_log('[msp-sentinel] reports failed: ' . $ex->getMessage());
+            }
+            // Daily fix reminders (overdue and due-soon findings) once a day.
+            try {
+                if ($this->workflow !== null && $this->alerts !== null && $this->workflow->claimDailyReminders()) {
+                    $r = $this->alerts->fixReminders($this->workflow->dueItems());
+                    $result .= " Fix reminders: {$r['assignees']} assignee(s).";
+                }
+            } catch (\Throwable $ex) {
+                error_log('[msp-sentinel] fix reminders failed: ' . $ex->getMessage());
             }
             // Send queued alerts (also when no job ran, so retries and test messages go out).
             if ($this->outbox !== null) {
@@ -257,6 +268,12 @@ final class ScanWorker
         if (($job['job_type'] ?? 'ports') === 'tls') {
             return $this->runTlsJob($job);
         }
+        if (($job['job_type'] ?? 'ports') === 'verify' && isset($job['payload']['email_domain'])) {
+            return $this->runEmailVerify($job);
+        }
+        // A "verify fix" recheck of one address and port runs like a port scan of just that port,
+        // with the host names already known for the address (for certificates and Host headers).
+        $isVerify = ($job['job_type'] ?? 'ports') === 'verify';
         $ports = array_values(array_filter((array) ($job['payload']['ports'] ?? []), 'is_int'));
         $portText = PortProfile::toNmapArg($ports);
         $overrideWindow = (int) $job['outside_window'] === 1;
@@ -273,7 +290,7 @@ final class ScanWorker
         foreach ((array) ($job['payload']['ips'] ?? []) as $ip) {
             $canonical = ScopeService::canonicalTarget((string) $ip);
             if ($canonical !== null && filter_var($canonical, FILTER_VALIDATE_IP) !== false) {
-                $targets[$canonical] ??= [];
+                $targets[$canonical] ??= array_values(array_filter((array) ($job['payload']['names'][$canonical] ?? []), 'is_string'));
             }
         }
         foreach ((array) ($job['payload']['hostnames'] ?? []) as $host) {
@@ -396,10 +413,15 @@ final class ScanWorker
                 error_log('[msp-sentinel] vulnerability matching failed for client ' . $clientId . ': ' . $ex->getMessage());
             }
         }
-        $this->checkEmail($clientId, $summary);
+        if (!$isVerify) {
+            $this->checkEmail($clientId, $summary);
+        }
         $this->refreshFindings($clientId, $summary);
+        if ($isVerify) {
+            $this->recordVerification($job, $status, $summary);
+        }
         $this->scans->finish($jobId, $status, $summary);
-        $this->publishFinished($jobId, $clientId, 'ports', $status);
+        $this->publishFinished($jobId, $clientId, $isVerify ? 'verify' : 'ports', $status);
         if ($status === 'failed') {
             try {
                 $this->alerts?->scanFailed($clientId, $jobId, implode(' ', array_slice((array) $summary['messages'], 0, 3)));
@@ -408,6 +430,84 @@ final class ScanWorker
             }
         }
         return "Job {$jobId} {$status}: {$summary['hosts_scanned']} scanned, {$summary['hosts_skipped']} skipped, {$summary['hosts_failed']} failed.";
+    }
+
+    /**
+     * "Verify fix" for an email finding: check that one domain's records again (DNS only), if it is still in scope.
+     *
+     * @param array<string,mixed> $job Already claimed.
+     */
+    private function runEmailVerify(array $job): string
+    {
+        $jobId = (int) $job['id'];
+        $clientId = (int) $job['client_id'];
+        $domain = strtolower((string) $job['payload']['email_domain']);
+        $summary = ['hosts_scanned' => 0, 'hosts_skipped' => 0, 'hosts_failed' => 0, 'open_ports' => 0, 'messages' => []];
+        $status = 'done';
+        $stop = $this->stopReason($jobId, $clientId, true);
+        if ($stop !== null) {
+            $status = $this->scans->cancelRequested($jobId) ? 'cancelled' : 'partial';
+            $summary['messages'][] = $stop;
+        } elseif (!$this->scope->isInScope($clientId, $domain)) {
+            $this->scans->logStart($jobId, $clientId, 'dns', mb_substr($domain, 0, 260), '', 'skipped_out_of_scope', __('Not in an active authorisation.'));
+            $summary['hosts_skipped']++;
+            $status = 'partial';
+            $summary['messages'][] = __('{domain} is no longer in an active authorisation.', ['domain' => $domain]);
+        } else {
+            $logId = $this->scans->logStart($jobId, $clientId, 'dns', mb_substr($domain, 0, 260), '', 'running');
+            $this->checkEmail($clientId, $summary, $domain);
+            $ok = (int) ($summary['email_domains_checked'] ?? 0) === 1 && !isset($summary['email_error']);
+            $this->scans->logFinish($logId, $ok ? 'checked' : 'error', $ok ? __('Email records checked (DNS only).') : __('The DNS lookups failed: {e}', ['e' => (string) ($summary['email_error'] ?? '?')]));
+            $summary['hosts_scanned'] = $ok ? 1 : 0;
+            $summary['hosts_failed'] = $ok ? 0 : 1;
+            $status = $ok ? 'done' : 'partial';
+        }
+        $this->refreshFindings($clientId, $summary);
+        $this->recordVerification($job, $status, $summary);
+        $this->scans->finish($jobId, $status, $summary);
+        $this->publishFinished($jobId, $clientId, 'verify', $status);
+        return "Verify job {$jobId} {$status}.";
+    }
+
+    /**
+     * Record the outcome of a "verify fix" recheck on the finding (history) and tell the person who asked.
+     * Fixed only if the finding is now resolved; "still present" only if the recheck finished completely.
+     *
+     * @param array<string,mixed> $job
+     * @param array<string,mixed> $summary Gets verify_result (fixed|still_present|not_verified).
+     */
+    private function recordVerification(array $job, string $status, array &$summary): void
+    {
+        $findingId = (int) ($job['payload']['finding_id'] ?? 0);
+        try {
+            $stmt = $this->db->prepare('SELECT id, status, title FROM findings WHERE id = :id AND client_id = :c');
+            $stmt->execute(['id' => $findingId, 'c' => (int) $job['client_id']]);
+            $f = $stmt->fetch();
+            if ($f === false) {
+                return;
+            }
+            if ($f['status'] === 'resolved') {
+                $result = 'fixed';
+                $note = __('Verify fix: the problem is no longer seen. Resolved.');
+            } elseif ($status === 'done' && (int) $summary['hosts_scanned'] > 0) {
+                $result = 'still_present';
+                $note = __('Verify fix: the problem is still seen.');
+            } else {
+                $result = 'not_verified';
+                $note = __('Verify fix could not finish: {why}', ['why' => implode(' ', array_slice(array_map('strval', (array) $summary['messages']), 0, 2)) ?: __('the check did not complete.')]);
+            }
+            $summary['verify_result'] = $result;
+            $this->db->prepare("INSERT INTO finding_events (finding_id, event, user_id, note, created_at) VALUES (:f, 'verified', NULL, :n, UTC_TIMESTAMP())")
+                ->execute(['f' => $findingId, 'n' => $note]);
+            if ($job['requested_by'] !== null) {
+                $this->db->prepare('INSERT INTO notifications (user_id, kind, severity, title, body, link, created_at) VALUES (:u, :k, :s, :t, :b, :l, UTC_TIMESTAMP())')
+                    ->execute(['u' => (int) $job['requested_by'], 'k' => 'verify', 's' => $result === 'fixed' ? 'info' : 'warn',
+                               't' => mb_substr(($result === 'fixed' ? __('Fixed: {title}', ['title' => $f['title']]) : ($result === 'still_present' ? __('Still present: {title}', ['title' => $f['title']]) : __('Not verified: {title}', ['title' => $f['title']]))), 0, 300),
+                               'b' => mb_substr($note, 0, 2000), 'l' => '/findings/' . $findingId]);
+            }
+        } catch (\Throwable $ex) {
+            error_log('[msp-sentinel] recording verification failed for finding ' . $findingId . ': ' . $ex->getMessage());
+        }
     }
 
     /**
@@ -672,9 +772,11 @@ final class ScanWorker
      * job, and domains that left the scope are removed on every job. DNS lookups only: nothing is sent
      * to the client's servers. Never fatal to the job.
      *
+     * @param string|null $force Check only this domain, now ("verify fix"); nothing if it isn't in scope.
+     *
      * @param array<string,mixed> $summary
      */
-    private function checkEmail(int $clientId, array &$summary): void
+    private function checkEmail(int $clientId, array &$summary, ?string $force = null): void
     {
         if ($this->email === null || $this->websiteStore === null) {
             return;
@@ -703,13 +805,16 @@ final class ScanWorker
             $times = $this->websiteStore->emailCheckedTimes($clientId);
             $results = [];
             foreach ($inScope as $d) {
-                if (isset($times[$d]) && strtotime($times[$d] . ' UTC') > time() - 20 * 3600) {
-                    continue; // checked recently
+                if ($force !== null ? $d !== $force : (isset($times[$d]) && strtotime($times[$d] . ' UTC') > time() - 20 * 3600)) {
+                    continue; // checked recently (or a "verify fix" of another domain)
                 }
                 // Receivers fall back to the organisational domain's DMARC record; only looked up when that domain is in scope too.
                 $parent = substr($d, (int) strpos($d, '.') + 1);
                 $org = str_contains($parent, '.') && $this->scope->isInScope($clientId, $parent) ? $parent : null;
-                $results[] = $this->email->check($d, $org);
+                $results[] = $r = $this->email->check($d, $org);
+                if ($r['error'] !== '') {
+                    $summary['email_error'] = $r['error'];
+                }
             }
             $this->websiteStore->saveEmail($clientId, $results, $inScope);
             $summary['email_domains_checked'] = count($results);

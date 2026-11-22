@@ -307,8 +307,9 @@ final class ApiController
     }
 
     private const FINDING_SELECT = 'SELECT f.id, f.client_id, f.asset_id, f.finding_key, f.finding_type, f.severity, f.title, f.detail, f.target, f.evidence, f.cve_id, f.status,
-        f.triage_note, f.triaged_at, f.reappeared, f.reopened_count, f.first_seen, f.last_seen, f.resolved_at, f.updated_at, c.is_archived AS client_archived
-        FROM findings f JOIN clients c ON c.id = f.client_id';
+        f.triage_note, f.triaged_at, f.reappeared, f.reopened_count, f.first_seen, f.last_seen, f.resolved_at, f.updated_at, c.is_archived AS client_archived,
+        f.due_at, f.assigned_at, au.username AS assignee_username
+        FROM findings f JOIN clients c ON c.id = f.client_id LEFT JOIN users au ON au.id = f.assigned_to';
 
     /**
      * WHERE parts limiting a query to the token's clients.
@@ -448,7 +449,10 @@ final class ApiController
                 'type' => $f['finding_type'], 'severity' => $f['severity'], 'status' => $f['status'], 'title' => $f['title'], 'detail' => $f['detail'],
                 'target' => $f['target'], 'evidence' => $f['evidence'], 'cve_id' => $f['cve_id'], 'triage_note' => $f['triage_note'], 'triaged_at' => self::iso($f['triaged_at']),
                 'reappeared' => (int) $f['reappeared'] === 1, 'reopened_count' => (int) $f['reopened_count'], 'first_seen' => self::iso($f['first_seen']),
-                'last_seen' => self::iso($f['last_seen']), 'resolved_at' => self::iso($f['resolved_at']), 'updated_at' => self::iso($f['updated_at'])];
+                'last_seen' => self::iso($f['last_seen']), 'resolved_at' => self::iso($f['resolved_at']), 'updated_at' => self::iso($f['updated_at']),
+                // Fix workflow (read-only here): only open findings are due.
+                'assignee' => $f['assignee_username'] ?? null, 'assigned_at' => self::iso($f['assigned_at'] ?? null),
+                'due_at' => ($f['status'] ?? '') === 'open' ? self::iso($f['due_at'] ?? null) : null];
     }
 
     /** @param array<string,mixed> $j */

@@ -27,7 +27,7 @@ curl -H "Authorization: Bearer snt_xxxxxxxxxxxx_..." https://sentinel.msp.exampl
 | `GET /clients`, `GET /clients/{id}` | read | Clients |
 | `GET /clients/{id}/summary` | read | Rating, open Fail/Warning, accepted, by type, last scan |
 | `GET /assets` | read | Assets with their open services |
-| `GET /findings`, `GET /findings/{id}` | read | Findings (filters: `client_id`, `status`, `severity`, `type`, `updated_since`); one finding includes its history |
+| `GET /findings`, `GET /findings/{id}` | read | Findings (filters: `client_id`, `status`, `severity`, `type`, `updated_since`); one finding includes its history. Each finding has `assignee` (username or null), `assigned_at` and `due_at` (open findings only) |
 | `POST /findings/{id}/triage` | triage | `{"status": "accepted"\|"false_positive"\|"open", "note": "..."}` |
 | `GET /scans`, `GET /scans/{id}` | read | Scans, newest first |
 | `POST /clients/{id}/scans` | scan | Queue a scan; it runs in the client's scan window, only in scope (202, or 409 if already queued or paused) |
