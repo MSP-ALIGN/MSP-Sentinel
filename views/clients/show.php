@@ -186,5 +186,5 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
         </div>
 <?php else: ?>
 <?php require __DIR__ . '/' . ['findings' => 'findings', 'scans' => 'scans', 'vulnerabilities' => 'vulns', 'certificates' => 'exposure', 'website' => 'website',
-    'agents' => 'agents', 'devices' => 'devices', 'discovery' => 'discovery', 'reports' => 'reports'][$section] . '.php'; ?>
+    'agents' => 'agents', 'devices' => 'devices', 'discovery' => 'discovery', 'reports' => 'reports', 'compliance' => 'compliance'][$section] . '.php'; ?>
 <?php endif; ?>

@@ -8,11 +8,14 @@ use Sentinel\Core\App;
 use Sentinel\Core\Request;
 use Sentinel\Core\Response;
 use Sentinel\Core\Session;
+use Sentinel\Compliance\AlignClient;
+use Sentinel\Compliance\AlignException;
 use Sentinel\Inventory\InventoryException;
 use Sentinel\Inventory\NinjaOneSource;
 
 /**
- * Administration > Integrations: outside systems Sentinel reads from. First: NinjaOne (read-only inventory).
+ * Administration > Integrations: outside systems Sentinel reads from: NinjaOne (read-only inventory) and MSP Align
+ * (read-only compliance frameworks, shown on each linked client's Compliance page).
  *
  * Every route is admin-only (src/routes.php) and every POST is CSRF-checked (App::dispatch).
  *
@@ -35,6 +38,14 @@ final class IntegrationsController extends Controller
                 'tested_at' => $s->get('ninjaone_tested_at'),
                 'test_result' => $s->get('ninjaone_test_result'),
                 'linked' => (int) App::db()->query("SELECT COUNT(*) FROM source_links WHERE source = 'ninjaone'")->fetchColumn(),
+            ],
+            'align' => [
+                'enabled' => $s->get('mspalign_enabled') === '1',
+                'url' => $s->get('mspalign_url'),
+                'has_key' => $s->getSecret('mspalign_api_key') !== '',
+                'tested_at' => $s->get('mspalign_tested_at'),
+                'test_result' => $s->get('mspalign_test_result'),
+                'linked' => (int) App::db()->query('SELECT COUNT(*) FROM clients WHERE align_client_id IS NOT NULL')->fetchColumn(),
             ],
         ]);
     }
@@ -117,5 +128,93 @@ final class IntegrationsController extends Controller
         $s->set('ninjaone_test_result', mb_substr($result, 0, 500));
         $this->audit($request, 'settings.ninjaone_tested', null, null, ['ok' => $ok]);
         return $back;
+    }
+
+    /** POST /admin/integrations/mspalign: save the MSP Align address, API key and on/off. */
+    public function saveAlign(Request $request): Response
+    {
+        $back = Response::redirect('/admin/integrations#mspalign');
+        $s = App::settings();
+        $url = rtrim(trim($request->input('url')), '/');
+        $url = (string) preg_replace('#/api/v1$#', '', $url); // a pasted API address becomes the app address
+        $enabled = $request->input('enabled') === '1';
+        if ($url !== '' && !AlignClient::validUrl($url, App::webhookTestMode())) {
+            Session::flash('danger', __('The MSP Align address must be an https:// address, for example https://align.msp.example.'));
+            return $back;
+        }
+        $changed = [];
+        foreach (['mspalign_url' => $url, 'mspalign_enabled' => $enabled ? '1' : '0'] as $key => $value) {
+            if ($s->get($key) !== $value) {
+                $s->set($key, $value);
+                $changed[$key] = $key === 'mspalign_enabled' ? $enabled : $value;
+            }
+        }
+        $apiKey = trim($request->raw('api_key'));
+        if ($request->input('clear_key') === '1') {
+            $s->setSecret('mspalign_api_key', '');
+            $changed['mspalign_api_key'] = 'cleared';
+        } elseif ($apiKey !== '') {
+            if (!AlignClient::validKey($apiKey)) {
+                Session::flash('danger', __('That is not an MSP Align API key (they look like msa_xxxxxxxx_...). Create one in MSP Align under Administration, API.'));
+                return $back;
+            }
+            $s->setSecret('mspalign_api_key', $apiKey);
+            $changed['mspalign_api_key'] = 'changed';
+        }
+        if ($changed !== []) {
+            $s->set('mspalign_test_result', '');
+            App::db()->exec('DELETE FROM align_cache'); // another address or key: read everything again
+            $this->audit($request, 'settings.mspalign_updated', null, null, ['changed' => $changed]);
+        }
+        Session::flash('success', __('MSP Align settings saved.'));
+        return $back;
+    }
+
+    /** POST /admin/integrations/mspalign/test: read the key's description and check its permissions. */
+    public function testAlign(Request $request): Response
+    {
+        $back = Response::redirect('/admin/integrations#mspalign');
+        $align = App::align(true);
+        if ($align === null) {
+            Session::flash('warning', __('Fill in the MSP Align address and API key first.'));
+            return $back;
+        }
+        $ok = false;
+        try {
+            $me = $align->whoami();
+            $missing = array_values(array_diff(['clients:read', 'compliance:read'], self::expand($me['scopes'])));
+            $writes = array_values(array_filter($me['scopes'], static fn (string $sc): bool => str_ends_with($sc, ':write')));
+            if ($missing !== []) {
+                $result = __('Connected, but the key is missing {list}. Give it clients:read and compliance:read in MSP Align.', ['list' => implode(', ', $missing)]);
+            } else {
+                $ok = true;
+                $result = __('Connected to MSP Align {v} as "{name}"; the key can see {n} client(s).', ['v' => $me['app_version'], 'name' => $me['name'], 'n' => count($align->clients())])
+                    . ($writes !== [] ? ' ' . __('Tip: Sentinel only reads, so a key without write permissions ({list}) is safer.', ['list' => implode(', ', $writes)]) : '');
+            }
+        } catch (AlignException $ex) {
+            $result = __('Failed: {e}', ['e' => $ex->getMessage()]);
+        }
+        Session::flash($ok ? 'success' : 'danger', $result);
+        App::settings()->set('mspalign_tested_at', gmdate('Y-m-d H:i:s'));
+        App::settings()->set('mspalign_test_result', mb_substr($result, 0, 500));
+        $this->audit($request, 'settings.mspalign_tested', null, null, ['ok' => $ok]);
+        return $back;
+    }
+
+    /**
+     * MSP Align scopes with write implying read (as MSP Align itself treats them).
+     *
+     * @param list<string> $scopes
+     * @return list<string>
+     */
+    private static function expand(array $scopes): array
+    {
+        $out = $scopes;
+        foreach ($scopes as $sc) {
+            if (str_ends_with($sc, ':write')) {
+                $out[] = substr($sc, 0, -6) . ':read';
+            }
+        }
+        return array_values(array_unique($out));
     }
 }

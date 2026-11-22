@@ -73,6 +73,12 @@ final class Settings
         'ninjaone_client_secret' => '',
         'ninjaone_tested_at' => '',
         'ninjaone_test_result' => '',
+        // MSP Align compliance (read-only): address, on/off, last test. The API key is in mspalign_api_key (SECRETS).
+        'mspalign_enabled' => '0',
+        'mspalign_url' => '',
+        'mspalign_api_key' => '',
+        'mspalign_tested_at' => '',
+        'mspalign_test_result' => '',
         // Git-based installs: commits the followed branch is ahead of the installed commit, its newest commit, and
         // the installed commit the answer is for (so an answer for an older commit is never shown after updating).
         'update_branch_behind' => '',
@@ -87,7 +93,7 @@ final class Settings
     ];
 
     /** Settings that hold secrets: stored encrypted with the app key, never shown again. */
-    public const SECRETS = ['smtp_password', 'webhook_url', 'event_webhook_url', 'event_webhook_secret', 'ninjaone_client_secret'];
+    public const SECRETS = ['smtp_password', 'webhook_url', 'event_webhook_url', 'event_webhook_secret', 'ninjaone_client_secret', 'mspalign_api_key'];
 
     /** @var array<string,string>|null */
     private ?array $cache = null;

@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.15.0](https://img.shields.io/badge/version-1.15.0-ff5a1f?style=flat-square)
+![Version 1.16.0](https://img.shields.io/badge/version-1.16.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -149,6 +149,17 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
 
 ## What's new
 
+### 1.16.0 (2026-11-22): compliance from MSP Align
+
+- New **Compliance** page for each client: the frameworks assigned to it in MSP Align, and for every control in an
+  area Sentinel checks, either the open Sentinel findings that affect it, "no problems found" (with what was
+  checked), or "not checked yet". Read-only: control statuses stay in MSP Align.
+- Findings are matched through MSP Align's crosswalk tags, so one mapping covers CIS, NIST CSF, HIPAA, CMMC,
+  ISO 27001, PCI DSS, SOC 2, cyber insurance and custom frameworks.
+- **Administration → Integrations → MSP Align**: address and API key (encrypted; a read-only key with
+  clients:read and compliance:read is all it needs), with Test connection. Admins link each client on its
+  Compliance page; the same name is suggested first.
+
 ### 1.15.0 (2026-11-22): tabbed settings and vulnerability data on demand
 
 - **Administration → Settings** is now in tabs: General, Alerts, Fix due dates, Report branding and Vulnerability
@@ -159,6 +170,9 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
   due (daily), so a new server has its vulnerability data within minutes of installing instead of the next morning.
   Existing servers pick up the new schedule with their next update. The health check no longer asks you to add a
   cron job that is already there.
+
+<details>
+<summary><b>Earlier releases (1.14.0 to 1.0.0)</b></summary>
 
 ### 1.14.0 (2026-11-22): NinjaOne
 
@@ -171,9 +185,6 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
   **Test connection** button. Link each client to its NinjaOne organisation on the client's Devices page.
 - Honest by design: anything NinjaOne doesn't report stays "unknown" rather than becoming a finding, and a sync with
   a failed page changes nothing.
-
-<details>
-<summary><b>Earlier releases (1.13.1 to 1.0.0)</b></summary>
 
 ### 1.13.1 (2026-11-22): Update now fixes
 

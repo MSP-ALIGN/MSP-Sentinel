@@ -128,6 +128,13 @@ return [
             ],
         ],
         [
+            'title' => 'Compliance (MSP Align)',
+            'paragraphs' => [
+                'With MSP Align connected (Administration, Integrations) and a client linked on its Compliance page, Sentinel shows that client\'s compliance frameworks from MSP Align. For each control in an area Sentinel checks it shows the open findings that affect it, or "No problems found" with what was checked, or "Not checked yet". Controls Sentinel can\'t see (policies, training, backups) are only counted.',
+                '"No problems found" supports a control but does not prove it is met: Sentinel sees only part of what a control asks for. Statuses are set in MSP Align; Sentinel never changes them.',
+            ],
+        ],
+        [
             'title' => 'Findings and triage',
             'paragraphs' => [
                 'Findings bring together everything Sentinel grades as Fail or Warning for a client: high-risk services open to the internet, certificate problems, exposed admin pages and portals, and vulnerabilities. Info items are not findings; they stay visible in the client panels.',
@@ -197,6 +204,14 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.16.0',
+            'date' => '2026-11-22',
+            'items' => [
+                'Compliance page per client: its MSP Align frameworks, with Sentinel findings matched to each control (read-only).',
+                'Administration, Integrations: MSP Align address and read-only API key, with Test connection.',
+            ],
+        ],
         [
             'version' => '1.15.0',
             'date' => '2026-11-22',

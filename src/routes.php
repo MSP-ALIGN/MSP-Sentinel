@@ -21,6 +21,7 @@ use Sentinel\Controllers\ApiAdminController;
 use Sentinel\Controllers\AuthController;
 use Sentinel\Controllers\AuthorisationController;
 use Sentinel\Controllers\ClientController;
+use Sentinel\Controllers\ComplianceController;
 use Sentinel\Controllers\DiscoveryController;
 use Sentinel\Controllers\FindingController;
 use Sentinel\Controllers\InventoryController;
@@ -68,7 +69,7 @@ $router->add('GET', '/clients/new', [ClientController::class, 'create'], $admin)
 $router->add('POST', '/clients', [ClientController::class, 'store'], $admin);
 $router->add('GET', '/clients/{id}', [ClientController::class, 'show']);
 // A client's pages, one per section (the overview is /clients/{id}); see ClientController::SECTIONS.
-foreach (['findings', 'scans', 'vulnerabilities', 'certificates', 'website', 'agents', 'devices', 'authorisations', 'discovery', 'reports'] as $clientSection) {
+foreach (['findings', 'scans', 'vulnerabilities', 'certificates', 'website', 'agents', 'devices', 'authorisations', 'discovery', 'reports', 'compliance'] as $clientSection) {
     $router->add('GET', '/clients/{id}/' . $clientSection, [ClientController::class, 'show']);
 }
 $router->add('GET', '/clients/{id}/overview', [ClientController::class, 'overview'], ['passive' => true]);
@@ -146,6 +147,11 @@ $router->add('GET', '/admin/audit', [AdminController::class, 'auditLog'], $admin
 $router->add('GET', '/admin/integrations', [IntegrationsController::class, 'index'], $admin);
 $router->add('POST', '/admin/integrations/ninjaone', [IntegrationsController::class, 'saveNinjaOne'], $admin);
 $router->add('POST', '/admin/integrations/ninjaone/test', [IntegrationsController::class, 'testNinjaOne'], $admin);
+$router->add('POST', '/admin/integrations/mspalign', [IntegrationsController::class, 'saveAlign'], $admin);
+$router->add('POST', '/admin/integrations/mspalign/test', [IntegrationsController::class, 'testAlign'], $admin);
+$router->add('POST', '/clients/{id}/compliance/link', [ComplianceController::class, 'link'], $admin);
+$router->add('POST', '/clients/{id}/compliance/unlink', [ComplianceController::class, 'unlink'], $admin);
+$router->add('POST', '/clients/{id}/compliance/refresh', [ComplianceController::class, 'refresh'], $technician);
 $router->add('GET', '/admin/settings', [AdminController::class, 'settings'], $admin);
 $router->add('POST', '/admin/settings', [AdminController::class, 'saveSettings'], $admin);
 $router->add('POST', '/admin/settings/due-dates', [AdminController::class, 'saveDuePolicy'], $admin);

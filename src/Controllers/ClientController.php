@@ -76,7 +76,7 @@ final class ClientController extends Controller
      * The client's pages: one URL per section (GET /clients/{id} is the overview, /clients/{id}/findings, ...),
      * each with the client's own menu in the sidebar. Only the data the section shows is loaded.
      */
-    public const SECTIONS = ['overview', 'findings', 'scans', 'vulnerabilities', 'certificates', 'website', 'agents', 'devices', 'authorisations', 'discovery', 'reports'];
+    public const SECTIONS = ['overview', 'findings', 'scans', 'vulnerabilities', 'certificates', 'website', 'agents', 'devices', 'authorisations', 'discovery', 'reports', 'compliance'];
 
     /**
      * GET /clients/{id} and /clients/{id}/{section} (any signed-in role; actions inside are role-checked by their routes).
@@ -116,6 +116,21 @@ final class ClientController extends Controller
             'discovery' => ['suggestions' => fn () => App::suggestions()->forClient($cid, 'pending'), 'dismissed' => fn () => App::suggestions()->forClient($cid, 'dismissed'),
                             'lastRun' => fn () => App::suggestions()->lastRun($cid)],
             'reports' => ['clientReports' => fn () => App::reports()->list($cid, 20)],
+            'compliance' => ['alignOn' => fn () => App::align() !== null,
+                             'compliance' => fn () => (int) ($client['align_client_id'] ?? 0) > 0 ? (new \Sentinel\Compliance\AlignCompliance(App::db(), App::align()))->forClient($client) : null,
+                             'alignClients' => function () use ($client): array {
+                                 // Choices for linking (admins, unlinked clients only); the exact-name match first.
+                                 if ((int) ($client['align_client_id'] ?? 0) > 0 || App::align() === null) {
+                                     return ['list' => [], 'error' => ''];
+                                 }
+                                 try {
+                                     $list = App::align()->clients();
+                                 } catch (\Sentinel\Compliance\AlignException $ex) {
+                                     return ['list' => [], 'error' => $ex->getMessage()];
+                                 }
+                                 usort($list, static fn (array $a, array $b): int => [strcasecmp($a['name'], (string) $client['name']) !== 0, $a['name']] <=> [strcasecmp($b['name'], (string) $client['name']) !== 0, $b['name']]);
+                                 return ['list' => $list, 'error' => ''];
+                             }],
         ];
         $data = ['client' => $client, 'section' => $section, 'today' => $today, 'globallyPaused' => App::scope()->globallyPaused(),
                  'findingCounts' => App::findings()->counts($cid), 'authorisations' => [], 'sites' => []];
@@ -146,7 +161,7 @@ final class ClientController extends Controller
                     $item('certificates', __('Certificates & web'), 'bi-shield-lock'), $item('website', __('Website & email'), 'bi-globe')]],
                 ['label' => __('Internal'), 'items' => [$item('agents', __('Agents'), 'bi-router'), $item('devices', __('Devices'), 'bi-pc-display')]],
                 ['label' => __('Manage'), 'items' => [$item('authorisations', __('Authorisations'), 'bi-file-earmark-check'), $item('discovery', __('Discovery'), 'bi-search'),
-                    $item('reports', __('Reports'), 'bi-file-earmark-text')]],
+                    $item('reports', __('Reports'), 'bi-file-earmark-text'), $item('compliance', __('Compliance'), 'bi-clipboard-check')]],
             ],
         ];
     }

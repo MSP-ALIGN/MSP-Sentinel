@@ -379,6 +379,21 @@ final class App
         return new \Sentinel\Inventory\NinjaOneSource($host, $id, $secret, $base);
     }
 
+    /**
+     * The MSP Align reader from Administration > Integrations, or null while it is off or not filled in.
+     * Plain http is accepted only in the test suite.
+     */
+    public static function align(bool $evenIfOff = false): ?\Sentinel\Compliance\AlignClient
+    {
+        $s = self::settings();
+        $url = $s->get('mspalign_url');
+        $key = $s->getSecret('mspalign_api_key');
+        if ($url === '' || $key === '' || (!$evenIfOff && $s->get('mspalign_enabled') !== '1')) {
+            return null;
+        }
+        return new \Sentinel\Compliance\AlignClient($url, $key, self::webhookTestMode());
+    }
+
     /** Inventory sync service (worker and "Sync now"). */
     public static function inventorySync(): \Sentinel\Inventory\InventorySync
     {

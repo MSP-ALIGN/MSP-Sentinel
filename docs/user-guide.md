@@ -61,6 +61,31 @@ stays unknown and is never a finding. If a sync fails part-way, nothing is chang
 
 The Sentinel server needs outbound HTTPS to your NinjaOne instance.
 
+## Compliance from MSP Align
+
+If you use MSP Align for compliance, each client's **Compliance** page in Sentinel shows the frameworks assigned to
+it in MSP Align (CIS, NIST CSF, HIPAA, CMMC, ISO 27001, PCI DSS, SOC 2, cyber insurance, your own...) and, for every
+control in an area Sentinel checks, what Sentinel found. Sentinel only reads: control statuses stay in MSP Align.
+
+1. In MSP Align, go to **Administration → API**, turn the API on, and create a key named MSP Sentinel with
+   **clients:read** and **compliance:read** only (it can be limited to some clients).
+2. In Sentinel, go to **Administration → Integrations → MSP Align**: enter MSP Align's address and the key, tick
+   **Show compliance from MSP Align**, save, and click **Test connection**.
+3. On a client's **Compliance** page, an admin links it to its MSP Align client (the same name is suggested first).
+
+How findings meet controls: MSP Align tags every control with "crosswalk tags" shared across frameworks (for
+example `net_firewall`, `email_auth`, `ep_malware`, `vuln_patch_os`). Sentinel maps each kind of finding to those
+tags, so one mapping works for every framework. Each control then shows one of:
+
+- **Open problems**: Sentinel findings in that area, with links to them.
+- **No problems found**: Sentinel checked that area for this client (it says how: external scan, email records,
+  NinjaOne device inventory, internal scan) and nothing is open. It supports the control; it doesn't prove it.
+- **Not checked yet**: the control is in an area Sentinel covers, but there's no data yet (for example no NinjaOne
+  link for device controls).
+
+Controls about things Sentinel can't see (policies, training, backups, physical security) are counted, not listed.
+MSP Align is read at most once an hour per client; **Read again** reads it now.
+
 ## On-premises agents
 
 For a client's internal network, install an agent at the site (see [`agent.md`](agent.md)): record an internal

@@ -20,6 +20,9 @@ if (is_string($log) && $log !== '') {
 }
 $fixtures = __DIR__ . '/../fixtures/feeds/';
 header('Content-Type: application/json');
+if (str_starts_with($path, '/align/')) {
+    require __DIR__ . '/align_mock.php'; // mock MSP Align API (exits)
+}
 if (str_starts_with($path, '/ninja/')) {
     require __DIR__ . '/ninjaone_mock.php'; // mock NinjaOne Public API (exits)
 }
