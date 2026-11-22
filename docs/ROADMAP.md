@@ -53,6 +53,10 @@ Each finding records its **source** (external, internal, authenticated, or pen t
 
 ## Phase 2: internal scanning with the Sentinel Agent (v2.x)
 
+> **Brought forward:** the agent's first steps shipped early, inside phase 1: on-premises agents with discovery,
+> ports, certificates and new-device alerts in **1.6.0**, and risky internal protocols in **1.7.0** (see
+> [`agent.md`](agent.md)). The version numbers below are the original plan; 2.x is kept for the later steps.
+
 A small **collector** installed at each client site. It can see inside the network, which an outside scan can't.
 
 **How it works (safe by design):**

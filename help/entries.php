@@ -193,7 +193,7 @@ return [
     ],
     'releases' => [
         [
-            'version' => '2.0.0',
+            'version' => '1.6.0',
             'date' => '2026-11-22',
             'items' => [
                 'On-premises agents: internal network scans from a small Linux appliance at the client\'s site, with signed internal authorisations and signed jobs.',

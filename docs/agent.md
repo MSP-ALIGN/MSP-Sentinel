@@ -82,5 +82,5 @@ is kept). Remove: `sudo ./install/agent-install.sh --uninstall`, and revoke the 
   distribution builds are never "confirmed" (the fix may be backported).
 - Certificates: expired, still accepting TLS 1.0/1.1, or a weak key. Self-signed certificates and name mismatches
   are normal on internal devices and are not findings.
-- Version 2.1 adds risky internal protocols (SMBv1, SMB signing off, default SNMP communities, RDP without NLA,
+- Version 1.7 adds risky internal protocols (SMBv1, SMB signing off, default SNMP communities, RDP without NLA,
   cleartext Telnet and FTP).

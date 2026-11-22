@@ -2,7 +2,7 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
-### 2.0.0 (2026-11-22): on-premises agents
+### 1.6.0 (2026-11-22): on-premises agents
 
 - **Internal scans** from a small Linux appliance at the client's site (Ubuntu 24.04 or Debian 12). The agent only
   connects out to Sentinel. Weekly full scans (devices, open services and versions, certificates, start pages) and
