@@ -162,6 +162,16 @@ for (const [kind, name] of [['technical', '33-report-technical'], ['executive', 
   await page.pdf({ path: `${out}${name}.pdf`, format: 'A4', printBackground: true });
   await page.emulateMedia({ media: 'screen' });
 }
+// API: create a demo token (on the throwaway test database), then reload so the one-time token is NOT in the screenshot.
+await page.goto(`${base}/admin/api`);
+await page.fill('#token-name', 'MSP Align');
+await page.check('#all_clients');
+await page.check('#can_triage');
+await page.fill('#ip_allowlist', '203.0.113.10');
+await page.click('form[action$="/admin/api/tokens"] button[type=submit]');
+await page.waitForURL(/\/admin\/api/);
+await page.goto(`${base}/admin/api`);
+await shot(page, '34-api');
 await page.goto(`${base}/clients`);
 await shot(page, '17-clients');
 await page.goto(`${base}/`);
