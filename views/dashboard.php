@@ -1,69 +1,15 @@
 <?php
 /**
- * Dashboard.
- * Expects: $currentUser, $version, $clientCount, $activeAuthorisations, $expiringAuthorisations, $expiringCerts, $kevCounts, $findingCounts, $globallyPaused.
+ * Main dashboard ("command view"). The panels refresh every 60 seconds from
+ * /dashboard/live while the tab is visible (public/assets/js/sentinel.js).
+ * Expects: $d (dashboard data), $globallyPaused, $currentUser. Every value is escaped.
  */
 ?>
 <?php if ($globallyPaused): ?>
 <?php require __DIR__ . '/partials/kill_switch.php'; ?>
+<?php else: ?>
+<div class="dash-actions"><?php require __DIR__ . '/partials/kill_switch.php'; ?></div>
 <?php endif; ?>
-<div class="row g-3">
-    <div class="col-md-6 col-xl-3">
-        <a class="text-decoration-none" href="<?= e(url('/findings', ['severity' => 'fail'])) ?>">
-        <div class="small-box <?= $findingCounts['fail'] > 0 ? 'text-bg-danger' : 'text-bg-success' ?>">
-            <div class="inner"><h3><?= e($findingCounts['fail']) ?></h3><p><?= e(__('Open Fail findings')) ?></p></div>
-            <i class="small-box-icon bi bi-x-octagon" aria-hidden="true"></i>
-        </div>
-        </a>
-    </div>
-    <div class="col-md-6 col-xl-3">
-        <a class="text-decoration-none" href="<?= e(url('/findings', ['severity' => 'warn'])) ?>">
-        <div class="small-box <?= $findingCounts['warn'] > 0 ? 'text-bg-warning' : 'text-bg-success' ?>">
-            <div class="inner"><h3><?= e($findingCounts['warn']) ?></h3><p><?= e(__('Open Warning findings')) ?></p></div>
-            <i class="small-box-icon bi bi-exclamation-triangle" aria-hidden="true"></i>
-        </div>
-        </a>
-    </div>
-    <div class="col-md-6 col-xl-3">
-        <a class="text-decoration-none" href="<?= e(url('/clients')) ?>">
-        <div class="small-box text-bg-primary">
-            <div class="inner"><h3><?= e($clientCount) ?></h3><p><?= e(__('Clients')) ?></p></div>
-            <i class="small-box-icon bi bi-building" aria-hidden="true"></i>
-        </div>
-        </a>
-    </div>
-    <div class="col-md-6 col-xl-3">
-        <div class="small-box <?= $activeAuthorisations > 0 ? 'text-bg-success' : 'text-bg-secondary' ?>">
-            <div class="inner"><h3><?= e($activeAuthorisations) ?></h3><p><?= e(__('Active scan authorisations')) ?></p></div>
-            <i class="small-box-icon bi bi-file-earmark-check" aria-hidden="true"></i>
-        </div>
-    </div>
-    <div class="col-md-6 col-xl-3">
-        <div class="small-box <?= $expiringAuthorisations > 0 ? 'text-bg-warning' : 'text-bg-secondary' ?>">
-            <div class="inner"><h3><?= e($expiringAuthorisations) ?></h3><p><?= e(__('Authorisations ending within 30 days')) ?></p></div>
-            <i class="small-box-icon bi bi-calendar-x" aria-hidden="true"></i>
-        </div>
-    </div>
-    <div class="col-md-6 col-xl-3">
-        <div class="small-box <?= $kevCounts['confirmed_kev'] > 0 ? 'text-bg-danger' : ($kevCounts['possible_kev'] > 0 ? 'text-bg-warning' : 'text-bg-secondary') ?>">
-            <div class="inner"><h3><?= e($kevCounts['confirmed_kev']) ?></h3><p><?= e(__('Known exploited vulnerabilities (confirmed)')) ?><?php if ($kevCounts['possible_kev'] > 0): ?><br><span class="small"><?= e(__('+{n} possible (version unknown)', ['n' => $kevCounts['possible_kev']])) ?></span><?php endif; ?></p></div>
-            <i class="small-box-icon bi bi-bug" aria-hidden="true"></i>
-        </div>
-    </div>
-    <div class="col-md-6 col-xl-3">
-        <div class="small-box <?= $expiringCerts > 0 ? 'text-bg-danger' : 'text-bg-secondary' ?>">
-            <div class="inner"><h3><?= e($expiringCerts) ?></h3><p><?= e(__('Certificates expired or expiring within 14 days')) ?></p></div>
-            <i class="small-box-icon bi bi-shield-exclamation" aria-hidden="true"></i>
-        </div>
-    </div>
-</div>
-<div class="card mt-3">
-    <div class="card-header d-flex align-items-center flex-wrap gap-2">
-        <h2 class="card-title h5 mb-0"><?= e(__('Welcome, {name}', ['name' => $currentUser['display_name']])) ?></h2>
-        <?php if (!$globallyPaused): ?><div class="ms-auto"><?php require __DIR__ . '/partials/kill_switch.php'; ?></div><?php endif; ?>
-    </div>
-    <div class="card-body">
-        <p><?= e(__('MSP Sentinel {version}. Every scan stays inside an active, approved authorisation, and every action is logged.', ['version' => $version])) ?></p>
-        <p class="mb-0"><?= e(__('New client? Add it under Clients, record the authorisation with the approved addresses, then queue a scan. Findings, alerts and reports follow from there.')) ?></p>
-    </div>
+<div id="live-dashboard" data-refresh-url="<?= e(url('/dashboard/live')) ?>" aria-live="off">
+    <?php require __DIR__ . '/dashboard/panels.php'; ?>
 </div>

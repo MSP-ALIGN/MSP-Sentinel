@@ -60,7 +60,7 @@ return [
                   'Firewall admin page reachable from the internet', 'VPN login portal exposed', 'Device management page reachable', 'Welcome to Example Co'] as $text) {
             Assert::contains($text, $page);
         }
-        Assert::contains('Certificates expired or expiring within 14 days', $admin->get('/')->body);
+        Assert::contains('Certs ≤ 14 days', $admin->get('/')->body);
         Assert::true((int) $ctx->db->query("SELECT COUNT(*) FROM scan_log WHERE job_id = {$jobId} AND result = 'checked'")->fetchColumn() === 3, 'endpoint checks logged per host');
     },
     'the daily job re-checks known endpoints and skips anything out of scope' => function (TestContext $ctx): void {

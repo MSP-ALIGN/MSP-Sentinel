@@ -8,6 +8,7 @@ use Sentinel\Core\App;
 use Sentinel\Core\HttpException;
 use Sentinel\Core\Request;
 use Sentinel\Core\Response;
+use Sentinel\Core\View;
 use Sentinel\Core\Session;
 use Sentinel\Scanning\PortProfile;
 use Sentinel\Scanning\ScanWindow;
@@ -104,7 +105,36 @@ final class ClientController extends Controller
             'findingCounts' => App::findings()->counts((int) $client['id']),
             'feeds' => App::vulns()->feedStatuses(),
             'clientReports' => App::reports()->list((int) $client['id'], 5),
+            'overview' => self::overviewData($client),
         ]);
+    }
+
+    /** GET /clients/{id}/overview: the overview panel alone, for the 60-second refresh (any signed-in role). */
+    public function overview(Request $request, array $params): Response
+    {
+        $client = $this->findOr404($params);
+        return Response::html(View::render('clients/overview', ['client' => $client, 'ov' => self::overviewData($client)], null))->header('X-Sentinel-Fragment', '1');
+    }
+
+    /**
+     * Numbers for a client's overview console.
+     *
+     * @param array<string,mixed> $client
+     * @return array<string,mixed>
+     */
+    private static function overviewData(array $client): array
+    {
+        $data = App::dashboard();
+        $cid = (int) $client['id'];
+        $summary = $data->clients($cid)[0] ?? ['fail' => 0, 'warn' => 0, 'kev' => 0, 'score' => 0, 'level' => 'good', 'last_scan' => null];
+        return [
+            'summary' => $summary,
+            'window' => \Sentinel\Dashboard\DashboardData::window($client),
+            'trend' => $data->trend(90, $cid, (int) $summary['fail'], (int) $summary['warn']),
+            'surface' => $data->surface($cid),
+            'activity' => $data->activity(6, $cid),
+            'certs' => $data->certificates(30, $cid),
+        ];
     }
 
     /** GET /clients/{id}/edit */

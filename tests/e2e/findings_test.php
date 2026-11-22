@@ -201,7 +201,8 @@ return [
         Assert::status(200, $evil, 'invalid filter values are ignored');
         Assert::notContains('<script>', $evil->body);
         $dash = $admin->get('/')->body;
-        Assert::contains('Open Fail findings', $dash);
-        Assert::contains('Open Warning findings', $dash);
+        Assert::contains('Open Fail', $dash);
+        Assert::contains('Open Warning', $dash);
+        Assert::contains('Client risk grid', $dash);
     },
 ];

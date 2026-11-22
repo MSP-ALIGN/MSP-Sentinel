@@ -2,6 +2,19 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.2.0 (2026-11-22): command-view dashboards
+
+- The **dashboard** is now a command view: a threat-level gauge (the highest client risk), totals, a 90-day trend,
+  every client ranked by risk, the worst open findings, a live activity feed, the attack surface by type of service,
+  certificates expiring in the next 30 days, and an operations strip (scanning armed or paused, worker, threat
+  feeds, scans running, scan windows, authorisations).
+- Every **client page** opens with its own overview console: risk gauge, totals, a scan-window countdown, trend,
+  attack surface, recent activity and expiring certificates.
+- A simple **risk score** (0-100, higher is worse): 20 per open known-exploited Fail, 10 per other Fail, 2 per
+  Warning, capped at 100. The formula is in Help.
+- Dashboards **refresh every minute** while visible, from Sentinel's own server only.
+- Charts are drawn on the server as SVG with text labels; severity still comes with icons and words.
+
 ### 1.1.0 (2026-11-22): console look and new logo
 
 - A new **dark "operations console" look** for the web interface: near-black panels with ember accents, angular

@@ -4,7 +4,7 @@ Self-hosted security monitoring for MSPs (managed service providers). Sentinel *
 exposure and vulnerabilities across your clients, monitors them and alerts on them. Its companion product,
 MSP Align, plans, reports and proves, using Sentinel's findings.
 
-> **Status: 1.1.0 (stable).** External exposure monitoring for MSPs: the "authorised to scan"
+> **Status: 1.2.0 (stable).** External exposure monitoring for MSPs: the "authorised to scan"
 > register, passive discovery, gentle port scanning, certificate and admin-page checks, vulnerability matching
 > (NVD, CISA KEV, EPSS), findings with triage, alerts, branded reports, an API, and an installer. See
 > [`docs/ROADMAP.md`](docs/ROADMAP.md) for what comes next (internal agent, pen testing).
@@ -12,6 +12,19 @@ MSP Align, plans, reports and proves, using Sentinel's findings.
 Sentinel is free software under the [GNU AGPL-3.0](LICENSE). Each MSP runs its own copy and owns its data.
 
 ## What's new
+
+### 1.2.0 (2026-11-22): command-view dashboards
+
+- The **dashboard** is now a command view: a threat-level gauge (the highest client risk), totals, a 90-day trend,
+  every client ranked by risk, the worst open findings, a live activity feed, the attack surface by type of service,
+  certificates expiring in the next 30 days, and an operations strip (scanning armed or paused, worker, threat
+  feeds, scans running, scan windows, authorisations).
+- Every **client page** opens with its own overview console: risk gauge, totals, a scan-window countdown, trend,
+  attack surface, recent activity and expiring certificates.
+- A simple **risk score** (0-100, higher is worse): 20 per open known-exploited Fail, 10 per other Fail, 2 per
+  Warning, capped at 100. The formula is in Help.
+- Dashboards **refresh every minute** while visible, from Sentinel's own server only.
+- Charts are drawn on the server as SVG with text labels; severity still comes with icons and words.
 
 ### 1.1.0 (2026-11-22): console look and new logo
 

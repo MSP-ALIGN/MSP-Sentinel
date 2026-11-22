@@ -115,6 +115,14 @@ return [
             ],
         ],
         [
+            'title' => 'Dashboards and the risk score',
+            'paragraphs' => [
+                'The dashboard is a command view of every client: the threat level (the highest client risk), totals, a 90-day trend of open problems, every client ranked by risk, the worst open findings, live activity, the attack surface by type of service, certificates expiring in the next 30 days, and a status strip (scanning armed or paused, worker, threat feeds, scans running, scan windows, authorisations). Each client page opens with the same kind of overview for that client.',
+                'The risk score runs from 0 to 100; higher is worse. It adds 20 for each open known-exploited Fail finding, 10 for each other open Fail, and 2 for each open Warning, up to 100. Accepted risks and false positives do not count. The level next to it is the same as in reports: At risk (any open Fail), Needs attention (Warnings only) or Good (nothing open).',
+                'Dashboards update themselves every minute while the page is open and visible. If your session has ended, updating stops; reload the page to sign in again. The trend chart fills in day by day from when Sentinel started recording.',
+            ],
+        ],
+        [
             'title' => 'Reports',
             'paragraphs' => [
                 'Open a client and use the Reports card to create a report. The Executive summary is written for the client\'s management: an overall rating, the top 5 risks in plain English, totals and a trend. The Technical findings report is for IT: every open finding with its evidence, how to fix it, what was fixed this period, and the scope and methods. Technicians and admins create reports; everyone can read them.',
@@ -144,6 +152,15 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.2.0',
+            'date' => '2026-11-22',
+            'items' => [
+                'Command-view dashboard: threat gauge, client risk grid, 90-day trend, live activity, top exposures, attack surface, certificates and an operations strip.',
+                'Every client page opens with its own overview console: risk gauge, totals, scan window countdown, trend, attack surface and recent activity.',
+                'Dashboards refresh themselves every minute while the page is open.',
+            ],
+        ],
         [
             'version' => '1.1.0',
             'date' => '2026-11-22',

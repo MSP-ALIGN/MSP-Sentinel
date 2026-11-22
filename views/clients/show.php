@@ -20,6 +20,11 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
 <div class="alert alert-secondary"><i class="bi bi-archive me-1" aria-hidden="true"></i><?= e(__('This client is archived. It will not be scanned.')) ?></div>
 <?php endif; ?>
 
+<?php if (!$archived): ?>
+<div id="live-client" data-refresh-url="<?= e(url('/clients/' . $clientId . '/overview')) ?>" aria-live="off">
+    <?php $ov = $overview; require __DIR__ . '/overview.php'; ?>
+</div>
+<?php endif; ?>
 <div class="row g-3">
     <div class="col-lg-4">
         <div class="card mb-3">

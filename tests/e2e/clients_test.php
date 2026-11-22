@@ -268,7 +268,7 @@ return [
     'dashboard counts clients and active authorisations; audit records the register' => function (TestContext $ctx): void {
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $page = $admin->get('/')->body;
-        Assert::contains('Active scan authorisations', $page);
+        Assert::contains('active scan authorisations', $page);
         Assert::contains('Pause all scanning', $page);
         $actions = $ctx->db->query('SELECT DISTINCT action FROM audit_log')->fetchAll(PDO::FETCH_COLUMN);
         foreach (['client.created', 'client.archived', 'client.restored', 'authorisation.created', 'authorisation.revoked',

@@ -53,9 +53,10 @@ return [
         }
         Assert::notContains('<script>alert(1)</script>', $page, 'feed text escaped');
         Assert::notContains('CVE-2099-0004', $page, 'rejected CVE never shown');
-        Assert::true(strpos($page, 'CVE-2099-0001') < strpos($page, 'CVE-2099-0002'), 'known exploited listed first');
+        $vulnCard = substr($page, (int) strpos($page, 'id="vulns"'));
+        Assert::true(strpos($vulnCard, 'CVE-2099-0001') < strpos($vulnCard, 'CVE-2099-0002'), 'known exploited listed first');
         $dash = $admin->get('/')->body;
-        Assert::contains('Known exploited vulnerabilities (confirmed)', $dash);
+        Assert::contains('Known exploited', $dash);
         Assert::true((bool) preg_match('/\+\d+ possible \(version unknown\)/', $dash), 'possible KEV matches counted separately');
         $settings = $admin->get('/admin/settings')->body;
         Assert::contains('3 known exploited vulnerabilities.', $settings);

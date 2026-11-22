@@ -281,6 +281,12 @@ final class App
         return new HealthCheck(self::db(), self::config(), self::settings(), SENTINEL_ROOT, self::updates());
     }
 
+    /** Dashboard numbers (main dashboard and client overviews). */
+    public static function dashboard(): \Sentinel\Dashboard\DashboardData
+    {
+        return new \Sentinel\Dashboard\DashboardData(self::db(), self::settings());
+    }
+
     /** Outbound events (event webhook). */
     public static function events(): EventPublisher
     {

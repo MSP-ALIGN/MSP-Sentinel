@@ -7,6 +7,7 @@ namespace Sentinel\Controllers;
 use Sentinel\Core\App;
 use Sentinel\Core\Request;
 use Sentinel\Core\Response;
+use Sentinel\Core\View;
 
 /**
  * Simple read-only pages: dashboard and help.
@@ -17,26 +18,50 @@ use Sentinel\Core\Response;
  */
 final class PageController extends Controller
 {
-    /** GET / */
+    /** GET /: the main dashboard ("command view"). */
     public function dashboard(Request $request): Response
     {
-        $db = App::db();
-        $clients = (int) $db->query('SELECT COUNT(*) FROM clients WHERE is_archived = 0')->fetchColumn();
-        // Authorisations valid today (UTC date: a summary only; exact per-client checks use each client's timezone).
-        $active = (int) $db->query('SELECT COUNT(*) FROM scan_authorisations a JOIN clients c ON c.id = a.client_id AND c.is_archived = 0
-                                    WHERE a.revoked_at IS NULL AND a.valid_from <= UTC_DATE() AND a.valid_until >= UTC_DATE()')->fetchColumn();
-        $expiring = (int) $db->query('SELECT COUNT(*) FROM scan_authorisations a JOIN clients c ON c.id = a.client_id AND c.is_archived = 0
-                                      WHERE a.revoked_at IS NULL AND a.valid_until BETWEEN UTC_DATE() AND UTC_DATE() + INTERVAL 30 DAY')->fetchColumn();
-        return $this->page('dashboard', __('Dashboard'), [
-            'version' => App::version(),
-            'clientCount' => $clients,
-            'activeAuthorisations' => $active,
-            'expiringAuthorisations' => $expiring,
-            'globallyPaused' => App::scope()->globallyPaused(),
-            'expiringCerts' => App::endpoints()->countExpiring(\Sentinel\Scanning\ExposureRules::EXPIRY_WARN_DAYS),
-            'kevCounts' => App::vulns()->kevCounts(),
-            'findingCounts' => App::findings()->counts(),
-        ]);
+        return $this->page('dashboard', __('Dashboard'), ['d' => self::dashboardData(), 'globallyPaused' => App::scope()->globallyPaused()]);
+    }
+
+    /** GET /dashboard/live: the dashboard panels alone, for the 60-second refresh (any signed-in role). */
+    public function live(Request $request): Response
+    {
+        return Response::html(View::render('dashboard/panels', ['d' => self::dashboardData()], null))->header('X-Sentinel-Fragment', '1');
+    }
+
+    /**
+     * Everything the dashboard shows (read-only).
+     *
+     * @return array<string,mixed>
+     */
+    private static function dashboardData(): array
+    {
+        $data = App::dashboard();
+        $clients = $data->clients();
+        $totals = ['fail' => 0, 'warn' => 0, 'kev' => 0];
+        foreach ($clients as $c) {
+            $totals['fail'] += $c['fail'];
+            $totals['warn'] += $c['warn'];
+            $totals['kev'] += $c['kev'];
+        }
+        return [
+            'clients' => $clients,
+            'totals' => $totals,
+            'trend' => $data->trend(90, null, $totals['fail'], $totals['warn']),
+            'activity' => $data->activity(12),
+            'surface' => $data->surface(),
+            'top' => $data->topExposures(6),
+            'certs' => $data->certificates(30),
+            'ops' => $data->ops(),
+            'kevPossible' => App::vulns()->kevCounts()['possible_kev'],
+            'authorisations' => [
+                'active' => (int) App::db()->query('SELECT COUNT(*) FROM scan_authorisations a JOIN clients c ON c.id = a.client_id AND c.is_archived = 0
+                    WHERE a.revoked_at IS NULL AND a.valid_from <= UTC_DATE() AND a.valid_until >= UTC_DATE()')->fetchColumn(),
+                'ending' => (int) App::db()->query('SELECT COUNT(*) FROM scan_authorisations a JOIN clients c ON c.id = a.client_id AND c.is_archived = 0
+                    WHERE a.revoked_at IS NULL AND a.valid_until BETWEEN UTC_DATE() AND UTC_DATE() + INTERVAL 30 DAY')->fetchColumn(),
+            ],
+        ];
     }
 
     /** GET /help */
