@@ -9,7 +9,8 @@ use Sentinel\Core\Settings;
 /**
  * When the vulnerability data (CISA KEV, NVD, EPSS) is refreshed. The installer's cron job runs
  * "bin/feeds.php --if-due" every 5 minutes; it only does the work when it is due: never refreshed yet, the last
- * run started 20 or more hours ago, or someone asked for a refresh ("Refresh now") since the last run started.
+ * run started 23 or more hours ago (a failed run: 1 hour, so a server whose network wasn't ready yet catches up
+ * soon without hammering the feeds), or someone asked for a refresh ("Refresh now") since the last run started.
  * So a new server gets its data within minutes, and a manual refresh starts within 5 minutes.
  *
  * State lives in settings (feeds_run_started, feeds_run_finished, feeds_requested_at, all UTC). The run itself is
@@ -19,8 +20,10 @@ use Sentinel\Core\Settings;
  */
 final class FeedSchedule
 {
-    /** Hours between scheduled refreshes. */
-    public const INTERVAL_HOURS = 20;
+    /** Hours between scheduled refreshes (23, so the daily run stays at about the same time of day). */
+    public const INTERVAL_HOURS = 23;
+    /** Hours before a failed run is tried again. */
+    public const RETRY_HOURS = 1;
 
     public function __construct(private readonly Settings $settings)
     {
@@ -32,7 +35,9 @@ final class FeedSchedule
         $now ??= time();
         $started = $this->time('feeds_run_started');
         $requested = $this->time('feeds_requested_at');
-        return $started === null || $started <= $now - self::INTERVAL_HOURS * 3600 || ($requested !== null && $requested >= $started);
+        $wait = ($this->settings->fresh('feeds_run_ok') === '0' ? self::RETRY_HOURS : self::INTERVAL_HOURS) * 3600;
+        return $started === null || $started > $now + 300 /* clock went back: don't wait for it to catch up */
+            || $started <= $now - $wait || ($requested !== null && $requested >= $started);
     }
 
     /** Ask for a refresh (Refresh now). */
@@ -49,16 +54,17 @@ final class FeedSchedule
         $this->settings->set('feeds_requested_at', ''); // this run answers the request
     }
 
-    /** Called by bin/feeds.php when a run ends. */
-    public function finished(): void
+    /** Called by bin/feeds.php when a run ends; $ok false (a feed failed) means try again in an hour. */
+    public function finished(bool $ok = true): void
     {
         $this->settings->set('feeds_run_finished', gmdate('Y-m-d H:i:s'));
+        $this->settings->set('feeds_run_ok', $ok ? '1' : '0');
     }
 
     /**
      * For the pages: requested (waiting), running, last started and finished.
      *
-     * @return array{requested:bool, running:bool, started:string, finished:string}
+     * @return array{requested:bool, running:bool, started:string, finished:string, ok:bool}
      */
     public function status(): array
     {
@@ -72,6 +78,7 @@ final class FeedSchedule
             'running' => $running,
             'started' => $started === null ? '' : gmdate('Y-m-d H:i:s', $started),
             'finished' => $finished === null ? '' : gmdate('Y-m-d H:i:s', $finished),
+            'ok' => $this->settings->fresh('feeds_run_ok') !== '0',
         ];
     }
 

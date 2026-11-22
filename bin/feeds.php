@@ -41,10 +41,14 @@ try {
         fwrite(STDOUT, "Another feeds run is still going.\n");
         exit(0);
     }
+    if (isset($opts['if-due']) && !$schedule->due()) {
+        exit(0); // another run finished while this one waited for the lock
+    }
     $schedule->started();
-    register_shutdown_function(static function () use ($schedule): void {
+    $exit = 1; // until the run gets to its end
+    register_shutdown_function(static function () use ($schedule, &$exit): void {
         try {
-            $schedule->finished();
+            $schedule->finished($exit === 0);
         } catch (\Throwable) {
             // the database went away: the next run starts over
         }
@@ -95,6 +99,7 @@ try {
     }
     exit($exit);
 } catch (\Throwable $ex) {
+    $exit = 1; // the shutdown function records the run as failed (retried within an hour)
     fwrite(STDERR, 'Feeds failed: ' . $ex->getMessage() . "\n");
     exit(1);
 }

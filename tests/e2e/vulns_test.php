@@ -151,8 +151,22 @@ return [
         $st = $schedule->status();
         Assert::true(!$st['requested'] && !$st['running'] && $st['finished'] !== '', 'finished: ' . json_encode($st));
         Assert::true(!$schedule->due(), 'not due again until tomorrow');
-        // Due again after 20 hours, or straight away on a server that never refreshed.
-        Assert::true($schedule->due(time() + 21 * 3600), 'daily');
+        // One run at a time: while another holds the lock, a second run exits at once.
+        $s->set('feeds_requested_at', gmdate('Y-m-d H:i:s', time() + 1));
+        $lockName = 'msp_sentinel_feeds_' . substr(hash('sha256', (string) $ctx->db->query('SELECT DATABASE()')->fetchColumn()), 0, 16);
+        $ctx->db->query("SELECT GET_LOCK('{$lockName}', 0)");
+        [, $out] = $ctx->cli('bin/feeds.php', ['--if-due']);
+        $ctx->db->query("SELECT RELEASE_LOCK('{$lockName}')");
+        Assert::contains('Another feeds run is still going', $out);
+        $s->set('feeds_requested_at', '');
+        // Due again after 23 hours (about the same time each day); a failed run is retried after an hour.
+        Assert::true(!$schedule->due(time() + 22 * 3600) && $schedule->due(time() + 23 * 3600 + 60), 'daily');
+        $schedule->finished(false);
+        Assert::true($schedule->due(time() + 3700) && !$schedule->due(time() + 1800), 'failed run: retried after an hour');
+        Assert::contains('tries again within an hour', $admin->get('/admin/settings')->body);
+        $schedule->finished(true);
+        $s->set('feeds_run_started', gmdate('Y-m-d H:i:s', time() + 86400));
+        Assert::true($schedule->due(), 'clock went back: not stuck');
         $s->set('feeds_run_started', '');
         Assert::true($schedule->due(), 'never refreshed: due');
         // Technicians can't ask.

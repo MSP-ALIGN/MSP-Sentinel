@@ -64,6 +64,7 @@ final class Settings
         'feeds_run_started' => '',
         'feeds_run_finished' => '',
         'feeds_requested_at' => '',
+        'feeds_run_ok' => '',
         // NinjaOne (Administration > Integrations): instance host, API client ID, and on/off. The client secret
         // is in ninjaone_client_secret (encrypted, see SECRETS).
         'ninjaone_enabled' => '0',

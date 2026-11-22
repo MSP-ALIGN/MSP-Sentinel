@@ -134,7 +134,7 @@ final class AlertService
         if ((int) $stmt->fetchColumn() > 0) {
             return;
         }
-        $this->notifyUsers('feed_failed', 'warn', $title, $message, '/admin/settings', 'admin');
+        $this->notifyUsers('feed_failed', 'warn', $title, $message, '/admin/settings#feeds', 'admin');
     }
 
     /**
