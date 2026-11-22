@@ -1,6 +1,7 @@
 # Responsible use
 
-Sentinel scans systems on the internet. Scanning without permission can be illegal, and laws differ by country.
+Sentinel scans systems on the internet and, with an on-premises agent, inside clients' networks. Scanning without
+permission can be illegal, and laws differ by country.
 
 - **Only scan what you are authorised to scan.** Get written permission from each client (see the
   [sample form](authorisation-form.md)), and from hosting or cloud providers where their terms require it.

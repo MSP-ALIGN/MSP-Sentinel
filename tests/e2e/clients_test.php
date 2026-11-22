@@ -53,13 +53,13 @@ return [
             'scan_window_start' => '22:00', 'scan_window_end' => '22:00', 'notes' => '']);
         Assert::contains('must not start and end at the same time', $same->body);
 
-        $id = $makeClient($ctx, $admin, 'Contoso Example Ltd');
+        $id = $makeClient($ctx, $admin, 'Riverside Example Ltd');
         $page = $admin->get('/clients/' . $id);
         Assert::status(200, $page);
         Assert::contains('Main site', $page->body);
         Assert::contains('No authorisation recorded', $page->body);
         Assert::contains('Cannot be scanned', $page->body);
-        $dup = $admin->submit('/clients/new', '/clients', ['name' => 'CONTOSO EXAMPLE LTD', 'itflow_client_id' => '', 'timezone' => 'UTC',
+        $dup = $admin->submit('/clients/new', '/clients', ['name' => 'RIVERSIDE EXAMPLE LTD', 'itflow_client_id' => '', 'timezone' => 'UTC',
             'scan_window_start' => '22:00', 'scan_window_end' => '06:00', 'notes' => '']);
         Assert::contains('Another client already has this name', $dup->body);
     },
@@ -90,7 +90,7 @@ return [
     },
     'recording an authorisation validates dates, confirmation and scope' => function (TestContext $ctx) use ($makeClient, $authForm): void {
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
-        $id = $makeClient($ctx, $admin, 'Fabrikam Example Inc');
+        $id = $makeClient($ctx, $admin, 'Lakeshore Example Inc');
         $form = '/clients/' . $id . '/authorisations/new';
         $post = '/clients/' . $id . '/authorisations';
 
@@ -115,12 +115,12 @@ return [
         $twoYears = (new DateTimeImmutable($from))->modify('+2 years');
         Assert::status(422, $admin->submit($form, $post, $authForm('203.0.113.10', ['valid_from' => $from, 'valid_until' => $twoYears->modify('+1 day')->format('Y-m-d')])), 'two years and a day refused');
 
-        $ok = $admin->submit($form, $post, $authForm("# public IPs\n203.0.113.10\n198.51.100.0/24\nfabrikam.example\n*.fabrikam.example"));
+        $ok = $admin->submit($form, $post, $authForm("# public IPs\n203.0.113.10\n198.51.100.0/24\nlakeshore.example\n*.lakeshore.example"));
         Assert::redirect('/clients/' . $id, $ok);
         $page = $admin->get('/clients/' . $id);
         Assert::contains('Authorisation recorded with 4 scope entries', $page->body);
         Assert::contains('Dana Example', $page->body);
-        Assert::contains('*.fabrikam.example', $page->body);
+        Assert::contains('*.lakeshore.example', $page->body);
         Assert::contains('Can be scanned: 1 active authorisation', $page->body);
     },
     'scope check: only in-scope targets of an active authorisation pass' => function (TestContext $ctx) use ($makeClient, $authForm, $inScope): void {

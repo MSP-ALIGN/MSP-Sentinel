@@ -21,13 +21,14 @@ MariaDB. The installer does everything; the manual steps at the end are for othe
 1. Download the release and check it:
 
    ```sh
-   curl -LO https://github.com/msp-align/msp-sentinel/releases/download/v1.0.0/msp-sentinel-1.0.0.tar.gz
-   curl -LO https://github.com/msp-align/msp-sentinel/releases/download/v1.0.0/SHA256SUMS
-   curl -LO https://github.com/msp-align/msp-sentinel/releases/download/v1.0.0/SHA256SUMS.asc
+   V=1.7.0   # the release you are installing (see the Releases page)
+   curl -LO https://github.com/msp-align/msp-sentinel/releases/download/v$V/msp-sentinel-$V.tar.gz
+   curl -LO https://github.com/msp-align/msp-sentinel/releases/download/v$V/SHA256SUMS
+   curl -LO https://github.com/msp-align/msp-sentinel/releases/download/v$V/SHA256SUMS.asc
    gpg --verify SHA256SUMS.asc SHA256SUMS      # check the key fingerprint against SECURITY.md
    sha256sum -c SHA256SUMS
-   tar xzf msp-sentinel-1.0.0.tar.gz
-   cd msp-sentinel-1.0.0
+   tar xzf msp-sentinel-$V.tar.gz
+   cd msp-sentinel-$V
    ```
 
 2. See what the installer would do (changes nothing):

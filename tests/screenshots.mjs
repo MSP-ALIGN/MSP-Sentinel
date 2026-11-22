@@ -71,7 +71,7 @@ for (const [path, name] of [['/', '04-dashboard'], ['/users', '05-users'], ['/us
 
 // Clients and the authorised-to-scan register (made-up client, documentation addresses only).
 await page.goto(`${base}/clients/new`);
-await page.fill('#name', 'Contoso Example Ltd');
+await page.fill('#name', 'Riverside Example Ltd');
 await page.fill('#itflow_client_id', '17');
 await page.selectOption('#timezone', 'Europe/London');
 await page.fill('#scan_window_start', '00:00');
@@ -84,7 +84,7 @@ await page.goto(`${clientUrl}/authorisations/new`);
 await page.fill('#approved_by_name', 'Dana Example');
 await page.fill('#approved_by_role', 'Managing Director');
 await page.fill('#document_ref', 'TICKET-1001');
-await page.fill('#scope', '# Office and website\n203.0.113.10\n198.51.100.0/28\ncontoso.example\n*.contoso.example\n10.0.0.0/24');
+await page.fill('#scope', '# Office and website\n203.0.113.10\n198.51.100.0/28\nriverside.example\n*.riverside.example\n10.0.0.0/24');
 await page.check('#confirm');
 await page.click('.app-content form button.btn-primary[type=submit]');
 await shot(page, '15-authorisation-errors');

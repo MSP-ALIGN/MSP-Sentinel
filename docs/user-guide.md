@@ -60,5 +60,6 @@ distribution build that may already carry the fix). Sentinel never guesses a ver
 
 ## What Sentinel is not
 
-It checks the outside of your clients' networks gently and honestly. It is not a full penetration test, it does
-not test internal networks (that comes with the agent in version 2), and it is **not a PCI ASV scan**.
+It checks your clients' networks gently and honestly: from the outside, and inside where an on-premises agent is
+installed. It does not log in to systems, guess passwords (apart from the optional read of default SNMP community
+names by agents) or exploit anything. It is not a penetration test, and it is **not a PCI ASV scan**.

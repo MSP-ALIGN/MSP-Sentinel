@@ -4,7 +4,7 @@
 
 | Job | When (installer default) | What it does |
 |---|---|---|
-| `bin/worker.php` | every minute | Runs queued and weekly scans, daily certificate checks, sends alerts and events, creates monthly reports, records trend counts, checks for updates and applies data retention (daily). Runs as `sentinel`, never root. One worker at a time; scans continue in the next window if the window closes. |
+| `bin/worker.php` | every minute | Runs queued and weekly scans, daily certificate, website and email checks and *verify fix* rechecks; queues on-premises agent jobs (weekly full scan, daily light sweep); syncs inventory sources; sends alerts, daily fix reminders and events; creates monthly reports; records trend counts; checks for updates and applies data retention (daily). Runs as `sentinel`, never root. One worker at a time; scans continue in the next window if the window closes. |
 | `bin/feeds.php` | daily 04:41 | Refreshes CISA KEV, NVD and EPSS data and re-grades findings. |
 | `bin/discover.php` | weekly, Sunday 03:17 | Passive discovery (DNS, certificate logs) for every client. Suggestions need an admin's approval. |
 | `bin/backup.php` | daily 02:23 | Backup, keeps 14. See [backup.md](backup.md). |
@@ -37,6 +37,8 @@ later comes back is treated as new.
 
 - **Pause all scanning** (header button, technicians and admins) stops everything at once, including running scans.
 - A single client can be paused on its page. Only admins resume.
+- Agent scans at one site can be paused under **On-premises agents** on the client page (running agent scans stop
+  within a minute). The agents themselves are covered in [agent.md](agent.md).
 
 ## Troubleshooting
 

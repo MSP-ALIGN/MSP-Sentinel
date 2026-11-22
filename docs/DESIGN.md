@@ -1,6 +1,7 @@
 # MSP Sentinel: design (v1.0)
 
-Status: **draft, agreed in principle**. Changes to this document are made before code.
+Status: **agreed for 1.0**. This is the design of the first release; later features are described in the
+[user guide](user-guide.md), [agent.md](agent.md), the [changelog](../CHANGELOG.md) and the [roadmap](ROADMAP.md).
 
 MSP Sentinel is a self-hosted security product for MSPs. It **detects** external exposure and vulnerabilities,
 monitors them and alerts on them. It sits alongside MSP Align, which **plans, reports and proves**. Align reads

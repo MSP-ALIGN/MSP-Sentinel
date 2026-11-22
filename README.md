@@ -1,15 +1,132 @@
+<div align="center">
+
+<img src="public/assets/img/logo.svg" alt="MSP Sentinel logo" width="96" height="96">
+
 # MSP Sentinel
 
-Self-hosted security monitoring for MSPs (managed service providers). Sentinel **detects**: it finds external
-exposure and vulnerabilities across your clients, monitors them and alerts on them. Its companion product,
-MSP Align, plans, reports and proves, using Sentinel's findings.
+**Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
+inside and outside the network, and get it fixed on time.
 
-> **Status: 1.7.0 (stable).** External exposure monitoring for MSPs: the "authorised to scan"
-> register, passive discovery, gentle port scanning, certificate, admin-page, website and email checks, vulnerability matching
-> (NVD, CISA KEV, EPSS), findings with triage, owners, due dates and verify fix, alerts, branded reports, an API, an installer, and on-premises agents for internal scans. See
-> [`docs/ROADMAP.md`](docs/ROADMAP.md) for what comes next (internal agent, pen testing).
+![Version 1.7.0](https://img.shields.io/badge/version-1.7.0-ff5a1f?style=flat-square)
+![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
+![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
+![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
+![Self-hosted](https://img.shields.io/badge/self--hosted-your%20data%20stays%20yours-2ea44f?style=flat-square)
 
-Sentinel is free software under the [GNU AGPL-3.0](LICENSE). Each MSP runs its own copy and owns its data.
+[Features](#features) · [Screenshots](#screenshots) · [How it stays safe](#how-it-stays-safe) · [Install](#install) ·
+[Documentation](#documentation) · [What's new](#whats-new)
+
+</div>
+
+<p align="center"><img src="docs/images/dashboard.webp" alt="The MSP Sentinel dashboard: threat level, open findings, client risk grid, top exposures and live activity" width="900"></p>
+
+## What it is
+
+MSP Sentinel is a security product an MSP runs on its own server and brands as its own. It **detects**: it finds
+external exposure and vulnerabilities across your clients, watches them, alerts on them, and tracks the fixes. Its
+companion product, **MSP Align**, plans, reports and proves, using Sentinel's findings.
+
+- **Authorised targets only.** Nothing is scanned unless a client approved it in writing and you recorded it in
+  Sentinel's "authorised to scan" register. Every active scan is logged.
+- **Gentle by default.** Slow, rate-limited TCP connect scans inside each client's scan window, with kill switches.
+- **Honest findings.** Versions are never guessed; "confirmed" and "possible" are kept apart; nothing is called fixed
+  unless a check proved it.
+- **Your data stays yours.** Self-hosted, white-label reports, free software under the AGPL-3.0.
+
+## Features
+
+| | |
+|---|---|
+| **External exposure** | Passive discovery of forgotten hostnames (DNS, certificate logs), gentle port scans, exposed admin pages, VPN portals and remote access, TLS certificate checks |
+| **Website and email** | HTTPS and security headers, cookies, exposed `.git`/`.env`/backups (proved by content), CMS and JavaScript library versions, SPF, DMARC and DKIM |
+| **Vulnerabilities** | Matched with NVD, CISA's known-exploited list (KEV) and EPSS; "confirmed" for exact versions, distribution builds and unknown versions treated honestly |
+| **Inside the network** | On-premises agent (Linux appliance, outbound only, signed scope): devices, services, certificates, new-device alerts, and risky protocols (SMBv1, SMB signing, RDP without NLA, default SNMP, Telnet, FTP) |
+| **Internal devices** | Groundwork for NinjaOne: installed software matched to CVEs, unsupported Windows, antivirus, disk encryption and missing updates (connector coming) |
+| **Fix workflow** | Triage (accepted risk, false positive), owners, due dates by severity, overdue reminders, and *verify fix* rechecks of a single finding |
+| **Alerts** | In-app bell, email and Teams/Slack webhooks; immediate alerts for new Fails, digests, daily reminders |
+| **Reports** | Branded executive and technical reports with plain-English fixes, frozen with a SHA-256, monthly email schedule, CSV export |
+| **Dashboards** | Command-view dashboard with a 0–100 risk score per client, trends, attack surface and live activity |
+| **API** | Read and (opt-in) write API with scoped, expiring tokens, plus signed outbound events |
+| **Operations** | One-command installer, encrypted backups, health checks, update check, data retention, audit log |
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/client.webp" alt="A client's overview: risk gauge, open findings and attack surface (light theme)"><br><sub><b>Client overview</b> (light theme): risk score, findings, attack surface.</sub></td>
+    <td width="50%"><img src="docs/images/findings.webp" alt="All findings with owner and due-date filters"><br><sub><b>Findings</b>: owners, due dates, overdue and due-soon quick links.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/finding.webp" alt="One finding with its fix card and history"><br><sub><b>A finding</b>: owner, due date, <i>verify fix</i> and full history.</sub></td>
+    <td><img src="docs/images/website-email.webp" alt="Website and email security results"><br><sub><b>Website and email</b>: headers, exposed files, CMS versions, SPF/DMARC/DKIM.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/agents.webp" alt="On-premises agents for a client site"><br><sub><b>On-premises agents</b>: signed internal authorisation, check-ins, kill switch.</sub></td>
+    <td><img src="docs/images/device.webp" alt="An internal device with its services and findings"><br><sub><b>Internal device</b>: open services, certificates, software and findings.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/report.webp" alt="Executive summary report"><br><sub><b>Executive report</b>: branded, plain English, frozen with a SHA-256.</sub></td>
+    <td><img src="docs/images/login.webp" alt="Sign-in page"><br><sub><b>Sign-in</b>: two-factor authentication is mandatory.</sub></td>
+  </tr>
+</table>
+
+All screenshots use made-up clients and documentation addresses only.
+
+## How it stays safe
+
+- **Scope is enforced at the moment of scanning**, against an active, approved authorisation, with a global kill
+  switch and a pause per client and per site.
+- **Agents scan only what was approved for their site**: internal authorisations and every job are signed with a key
+  that is not in the database, and the agent checks the signatures and its own site before it touches anything.
+- **Sign-in** with mandatory TOTP two-factor authentication, three roles, CSRF protection on every form, a strict
+  Content Security Policy, and everything escaped on output.
+- **Secrets** are encrypted with libsodium; tokens and recovery codes are stored only as keyed hashes.
+- **Outbound requests** are pinned and never follow redirects; **reports** run no scripts.
+
+More in [docs/security.md](docs/security.md), [docs/agent.md](docs/agent.md) and
+[docs/responsible-use.md](docs/responsible-use.md). Sentinel is **not a PCI ASV scan** and not a penetration test.
+
+## Install
+
+On Ubuntu 24.04 or Debian 12, from an unpacked release:
+
+```sh
+sudo ./install/install.sh --domain sentinel.msp.example --certbot --email admin@msp.example
+```
+
+The installer sets up Nginx, PHP-FPM 8.4, MariaDB, the database, a fresh app key, cron jobs, log rotation and the
+first admin. For an on-premises agent at a client site:
+
+```sh
+sudo ./install/agent-install.sh --server https://sentinel.msp.example
+```
+
+### Requirements
+
+- PHP 8.4 (8.3 works), with the extensions `pdo_mysql`, `sodium`, `mbstring`, `openssl`, `curl`, `simplexml` and `gd`
+- MariaDB 10.6 or newer
+- **nmap** 7.x for port scanning (`apt install nmap`). It is not bundled; its licence is the NPSL.
+- A web server that sends requests to `public/index.php` (Apache with the included `.htaccess`, nginx, or similar)
+- HTTPS in production
+
+## Documentation
+
+| Guide | |
+|---|---|
+| [User guide](docs/user-guide.md) | Roles, the client workflow, grades, fix workflow |
+| [Install](docs/install.md) | Installer, what it sets up, manual install on other systems |
+| [Upgrade](docs/upgrade.md) | `install.sh --upgrade`, manual upgrades, rolling back by hand |
+| [Configuration](docs/configuration.md) | Every `config/config.php` option and environment variable |
+| [On-premises agent](docs/agent.md) | Safety model, schedule, install, operations, what is graded |
+| [Security](docs/security.md) | What Sentinel protects, and your hardening checklist |
+| [Responsible use](docs/responsible-use.md) | Authorisation, gentle scanning, honest reporting |
+| [Authorisation form](docs/authorisation-form.md) | A template for the client's written approval |
+| [Backup and restore](docs/backup.md) | Daily encrypted backups, restore, moving servers |
+| [Operations](docs/operations.md) | Cron jobs, health checks, logs, retention, troubleshooting |
+| [API](docs/api.md) | Tokens, endpoints, signed outbound events |
+| [Design](docs/DESIGN.md) and [Roadmap](docs/ROADMAP.md) | How it is built, and what is next |
+
+The same help is built into the app (**Help** in the menu), with a "What's new" page for every release.
 
 ## What's new
 
@@ -39,6 +156,9 @@ Sentinel is free software under the [GNU AGPL-3.0](LICENSE). Each MSP runs its o
 - **Internal devices groundwork** for NinjaOne: installed software matched to vulnerabilities (one finding per device
   and program), unsupported Windows versions, antivirus, disk encryption and missing updates, with an Internet /
   Internal filter on the findings list. The NinjaOne connector itself follows in a later release.
+
+<details>
+<summary><b>Earlier releases (1.5.0 to 1.0.0)</b></summary>
 
 ### 1.5.0 (2026-11-22): fix workflow
 
@@ -117,37 +237,13 @@ Sentinel is free software under the [GNU AGPL-3.0](LICENSE). Each MSP runs its o
 - **Documentation** in `docs/`: install, upgrade, configuration, security, backup, operations, API and a user guide.
   The full history is in [CHANGELOG.md](CHANGELOG.md).
 
-Earlier releases: see [CHANGELOG.md](CHANGELOG.md).
+</details>
 
-## Requirements
+Full history: [CHANGELOG.md](CHANGELOG.md).
 
-- PHP 8.4 (8.3 works), with the extensions `pdo_mysql`, `sodium`, `mbstring`, `openssl`, `curl`, `simplexml` and `gd`
-- MariaDB 10.6 or newer
-- **nmap** 7.x for port scanning (`apt install nmap`). It is not bundled; its licence is the NPSL.
-- A web server that sends requests to `public/index.php` (Apache with the included `.htaccess`, nginx, or similar)
-- HTTPS in production
+## Contributing
 
-## Install
-
-On Ubuntu 24.04 or Debian 12, from an unpacked release:
-
-```sh
-sudo ./install/install.sh --domain sentinel.msp.example --certbot --email admin@msp.example
-```
-
-Everything else is in the documentation:
-
-| Guide | |
-|---|---|
-| [Install](docs/install.md) | Installer, what it sets up, manual install on other systems |
-| [Upgrade](docs/upgrade.md) | `install.sh --upgrade`, manual upgrades, rolling back by hand |
-| [Configuration](docs/configuration.md) | Every `config/config.php` option and environment variable |
-| [Security](docs/security.md) | What Sentinel protects, and your hardening checklist |
-| [Backup and restore](docs/backup.md) | Daily encrypted backups, restore, moving servers |
-| [Operations](docs/operations.md) | Cron jobs, health checks, logs, retention, troubleshooting |
-| [API](docs/api.md) | Tokens, endpoints, signed outbound events |
-| [User guide](docs/user-guide.md) | Roles, the client workflow, grades |
-| [Design](docs/DESIGN.md) and [Roadmap](docs/ROADMAP.md) | How it is built, and what is next |
+Contributions are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). Commits carry a DCO sign-off (`git commit -s`).
 
 ## Tests
 
@@ -167,15 +263,15 @@ The database admin used to create and drop the test database is set with `SENTIN
 | Path | What |
 |---|---|
 | `public/` | Web root: front controller and static assets (Bootstrap 5.3, AdminLTE 4 and Bootstrap Icons, all served locally) |
-| `src/` | Application code (`Core`, `Auth`, `Scope`, `Scanning`, `Vulns`, `Findings`, `Alerts`, `Reports`, `Api`, `System`, `Controllers`) |
+| `src/` | Application code (`Core`, `Auth`, `Scope`, `Discovery`, `Scanning`, `Web`, `Vulns`, `Findings`, `Inventory`, `Agent`, `AgentClient`, `Alerts`, `Reports`, `Dashboard`, `Api`, `System`, `Controllers`) |
 | `views/` | PHP templates (every value is escaped with `e()`) |
 | `migrations/` | Idempotent database migrations |
-| `bin/` | CLI tools |
+| `bin/` | CLI tools, including the on-premises agent (`sentinel-agent.php`) |
 | `lang/` | Interface translations (English is the source language) |
 | `help/` | In-app help and "What's new" entries |
 | `tests/` | End-to-end and unit tests |
-| `docs/` | Guides, design and roadmap |
-| `install/` | Installer and server config templates |
+| `docs/` | Guides, design, roadmap and README screenshots (`docs/images/`) |
+| `install/` | Server and agent installers, and config templates |
 
 ## Security
 
