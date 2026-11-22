@@ -8,6 +8,8 @@ declare(strict_types=1);
  * Usage: php bin/setup-config.php --public-url=https://sentinel.msp.example [--db-host=127.0.0.1]
  *            [--db-name=msp_sentinel] [--db-user=msp_sentinel] [--config=PATH] [--trusted-proxy=IP]
  *            (database password on stdin; --trusted-proxy: the reverse proxy whose X-Forwarded-* headers are trusted)
+ *        php bin/setup-config.php --update --trusted-proxy=IP [--config=PATH]
+ *            (existing config: only replaces app.trusted_proxies; the app key and everything else are kept)
  *
  * Starts from config/config.example.php, sets a fresh random app key, the
  * database details and the public address, and writes the file with mode 0640.
@@ -23,13 +25,49 @@ if (PHP_SAPI !== 'cli') {
 }
 
 $root = dirname(__DIR__);
-$opts = getopt('', ['public-url:', 'db-host:', 'db-name:', 'db-user:', 'config:', 'trusted-proxy:']);
+$opts = getopt('', ['public-url:', 'db-host:', 'db-name:', 'db-user:', 'config:', 'trusted-proxy:', 'update']);
 $proxy = (string) ($opts['trusted-proxy'] ?? '');
 if ($proxy !== '' && filter_var($proxy, FILTER_VALIDATE_IP) === false) {
     fwrite(STDERR, "--trusted-proxy must be one IP address.\n");
     exit(2);
 }
 $target = is_string($opts['config'] ?? null) ? $opts['config'] : $root . '/config/config.php';
+
+// Update mode (installer re-run in reverse-proxy mode): the config is our own generated file (root-owned,
+// not writable by the app), so loading it with require is trusted. Written to a temp file and renamed, so a
+// failure never leaves a half-written config (which would lose the app key).
+if (isset($opts['update'])) {
+    if ($proxy === '' || !is_file($target)) {
+        fwrite(STDERR, "--update needs --trusted-proxy=IP and an existing {$target}.\n");
+        exit(2);
+    }
+    $cfg = require $target;
+    if (!is_array($cfg) || !is_string($cfg['app_key'] ?? null) || $cfg['app_key'] === '') {
+        fwrite(STDERR, "{$target} does not look like a Sentinel config; not changing it.\n");
+        exit(1);
+    }
+    $cfg['app']['trusted_proxies'] = [inet_ntop((string) inet_pton($proxy))];
+    $cfg['app']['force_secure_cookies'] = true;
+    $php = "<?php\n\n// Updated by bin/setup-config.php on " . gmdate('Y-m-d') . ". Keep this file private and back it up:\n"
+        . "// its app_key encrypts 2FA seeds and saved secrets. See docs/configuration.md for every option.\n\nreturn " . var_export($cfg, true) . ";\n";
+    $tmp = $target . '.tmp';
+    $old = umask(0027);
+    $ok = file_put_contents($tmp, $php, LOCK_EX) !== false && chmod($tmp, fileperms($target) & 0777);
+    if ($ok) {
+        // Keep the owner and group (root:sentinel); only root can, and the installer re-applies them anyway.
+        @chown($tmp, (int) fileowner($target));
+        @chgrp($tmp, (int) filegroup($target));
+        $ok = rename($tmp, $target);
+    }
+    umask($old);
+    if (!$ok) {
+        @unlink($tmp);
+        fwrite(STDERR, "Could not update {$target}.\n");
+        exit(1);
+    }
+    fwrite(STDOUT, "Updated app.trusted_proxies in {$target}\n");
+    exit(0);
+}
 $url = (string) ($opts['public-url'] ?? '');
 $name = (string) ($opts['db-name'] ?? 'msp_sentinel');
 $user = (string) ($opts['db-user'] ?? 'msp_sentinel');

@@ -56,17 +56,24 @@ return [
         Assert::notContains('certbot', $proxy);
         Assert::notContains('a-long-test-passphrase', $proxy, 'the passphrase is never printed');
         Assert::notContains('ufw allow 443', $proxy, 'no public HTTPS port in proxy mode');
-        exec($env . 'SENTINEL_DOMAIN=sentinel.example SENTINEL_FIREWALL=0 SENTINEL_FAIL2BAN=0 SENTINEL_AUTO_UPDATES=0 bash ' . escapeshellarg($root . '/install.sh') . ' </dev/null 2>&1', $l4, $rc4);
+        Assert::contains('remove earlier MSP Sentinel web rules', $proxy, 'stale web rules are cleaned up');
+        exec($env . 'SENTINEL_DOMAIN=sentinel.example SENTINEL_FIREWALL=n SENTINEL_FAIL2BAN=no SENTINEL_AUTO_UPDATES=0 bash ' . escapeshellarg($root . '/install.sh') . ' </dev/null 2>&1', $l4, $rc4);
         $off = implode("\n", $l4);
         Assert::same(0, $rc4, $off);
         Assert::true(!str_contains($off, 'ufw') && !str_contains($off, 'fail2ban') && !str_contains($off, 'unattended'), 'optional steps left out');
         $tpl = (string) file_get_contents($root . '/install/templates/nginx-proxy.conf');
         Assert::true(str_contains($tpl, 'allow __PROXY__;') && str_contains($tpl, 'deny all;') && !str_contains($tpl, 'fastcgi_param HTTPS on'), 'proxy site accepts the proxy only');
+        $inst = (string) file_get_contents($root . '/install/install.sh');
+        Assert::contains('render nginx-proxy.conf', $inst, 'proxy site goes through render (drops [::] lines without IPv6)');
+        Assert::notContains('%q', $inst, 'backup.env uses POSIX quoting that sh can read');
         foreach ([['SENTINEL_DOMAIN="bad domain;rm"', 'bad host name'], ['SENTINEL_DOMAIN=sentinel.example SENTINEL_TLS=other', 'bad TLS mode'],
                   ['SENTINEL_DOMAIN=sentinel.example SENTINEL_TLS=proxy SENTINEL_PROXY_IP="1.2.3.4;rm"', 'bad proxy address'],
                   ['SENTINEL_DOMAIN=sentinel.example SENTINEL_TLS=proxy SENTINEL_PROXY_IP=300.1.1.1', 'impossible IPv4'],
                   ['SENTINEL_DOMAIN=sentinel.example SENTINEL_BACKUP_PASSPHRASE=short', 'short passphrase'],
-                  ['SENTINEL_DOMAIN=sentinel.example SENTINEL_FIREWALL=maybe', 'yes/no must be 1 or 0'],
+                  ['SENTINEL_DOMAIN=sentinel.example SENTINEL_TLS=proxy SENTINEL_PROXY_IP=010.0.0.1', 'leading zeros'],
+                  ['SENTINEL_DOMAIN=sentinel.example SENTINEL_TLS=proxy SENTINEL_PROXY_IP=:::::', 'colons only'],
+                  ['SENTINEL_DOMAIN=sentinel.example SENTINEL_TLS=proxy SENTINEL_PROXY_IP=1::2::3', 'two ::'],
+                  ['SENTINEL_DOMAIN=sentinel.example SENTINEL_FIREWALL=maybe', 'yes/no must be y or n'],
                   ['SENTINEL_DOMAIN=sentinel.example SENTINEL_BRANCH="../x"', 'bad branch'], ['SENTINEL_DOMAIN=sentinel.example SENTINEL_REPO="a/b c"', 'bad repository'],
                   ['', 'no host name and no terminal']] as [$vars, $why]) {
             exec($env . $vars . ' bash ' . escapeshellarg($root . '/install.sh') . ' </dev/null 2>&1', $l, $c);
@@ -147,6 +154,18 @@ return [
         Assert::same(1, $code, 'refuses to overwrite (the app key would be lost)');
         [$code] = $run(['--public-url=http://sentinel.example', '--config=' . $path . '2'], "x\n");
         Assert::same(2, $code, 'https only');
+        // --update (installer re-run in proxy mode): only the trusted proxy changes; the app key is kept.
+        $before = require $path;
+        [$code, $out] = $run(['--update', '--trusted-proxy=2001:DB8::10', '--config=' . $path], '');
+        Assert::same(0, $code, $out);
+        clearstatcache();
+        $after = require $path;
+        Assert::same([$before['app_key'], $before['db']['pass'], ['2001:db8::10']], [$after['app_key'], $after['db']['pass'], $after['app']['trusted_proxies']]);
+        Assert::same('0640', substr(sprintf('%o', fileperms($path)), -4), 'permissions kept');
+        [$code] = $run(['--update', '--trusted-proxy=not-an-ip', '--config=' . $path], '');
+        Assert::same(2, $code, 'bad proxy address refused');
+        [$code] = $run(['--update', '--trusted-proxy=192.0.2.10', '--config=' . $path . '.missing'], '');
+        Assert::same(2, $code, 'no config to update');
         unlink($path);
     },
 ];

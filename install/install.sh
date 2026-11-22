@@ -53,6 +53,9 @@ firewall=1
 fail2ban=1
 auto_updates=1
 dry=0
+# The backup passphrase is taken out of the environment at once, so no child process (migrations, PHP jobs) inherits it.
+backup_pass="${SENTINEL_BACKUP_PASSPHRASE:-}"
+unset SENTINEL_BACKUP_PASSPHRASE
 skip_os=0
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -92,12 +95,18 @@ write_service_files() {
 die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 # valid_ip ADDR: one IPv4 address (each part 0-255) or an IPv6 address (hex groups and colons only).
 valid_ip() {
-  local a="$1" o
+  local a="$1" o g n=0
   if [[ "$a" =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]]; then
-    for o in "${BASH_REMATCH[@]:1}"; do [ "$o" -le 255 ] || return 1; done
-    return 0
+    # No leading zeros (some tools read 010 as octal) and each part 0-255.
+    for o in "${BASH_REMATCH[@]:1}"; do [[ "$o" =~ ^(0|[1-9][0-9]*)$ ]] && [ "$o" -le 255 ] || return 1; done; return 0
   fi
-  [[ "$a" =~ ^[0-9A-Fa-f:]{2,39}$ && "$a" == *:*:* ]]
+  # IPv6: groups of 1-4 hex digits, at most one "::", eight groups without "::" or fewer with it.
+  [[ "$a" =~ ^[0-9A-Fa-f:]{2,39}$ ]] || return 1
+  case "$a" in *:::*) return 1 ;; esac
+  [ "$(grep -o '::' <<<"$a" | wc -l)" -le 1 ] || return 1
+  local IFS=:
+  for g in $a; do [ -z "$g" ] && continue; [ "${#g}" -le 4 ] || return 1; n=$((n + 1)); done
+  if [[ "$a" == *::* ]]; then [ "$n" -le 7 ]; else [ "$n" -eq 8 ] && [[ "$a" != :* && "$a" != *: ]]; fi
 }
 # Run a command, or only show it in a dry run.
 run() {
@@ -116,7 +125,7 @@ render() {
   local ipv6='cat'
   # Hosts with IPv6 turned off can't bind [::]; drop those listen lines there.
   [ -f /proc/net/if_inet6 ] || ipv6="grep -v \[::\]"
-  sed -e "s#__DOMAIN__#${domain}#g" -e "s#__ROOT__#${APP_DIR}#g" -e "s#__PHP__#${PHP_BIN}#g" -e "s#__CERT__#${cert:-}#g" -e "s#__KEY__#${key:-}#g" "$SRC/install/templates/$1" | $ipv6
+  sed -e "s#__DOMAIN__#${domain}#g" -e "s#__ROOT__#${APP_DIR}#g" -e "s#__PHP__#${PHP_BIN}#g" -e "s#__CERT__#${cert:-}#g" -e "s#__KEY__#${key:-}#g" -e "s#__PROXY__#${proxy_ip:-}#g" "$SRC/install/templates/$1" | $ipv6
 }
 
 [ -f "$SRC/VERSION" ] && [ -f "$SRC/public/index.php" ] || die "Run this from an unpacked MSP Sentinel release."
@@ -246,6 +255,11 @@ fi
 say "Configuration"
 if [ "$existing" -eq 1 ]; then
   echo "  Kept $APP_DIR/config/config.php."
+  if [ -n "$proxy_ip" ]; then
+    # Switching to (or re-running) proxy mode: without this the proxy's address would count as every user's.
+    run "$PHP_BIN" "$APP_DIR/bin/setup-config.php" --update --trusted-proxy="$proxy_ip"
+    run chown root:sentinel "$APP_DIR/config/config.php"
+  fi
 elif [ "$dry" -eq 1 ]; then
   echo "  [dry-run] php bin/setup-config.php --public-url=https://$domain --db-host=localhost${proxy_ip:+ --trusted-proxy=$proxy_ip} (password on stdin)"
 else
@@ -265,8 +279,7 @@ run systemctl restart "php${PHPV}-fpm"
 
 if [ "$tls" = proxy ]; then
   say "Nginx behind the reverse proxy ($proxy_ip)"
-  sed -e "s#__DOMAIN__#${domain}#g" -e "s#__ROOT__#${APP_DIR}#g" -e "s#__PROXY__#${proxy_ip}#g" "$SRC/install/templates/nginx-proxy.conf" \
-    | write_file /etc/nginx/sites-available/msp-sentinel 0644
+  render nginx-proxy.conf | write_file /etc/nginx/sites-available/msp-sentinel 0644
   run ln -sf /etc/nginx/sites-available/msp-sentinel /etc/nginx/sites-enabled/msp-sentinel
   run rm -f /etc/nginx/sites-enabled/default
   run nginx -t
@@ -302,14 +315,22 @@ fi
 
 if [ "$firewall" -eq 1 ]; then
   say "Firewall (ufw)"
-  ssh_port="$( { sshd -T 2>/dev/null || true; } | awk '/^port /{print $2; exit}')"; ssh_port="${ssh_port:-22}"
+  # Every port sshd listens on (it may have several Port lines); 22 if sshd can't tell us.
+  ssh_ports="$( { sshd -T 2>/dev/null || true; } | awk '/^port [0-9]+$/{print $2}' | sort -un | tr '\n' ' ')"; ssh_ports="${ssh_ports:-22}"
   run ufw default deny incoming
   run ufw default allow outgoing
-  run ufw limit "${ssh_port}/tcp" comment 'SSH (rate-limited)'
+  for p in $ssh_ports; do run ufw limit "${p}/tcp" comment 'SSH (rate-limited)'; done
+  # Remove web rules an earlier run added (e.g. 80/443 open to all before switching to proxy mode), newest first.
+  if [ "$dry" -eq 0 ]; then
+    { ufw status numbered 2>/dev/null || true; } | sed -n 's/^\[ *\([0-9]*\)\].*# \(MSP Sentinel\|HTTP redirect and Lets Encrypt\).*/\1/p' | sort -rn \
+      | while read -r n; do ufw --force delete "$n" >/dev/null; done
+  else
+    echo "  [dry-run] remove earlier MSP Sentinel web rules from ufw"
+  fi
   if [ "$tls" = proxy ]; then
     run ufw allow from "$proxy_ip" to any port 80 proto tcp comment 'MSP Sentinel via reverse proxy'
   else
-    run ufw allow 80/tcp comment 'HTTP redirect and Lets Encrypt'
+    run ufw allow 80/tcp comment 'MSP Sentinel HTTP redirect and Lets Encrypt'
     run ufw allow 443/tcp comment 'MSP Sentinel HTTPS'
   fi
   run ufw --force enable
@@ -318,8 +339,9 @@ fi
 if [ "$fail2ban" -eq 1 ]; then
   say "fail2ban (SSH sign-in protection)"
   # Debian 13 logs to the journal (no /var/log/auth.log), so the systemd backend is used.
+  f2b_ports="$( { sshd -T 2>/dev/null || true; } | awk '/^port [0-9]+$/{print $2}' | sort -un | paste -sd, -)"
   printf '%s\n' '# Written by the MSP Sentinel installer. Web sign-ins are throttled by Sentinel itself.' '[sshd]' 'enabled = true' 'backend = systemd' \
-    'maxretry = 5' 'findtime = 10m' 'bantime = 1h' | write_file /etc/fail2ban/jail.d/msp-sentinel.local 0644
+    "port = ${f2b_ports:-ssh}" 'maxretry = 5' 'findtime = 10m' 'bantime = 1h' | write_file /etc/fail2ban/jail.d/msp-sentinel.local 0644
   run systemctl enable fail2ban
   run systemctl restart fail2ban
 fi
@@ -330,17 +352,26 @@ if [ "$auto_updates" -eq 1 ]; then
   run systemctl enable --now unattended-upgrades
 fi
 
-if [ -n "${SENTINEL_BACKUP_PASSPHRASE:-}" ]; then
+if [ -n "$backup_pass" ]; then
   say "Encrypted backups"
+  if [ -f /etc/msp-sentinel/backup.env ]; then
+    echo "  Note: replacing the existing backup passphrase. Older backups still need the OLD passphrase: keep it."
+  fi
   if [ "$dry" -eq 1 ]; then
     echo "  [dry-run] write /etc/msp-sentinel/backup.env (mode 0640, root:sentinel) with the passphrase"
   else
-    # Quoted for the shell with printf %q; readable by root and the backup job only. Never printed.
+    # POSIX single quotes (each ' becomes '\''), because the cron job sources this file with sh (dash), which
+    # does not understand bash's $'...' quoting. Readable by root and the backup job only. Never printed.
+    q="'$(printf '%s' "$backup_pass" | sed "s/'/'\\\\''/g")'"
     { echo '# Written by the MSP Sentinel installer: nightly backups are encrypted with this passphrase. Keep a copy in your vault.'
       echo 'export SENTINEL_BACKUP_ENCRYPT=1'
-      printf 'export SENTINEL_BACKUP_PASSPHRASE=%q\n' "$SENTINEL_BACKUP_PASSPHRASE"; } > /etc/msp-sentinel/backup.env.tmp
+      printf 'export SENTINEL_BACKUP_PASSPHRASE=%s\n' "$q"; } > /etc/msp-sentinel/backup.env.tmp
+    unset q
     chown root:sentinel /etc/msp-sentinel/backup.env.tmp
     chmod 0640 /etc/msp-sentinel/backup.env.tmp
+    # Self-test: the file must give back exactly this passphrase under sh (through the environment, not argv).
+    SENTINEL_PP_EXPECT="$backup_pass" sh -c '. /etc/msp-sentinel/backup.env.tmp; [ "$SENTINEL_BACKUP_PASSPHRASE" = "$SENTINEL_PP_EXPECT" ]' \
+      || { rm -f /etc/msp-sentinel/backup.env.tmp; die "Could not store the backup passphrase safely; backups were left unencrypted."; }
     mv -f /etc/msp-sentinel/backup.env.tmp /etc/msp-sentinel/backup.env
     echo "  Nightly backups will be encrypted. Keep the passphrase in your password vault: without it they can't be restored."
   fi

@@ -24,8 +24,8 @@ On a fresh Debian 13 VM (a minimal Debian may need `apt install -y curl sudo` fi
 curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install.sh | sudo -E bash
 ```
 
-It fetches Sentinel from GitHub into `/opt/msp-sentinel-src`, walks you through seven steps, shows a summary, and
-only installs once you answer `y`. It also adds the command `sudo msp-sentinel-update` for later upgrades. Run it
+It installs `git`, `curl` and `rsync` and fetches Sentinel from GitHub into `/opt/msp-sentinel-src`. It then walks you
+through seven steps and shows a summary, and only installs Sentinel once you answer `y`. It also adds the command `sudo msp-sentinel-update` for later upgrades. Run it
 again on an installed server and it upgrades instead.
 
 ### The guided install, step by step
@@ -50,7 +50,7 @@ For a reverse proxy, set it up to:
 
 Sentinel trusts the forwarded headers only from the proxy IP you gave, so a user cannot fake their address.
 
-**Step 3 — Firewall (ufw).** Default yes. Allows SSH (rate-limited, on the port sshd uses), and HTTP and HTTPS — or,
+**Step 3 — Firewall (ufw).** Default yes. Allows SSH (rate-limited, on every port sshd listens on), and HTTP and HTTPS — or,
 behind a proxy, port 80 from the proxy only. Everything else inbound is blocked. Say no if your cloud provider or
 another tool already manages the firewall.
 
@@ -166,8 +166,13 @@ The one-line install follows the branch, not a signed release. For signed releas
 | Daily backups (keep 14; encrypted if a passphrase was set) | `/var/backups/msp-sentinel/`, settings in `/etc/msp-sentinel/backup.env` |
 | Firewall, fail2ban, automatic security updates (unless turned off) | `ufw`, `/etc/fail2ban/jail.d/msp-sentinel.local`, `/etc/apt/apt.conf.d/20auto-upgrades` |
 
-Re-running the installer with the same version is safe: it keeps the config and database and re-applies the
-rest (for example to switch to `--tls letsencrypt` later). On hosts with IPv6 turned off, the Nginx site listens on IPv4 only.
+Re-running the installer with the same version is safe: it keeps the config, database and app key and re-applies
+the rest. To change the HTTPS mode later, run it again from the source folder with the new option, for example
+`sudo /opt/msp-sentinel-src/install/install.sh --domain sentinel.msp.example --tls proxy --proxy-ip 192.0.2.10`
+(the one-line command only upgrades an installed server). A re-run sets the trusted proxy, replaces the
+firewall's web rules, and turns the firewall, fail2ban and automatic updates on again unless you pass `--no-firewall`,
+`--no-fail2ban` or `--no-auto-updates`. A re-run with a new backup passphrase replaces the old one: keep the old
+passphrase for older backups. On hosts with IPv6 turned off, the Nginx site listens on IPv4 only.
 
 Then check everything with `sudo -u sentinel php8.4 /opt/msp-sentinel/bin/doctor.php`, or under
 **Administration → System**.

@@ -121,22 +121,32 @@ fi
 # ------------------------------------------------------------------ wizard ----
 step() { if have_tty; then printf '\n%s[%s/7] %s%s\n' "$c_ok" "$1" "$2" "$c_0"; fi; }
 note() { if have_tty; then printf '      %s\n' "$@"; fi; }
-# ask_yes VAR "Question" default(1|0): yes/no, from the environment (1/0) or the terminal.
+# ask_yes VAR "Question" default(1|0): yes/no, from the environment (y/n, yes/no or 1/0) or the terminal.
 ask_yes() {
   local __var=$1 q=$2 def=$3 reply=
-  if [ -n "${!__var:-}" ]; then [[ "${!__var}" =~ ^[01]$ ]] || die "$__var must be 1 or 0."; return; fi
+  if [ -n "${!__var:-}" ]; then
+    case "${!__var,,}" in y|yes|1) printf -v "$__var" 1 ;; n|no|0) printf -v "$__var" 0 ;; *) die "$__var must be y or n." ;; esac
+    return
+  fi
   if ! have_tty; then printf -v "$__var" '%s' "$def"; return; fi
   read -r -p "      $q [$( [ "$def" = 1 ] && echo Y/n || echo y/N )]: " reply </dev/tty
   case "${reply,,}" in y|yes) printf -v "$__var" 1 ;; n|no) printf -v "$__var" 0 ;; *) printf -v "$__var" '%s' "$def" ;; esac
 }
 valid_ip() {
-  local a="$1" o
+  local a="$1" o g n=0
   if [[ "$a" =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]]; then
-    for o in "${BASH_REMATCH[@]:1}"; do [ "$o" -le 255 ] || return 1; done; return 0
+    # No leading zeros (some tools read 010 as octal) and each part 0-255.
+    for o in "${BASH_REMATCH[@]:1}"; do [[ "$o" =~ ^(0|[1-9][0-9]*)$ ]] && [ "$o" -le 255 ] || return 1; done; return 0
   fi
-  [[ "$a" =~ ^[0-9A-Fa-f:]{2,39}$ && "$a" == *:*:* ]]
+  # IPv6: groups of 1-4 hex digits, at most one "::", eight groups without "::" or fewer with it.
+  [[ "$a" =~ ^[0-9A-Fa-f:]{2,39}$ ]] || return 1
+  case "$a" in *:::*) return 1 ;; esac
+  [ "$(grep -o '::' <<<"$a" | wc -l)" -le 1 ] || return 1
+  local IFS=:
+  for g in $a; do [ -z "$g" ] && continue; [ "${#g}" -le 4 ] || return 1; n=$((n + 1)); done
+  if [[ "$a" == *::* ]]; then [ "$n" -le 7 ]; else [ "$n" -eq 8 ] && [[ "$a" != :* && "$a" != *: ]]; fi
 }
-if have_tty; then printf '\n%sMSP Sentinel setup%s: seven short steps, then a summary to confirm. Nothing changes before you confirm.\n' "$c_ok" "$c_0"; fi
+if have_tty; then printf '\n%sMSP Sentinel setup%s: seven short steps, then a summary to confirm. Sentinel is only installed once you confirm.\n' "$c_ok" "$c_0"; fi
 
 step 1 "Host name"
 note "The name users type in the browser, e.g. sentinel.msp.example. It must point at this server (or at your proxy)."
@@ -181,10 +191,10 @@ note "Sentinel backs up its database and config every night (kept 14 days). With
      "Keep the passphrase in your password vault: without it an encrypted backup can't be restored. Leave empty to skip."
 if [ -z "${SENTINEL_BACKUP_PASSPHRASE:-}" ] && have_tty; then
   while true; do
-    read -r -s -p "      Backup passphrase (at least 12 characters, empty for none): " pp1 </dev/tty; echo >/dev/tty
+    IFS= read -r -s -p "      Backup passphrase (at least 12 characters, empty for none): " pp1 </dev/tty; echo >/dev/tty
     [ -z "$pp1" ] && break
     [ "${#pp1}" -ge 12 ] || { note "Too short."; continue; }
-    read -r -s -p "      The same passphrase again: " pp2 </dev/tty; echo >/dev/tty
+    IFS= read -r -s -p "      The same passphrase again: " pp2 </dev/tty; echo >/dev/tty
     [ "$pp1" = "$pp2" ] && { SENTINEL_BACKUP_PASSPHRASE="$pp1"; break; }
     note "They don't match; try again."
   done
