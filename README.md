@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.13.1](https://img.shields.io/badge/version-1.13.1-ff5a1f?style=flat-square)
+![Version 1.14.0](https://img.shields.io/badge/version-1.14.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -41,7 +41,7 @@ companion product, **MSP Align**, plans, reports and proves, using Sentinel's fi
 | **Website and email** | HTTPS and security headers, cookies, exposed `.git`/`.env`/backups (proved by content), CMS and JavaScript library versions, SPF, DMARC and DKIM |
 | **Vulnerabilities** | Matched with NVD, CISA's known-exploited list (KEV) and EPSS; "confirmed" for exact versions, distribution builds and unknown versions treated honestly |
 | **Inside the network** | On-premises agent (Linux appliance, outbound only, signed scope): devices, services, certificates, new-device alerts, and risky protocols (SMBv1, SMB signing, RDP without NLA, default SNMP, Telnet, FTP) |
-| **Internal devices** | Groundwork for NinjaOne: installed software matched to CVEs, unsupported Windows, antivirus, disk encryption and missing updates (connector coming) |
+| **Internal devices** | From NinjaOne (read-only) and the on-premises agent: installed software matched to CVEs, unsupported Windows, antivirus, disk encryption and missing updates (connector coming) |
 | **Fix workflow** | Triage (accepted risk, false positive), owners, due dates by severity, overdue reminders, and *verify fix* rechecks of a single finding |
 | **Alerts** | In-app bell, email and Teams/Slack webhooks; immediate alerts for new Fails, digests, daily reminders |
 | **Reports** | Branded executive and technical reports with plain-English fixes, frozen with a SHA-256, monthly email schedule, CSV export |
@@ -149,6 +149,18 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
 
 ## What's new
 
+### 1.14.0 (2026-11-22): NinjaOne
+
+- **NinjaOne connector**, read-only, built on NinjaOne's published Public API 2.0. Every 6 hours, each linked client
+  gets its computers with operating system (and its support date), antivirus, disk encryption (BitLocker), missing
+  Windows updates and installed software, matched to known vulnerabilities. Findings follow the same grades as
+  everything else.
+- **Administration → Integrations**: enter your NinjaOne instance, client ID and client secret (encrypted, never
+  shown again), with step-by-step instructions for the NinjaOne API app (Monitoring scope, Client credentials) and a
+  **Test connection** button. Link each client to its NinjaOne organisation on the client's Devices page.
+- Honest by design: anything NinjaOne doesn't report stays "unknown" rather than becoming a finding, and a sync with
+  a failed page changes nothing.
+
 ### 1.13.1 (2026-11-22): Update now fixes
 
 - Clicking **Update now** again within 15 minutes now says when the next update can start, instead of seemingly
@@ -158,6 +170,9 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
 - An upgrade no longer stops at "Service files" when that helper is stuck; it resets it, or warns and carries on.
 - If a request is not picked up, the System page says how to fix it on the server and lets you remove the request.
 
+<details>
+<summary><b>Earlier releases (1.13.0 to 1.0.0)</b></summary>
+
 ### 1.13.0 (2026-11-22): client pages
 
 - Opening a client now switches the left menu to **that client's own menu**: Overview, Findings, External (scans and
@@ -165,9 +180,6 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
   (authorisations, discovery, reports), with **All clients** to go back. No more one long page.
 - Each section is its own page with its own address (for example `/clients/12/devices`), and only loads what it shows.
 - The client's forms and device pages keep the client menu; actions return you to the page you were on.
-
-<details>
-<summary><b>Earlier releases (1.12.1 to 1.0.0)</b></summary>
 
 ### 1.12.1 (2026-11-22): one-click Update now
 

@@ -40,6 +40,27 @@ back. The client's forms (edit, new authorisation, agent enrolment, a device) ke
 7. **Reports**: create an Executive summary for management and a Technical findings report for IT (Reports card on
    the client's **Reports** page). Print to PDF from the browser. Reports are frozen: they never change after they are made.
 
+## NinjaOne
+
+Sentinel can read each client's computers from NinjaOne. It only reads; it never changes anything in NinjaOne.
+
+1. In NinjaOne, go to **Administration → Apps → API → Client App IDs** and click **Add client app**:
+   - Application platform: **API Services (machine-to-machine)**; name: MSP Sentinel.
+   - Scopes: **Monitoring** only. Allowed grant types: **Client credentials**.
+   - Save, and copy the client ID and client secret (NinjaOne shows the secret once).
+2. In Sentinel, go to **Administration → Integrations**. Enter the instance (the address you sign in to NinjaOne at,
+   for example `app.ninjarmm.com` or `eu.ninjarmm.com`), the client ID and the secret. Tick **Sync linked clients**,
+   save, and click **Test connection**.
+3. On each client's **Devices** page, click **Link to an organisation** and pick its NinjaOne organisation. Use
+   **Sync now** for a first look; after that it syncs every 6 hours.
+
+What comes over: computers (Windows, macOS and Linux workstations and servers) that are approved in NinjaOne, with
+their operating system, antivirus, BitLocker on the system drive, missing and failed Windows updates, and installed
+software. Network devices, phones and devices waiting for approval are left out. Anything NinjaOne doesn't report
+stays unknown and is never a finding. If a sync fails part-way, nothing is changed and the next sync tries again.
+
+The Sentinel server needs outbound HTTPS to your NinjaOne instance.
+
 ## On-premises agents
 
 For a client's internal network, install an agent at the site (see [`agent.md`](agent.md)): record an internal

@@ -210,6 +210,7 @@ try {
     $cfg['updates'] = ['url' => "http://127.0.0.1:{$feedsPort}/releases/latest", // never the real releases feed in tests
                        'compare_url' => "http://127.0.0.1:{$feedsPort}/compare/{repo}/{base}...{head}"];
     $cfg['web_update'] = ['state_dir' => $outDir . '/web-update']; // never /var/lib in tests
+    $cfg['testing']['ninjaone_base_url'] = "http://127.0.0.1:{$feedsPort}/ninja"; // mock NinjaOne API, never the real one
     $cfg['app']['public_url'] = 'https://sentinel.example';
 
     // Fake mail servers on 127.0.0.1: plain (local relay style) and STARTTLS with a test certificate for "localhost".

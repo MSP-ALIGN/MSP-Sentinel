@@ -41,6 +41,7 @@ final class AdminController extends Controller
             'webhook' => App::settings()->get('webhook_enabled') === '1',
             'tokens' => $tokens,
             'events' => App::settings()->get('event_webhook_enabled') === '1',
+            'ninja' => App::settings()->get('ninjaone_enabled') === '1' && App::ninjaOne() !== null,
             'problems' => count(array_filter($checks, static fn (array $c): bool => $c['status'] === 'fail')),
             'warnings' => count(array_filter($checks, static fn (array $c): bool => $c['status'] === 'warn')),
             'newer' => App::updates()->newer(),

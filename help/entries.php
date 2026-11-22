@@ -113,7 +113,7 @@ return [
                 'Internal devices come from the on-premises agent and, once it is connected, from NinjaOne. Each client page shows them under Internal devices; a device page lists its open services, installed software with known vulnerabilities, and missing updates.',
                 'Grading: a Windows version without security updates, or antivirus/EDR missing or turned off, is a Fail. Antivirus definitions out of date, disk encryption off on a workstation, security updates missing for more than 30 days, and updates that failed are Warnings. Vulnerable software gets one finding per device and program, graded by its worst CVE.',
                 'Only programs in Sentinel\'s software catalogue are matched to vulnerabilities, and only with a clean version number; other programs are listed but not matched. When a program updates before vulnerability data for the new version is available, its findings wait instead of resolving.',
-                'The NinjaOne connector itself is not available yet: it is added in a later release.',
+                'NinjaOne: an admin connects it under Administration, Integrations (an API app with the Monitoring scope and the Client credentials grant), then links each client to its NinjaOne organisation on the client\'s Devices page. Sentinel reads devices, operating systems, antivirus, BitLocker, missing Windows updates and installed software every 6 hours. It only reads: nothing is changed in NinjaOne. Network devices, phones and devices waiting for approval are left out.',
             ],
         ],
         [
@@ -197,6 +197,14 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.14.0',
+            'date' => '2026-11-22',
+            'items' => [
+                'NinjaOne connector (read-only): devices, operating systems, antivirus, BitLocker, missing updates and installed software for each linked client, every 6 hours.',
+                'Administration, Integrations: NinjaOne instance, client ID and secret (encrypted), set-up steps and Test connection.',
+            ],
+        ],
         [
             'version' => '1.13.1',
             'date' => '2026-11-22',

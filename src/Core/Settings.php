@@ -60,6 +60,14 @@ final class Settings
         'worker_last_tick' => '',
         'update_latest_version' => '',
         'update_checked_at' => '',
+        // NinjaOne (Administration > Integrations): instance host, API client ID, and on/off. The client secret
+        // is in ninjaone_client_secret (encrypted, see SECRETS).
+        'ninjaone_enabled' => '0',
+        'ninjaone_host' => '',
+        'ninjaone_client_id' => '',
+        'ninjaone_client_secret' => '',
+        'ninjaone_tested_at' => '',
+        'ninjaone_test_result' => '',
         // Git-based installs: commits the followed branch is ahead of the installed commit, its newest commit, and
         // the installed commit the answer is for (so an answer for an older commit is never shown after updating).
         'update_branch_behind' => '',
@@ -74,7 +82,7 @@ final class Settings
     ];
 
     /** Settings that hold secrets: stored encrypted with the app key, never shown again. */
-    public const SECRETS = ['smtp_password', 'webhook_url', 'event_webhook_url', 'event_webhook_secret'];
+    public const SECRETS = ['smtp_password', 'webhook_url', 'event_webhook_url', 'event_webhook_secret', 'ninjaone_client_secret'];
 
     /** @var array<string,string>|null */
     private ?array $cache = null;

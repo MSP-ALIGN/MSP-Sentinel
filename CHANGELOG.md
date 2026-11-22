@@ -2,6 +2,18 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.14.0 (2026-11-22): NinjaOne
+
+- **NinjaOne connector**, read-only, built on NinjaOne's published Public API 2.0. Every 6 hours, each linked client
+  gets its computers with operating system (and its support date), antivirus, disk encryption (BitLocker), missing
+  Windows updates and installed software, matched to known vulnerabilities. Findings follow the same grades as
+  everything else.
+- **Administration → Integrations**: enter your NinjaOne instance, client ID and client secret (encrypted, never
+  shown again), with step-by-step instructions for the NinjaOne API app (Monitoring scope, Client credentials) and a
+  **Test connection** button. Link each client to its NinjaOne organisation on the client's Devices page.
+- Honest by design: anything NinjaOne doesn't report stays "unknown" rather than becoming a finding, and a sync with
+  a failed page changes nothing.
+
 ### 1.13.1 (2026-11-22): Update now fixes
 
 - Clicking **Update now** again within 15 minutes now says when the next update can start, instead of seemingly

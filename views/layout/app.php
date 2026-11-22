@@ -34,6 +34,7 @@ $adminItems = [
     ['/admin', 'bi-grid-1x2', __('Overview')],
     ['/users', 'bi-people', __('Users')],
     ['/admin/settings', 'bi-gear', __('Settings')],
+    ['/admin/integrations', 'bi-puzzle', __('Integrations')],
     ['/admin/api', 'bi-plug', __('API')],
     ['/admin/system', 'bi-heart-pulse', __('System')],
     ['/admin/audit', 'bi-journal-text', __('Audit log')],

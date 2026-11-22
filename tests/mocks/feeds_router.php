@@ -20,6 +20,9 @@ if (is_string($log) && $log !== '') {
 }
 $fixtures = __DIR__ . '/../fixtures/feeds/';
 header('Content-Type: application/json');
+if (str_starts_with($path, '/ninja/')) {
+    require __DIR__ . '/ninjaone_mock.php'; // mock NinjaOne Public API (exits)
+}
 
 if ($path === '/rest/json/cves/2.0') {
     $match = (string) ($_GET['virtualMatchString'] ?? '');

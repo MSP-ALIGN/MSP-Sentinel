@@ -353,8 +353,30 @@ final class App
         $fixture = (string) self::config()->get('testing.inventory_fixture', '');
         if ($fixture !== '' && self::webhookTestMode()) {
             $sources['ninjaone'] = new \Sentinel\Inventory\FixtureSource($fixture);
+            return $sources;
+        }
+        $ninja = self::ninjaOne();
+        if ($ninja !== null && self::settings()->get('ninjaone_enabled') === '1') {
+            $sources['ninjaone'] = $ninja;
         }
         return $sources;
+    }
+
+    /**
+     * The NinjaOne connector from Administration > Integrations, or null while it isn't filled in.
+     * The test suite may point it at a local mock (config testing.ninjaone_base_url, test mode only).
+     */
+    public static function ninjaOne(): ?\Sentinel\Inventory\NinjaOneSource
+    {
+        $s = self::settings();
+        $host = $s->get('ninjaone_host');
+        $id = $s->get('ninjaone_client_id');
+        $secret = $s->getSecret('ninjaone_client_secret');
+        if ($host === '' || $id === '' || $secret === '') {
+            return null;
+        }
+        $base = self::webhookTestMode() ? (string) self::config()->get('testing.ninjaone_base_url', '') : '';
+        return new \Sentinel\Inventory\NinjaOneSource($host, $id, $secret, $base);
     }
 
     /** Inventory sync service (worker and "Sync now"). */

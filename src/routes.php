@@ -16,6 +16,7 @@ use Sentinel\Auth\Role;
 use Sentinel\Controllers\AdminController;
 use Sentinel\Controllers\AgentController;
 use Sentinel\Controllers\AlertController;
+use Sentinel\Controllers\IntegrationsController;
 use Sentinel\Controllers\ApiAdminController;
 use Sentinel\Controllers\AuthController;
 use Sentinel\Controllers\AuthorisationController;
@@ -142,6 +143,9 @@ $router->add('POST', '/users/{id}/password', [UserController::class, 'resetPassw
 $router->add('POST', '/users/{id}/2fa-reset', [UserController::class, 'resetTwoFactor'], $admin);
 $router->add('GET', '/admin', [AdminController::class, 'index'], $admin);
 $router->add('GET', '/admin/audit', [AdminController::class, 'auditLog'], $admin);
+$router->add('GET', '/admin/integrations', [IntegrationsController::class, 'index'], $admin);
+$router->add('POST', '/admin/integrations/ninjaone', [IntegrationsController::class, 'saveNinjaOne'], $admin);
+$router->add('POST', '/admin/integrations/ninjaone/test', [IntegrationsController::class, 'testNinjaOne'], $admin);
 $router->add('GET', '/admin/settings', [AdminController::class, 'settings'], $admin);
 $router->add('POST', '/admin/settings', [AdminController::class, 'saveSettings'], $admin);
 $router->add('POST', '/admin/settings/due-dates', [AdminController::class, 'saveDuePolicy'], $admin);
