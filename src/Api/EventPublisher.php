@@ -47,6 +47,10 @@ final class EventPublisher
         if (!in_array($type, self::TYPES, true) || $this->settings->get('event_webhook_enabled') !== '1') {
             return;
         }
+        // Demo clients (made-up data) never send events to outside systems.
+        if (isset($data['client_id']) && (int) $this->db->query('SELECT is_demo FROM clients WHERE id = ' . (int) $data['client_id'])->fetchColumn() === 1) {
+            return;
+        }
         // An event must never break the change that caused it (a triage, a report, an alert): log and go on.
         try {
             $this->queue($type, $data);

@@ -77,7 +77,7 @@ final class ReportService
         $stmt = $this->db->prepare(
             "SELECT c.*, r.attempts AS run_attempts FROM clients c
              LEFT JOIN report_runs r ON r.client_id = c.id AND r.period_start = :p
-             WHERE c.report_monthly = 1 AND c.is_archived = 0 AND c.report_recipients <> ''
+             WHERE c.report_monthly = 1 AND c.is_archived = 0 AND c.is_demo = 0 AND c.report_recipients <> ''
                AND (r.client_id IS NULL OR (r.status = 'failed' AND r.attempts < :max AND r.last_attempt_at < UTC_TIMESTAMP() - INTERVAL 1 HOUR))
              ORDER BY c.id"
         );

@@ -237,7 +237,8 @@ final class DashboardData
         $next = null;
         $openNow = 0;
         $paused = $this->settings->fresh('scanning_paused') === '1';
-        foreach ($this->db->query('SELECT id, name, timezone, scan_window_start, scan_window_end, scanning_paused FROM clients WHERE is_archived = 0')->fetchAll() as $c) {
+        // Demo clients are never scanned, so they have no scan window here.
+        foreach ($this->db->query('SELECT id, name, timezone, scan_window_start, scan_window_end, scanning_paused FROM clients WHERE is_archived = 0 AND is_demo = 0')->fetchAll() as $c) {
             $w = ScanWindow::nextChange($c);
             if ($w === null || (int) $c['scanning_paused'] === 1) {
                 continue;

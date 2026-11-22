@@ -169,7 +169,7 @@ final class FixWorkflow
             "SELECT f.id, f.client_id, f.title, f.target, f.severity, f.due_at, f.assigned_to, c.name AS client_name,
                     u.username, u.email, u.alert_email, u.is_active AS user_active, u.role AS user_role,
                     f.due_at < UTC_TIMESTAMP() AS overdue
-             FROM findings f JOIN clients c ON c.id = f.client_id AND c.is_archived = 0 LEFT JOIN users u ON u.id = f.assigned_to
+             FROM findings f JOIN clients c ON c.id = f.client_id AND c.is_archived = 0 AND c.is_demo = 0 LEFT JOIN users u ON u.id = f.assigned_to
              WHERE f.status = 'open' AND f.due_at IS NOT NULL AND f.due_at < UTC_TIMESTAMP() + INTERVAL " . self::DUE_SOON_DAYS . " DAY
              ORDER BY f.due_at, f.id LIMIT 5000"
         )->fetchAll();

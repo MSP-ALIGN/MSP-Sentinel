@@ -102,6 +102,15 @@ return [
             }
             Assert::true($refused, 'repository refuses demo clients');
         }
+        // Monthly report emails can't be switched on for a demo client.
+        $admin->submit('/clients/' . $riverside, '/clients/' . $riverside . '/report-schedule', ['report_monthly' => '1', 'report_recipients' => 'ops@msp.example']);
+        Assert::same(0, (int) $ctx->db->query("SELECT report_monthly FROM clients WHERE id = {$riverside}")->fetchColumn(), 'no monthly report emails for demo clients');
+        // Fix reminders and the daily findings refresh never alert about demo clients.
+        $deliveries = (int) $ctx->db->query('SELECT COUNT(*) FROM deliveries')->fetchColumn();
+        $ctx->db->exec("UPDATE tls_endpoints t JOIN assets a ON a.id = t.asset_id SET t.not_after = UTC_TIMESTAMP() - INTERVAL 1 DAY WHERE a.client_id = {$riverside}");
+        App::findingsEngine()->refreshAll(static fn (int $id, array $r) => App::alerts()->findingsChanged($id, $r, true));
+        Assert::true(array_filter(App::fixWorkflow()->dueItems(), static fn (array $i): bool => in_array((int) $i['client_id'], $ids, true)) === [], 'no fix reminders for demo findings');
+        Assert::same($deliveries, (int) $ctx->db->query('SELECT COUNT(*) FROM deliveries')->fetchColumn(), 'daily refresh queues nothing for demo clients');
         // The scheduler and the agent scheduler skip them.
         // (They may queue jobs for the other test clients: those are removed again, so later tests see the same state.)
         $maxScan = (int) $ctx->db->query('SELECT COALESCE(MAX(id), 0) FROM scan_jobs')->fetchColumn();

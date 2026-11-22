@@ -63,7 +63,8 @@ Safety:
 - They carry a **Demo** badge and are **never scanned**. Scheduled and manual scans, verify fix, discovery, agent
   scans, inventory sync and vulnerability look-ups all refuse or skip them. The demo agent's token is thrown away
   when it is created, so nothing can ever sign in as it.
-- No user accounts are created and no alerts or emails are sent.
+- No user accounts are created. Demo clients never send notifications, alert emails, webhooks, outbound events,
+  fix reminders or monthly reports.
 - Removing deletes only demo clients and what belongs to them. The public CVE and KEV entries the demo refers to
   stay, because they are real reference data that the daily feeds keep up to date. The audit log keeps its records
   of loading and removing.

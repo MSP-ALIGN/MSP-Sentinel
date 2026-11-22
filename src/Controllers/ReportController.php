@@ -89,6 +89,10 @@ final class ReportController extends Controller
     {
         $client = $this->client($params);
         $on = $request->input('report_monthly') === '1';
+        if ($on && (int) ($client['is_demo'] ?? 0) === 1) {
+            Session::flash('info', __('This is a demo client with made-up data: it never emails reports.'));
+            return Response::redirect('/clients/' . (int) $client['id'] . '#reports');
+        }
         $list = array_values(array_unique(array_filter(array_map('trim', preg_split('/[,;\s]+/', $request->input('report_recipients')) ?: []))));
         if (count($list) > 5 || array_filter($list, static fn (string $a): bool => !SmtpMailer::validAddress($a)) !== []) {
             Session::flash('danger', __('Report recipients: up to 5 valid email addresses, separated by commas.'));

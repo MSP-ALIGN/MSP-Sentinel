@@ -59,6 +59,9 @@ final class AlertService
      */
     public function findingsChanged(int $clientId, array $result, bool $digest): void
     {
+        if ($this->isDemo($clientId)) {
+            return; // demo clients never alert anyone
+        }
         $this->events?->findingsChanged($clientId, $result); // outbound events (all changes, including warnings)
         $client = (string) $this->db->query('SELECT name FROM clients WHERE id = ' . (int) $clientId)->fetchColumn();
         $newIds = array_merge($result['opened_ids'], $result['reopened_ids']);
@@ -113,6 +116,9 @@ final class AlertService
     /** A scan job failed: tell admins (in-app) and the team addresses. */
     public function scanFailed(int $clientId, int $jobId, string $message): void
     {
+        if ($this->isDemo($clientId)) {
+            return; // demo clients never alert anyone
+        }
         $client = (string) $this->db->query('SELECT name FROM clients WHERE id = ' . (int) $clientId)->fetchColumn();
         $title = __('Scan #{id} for {client} failed', ['id' => $jobId, 'client' => $client]);
         $this->notifyUsers('scan_failed', 'warn', $title, $message, '/clients/' . $clientId . '#scans', 'admin');
@@ -137,7 +143,7 @@ final class AlertService
      */
     public function findingAssigned(int $findingId, int $assigneeId, int $byUserId): void
     {
-        if ($assigneeId === $byUserId) {
+        if ($assigneeId === $byUserId || $this->isDemo((int) $this->db->query('SELECT client_id FROM findings WHERE id = ' . $findingId)->fetchColumn())) {
             return;
         }
         $stmt = $this->db->prepare('SELECT f.id, f.title, f.target, f.severity, f.due_at, c.name AS client_name, u.email, u.alert_email, u.is_active, b.username AS by_name
@@ -225,6 +231,9 @@ final class AlertService
      */
     public function newDevices(int $clientId, string $site, array $devices): void
     {
+        if ($this->isDemo($clientId)) {
+            return; // demo clients never alert anyone
+        }
         $client = (string) $this->db->query('SELECT name FROM clients WHERE id = ' . (int) $clientId)->fetchColumn();
         $title = __('{n} new device(s) on the {site} network of {client}', ['n' => count($devices), 'site' => $site, 'client' => $client]);
         $items = array_map(static fn (array $d): string => trim($d['ip'] . ' ' . ($d['hostname'] !== '' ? '(' . $d['hostname'] . ')' : '') . ($d['mac'] !== '' ? ' ' . $d['mac'] : '')), array_slice($devices, 0, 50));
@@ -353,5 +362,13 @@ final class AlertService
         $reportIds = implode(',', array_filter(array_map('intval', explode(',', $reportIds))));
         $this->db->prepare("INSERT INTO deliveries (channel, recipient, subject, body, status, next_attempt_at, created_at, report_ids) VALUES (:c, :r, :s, :b, 'pending', UTC_TIMESTAMP(), UTC_TIMESTAMP(), :ri)")
             ->execute(['c' => $channel, 'r' => $recipient, 's' => mb_substr($subject, 0, 300), 'b' => $body, 'ri' => $reportIds]);
+    }
+
+    /** Whether a client is a demo client (made-up data: no notifications, emails, webhooks or events). */
+    private function isDemo(int $clientId): bool
+    {
+        $stmt = $this->db->prepare('SELECT is_demo FROM clients WHERE id = :c');
+        $stmt->execute(['c' => $clientId]);
+        return (int) $stmt->fetchColumn() === 1;
     }
 }

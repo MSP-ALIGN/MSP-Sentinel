@@ -24,8 +24,8 @@ use Sentinel\Scope\IpRange;
  * - Every demo client has is_demo = 1, and ScanRepository::queue, AgentRepository::queueJob, discovery, the
  *   scheduler, inventory sync and vulnerability matching all refuse or skip demo clients. Nothing here ever
  *   contacts a host.
- * - No user accounts are created (findings are assigned to the admin who loads the data), no alerts or emails
- *   are sent, and monthly reports are off for demo clients.
+ * - No user accounts are created (findings are assigned to the admin who loads the data). Demo clients never
+ *   alert anyone: AlertService, EventPublisher, fix reminders and monthly reports skip them.
  * - remove() deletes only rows that belong to demo clients (is_demo = 1). The CVE and KEV rows it adds are real,
  *   public reference data (and only added when missing), so they stay; the daily feeds keep them current.
  *
@@ -54,6 +54,25 @@ final class DemoData
      */
     public function load(): array
     {
+        // One load at a time (two admins clicking at once would otherwise create two demo sets).
+        $lock = $this->db->quote('msp_sentinel_demo_' . substr(hash('sha256', (string) $this->db->query('SELECT DATABASE()')->fetchColumn()), 0, 16));
+        if ((int) $this->db->query("SELECT GET_LOCK({$lock}, 5)")->fetchColumn() !== 1) {
+            throw new \RuntimeException('Demo data is being loaded already.');
+        }
+        try {
+            return $this->loadLocked();
+        } finally {
+            $this->db->query("SELECT RELEASE_LOCK({$lock})");
+        }
+    }
+
+    /**
+     * The load itself (caller holds the demo lock).
+     *
+     * @return array{clients:int, findings:int, devices:int, reports:int}
+     */
+    private function loadLocked(): array
+    {
         if ($this->isLoaded()) {
             throw new \RuntimeException('Demo data is already loaded. Remove it first.');
         }
@@ -77,7 +96,12 @@ final class DemoData
             if ($this->db->inTransaction()) {
                 $this->db->rollBack();
             }
-            $this->remove();
+            try {
+                $this->remove();
+            } catch (\Throwable $cleanup) {
+                // Keep the original error; the cleanup problem is logged (remove it later with --remove).
+                error_log('MSP Sentinel demo data: cleanup after a failed load also failed: ' . $cleanup->getMessage());
+            }
             throw $ex;
         }
         $in = implode(',', $ids);
