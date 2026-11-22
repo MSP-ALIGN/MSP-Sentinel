@@ -136,7 +136,13 @@ await page.goto(`${base}/findings`);
 await shot(page, '23-findings');
 await page.click('table a[href*="/findings/"]');
 await page.waitForURL(/\/findings\/\d+$/);
+// Fix workflow: take the finding, then show the fix card and the list with owners and due dates.
+await page.click('#fix form input[value="me"] + button');
+await page.waitForURL(/\/findings\/\d+$/);
 await shot(page, '24-finding-detail');
+await page.locator('#fix').screenshot({ path: `${out}40-fix-card.png` });
+await page.goto(`${base}/findings?assignee=me`);
+await shot(page, '41-findings-mine');
 // Reports: branding (made-up MSP), then both reports for the demo client.
 await page.goto(`${base}/admin/settings`);
 await page.fill('#brand_name', 'Example MSP Ltd');

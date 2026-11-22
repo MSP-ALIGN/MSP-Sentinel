@@ -31,14 +31,14 @@ $typeLabels = ['port' => __('Exposed service'), 'tls' => __('Certificate'), 'web
 <div class="card">
     <div class="card-header">
         <form method="get" action="<?= e(url('/findings')) ?>" class="row g-2 align-items-end">
-            <div class="col-md-2">
+            <div class="col-6 col-md-3">
                 <label class="form-label small mb-0" for="f-client"><?= e(__('Client')) ?></label>
                 <select class="form-select form-select-sm" id="f-client" name="client">
                     <option value=""><?= e(__('All clients')) ?></option>
                     <?php foreach ($clients as $c): ?><option value="<?= e($c['id']) ?>" <?= (int) $filters['client'] === (int) $c['id'] ? 'selected' : '' ?>><?= e($c['name']) ?></option><?php endforeach; ?>
                 </select>
             </div>
-            <div class="col-md-1">
+            <div class="col-6 col-md-3">
                 <label class="form-label small mb-0" for="f-status"><?= e(__('Status')) ?></label>
                 <select class="form-select form-select-sm" id="f-status" name="status">
                     <?php foreach (['open' => __('Open'), 'accepted' => __('Accepted risk'), 'false_positive' => __('False positive'), 'resolved' => __('Resolved'), 'all' => __('Any status')] as $v => $l): ?>
@@ -46,7 +46,7 @@ $typeLabels = ['port' => __('Exposed service'), 'tls' => __('Certificate'), 'web
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div class="col-md-2">
+            <div class="col-6 col-md-3">
                 <label class="form-label small mb-0" for="f-sev"><?= e(__('Grade')) ?></label>
                 <select class="form-select form-select-sm" id="f-sev" name="severity">
                     <option value=""><?= e(__('Fail and Warning')) ?></option>
@@ -54,7 +54,7 @@ $typeLabels = ['port' => __('Exposed service'), 'tls' => __('Certificate'), 'web
                     <option value="warn" <?= $filters['severity'] === 'warn' ? 'selected' : '' ?>><?= e(__('Warning')) ?></option>
                 </select>
             </div>
-            <div class="col-md-2">
+            <div class="col-6 col-md-3">
                 <label class="form-label small mb-0" for="f-assignee"><?= e(__('Owner')) ?></label>
                 <select class="form-select form-select-sm" id="f-assignee" name="assignee">
                     <option value=""><?= e(__('Anyone')) ?></option>
@@ -62,7 +62,7 @@ $typeLabels = ['port' => __('Exposed service'), 'tls' => __('Certificate'), 'web
                     <?php foreach ($assignable as $u): ?><option value="<?= e($u['id']) ?>" <?= $filters['assignee'] === (string) $u['id'] ? 'selected' : '' ?>><?= e($u['username']) ?></option><?php endforeach; ?>
                 </select>
             </div>
-            <div class="col-md-2">
+            <div class="col-6 col-md-3">
                 <label class="form-label small mb-0" for="f-due"><?= e(__('Due')) ?></label>
                 <select class="form-select form-select-sm" id="f-due" name="due">
                     <option value=""><?= e(__('Any')) ?></option>
@@ -70,14 +70,14 @@ $typeLabels = ['port' => __('Exposed service'), 'tls' => __('Certificate'), 'web
                     <option value="soon" <?= $filters['due'] === 'soon' ? 'selected' : '' ?>><?= e(__('Due soon')) ?></option>
                 </select>
             </div>
-            <div class="col-md-2">
+            <div class="col-6 col-md-3">
                 <label class="form-label small mb-0" for="f-type"><?= e(__('Type')) ?></label>
                 <select class="form-select form-select-sm" id="f-type" name="type">
                     <option value=""><?= e(__('All types')) ?></option>
                     <?php foreach ($typeLabels as $v => $l): ?><option value="<?= e($v) ?>" <?= $filters['type'] === $v ? 'selected' : '' ?>><?= e($l) ?></option><?php endforeach; ?>
                 </select>
             </div>
-            <div class="col-md-1"><button type="submit" class="btn btn-primary btn-sm w-100"><?= e(__('Filter')) ?></button></div>
+            <div class="col-6 col-md-3"><button type="submit" class="btn btn-primary btn-sm w-100"><?= e(__('Filter')) ?></button></div>
         </form>
     </div>
     <div class="card-body p-0 table-responsive">
