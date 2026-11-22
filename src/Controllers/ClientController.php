@@ -113,6 +113,9 @@ final class ClientController extends Controller
     public function overview(Request $request, array $params): Response
     {
         $client = $this->findOr404($params);
+        if ((int) $client['is_archived'] === 1) {
+            throw new HttpException(404); // archived clients have no overview
+        }
         return Response::html(View::render('clients/overview', ['client' => $client, 'ov' => self::overviewData($client)], null))->header('X-Sentinel-Fragment', '1');
     }
 
@@ -130,6 +133,7 @@ final class ClientController extends Controller
         return [
             'summary' => $summary,
             'window' => \Sentinel\Dashboard\DashboardData::window($client),
+            'paused' => (int) $client['scanning_paused'] === 1 || App::scope()->globallyPaused(),
             'trend' => $data->trend(90, $cid, (int) $summary['fail'], (int) $summary['warn']),
             'surface' => $data->surface($cid),
             'activity' => $data->activity(6, $cid),

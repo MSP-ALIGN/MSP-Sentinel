@@ -49,6 +49,9 @@ final class Auth
     /** @var array<string,mixed>|null|false Cached user for this request (false = not looked up yet). */
     private array|null|false $current = false;
 
+    /** True for background requests (dashboard refresh) that must not count as user activity. */
+    private bool $passive = false;
+
     /** Wire up the services the sign-in flow needs. */
     public function __construct(
         private readonly UserRepository $users,
@@ -203,6 +206,16 @@ final class Auth
     }
 
     /**
+     * Mark this request as background (e.g. the dashboard's 60-second refresh): the
+     * idle and absolute timeouts are still checked, but the request doesn't reset the
+     * idle timer, so an unattended screen still signs out after 30 minutes.
+     */
+    public function markPassive(): void
+    {
+        $this->passive = true;
+    }
+
+    /**
      * The signed-in user, or null. Checks timeouts and revocation on every call
      * (once per request, then cached).
      *
@@ -231,7 +244,9 @@ final class Auth
             Session::reset();
             return null;
         }
-        Session::set('seen_at', $now);
+        if (!$this->passive) {
+            Session::set('seen_at', $now);
+        }
         return $this->current = $user;
     }
 

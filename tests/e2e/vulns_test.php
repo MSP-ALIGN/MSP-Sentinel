@@ -57,7 +57,7 @@ return [
         Assert::true(strpos($vulnCard, 'CVE-2099-0001') < strpos($vulnCard, 'CVE-2099-0002'), 'known exploited listed first');
         $dash = $admin->get('/')->body;
         Assert::contains('Known exploited', $dash);
-        Assert::true((bool) preg_match('/\+\d+ possible \(version unknown\)/', $dash), 'possible KEV matches counted separately');
+        Assert::true((bool) preg_match('/\+\d+ possible CVE\(s\), version unknown/', $dash), 'possible KEV matches counted separately');
         $settings = $admin->get('/admin/settings')->body;
         Assert::contains('3 known exploited vulnerabilities.', $settings);
         Assert::contains('An NVD API key is configured', $settings);

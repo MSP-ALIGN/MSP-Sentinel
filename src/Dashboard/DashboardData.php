@@ -20,8 +20,13 @@ use Sentinel\Scanning\ScanWindow;
  *   positives don't count. Level: At risk (any open Fail), Needs attention
  *   (open Warnings only) or Good (nothing open), the same as in reports.
  *
- * Security assumptions: read-only queries with bound or integer-cast
- * parameters. Archived clients are left out. Every value returned is scan
+ * Ranking puts the level first (At risk before Needs attention before Good),
+ * then the score, so many Warnings never outrank a Fail.
+ *
+ * Certificates and TLS counts only include services that are still open.
+ *
+ * Security assumptions: read-only queries; every value placed in SQL is an
+ * integer cast or a constant. Archived clients are left out. Every value returned is scan
  * data or admin input (untrusted) and is escaped by the views. Callers
  * pass a client ID only after the route has authorised the user; every
  * signed-in role may see every client today.
@@ -58,7 +63,7 @@ final class DashboardData
                        COALESCE(SUM(f.status = 'open' AND f.severity = 'fail' AND k.cve_id IS NOT NULL), 0) AS kev,
                        (SELECT MAX(j.finished_at) FROM scan_jobs j WHERE j.client_id = c.id AND j.finished_at IS NOT NULL) AS last_scan
                 FROM clients c
-                LEFT JOIN findings f ON f.client_id = c.id
+                LEFT JOIN findings f ON f.client_id = c.id AND f.status = 'open'
                 LEFT JOIN kev_catalog k ON k.cve_id = f.cve_id
                 WHERE c.is_archived = 0" . ($onlyId !== null ? ' AND c.id = ' . (int) $onlyId : '') . '
                 GROUP BY c.id, c.name, c.scanning_paused';
@@ -71,7 +76,8 @@ final class DashboardData
                        'score' => self::score($kev, $fail, $warn), 'level' => self::level($fail, $warn),
                        'paused' => (int) $r['scanning_paused'] === 1, 'last_scan' => $r['last_scan']];
         }
-        usort($rows, static fn (array $a, array $b): int => [$b['score'], $b['fail'], $b['warn'], $a['name']] <=> [$a['score'], $a['fail'], $a['warn'], $b['name']]);
+        $rank = ['risk' => 2, 'attention' => 1, 'good' => 0];
+        usort($rows, static fn (array $a, array $b): int => [$rank[$b['level']], $b['score'], $b['fail'], $b['warn'], $a['name']] <=> [$rank[$a['level']], $a['score'], $a['fail'], $a['warn'], $b['name']]);
         return $rows;
     }
 
@@ -105,10 +111,12 @@ final class DashboardData
     {
         $limit = max(1, min(50, $limit));
         $clientSql = $clientId !== null ? ' AND c.id = ' . (int) $clientId : '';
+        // For one client, look only at that client's findings (uses the client index) instead of walking all events.
+        $eventScope = $clientId !== null ? ' AND e.finding_id IN (SELECT id FROM findings WHERE client_id = ' . (int) $clientId . ')' : '';
         $events = $this->db->query(
             "SELECT e.created_at AS at, e.event AS kind, f.severity, f.title, c.name AS client, c.id AS client_id, f.id AS ref
              FROM finding_events e JOIN findings f ON f.id = e.finding_id JOIN clients c ON c.id = f.client_id AND c.is_archived = 0
-             WHERE e.event IN ('opened','reopened','resolved','triaged_accepted','triaged_false_positive','triaged_open'){$clientSql}
+             WHERE e.event IN ('opened','reopened','resolved','triaged_accepted','triaged_false_positive','triaged_open'){$eventScope}{$clientSql}
              ORDER BY e.id DESC LIMIT {$limit}"
         )->fetchAll();
         $scans = $this->db->query(
@@ -136,7 +144,8 @@ final class DashboardData
         $join = ' JOIN clients c ON c.id = a.client_id AND c.is_archived = 0';
         $hosts = (int) $this->db->query("SELECT COUNT(*) FROM assets a{$join} WHERE 1=1{$clientSql}")->fetchColumn();
         $ports = $this->db->query("SELECT s.port FROM services s JOIN assets a ON a.id = s.asset_id{$join} WHERE s.is_open = 1{$clientSql}")->fetchAll(PDO::FETCH_COLUMN);
-        $tls = (int) $this->db->query("SELECT COUNT(*) FROM tls_endpoints t JOIN assets a ON a.id = t.asset_id{$join} WHERE 1=1{$clientSql}")->fetchColumn();
+        $tls = (int) $this->db->query("SELECT COUNT(*) FROM tls_endpoints t JOIN assets a ON a.id = t.asset_id{$join}
+            JOIN services s ON s.asset_id = t.asset_id AND s.port = t.port AND s.protocol = 'tcp' AND s.is_open = 1 WHERE 1=1{$clientSql}")->fetchColumn();
         $web = (int) $this->db->query("SELECT COUNT(*) FROM web_pages w JOIN assets a ON a.id = w.asset_id{$join} WHERE 1=1{$clientSql}")->fetchColumn();
         $groups = [
             'remote' => [__('Remote access'), [22, 23, 3389, 5900, 5985, 5986], true],
@@ -194,6 +203,7 @@ final class DashboardData
         $rows = $this->db->query(
             "SELECT a.ip, t.port, t.sni, t.subject_cn, t.not_after, c.name AS client, c.id AS client_id
              FROM tls_endpoints t JOIN assets a ON a.id = t.asset_id JOIN clients c ON c.id = a.client_id AND c.is_archived = 0
+             JOIN services s ON s.asset_id = t.asset_id AND s.port = t.port AND s.protocol = 'tcp' AND s.is_open = 1
              WHERE t.not_after IS NOT NULL AND t.not_after < UTC_TIMESTAMP() + INTERVAL " . max(1, min(365, $days)) . ' DAY'
             . ($clientId !== null ? ' AND c.id = ' . (int) $clientId : '') . ' ORDER BY t.not_after LIMIT 12'
         )->fetchAll();
@@ -201,6 +211,16 @@ final class DashboardData
             'endpoint' => $r['ip'] . ':' . $r['port'], 'name' => (string) ($r['sni'] ?: $r['subject_cn'] ?: '?'), 'client' => (string) $r['client'],
             'client_id' => (int) $r['client_id'], 'days' => (int) floor((strtotime($r['not_after'] . ' UTC') - time()) / 86400),
         ], $rows);
+    }
+
+    /** How many certificates on open services expire within $days days (or already have): the full count, not limited. */
+    public function certificateCount(int $days): int
+    {
+        return (int) $this->db->query(
+            "SELECT COUNT(*) FROM tls_endpoints t JOIN assets a ON a.id = t.asset_id JOIN clients c ON c.id = a.client_id AND c.is_archived = 0
+             JOIN services s ON s.asset_id = t.asset_id AND s.port = t.port AND s.protocol = 'tcp' AND s.is_open = 1
+             WHERE t.not_after IS NOT NULL AND t.not_after < UTC_TIMESTAMP() + INTERVAL " . max(0, min(365, $days)) . ' DAY'
+        )->fetchColumn();
     }
 
     /**
@@ -216,6 +236,7 @@ final class DashboardData
         $queued = (int) $this->db->query("SELECT COUNT(*) FROM scan_jobs WHERE status = 'queued'")->fetchColumn();
         $next = null;
         $openNow = 0;
+        $paused = $this->settings->fresh('scanning_paused') === '1';
         foreach ($this->db->query('SELECT id, name, timezone, scan_window_start, scan_window_end, scanning_paused FROM clients WHERE is_archived = 0')->fetchAll() as $c) {
             $w = ScanWindow::nextChange($c);
             if ($w === null || (int) $c['scanning_paused'] === 1) {
@@ -229,13 +250,13 @@ final class DashboardData
         }
         $age = static fn (?string $t): ?int => $t === null || $t === '' ? null : time() - (int) strtotime($t . ' UTC');
         return [
-            'paused' => $this->settings->fresh('scanning_paused') === '1',
+            'paused' => $paused,
             'worker_age' => $age($tick),
             'feed_age' => ['kev' => $age($feeds['kev'] ?? null), 'nvd' => $age($feeds['nvd'] ?? null), 'epss' => $age($feeds['epss'] ?? null)],
             'running' => $running,
             'queued' => $queued,
-            'windows_open' => $openNow,
-            'next_window' => $next === null ? null : ['client' => $next['client'], 'in' => max(0, $next['at']->getTimestamp() - time())],
+            'windows_open' => $paused ? 0 : $openNow,
+            'next_window' => $paused || $next === null ? null : ['client' => $next['client'], 'in' => max(0, $next['at']->getTimestamp() - time())],
         ];
     }
 

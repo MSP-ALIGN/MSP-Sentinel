@@ -21,7 +21,11 @@ $w = $ov['window'];
         <a class="kpi kpi-kev" href="#vulns"><span class="kpi-n"><?= (int) $c['kev'] ?></span><span class="kpi-l"><i class="bi bi-bug" aria-hidden="true"></i> <?= e(__('Known exploited')) ?></span></a>
         <a class="kpi" href="#scans"><span class="kpi-n"><?= (int) $ov['surface']['hosts'] ?></span><span class="kpi-l"><i class="bi bi-hdd-network" aria-hidden="true"></i> <?= e(__('Hosts')) ?></span></a>
         <a class="kpi" href="#scans"><span class="kpi-n"><?= (int) $ov['surface']['services'] ?></span><span class="kpi-l"><i class="bi bi-door-open" aria-hidden="true"></i> <?= e(__('Open services')) ?></span></a>
+        <?php if ($ov['paused']): ?>
+        <div class="kpi kpi-window is-paused"><span class="kpi-n kpi-small"><?= e(__('Paused')) ?></span><span class="kpi-l"><i class="bi bi-pause-circle" aria-hidden="true"></i> <?= e(__('Scanning is paused')) ?></span></div>
+        <?php else: ?>
         <div class="kpi kpi-window <?= $w !== null && $w['open'] ? 'is-open' : '' ?>"><span class="kpi-n kpi-small"><?= e($w === null ? '—' : $duration($w['in'])) ?></span><span class="kpi-l"><i class="bi bi-clock" aria-hidden="true"></i> <?= e($w === null ? __('No valid scan window') : ($w['open'] ? __('Window open, closes in') : __('Window opens in'))) ?></span></div>
+        <?php endif; ?>
     </section>
     <section class="hud hud-trend" aria-labelledby="h-c-trend">
         <h2 id="h-c-trend" class="hud-title"><?= e(__('Open problems, last 90 days')) ?></h2>

@@ -13,6 +13,7 @@ use Sentinel\Auth\Role;
  * - 'auth' => 'public'  : anyone (login page, logout)
  * - 'auth' => 'pending' : password checked, second factor still needed
  * - 'auth' => 'user'    : fully signed-in user (the default)
+ * - 'passive' => true    : background request (auto-refresh); does not reset the idle sign-out timer
  * - 'role' => minimum role for 'user' routes (default: viewer)
  *
  * Security assumptions:
@@ -36,7 +37,7 @@ final class Router
      */
     public function add(string $method, string $pattern, array $handler, array $opts = []): void
     {
-        $opts += ['auth' => 'user', 'role' => Role::VIEWER, 'allow_password_change' => false];
+        $opts += ['auth' => 'user', 'role' => Role::VIEWER, 'allow_password_change' => false, 'passive' => false];
         if (!in_array($opts['auth'], ['public', 'pending', 'user'], true)) {
             throw new \InvalidArgumentException('Unknown auth level for route ' . $pattern);
         }

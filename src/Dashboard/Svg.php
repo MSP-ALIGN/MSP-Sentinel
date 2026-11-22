@@ -65,7 +65,10 @@ final class Svg
         $max = max(1, ...array_map(static fn (array $p): int => max($p['fail'], $p['warn']), $points));
         $x = static fn (int $i): float => $n <= 1 ? $l + ($w - $l - $r) : $l + $i * ($w - $l - $r) / ($n - 1);
         $y = static fn (int $v): float => $t + ($h - $t - $b) * (1 - $v / $max);
-        $out = '<svg class="trend" viewBox="0 0 ' . $w . ' ' . $h . '" role="img" aria-label="' . e($label) . '" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">';
+        $first = $points[0];
+        $last = $points[$n - 1];
+        $spoken = $label . ': ' . __('now {f} Fail and {w} Warning; {d}: {f0} Fail and {w0} Warning', ['f' => $last['fail'], 'w' => $last['warn'], 'd' => $first['day'], 'f0' => $first['fail'], 'w0' => $first['warn']]);
+        $out = '<svg class="trend" viewBox="0 0 ' . $w . ' ' . $h . '" role="img" aria-label="' . e($spoken) . '" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">';
         foreach ([0, 0.5, 1] as $f) {
             $gy = $t + ($h - $t - $b) * $f;
             $out .= sprintf('<line class="t-grid" x1="%d" y1="%.1f" x2="%d" y2="%.1f"/>', $l, $gy, $w - $r, $gy);
@@ -103,7 +106,8 @@ final class Svg
         $max = max(1, ...array_map(static fn (array $r): int => $r['count'], $rows));
         $rowH = 26;
         $h = $rowH * count($rows);
-        $out = '<svg class="bars" viewBox="0 0 400 ' . $h . '" role="img" aria-label="' . e($label) . '" xmlns="http://www.w3.org/2000/svg">';
+        $spoken = implode(', ', array_map(static fn (array $r): string => $r['label'] . ' ' . (int) $r['count'], $rows));
+        $out = '<svg class="bars" viewBox="0 0 400 ' . $h . '" role="img" aria-label="' . e($label . ': ' . $spoken) . '" xmlns="http://www.w3.org/2000/svg">';
         foreach ($rows as $i => $row) {
             $y = $i * $rowH;
             $bw = 220 * $row['count'] / $max;

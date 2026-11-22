@@ -7,8 +7,9 @@
 ?>
 <?php if ($globallyPaused): ?>
 <?php require __DIR__ . '/partials/kill_switch.php'; ?>
+<div class="dash-actions"><button type="button" class="btn btn-sm btn-outline-secondary refresh-toggle" data-refresh-toggle aria-pressed="false" data-label-pause="<?= e(__('Pause updates')) ?>" data-label-resume="<?= e(__('Resume updates')) ?>"><?= e(__('Pause updates')) ?></button></div>
 <?php else: ?>
-<div class="dash-actions"><?php require __DIR__ . '/partials/kill_switch.php'; ?></div>
+<div class="dash-actions"><button type="button" class="btn btn-sm btn-outline-secondary refresh-toggle" data-refresh-toggle aria-pressed="false" data-label-pause="<?= e(__('Pause updates')) ?>" data-label-resume="<?= e(__('Resume updates')) ?>"><?= e(__('Pause updates')) ?></button><?php require __DIR__ . '/partials/kill_switch.php'; ?></div>
 <?php endif; ?>
 <div id="live-dashboard" data-refresh-url="<?= e(url('/dashboard/live')) ?>" aria-live="off">
     <?php require __DIR__ . '/dashboard/panels.php'; ?>

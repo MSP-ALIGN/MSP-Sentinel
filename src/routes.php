@@ -49,7 +49,7 @@ $router->add('GET', '/recovery-codes', [AuthController::class, 'showRecoveryCode
 
 // Everyone signed in
 $router->add('GET', '/', [PageController::class, 'dashboard']);
-$router->add('GET', '/dashboard/live', [PageController::class, 'live']);
+$router->add('GET', '/dashboard/live', [PageController::class, 'live'], ['passive' => true]);
 $router->add('GET', '/help', [PageController::class, 'help'], $duringPasswordChange);
 $router->add('GET', '/profile', [ProfileController::class, 'index']);
 $router->add('GET', '/profile/password', [ProfileController::class, 'showPassword'], $duringPasswordChange);
@@ -64,7 +64,7 @@ $router->add('GET', '/clients', [ClientController::class, 'index']);
 $router->add('GET', '/clients/new', [ClientController::class, 'create'], $admin);
 $router->add('POST', '/clients', [ClientController::class, 'store'], $admin);
 $router->add('GET', '/clients/{id}', [ClientController::class, 'show']);
-$router->add('GET', '/clients/{id}/overview', [ClientController::class, 'overview']);
+$router->add('GET', '/clients/{id}/overview', [ClientController::class, 'overview'], ['passive' => true]);
 $router->add('GET', '/clients/{id}/edit', [ClientController::class, 'edit'], $admin);
 $router->add('POST', '/clients/{id}', [ClientController::class, 'update'], $admin);
 $router->add('POST', '/clients/{id}/archive', [ClientController::class, 'archive'], $admin);

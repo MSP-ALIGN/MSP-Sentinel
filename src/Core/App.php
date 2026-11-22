@@ -411,6 +411,9 @@ final class App
         }
 
         $auth = self::auth();
+        if ($opts['passive'] === true) {
+            $auth->markPassive();
+        }
         if ($opts['auth'] === 'pending') {
             if ($auth->pendingUser() === null) {
                 return Response::redirect('/login');

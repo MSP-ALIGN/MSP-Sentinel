@@ -58,4 +58,39 @@ return [
         Assert::contains('class="trend"', $page);
         Assert::notContains('The trend builds up day by day', substr($page, 0, (int) strpos($page, 'id="findings"')));
     },
+    'background refreshes never keep a session alive; ranking puts Fail before many Warnings' => function (TestContext $ctx): void {
+        $uid = (int) $ctx->db->query("SELECT id FROM users WHERE username = 'admin'")->fetchColumn();
+        $sv = (int) $ctx->db->query("SELECT session_version FROM users WHERE id = {$uid}")->fetchColumn();
+        $old = time() - 1000;
+        $_SESSION = ['uid' => $uid, 'auth_at' => time() - 2000, 'seen_at' => $old, 'sv' => $sv];
+        $passive = new \Sentinel\Auth\Auth(\Sentinel\Core\App::users(), \Sentinel\Core\App::limiter(), \Sentinel\Core\App::audit());
+        $passive->markPassive();
+        Assert::true($passive->user() !== null, 'still signed in');
+        Assert::same($old, $_SESSION['seen_at'], 'a background refresh does not reset the idle timer');
+        $active = new \Sentinel\Auth\Auth(\Sentinel\Core\App::users(), \Sentinel\Core\App::limiter(), \Sentinel\Core\App::audit());
+        $active->user();
+        Assert::true($_SESSION['seen_at'] > $old, 'a normal request does');
+        $_SESSION = [];
+        $router = require dirname(__DIR__, 2) . '/src/routes.php';
+        Assert::same(true, $router->match('GET', '/dashboard/live')['opts']['passive']);
+        Assert::same(true, $router->match('GET', '/clients/1/overview')['opts']['passive']);
+        Assert::same(false, $router->match('GET', '/')['opts']['passive']);
+
+        // Ranking: 50 Warnings (score 100, Needs attention) never outrank one Fail (At risk).
+        $db = $ctx->db;
+        $db->exec("INSERT INTO clients (name, timezone, created_at, updated_at) VALUES ('Rank Warn Example', 'UTC', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+        $w = (int) $db->lastInsertId();
+        for ($i = 0; $i < 50; $i++) {
+            $db->exec("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, target, status, first_seen, last_seen) VALUES ({$w}, 'w{$i}', 'tls', 'warn', 'W', 't', 'open', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+        }
+        $db->exec("INSERT INTO clients (name, timezone, created_at, updated_at) VALUES ('Rank Fail Example', 'UTC', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+        $f = (int) $db->lastInsertId();
+        $db->exec("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, target, status, first_seen, last_seen) VALUES ({$f}, 'f1', 'port', 'fail', 'F', 't', 'open', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+        $order = array_column(\Sentinel\Core\App::dashboard()->clients(), 'id');
+        Assert::true(array_search($f, $order, true) < array_search($w, $order, true), 'At risk ranks above Needs attention');
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $db->exec("UPDATE clients SET is_archived = 1 WHERE id IN ({$w}, {$f})");
+        Assert::status(404, $admin->get('/clients/' . $f . '/overview'), 'archived clients have no overview');
+        Assert::contains('data-refresh-toggle', $admin->get('/')->body, 'updates can be paused');
+    },
 ];

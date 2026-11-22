@@ -23,30 +23,86 @@
         qr.appendChild(img);
     }
 
-    document.querySelectorAll('[data-refresh-url]').forEach(function (box) {
-        var url = box.getAttribute('data-refresh-url');
-        if (!url || url.charAt(0) !== '/' || url.charAt(1) === '/') {
-            return; // same-origin paths only
+    // Auto-refresh. Skips while the user is working inside a panel (focus or text selection),
+    // can be paused with the "Pause updates" button, never overlaps requests, retries on network
+    // or server errors with a growing gap, and stops after 30 minutes without input (so an
+    // unattended screen is not kept looking alive; the server also ignores these requests
+    // for the idle sign-out).
+    var boxes = Array.prototype.slice.call(document.querySelectorAll('[data-refresh-url]'));
+    var paused = false;
+    var lastInput = Date.now();
+    ['keydown', 'pointerdown', 'wheel', 'touchstart'].forEach(function (type) {
+        document.addEventListener(type, function () { lastInput = Date.now(); }, { passive: true, capture: true });
+    });
+    document.querySelectorAll('[data-refresh-toggle]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            paused = !paused;
+            document.querySelectorAll('[data-refresh-toggle]').forEach(function (b) {
+                b.setAttribute('aria-pressed', paused ? 'true' : 'false');
+                b.textContent = paused ? (b.getAttribute('data-label-resume') || 'Resume updates') : (b.getAttribute('data-label-pause') || 'Pause updates');
+            });
+        });
+    });
+    boxes.forEach(function (box) {
+        var url = box.getAttribute('data-refresh-url') || '';
+        var target;
+        try { target = new URL(url, window.location.href); } catch (e) { return; }
+        if (target.origin !== window.location.origin) {
+            return; // same-origin only
         }
-        var timer = null;
-        var stop = function () { if (timer) { window.clearInterval(timer); timer = null; } };
-        var refresh = function () {
-            if (document.visibilityState !== 'visible') {
+        var inFlight = false;
+        var stopped = false;
+        var failures = 0;
+        var nextAt = 0;
+        var busy = function () {
+            var active = document.activeElement;
+            var sel = window.getSelection ? window.getSelection() : null;
+            return (active && active !== document.body && box.contains(active)) || (sel && !sel.isCollapsed && box.contains(sel.anchorNode));
+        };
+        var refresh = function (force) {
+            if (stopped || inFlight || paused || document.visibilityState !== 'visible' || busy()) {
                 return;
             }
-            window.fetch(url, { credentials: 'same-origin', redirect: 'error', headers: { 'Accept': 'text/html' } })
+            if (Date.now() - lastInput > 30 * 60 * 1000) {
+                stopped = true; // idle: stop until the page is used and reloaded
+                return;
+            }
+            if (!force && Date.now() < nextAt) {
+                return;
+            }
+            inFlight = true;
+            window.fetch(target.href, { credentials: 'same-origin', redirect: 'error', headers: { 'Accept': 'text/html' } })
                 .then(function (res) {
+                    if (res.status >= 500) {
+                        throw new Error('retry');
+                    }
                     if (!res.ok || res.headers.get('X-Sentinel-Fragment') !== '1') {
-                        throw new Error('not a fragment');
+                        stopped = true; // signed out or not allowed: never insert anything else
+                        throw new Error('stop');
                     }
                     return res.text();
                 })
-                .then(function (html) { box.innerHTML = html; })
-                .catch(stop);
+                .then(function (html) {
+                    if (!busy() && !paused) {
+                        box.innerHTML = html;
+                        box.setAttribute('data-refreshed', '1');
+                    }
+                    failures = 0;
+                    nextAt = Date.now() + 55000;
+                })
+                .catch(function (err) {
+                    if (stopped || err.message === 'stop') {
+                        stopped = true;
+                        return;
+                    }
+                    failures++;
+                    nextAt = Date.now() + Math.min(15 * 60 * 1000, 60000 * Math.pow(2, failures)); // network or server trouble: back off
+                })
+                .then(function () { inFlight = false; });
         };
-        timer = window.setInterval(refresh, 60000);
+        window.setInterval(function () { refresh(false); }, 60000);
         document.addEventListener('visibilitychange', function () {
-            if (timer && document.visibilityState === 'visible') { refresh(); }
+            if (document.visibilityState === 'visible') { refresh(false); }
         });
     });
 

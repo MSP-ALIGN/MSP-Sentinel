@@ -119,7 +119,8 @@ return [
             'paragraphs' => [
                 'The dashboard is a command view of every client: the threat level (the highest client risk), totals, a 90-day trend of open problems, every client ranked by risk, the worst open findings, live activity, the attack surface by type of service, certificates expiring in the next 30 days, and a status strip (scanning armed or paused, worker, threat feeds, scans running, scan windows, authorisations). Each client page opens with the same kind of overview for that client.',
                 'The risk score runs from 0 to 100; higher is worse. It adds 20 for each open known-exploited Fail finding, 10 for each other open Fail, and 2 for each open Warning, up to 100. Accepted risks and false positives do not count. The level next to it is the same as in reports: At risk (any open Fail), Needs attention (Warnings only) or Good (nothing open).',
-                'Dashboards update themselves every minute while the page is open and visible. If your session has ended, updating stops; reload the page to sign in again. The trend chart fills in day by day from when Sentinel started recording.',
+                'Clients are ranked by level first (At risk, then Needs attention, then Good) and then by score, so a client with many Warnings never appears above one with a Fail.',
+                'Dashboards update themselves every minute while the page is open and visible. Use "Pause updates" to hold the view still; updates also wait while you are using a panel. These updates do not count as activity: an unattended screen still signs out after 30 minutes, and updates stop after 30 minutes without input. The trend chart fills in day by day from when Sentinel started recording. Certificates are counted only on services that are still open.',
             ],
         ],
         [

@@ -53,6 +53,7 @@ final class PageController extends Controller
             'surface' => $data->surface(),
             'top' => $data->topExposures(6),
             'certs' => $data->certificates(30),
+            'certsSoon' => $data->certificateCount(\Sentinel\Scanning\ExposureRules::EXPIRY_WARN_DAYS),
             'ops' => $data->ops(),
             'kevPossible' => App::vulns()->kevCounts()['possible_kev'],
             'authorisations' => [
