@@ -96,6 +96,15 @@ return [
             ],
         ],
         [
+            'title' => 'Alerts and notifications',
+            'paragraphs' => [
+                'Sentinel tells you straight away when a Fail finding is new or comes back. After each scan it sends a summary of what changed, and admins are told when a scan or a threat feed fails. Accepted risks and false positives never cause alerts.',
+                'Every alert appears under the bell in the header. Open the Notifications page to see them; opening it marks them read. On your profile, choose which emails you get: immediate alerts, the scan summary, both, or none.',
+                'Admins set up email and the webhook under Settings, Alerts. Email needs a mail server with STARTTLS or TLS (plain connections are only allowed to a relay on this server). Up to 5 team addresses get every immediate alert and summary. The webhook posts a short summary and a link to Teams, Slack or any tool that accepts JSON; it must be an https address on the public internet. Use the test buttons to check each one.',
+                'The SMTP password and the webhook address are stored encrypted and are never shown again; leave the field empty to keep the saved value. Messages that fail are retried up to 3 times, and the last results are listed on the settings page.',
+            ],
+        ],
+        [
             'title' => 'Audit log',
             'paragraphs' => [
                 'Admins can see a record of sign-ins, failed sign-ins, user changes and settings changes under Administration > Audit log. Entries cannot be edited or deleted from the web interface.',
@@ -103,6 +112,15 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '0.8.0',
+            'date' => '2026-11-22',
+            'items' => [
+                'Alerts: immediate alerts for new or returning Fail findings, a summary after each scan, and admin alerts when a scan or feed fails.',
+                'In-app notifications (the bell in the header), email (each user picks what they get on their profile) and a Teams, Slack or JSON webhook.',
+                'Set up under Settings, Alerts, with test buttons. The SMTP password and webhook address are stored encrypted.',
+            ],
+        ],
         [
             'version' => '0.7.0',
             'date' => '2026-11-22',

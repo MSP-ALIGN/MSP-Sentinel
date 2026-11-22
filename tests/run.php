@@ -79,7 +79,9 @@ $cleanup = static function () use (&$server, &$mocks, &$keepOutput, $admin, $dbN
     @unlink($outDir . '/config.php');
     // Keep the server log of a failed run for debugging; remove the folder after a clean run.
     if (!$keepOutput) {
-        array_map('unlink', glob($outDir . '/*') ?: []);
+        array_map('unlink', glob($outDir . '/mail/*') ?: []);
+        @rmdir($outDir . '/mail');
+        array_map('unlink', array_filter(glob($outDir . '/*') ?: [], 'is_file'));
         @rmdir($outDir);
     }
 };
@@ -182,6 +184,17 @@ try {
     $cfg['nvd'] = ['base_url' => "http://127.0.0.1:{$feedsPort}", 'api_key' => 'test-' . bin2hex(random_bytes(12)), 'delay' => 0];
     $cfg['kev'] = ['url' => "http://127.0.0.1:{$feedsPort}/kev.json"];
     $cfg['epss'] = ['base_url' => "http://127.0.0.1:{$feedsPort}"];
+    $cfg['app']['public_url'] = 'https://sentinel.example';
+
+    // Fake mail servers on 127.0.0.1: plain (local relay style) and STARTTLS with a test certificate for "localhost".
+    $spool = $outDir . '/mail';
+    mkdir($spool, 0700);
+    $smtpPlain = $freePort();
+    $smtpTls = $freePort();
+    $mocks[] = proc_open([PHP_BINARY, __DIR__ . '/mocks/smtp_server.php', (string) $smtpPlain, 'plain', $spool],
+        [0 => ['file', '/dev/null', 'r'], 1 => ['file', $outDir . '/mock-smtp.log', 'a'], 2 => ['file', $outDir . '/mock-smtp.log', 'a']], $pipes);
+    $mocks[] = proc_open([PHP_BINARY, __DIR__ . '/mocks/smtp_server.php', (string) $smtpTls, 'starttls', $spool, $certs['smtp']],
+        [0 => ['file', '/dev/null', 'r'], 1 => ['file', $outDir . '/mock-smtp.log', 'a'], 2 => ['file', $outDir . '/mock-smtp.log', 'a']], $pipes);
     for ($i = 0; $i < 50 && @fsockopen('127.0.0.1', $feedsPort) === false; $i++) {
         usleep(100000);
     }
@@ -220,13 +233,17 @@ try {
     $ctx->nmapLog = $outDir . '/nmap-args.log';
     $ctx->feedsUrl = "http://127.0.0.1:{$feedsPort}";
     $ctx->feedsLog = $feedsLog;
+    $ctx->mailSpool = $spool;
+    $ctx->smtpPlainPort = $smtpPlain;
+    $ctx->smtpTlsPort = $smtpTls;
+    $ctx->webhookLog = $outDir . '/webhook-posts.log';
     \Sentinel\Core\App::boot(\Sentinel\Core\Config::fromArray($appConfig));
 
     if ($serve) {
         // Demo users for screenshots: made-up names only.
         $ctx->createUser('tina', 'technician', 'Tech-Pass-0001!');
         $ctx->createUser('victor', 'viewer', 'View-Pass-0001!');
-        file_put_contents($outDir . '/serve.json', json_encode(['url' => $baseUrl, 'dir' => $outDir], JSON_PRETTY_PRINT));
+        file_put_contents($outDir . '/serve.json', json_encode(['url' => $baseUrl, 'dir' => $outDir, 'smtp_port' => $smtpPlain, 'feeds_url' => "http://127.0.0.1:{$feedsPort}"], JSON_PRETTY_PRINT));
         fwrite(STDOUT, "Serving {$baseUrl} (output in {$outDir}). Press Ctrl+C to stop.\n");
         pcntl_async_signals(true);
         $stop = false;

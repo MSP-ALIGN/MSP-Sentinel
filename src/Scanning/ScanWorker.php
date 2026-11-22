@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Sentinel\Scanning;
 
 use PDO;
+use Sentinel\Alerts\AlertService;
+use Sentinel\Alerts\Outbox;
 use Sentinel\Clients\ClientRepository;
 use Sentinel\Discovery\DnsClient;
 use Sentinel\Findings\FindingsEngine;
@@ -55,6 +57,8 @@ final class ScanWorker
         private readonly ?EndpointRepository $endpoints = null,
         private readonly ?VulnMatcher $matcher = null,
         private readonly ?FindingsEngine $findings = null,
+        private readonly ?AlertService $alerts = null,
+        private readonly ?Outbox $outbox = null,
     ) {
         $this->log ??= static function (string $line): void {
         };
@@ -80,10 +84,19 @@ final class ScanWorker
             $this->db->exec("UPDATE scan_log SET result = 'interrupted', finished_at = UTC_TIMESTAMP() WHERE result = 'running' AND finished_at IS NULL");
             $queued = $schedule ? $this->scheduleDue() : 0;
             $job = $this->nextRunnable($onlyJobId);
-            if ($job === null) {
-                return "Scheduled {$queued} job(s). Nothing to run now.";
+            $result = $job === null ? "Scheduled {$queued} job(s). Nothing to run now." : "Scheduled {$queued} job(s). " . $this->runJob($job);
+            // Send queued alerts (also when no job ran, so retries and test messages go out).
+            if ($this->outbox !== null) {
+                try {
+                    $sent = $this->outbox->flush();
+                    if ($sent['sent'] + $sent['failed'] > 0) {
+                        $result .= " Alerts: {$sent['sent']} sent, {$sent['failed']} failed.";
+                    }
+                } catch (\Throwable $ex) {
+                    error_log('[msp-sentinel] sending alerts failed: ' . $ex->getMessage());
+                }
             }
-            return "Scheduled {$queued} job(s). " . $this->runJob($job);
+            return $result;
         } finally {
             $this->db->query("SELECT RELEASE_LOCK({$lock})");
         }
@@ -350,6 +363,13 @@ final class ScanWorker
         }
         $this->refreshFindings($clientId, $summary);
         $this->scans->finish($jobId, $status, $summary);
+        if ($status === 'failed') {
+            try {
+                $this->alerts?->scanFailed($clientId, $jobId, implode(' ', array_slice((array) $summary['messages'], 0, 3)));
+            } catch (\Throwable $ex) {
+                error_log('[msp-sentinel] scan failure alert failed: ' . $ex->getMessage());
+            }
+        }
         return "Job {$jobId} {$status}: {$summary['hosts_scanned']} scanned, {$summary['hosts_skipped']} skipped, {$summary['hosts_failed']} failed.";
     }
 
@@ -504,8 +524,9 @@ final class ScanWorker
             $f = $this->findings->refreshClient($clientId);
             $summary['findings_opened'] = $f['opened'] + $f['reopened'];
             $summary['findings_resolved'] = $f['resolved'];
+            $this->alerts?->findingsChanged($clientId, $f, true);
         } catch (\Throwable $ex) {
-            error_log('[msp-sentinel] findings refresh failed for client ' . $clientId . ': ' . $ex->getMessage());
+            error_log('[msp-sentinel] findings refresh or alerts failed for client ' . $clientId . ': ' . $ex->getMessage());
         }
     }
 

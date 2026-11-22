@@ -45,6 +45,21 @@ try {
             </ul>
             <ul class="navbar-nav ms-auto">
                 <?php if ($currentUser !== null): ?>
+                <?php
+                try {
+                    $unreadStmt = App::db()->prepare('SELECT COUNT(*) FROM notifications WHERE user_id = :u AND read_at IS NULL');
+                    $unreadStmt->execute(['u' => (int) $currentUser['id']]);
+                    $unread = (int) $unreadStmt->fetchColumn();
+                } catch (\Throwable) {
+                    $unread = 0;
+                }
+                ?>
+                <li class="nav-item">
+                    <a class="nav-link position-relative" href="<?= e(url('/notifications')) ?>" aria-label="<?= e(__('Notifications ({n} unread)', ['n' => $unread])) ?>">
+                        <i class="bi bi-bell" aria-hidden="true"></i>
+                        <?php if ($unread > 0): ?><span class="badge text-bg-danger notification-count"><?= e($unread > 99 ? '99+' : $unread) ?></span><?php endif; ?>
+                    </a>
+                </li>
                 <li class="nav-item dropdown">
                     <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
                         <i class="bi bi-person-circle me-1" aria-hidden="true"></i><?= e($currentUser['display_name']) ?>

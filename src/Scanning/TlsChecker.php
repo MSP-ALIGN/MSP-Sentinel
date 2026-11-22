@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sentinel\Scanning;
 
+use Sentinel\Core\CaBundle;
 use Sentinel\Scope\ScopeParser;
 
 /**
@@ -153,36 +154,10 @@ final class TlsChecker
         return [$stream, ''];
     }
 
-    /**
-     * The CA bundle to verify against: PHP's "cafile" REPLACES the system
-     * trust store, so an extra CA file is combined with the system bundle
-     * (written once to a temporary file named after its contents' hash).
-     * Returns null to use the system store unchanged.
-     */
+    /** The CA bundle to verify against (system store plus the optional extra CA file). */
     private function caBundle(): ?string
     {
-        if ($this->caFile === null || !is_file($this->caFile)) {
-            return null;
-        }
-        static $cache = [];
-        if (isset($cache[$this->caFile])) {
-            return $cache[$this->caFile];
-        }
-        $system = '';
-        $locations = openssl_get_cert_locations();
-        foreach ([$locations['default_cert_file'] ?? '', '/etc/ssl/certs/ca-certificates.crt'] as $file) {
-            if ($file !== '' && is_readable($file)) {
-                $system = (string) file_get_contents($file);
-                break;
-            }
-        }
-        $extra = (string) file_get_contents($this->caFile);
-        $path = sys_get_temp_dir() . '/msp-sentinel-ca-' . hash('sha256', $system . $extra) . '.pem';
-        if (!is_file($path)) {
-            file_put_contents($path . '.tmp', $system . "\n" . $extra);
-            rename($path . '.tmp', $path);
-        }
-        return $cache[$this->caFile] = $path;
+        return CaBundle::path($this->caFile);
     }
 
     /**

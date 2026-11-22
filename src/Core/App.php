@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace Sentinel\Core;
 
 use PDO;
+use Sentinel\Alerts\AlertService;
+use Sentinel\Alerts\Outbox;
+use Sentinel\Alerts\WebhookSender;
 use Sentinel\Auth\Auth;
 use Sentinel\Auth\RecoveryCodes;
 use Sentinel\Auth\Role;
@@ -91,7 +94,7 @@ final class App
     /** Admin-editable settings (lazily created). */
     public static function settings(): Settings
     {
-        return self::$settings ??= new Settings(self::db());
+        return self::$settings ??= new Settings(self::db(), self::crypto());
     }
 
     /** The audit logger. */
@@ -192,7 +195,7 @@ final class App
         $connector = Connector::fromConfig($config);
         $caFile = (string) $config->get('tls.ca_file', '');
         return new ScanWorker(self::db(), self::clients(), self::authorisations(), self::scans(), self::scope(), NmapRunner::fromConfig($config), $dns, $log,
-            new TlsChecker($connector, $caFile === '' ? null : $caFile), new HttpProbe($connector), self::endpoints(), self::vulnMatcher(15), self::findingsEngine());
+            new TlsChecker($connector, $caFile === '' ? null : $caFile), new HttpProbe($connector), self::endpoints(), self::vulnMatcher(15), self::findingsEngine(), self::alerts(), self::outbox());
     }
 
     /** Vulnerability data and match store. */
@@ -215,6 +218,20 @@ final class App
     public static function vulnMatcher(int $timeout = 60): VulnMatcher
     {
         return new VulnMatcher(self::db(), self::vulns(), FeedUpdater::fromConfig(self::config(), self::vulns(), $timeout));
+    }
+
+    /** Alert creation (in-app notifications, queued emails and webhooks). */
+    public static function alerts(): AlertService
+    {
+        return new AlertService(self::db(), self::settings(), rtrim((string) self::config()->get('app.public_url', ''), '/'));
+    }
+
+    /** Sends queued emails and webhook posts. */
+    public static function outbox(): Outbox
+    {
+        $caFile = (string) self::config()->get('tls.ca_file', '');
+        return new Outbox(self::db(), self::settings(), $caFile === '' ? null : $caFile,
+            new WebhookSender(self::config()->get('testing.allow_documentation_ranges', false) === true));
     }
 
     /** Findings store (list, history, triage). */

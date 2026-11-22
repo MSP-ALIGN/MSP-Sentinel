@@ -28,14 +28,55 @@ final class Settings
         'source_url' => 'https://github.com/msp-align/msp-sentinel',
         // Global kill switch: '1' stops all scanning straight away. Technicians and admins can pause; only admins resume.
         'scanning_paused' => '0',
+        // Alerts (step 8). Secrets (smtp_password, webhook_url) are stored encrypted: see setSecret().
+        'email_enabled' => '0',
+        'smtp_host' => '',
+        'smtp_port' => '587',
+        'smtp_security' => 'starttls',
+        'smtp_username' => '',
+        'smtp_password' => '',
+        'smtp_from' => '',
+        'team_addresses' => '',
+        'webhook_enabled' => '0',
+        'webhook_url' => '',
+        'webhook_format' => 'teams',
     ];
+
+    /** Settings that hold secrets: stored encrypted with the app key, never shown again. */
+    public const SECRETS = ['smtp_password', 'webhook_url'];
 
     /** @var array<string,string>|null */
     private ?array $cache = null;
 
-    /** Reads and writes the settings table on the given connection. */
-    public function __construct(private readonly PDO $db)
+    /** Reads and writes the settings table on the given connection. Crypto is needed for secret settings. */
+    public function __construct(private readonly PDO $db, private readonly ?Crypto $crypto = null)
     {
+    }
+
+    /** Store a secret setting encrypted ('' clears it). */
+    public function setSecret(string $name, string $value): void
+    {
+        if (!in_array($name, self::SECRETS, true) || $this->crypto === null) {
+            throw new \InvalidArgumentException('Not a secret setting: ' . $name);
+        }
+        $this->set($name, $value === '' ? '' : $this->crypto->encrypt($value));
+    }
+
+    /** Read a secret setting (decrypted), or '' if unset or unreadable (e.g. the app key changed). */
+    public function getSecret(string $name): string
+    {
+        if (!in_array($name, self::SECRETS, true) || $this->crypto === null) {
+            throw new \InvalidArgumentException('Not a secret setting: ' . $name);
+        }
+        $stored = $this->get($name);
+        if ($stored === '') {
+            return '';
+        }
+        try {
+            return $this->crypto->decrypt($stored);
+        } catch (\RuntimeException) {
+            return '';
+        }
     }
 
     /** A known setting, or its default. Unknown names throw. */

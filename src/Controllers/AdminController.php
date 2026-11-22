@@ -50,7 +50,28 @@ final class AdminController extends Controller
             'feeds' => App::vulns()->feedStatuses(),
             'nvdKeySet' => trim((string) App::config()->get('nvd.api_key', '')) !== '',
             'nvdKeyUsable' => \Sentinel\Vulns\FeedUpdater::usableKey(App::config()) !== null,
+            'alerts' => self::alertSettings(),
         ]);
+    }
+
+    /**
+     * Alert settings for the form: secrets are reported only as set or not set.
+     *
+     * @return array<string,mixed>
+     */
+    private static function alertSettings(): array
+    {
+        $s = App::settings();
+        $values = [];
+        foreach (['email_enabled', 'smtp_host', 'smtp_port', 'smtp_security', 'smtp_username', 'smtp_from', 'team_addresses', 'webhook_enabled', 'webhook_format'] as $k) {
+            $values[$k] = $s->get($k);
+        }
+        return $values + [
+            'password_set' => $s->get('smtp_password') !== '',
+            'webhook_set' => $s->get('webhook_url') !== '',
+            'recent' => App::outbox()->recent(),
+            'public_url' => (string) App::config()->get('app.public_url', ''),
+        ];
     }
 
     /** POST /admin/settings */
@@ -68,7 +89,7 @@ final class AdminController extends Controller
         if ($errors !== []) {
             return $this->page('settings/index', __('Settings'), ['values' => $values, 'errors' => $errors,
                 'feeds' => App::vulns()->feedStatuses(), 'nvdKeySet' => trim((string) App::config()->get('nvd.api_key', '')) !== '',
-                'nvdKeyUsable' => \Sentinel\Vulns\FeedUpdater::usableKey(App::config()) !== null], 422);
+                'nvdKeyUsable' => \Sentinel\Vulns\FeedUpdater::usableKey(App::config()) !== null, 'alerts' => self::alertSettings()], 422);
         }
 
         $settings = App::settings();

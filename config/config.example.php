@@ -30,6 +30,9 @@ return [
         'trusted_proxies' => [],
         // Interface language (lang/<code>.php). English is the only one shipped so far.
         'locale' => 'en',
+        // The address users open Sentinel at, e.g. 'https://sentinel.msp.example'. Used for links in alert
+        // emails and webhooks; leave empty and alerts are sent without links.
+        'public_url' => '',
     ],
 
     // Passive discovery (DNS lookups and certificate logs).

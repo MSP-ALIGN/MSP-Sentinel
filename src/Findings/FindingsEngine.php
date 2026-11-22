@@ -54,7 +54,7 @@ final class FindingsEngine
      * scan job, never interleave), and reads the current issues INSIDE the
      * lock, so a decision is never made on a stale snapshot.
      *
-     * @return array{opened:int, reopened:int, resolved:int, current:int}
+     * @return array{opened:int, reopened:int, resolved:int, current:int, opened_ids:list<int>, reopened_ids:list<int>, resolved_ids:list<int>}
      */
     public function refreshClient(int $clientId): array
     {
@@ -80,7 +80,7 @@ final class FindingsEngine
         // Vulnerability findings of services still waiting for NVD data are left alone:
         // missing data is not evidence that a problem was fixed.
         $awaiting = $this->vulns->servicesAwaitingData($clientId);
-        $stats = ['opened' => 0, 'reopened' => 0, 'resolved' => 0, 'current' => count($current)];
+        $stats = ['opened' => 0, 'reopened' => 0, 'resolved' => 0, 'current' => count($current), 'opened_ids' => [], 'reopened_ids' => [], 'resolved_ids' => []];
         $this->db->beginTransaction();
         try {
             $stmt = $this->db->prepare('SELECT * FROM findings WHERE client_id = :c FOR UPDATE');
@@ -99,7 +99,7 @@ final class FindingsEngine
             foreach ($current as $key => $issue) {
                 $row = $existing[$key] ?? null;
                 if ($row === null) {
-                    $this->insert($clientId, $key, $issue);
+                    $stats['opened_ids'][] = $this->insert($clientId, $key, $issue);
                     $stats['opened']++;
                     continue;
                 }
@@ -116,11 +116,15 @@ final class FindingsEngine
                         ? __('Seen again after it was resolved.')
                         : __('Seen again after it was resolved. The earlier decision ({status}) still applies because the evidence is unchanged.', ['status' => $previous]));
                     $stats['reopened']++;
+                    if ($newStatus === 'open') {
+                        $stats['reopened_ids'][] = $id; // only findings that need attention again trigger alerts
+                    }
                 } elseif ($status === 'false_positive' && !$sameEvidence) {
                     $newStatus = 'open';
                     $this->event($id, 'evidence_changed', null, __('Marked as a false positive, but the evidence changed ({old} → {new}), so it was reopened.',
                         ['old' => mb_substr((string) $row['evidence'], 0, 120), 'new' => mb_substr($issue['evidence'], 0, 120)]));
                     $stats['reopened']++;
+                    $stats['reopened_ids'][] = $id;
                 }
                 if ($row['severity'] !== $issue['severity']) {
                     $this->event($id, 'severity_changed', null, __('Severity changed from {old} to {new}.', ['old' => $row['severity'], 'new' => $issue['severity']]));
@@ -142,6 +146,7 @@ final class FindingsEngine
                 $resolve->execute(['id' => $row['id']]);
                 $this->event((int) $row['id'], 'resolved', null, __('No longer seen by the latest checks.'));
                 $stats['resolved']++;
+                $stats['resolved_ids'][] = (int) $row['id'];
             }
             $this->db->commit();
         } catch (\Throwable $ex) {
@@ -155,14 +160,18 @@ final class FindingsEngine
      * Recompute findings for every non-archived client. A problem with one
      * client is logged and the others still get refreshed.
      *
+     * @param callable(int,array):void|null $onResult Called with each client's refresh result (e.g. to send alerts).
      * @return int Number of clients refreshed successfully.
      */
-    public function refreshAll(): int
+    public function refreshAll(?callable $onResult = null): int
     {
         $ok = 0;
         foreach ($this->db->query('SELECT id FROM clients WHERE is_archived = 0')->fetchAll(PDO::FETCH_COLUMN) as $id) {
             try {
-                $this->refreshClient((int) $id);
+                $result = $this->refreshClient((int) $id);
+                if ($onResult !== null) {
+                    $onResult((int) $id, $result);
+                }
                 $ok++;
             } catch (\Throwable $ex) {
                 error_log('[msp-sentinel] findings refresh failed for client ' . $id . ': ' . $ex->getMessage());
@@ -263,8 +272,8 @@ final class FindingsEngine
         return $issues;
     }
 
-    /** Insert a new open finding and its "opened" event. */
-    private function insert(int $clientId, string $key, array $issue): void
+    /** Insert a new open finding and its "opened" event. Returns the new ID. */
+    private function insert(int $clientId, string $key, array $issue): int
     {
         $this->db->prepare(
             'INSERT INTO findings (client_id, asset_id, finding_key, finding_type, severity, title, detail, target, evidence, cve_id, status, first_seen, last_seen)
@@ -274,7 +283,9 @@ final class FindingsEngine
             't' => mb_substr($issue['title'], 0, 300), 'd' => mb_substr($issue['detail'], 0, 1000), 'tg' => mb_substr($issue['target'], 0, 320),
             'ev' => mb_substr($issue['evidence'], 0, 500), 'cve' => $issue['cve_id'],
         ]);
-        $this->event((int) $this->db->lastInsertId(), 'opened', null, null);
+        $id = (int) $this->db->lastInsertId();
+        $this->event($id, 'opened', null, null);
+        return $id;
     }
 
     /** Append a history event. */

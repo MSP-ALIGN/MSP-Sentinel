@@ -13,6 +13,20 @@ Sentinel is free software under the [GNU AGPL-3.0](LICENSE). Each MSP runs its o
 
 ## What's new
 
+### 0.8.0 (2026-11-22): alerts
+
+- **Immediate alerts** when a **Fail** finding is new or comes back. Accepted risks and false positives never alert.
+- A **scan summary** (digest) after each scan, and **admin alerts** when a scan or a threat feed fails.
+- Three ways to be told:
+  - **in-app**: a bell in the header with an unread count, and a Notifications page;
+  - **email** over SMTP (STARTTLS or TLS, certificate checked). Each user picks immediate, digest, both or none
+    on their profile; up to 5 team addresses get everything;
+  - a **webhook** for Teams, Slack or plain JSON. It carries a short summary and a link, never evidence.
+- Admins set this up under Settings → Alerts, with test buttons. The SMTP password and webhook address are stored
+  encrypted and never shown again.
+- Messages go through an outbox with up to 3 tries. The worker and the feeds job send them, so no new cron job is
+  needed. Set `app.public_url` in the config so alerts link back to Sentinel.
+
 ### 0.7.0 (2026-11-22): findings and triage
 
 - One **findings list** per client, built from everything graded so far: exposed high-risk services,
@@ -154,6 +168,9 @@ Scan worker (required for scanning): run it every minute as an **unprivileged** 
 
 Threat feeds (required for vulnerability matching), once a day:
 `41 4 * * *  php /path/to/msp-sentinel/bin/feeds.php`
+
+Alerts are sent by the worker and the feeds job, so they need no cron job of their own. Set `app.public_url`
+in `config/config.php` so alert messages link back to Sentinel.
 
 Weekly discovery (optional, recommended): add a cron job such as
 `17 3 * * 0  php /path/to/msp-sentinel/bin/discover.php`.

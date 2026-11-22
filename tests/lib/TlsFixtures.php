@@ -39,6 +39,8 @@ final class TlsFixtures
         $out['good'] = self::server($dir, 'good', $write, ['vpn.tlscheck.example'], 2048, 200, $caCert, $caKey);
         // Weak: self-signed, 1024-bit, expires in 5 days
         $out['weak'] = self::server($dir, 'weak', $write, ['old.tlscheck.example'], 1024, 5, null, null);
+        // Mail server for STARTTLS tests: CA-signed for "localhost"
+        $out['smtp'] = self::server($dir, 'smtp', $write, ['localhost'], 2048, 30, $caCert, $caKey);
         // Wrong name: CA-signed but for another name
         $out['wrongname'] = self::server($dir, 'wrongname', $write, ['other-name.example'], 2048, 300, $caCert, $caKey);
         return $out;

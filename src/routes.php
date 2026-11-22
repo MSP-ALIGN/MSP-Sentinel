@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 use Sentinel\Auth\Role;
 use Sentinel\Controllers\AdminController;
+use Sentinel\Controllers\AlertController;
 use Sentinel\Controllers\AuthController;
 use Sentinel\Controllers\AuthorisationController;
 use Sentinel\Controllers\ClientController;
@@ -49,6 +50,8 @@ $router->add('GET', '/profile', [ProfileController::class, 'index']);
 $router->add('GET', '/profile/password', [ProfileController::class, 'showPassword'], $duringPasswordChange);
 $router->add('POST', '/profile/password', [ProfileController::class, 'changePassword'], $duringPasswordChange);
 $router->add('POST', '/profile/recovery-codes', [ProfileController::class, 'regenerateRecoveryCodes']);
+$router->add('POST', '/profile/alerts', [AlertController::class, 'preference']);
+$router->add('GET', '/notifications', [AlertController::class, 'notifications']);
 
 // Clients: everyone views; admins manage; technicians may pause (only admins resume)
 $router->add('GET', '/clients', [ClientController::class, 'index']);
@@ -97,5 +100,7 @@ $router->add('POST', '/users/{id}/2fa-reset', [UserController::class, 'resetTwoF
 $router->add('GET', '/admin/audit', [AdminController::class, 'auditLog'], $admin);
 $router->add('GET', '/admin/settings', [AdminController::class, 'settings'], $admin);
 $router->add('POST', '/admin/settings', [AdminController::class, 'saveSettings'], $admin);
+$router->add('POST', '/admin/alerts', [AlertController::class, 'save'], $admin);
+$router->add('POST', '/admin/alerts/test', [AlertController::class, 'test'], $admin);
 
 return $router;

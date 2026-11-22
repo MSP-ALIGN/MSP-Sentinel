@@ -28,26 +28,38 @@ try {
     App::boot();
     $updater = App::feedUpdater();
     $exit = 0;
+    $alerts = App::alerts();
     try {
         fwrite(STDOUT, 'KEV: ' . $updater->refreshKev() . " entries\n");
     } catch (\RuntimeException $ex) {
         fwrite(STDOUT, 'KEV failed: ' . $ex->getMessage() . "\n");
+        $alerts->feedFailed('kev', $ex->getMessage());
         $exit = 1;
     }
     $nvd = $updater->refreshNvd((int) App::config()->get('nvd.max_queries_per_run', 500));
     fwrite(STDOUT, "NVD: {$nvd['ok']} queries fetched, {$nvd['failed']} failed\n");
     $exit = $nvd['failed'] > 0 ? 1 : $exit;
+    if ($nvd['blocked']) {
+        $alerts->feedFailed('nvd', 'NVD asked Sentinel to slow down; the remaining lookups will run later.');
+    }
     $m = App::vulnMatcher()->matchClient(null, 0);
     fwrite(STDOUT, "Matching: {$m['services']} services, {$m['matches']} matches, {$m['pending']} waiting for data\n");
     try {
         fwrite(STDOUT, 'EPSS: ' . $updater->refreshEpss() . " scores\n");
     } catch (\RuntimeException $ex) {
         fwrite(STDOUT, 'EPSS failed: ' . $ex->getMessage() . "\n");
+        $alerts->feedFailed('epss', $ex->getMessage());
         $exit = 1;
     }
     // New data can create or resolve findings (and accepted risks can be affected), so refresh them all.
     try {
-        fwrite(STDOUT, 'Findings: refreshed for ' . App::findingsEngine()->refreshAll() . " client(s)\n");
+        // New vulnerability data can create new Fail findings: alert on those (no digest from the feeds job).
+        $n = App::findingsEngine()->refreshAll(static function (int $clientId, array $result) use ($alerts): void {
+            $alerts->findingsChanged($clientId, $result, false);
+        });
+        fwrite(STDOUT, 'Findings: refreshed for ' . $n . " client(s)\n");
+        $sent = App::outbox()->flush(200);
+        fwrite(STDOUT, "Alerts: {$sent['sent']} sent, {$sent['failed']} failed\n");
     } catch (\Throwable $ex) {
         fwrite(STDOUT, 'Findings failed: ' . $ex->getMessage() . "\n");
         $exit = 1;

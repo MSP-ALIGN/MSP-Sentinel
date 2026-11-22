@@ -185,6 +185,32 @@ final class TestContext
     public int $dnsPort = 0;
     public string $dnsLog = '';
     public string $crtshUrl = '';
+    /** Fake mail servers (spool of received messages, ports) and the fake webhook's log. */
+    public string $mailSpool = '';
+    public int $smtpPlainPort = 0;
+    public int $smtpTlsPort = 0;
+    public string $webhookLog = '';
+
+    /**
+     * Messages received by the fake mail servers, oldest first, with the decoded subject and body.
+     *
+     * @return list<array{from:string,to:list<string>,auth_user:string,tls:bool,subject:string,body:string}>
+     */
+    public function mails(): array
+    {
+        $out = [];
+        $files = glob($this->mailSpool . '/*.json') ?: [];
+        sort($files);
+        foreach ($files as $file) {
+            $m = json_decode((string) file_get_contents($file), true);
+            [$head, $body] = array_pad(explode("\r\n\r\n", (string) $m['data'], 2), 2, '');
+            preg_match('/^Subject: =\?UTF-8\?B\?([^?]*)\?=/m', $head, $sm);
+            $out[] = ['from' => $m['from'], 'to' => $m['to'], 'auth_user' => $m['auth_user'], 'tls' => $m['tls'],
+                      'subject' => base64_decode($sm[1] ?? ''), 'body' => (string) base64_decode(str_replace(["\r", "\n"], '', $body))];
+        }
+        return $out;
+    }
+
     /** Mock threat-feed server base URL and its request log. */
     public string $feedsUrl = '';
     public string $feedsLog = '';

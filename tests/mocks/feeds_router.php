@@ -44,6 +44,15 @@ if ($path === '/rest/json/cves/2.0') {
     echo isset($map[$match]) ? file_get_contents($fixtures . $map[$match]) : json_encode(['totalResults' => 0, 'vulnerabilities' => []]);
     exit;
 }
+if ($path === '/webhook') {
+    // Fake webhook receiver: record the posted JSON body.
+    $log = getenv('FEEDS_LOG');
+    if (is_string($log) && $log !== '') {
+        file_put_contents(dirname($log) . '/webhook-posts.log', file_get_contents('php://input') . "\n", FILE_APPEND);
+    }
+    echo '{"ok":true}';
+    exit;
+}
 if ($path === '/kev.json') {
     echo file_get_contents($fixtures . 'kev.json');
     exit;
