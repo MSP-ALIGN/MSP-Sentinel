@@ -51,7 +51,7 @@ final class AgentController extends Controller
         [$client, $site] = $this->clientSite($params);
         if ((int) $client['is_archived'] === 1) {
             Session::flash('danger', __('Restore the client before recording a new authorisation.'));
-            return Response::redirect('/clients/' . (int) $client['id']);
+            return Response::redirect('/clients/' . (int) $client['id'] . '/agents');
         }
         $today = ScopeService::today((string) $client['timezone']);
         $values = [];
@@ -105,7 +105,7 @@ final class AgentController extends Controller
         $this->audit($request, 'internal_authorisation.created', 'internal_authorisation', $id, ['client_id' => (int) $client['id'], 'site_id' => (int) $site['id'],
             'ranges' => $parsed['ranges'], 'valid_from' => $values['valid_from'], 'valid_until' => $values['valid_until'], 'approved_by' => $values['approved_by_name']]);
         Session::flash('success', __('Internal authorisation recorded and signed. Agents at this site may now scan these networks.'));
-        return Response::redirect('/clients/' . (int) $client['id'] . '#agents');
+        return Response::redirect('/clients/' . (int) $client['id'] . '/agents');
     }
 
     /** POST /clients/{id}/internal-authorisations/{auth}/revoke */
@@ -121,12 +121,12 @@ final class AgentController extends Controller
         }
         if ($reason === '' || mb_strlen($reason) > 500) {
             Session::flash('danger', __('Give a reason for revoking (up to 500 characters).'));
-            return Response::redirect('/clients/' . (int) $client['id'] . '#agents');
+            return Response::redirect('/clients/' . (int) $client['id'] . '/agents');
         }
         App::agents()->revokeAuthorisation($id, (int) $this->user()['id'], $reason);
         $this->audit($request, 'internal_authorisation.revoked', 'internal_authorisation', $id, ['client_id' => (int) $client['id'], 'reason' => mb_substr($reason, 0, 300)]);
         Session::flash('warning', __('Authorisation revoked. Running agent scans under it stop at their next check-in.'));
-        return Response::redirect('/clients/' . (int) $client['id'] . '#agents');
+        return Response::redirect('/clients/' . (int) $client['id'] . '/agents');
     }
 
     /** POST /clients/{id}/sites/{site}/enrol: a one-time enrolment code, shown once. */
@@ -157,7 +157,7 @@ final class AgentController extends Controller
         App::agents()->revokeAgent($id, (int) $this->user()['id']);
         $this->audit($request, 'agent.revoked', 'agent', $id, ['client_id' => (int) $client['id']]);
         Session::flash('warning', __('Agent revoked. Its token no longer works; uninstall it from the device.'));
-        return Response::redirect('/clients/' . (int) $client['id'] . '#agents');
+        return Response::redirect('/clients/' . (int) $client['id'] . '/agents');
     }
 
     /** POST /clients/{id}/sites/{site}/pause (technicians and admins): stop agent scans at this site now. */
@@ -167,7 +167,7 @@ final class AgentController extends Controller
         App::agents()->pauseSite((int) $site['id']);
         $this->audit($request, 'site.paused', 'site', (int) $site['id'], ['client_id' => (int) $client['id']]);
         Session::flash('warning', __('Agent scans at {site} are paused. Running scans stop at the agent\'s next check-in (within a minute).', ['site' => $site['name']]));
-        return Response::redirect('/clients/' . (int) $client['id'] . '#agents');
+        return Response::redirect('/clients/' . (int) $client['id'] . '/agents');
     }
 
     /** POST /clients/{id}/sites/{site}/resume (admins). */
@@ -177,7 +177,7 @@ final class AgentController extends Controller
         App::db()->prepare('UPDATE sites SET scanning_paused = 0, updated_at = UTC_TIMESTAMP() WHERE id = :s')->execute(['s' => (int) $site['id']]);
         $this->audit($request, 'site.resumed', 'site', (int) $site['id'], ['client_id' => (int) $client['id']]);
         Session::flash('success', __('Agent scans at {site} resumed.', ['site' => $site['name']]));
-        return Response::redirect('/clients/' . (int) $client['id'] . '#agents');
+        return Response::redirect('/clients/' . (int) $client['id'] . '/agents');
     }
 
     /** POST /clients/{id}/sites/{site}/scan (admins): a full agent scan now, outside the window too, with a reason. */
@@ -201,12 +201,12 @@ final class AgentController extends Controller
         };
         if ($error !== null) {
             Session::flash('warning', $error);
-            return Response::redirect('/clients/' . (int) $client['id'] . '#agents');
+            return Response::redirect('/clients/' . (int) $client['id'] . '/agents');
         }
         $jobId = App::agents()->queueJob($agentId, (int) $client['id'], (int) $site['id'], (int) $auth['id'], 'full', 'manual', (int) $this->user()['id'], AgentService::PORTS, AgentService::JOB_HOURS);
         $this->audit($request, 'agent.scan_requested', 'agent_job', $jobId, ['client_id' => (int) $client['id'], 'site_id' => (int) $site['id'], 'reason' => mb_substr($reason, 0, 300)]);
         Session::flash('success', __('Scan queued. The agent picks it up at its next check-in (within a minute).'));
-        return Response::redirect('/clients/' . (int) $client['id'] . '#agents');
+        return Response::redirect('/clients/' . (int) $client['id'] . '/agents');
     }
 
     /**

@@ -32,7 +32,7 @@ final class ScanController extends Controller
     {
         $client = App::clients()->find((int) ($params['id'] ?? 0)) ?? throw new HttpException(404);
         $clientId = (int) $client['id'];
-        $back = Response::redirect('/clients/' . $clientId . '#scans');
+        $back = Response::redirect('/clients/' . $clientId . '/scans');
         $user = $this->user();
 
         if ((int) $client['is_archived'] === 1 || (int) $client['scanning_paused'] === 1 || App::scope()->globallyPaused()) {
@@ -108,6 +108,6 @@ final class ScanController extends Controller
             'requested' => __('The running scan will stop within a few seconds.'),
             default => __('This scan is no longer running.'),
         });
-        return Response::redirect('/clients/' . (int) $job['client_id'] . '#scans');
+        return Response::redirect('/clients/' . (int) $job['client_id'] . '/scans');
     }
 }

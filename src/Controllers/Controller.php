@@ -31,6 +31,16 @@ abstract class Controller
     protected function page(string $template, string $title, array $data = [], int $status = 200): Response
     {
         $user = App::auth()->user();
+        // Pages about one existing client (forms, device page, ...) keep that client's menu in the sidebar.
+        $section = ['inventory/' => 'devices', 'authorisations/' => 'authorisations', 'agents/' => 'agents', 'clients/form' => 'overview'];
+        if (!isset($data['clientNav']) && is_array($data['client'] ?? null) && isset($data['client']['id'], $data['client']['name'])) {
+            foreach ($section as $prefix => $key) {
+                if (str_starts_with($template, $prefix)) {
+                    $data['clientNav'] = ClientController::nav($data['client'], $key, App::findings()->counts((int) $data['client']['id']));
+                    break;
+                }
+            }
+        }
         $html = View::render($template, $data + [
             'title' => $title,
             'currentUser' => $user === null ? null : UserRepository::publicFields($user),

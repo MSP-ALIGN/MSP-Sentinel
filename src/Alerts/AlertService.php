@@ -121,7 +121,7 @@ final class AlertService
         }
         $client = (string) $this->db->query('SELECT name FROM clients WHERE id = ' . (int) $clientId)->fetchColumn();
         $title = __('Scan #{id} for {client} failed', ['id' => $jobId, 'client' => $client]);
-        $this->notifyUsers('scan_failed', 'warn', $title, $message, '/clients/' . $clientId . '#scans', 'admin');
+        $this->notifyUsers('scan_failed', 'warn', $title, $message, '/clients/' . $clientId . '/scans', 'admin');
         $this->queueEmail($this->teamAddresses(), '[Sentinel] ' . $title, $title . "\n\n" . $message . "\n\n" . $this->absolute('/clients/' . $clientId));
     }
 
@@ -237,7 +237,7 @@ final class AlertService
         $client = (string) $this->db->query('SELECT name FROM clients WHERE id = ' . (int) $clientId)->fetchColumn();
         $title = __('{n} new device(s) on the {site} network of {client}', ['n' => count($devices), 'site' => $site, 'client' => $client]);
         $items = array_map(static fn (array $d): string => trim($d['ip'] . ' ' . ($d['hostname'] !== '' ? '(' . $d['hostname'] . ')' : '') . ($d['mac'] !== '' ? ' ' . $d['mac'] : '')), array_slice($devices, 0, 50));
-        $link = '/clients/' . $clientId . '#devices';
+        $link = '/clients/' . $clientId . '/devices';
         $this->notifyUsers('new_device', 'warn', $title, implode("\n", array_slice($items, 0, 20)), $link, null);
         $this->queueEmail($this->emailRecipients(['immediate', 'both']), '[' . $client . '] ' . $title,
             $title . "\n\n" . implode("\n", $items) . "\n\n" . __('If you don\'t recognise a device, find out what it is and who connected it.') . "\n\n" . $this->absolute($link));

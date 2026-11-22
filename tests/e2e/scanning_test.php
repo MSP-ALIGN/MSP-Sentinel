@@ -51,12 +51,12 @@ return [
         }
         $view = $ctx->login('sview', 'Sview-Pass-0001!');
         Assert::status(403, $view->submit('/clients/' . $id, '/clients/' . $id . '/scan', []), 'viewer cannot queue');
-        Assert::notContains('Scan now', $view->get('/clients/' . $id)->body);
+        Assert::notContains('Scan now', $ctx->clientPages($view, (int) $id));
 
         $tech = $ctx->login('stech', 'Stech-Pass-0001!');
-        Assert::redirect('/clients/' . $id . '#scans', $tech->submit('/clients/' . $id, '/clients/' . $id . '/scan', []));
+        Assert::redirect('/clients/' . $id . '/scans', $tech->submit('/clients/' . $id, '/clients/' . $id . '/scan', []));
         Assert::same('queued', $job($ctx, $id)['status']);
-        Assert::contains('A scan for this client is already queued', ($tech->submit('/clients/' . $id, '/clients/' . $id . '/scan', []) && true) ? $tech->get('/clients/' . $id)->body : '');
+        Assert::contains('A scan for this client is already queued', ($tech->submit('/clients/' . $id, '/clients/' . $id . '/scan', []) && true) ? $ctx->clientPages($tech, (int) $id) : '');
 
         @unlink($ctx->nmapLog);
         [$code, $out] = $ctx->cli('bin/worker.php', ['--no-schedule', '--job=' . $job($ctx, $id)['id']]);
@@ -74,7 +74,7 @@ return [
         Assert::same('skipped_out_of_scope', $byTarget['203.0.113.30']['result']);
         Assert::same('scanned', $byTarget['203.0.113.160']['result']);
 
-        $page = $admin->get('/clients/' . $id)->body;
+        $page = $ctx->clientPages($admin, (int) $id);
         Assert::contains('OpenSSH 8.9p1', $page);
         Assert::contains('High risk: Remote Desktop', $page, 'RDP flagged');
         Assert::notContains('<script>alert(1)</script>', $page, 'banner text escaped');
@@ -162,7 +162,8 @@ return [
         $id = $scanClient($ctx, $admin, 'Night Window Example', '203.0.113.161', false);
         $tech = $ctx->login('stech', 'Stech-Pass-0001!');
         $page = $tech->get('/clients/' . $id);
-        Assert::notContains('Run outside the window', $page->body, 'technicians have no override');
+        $all = $ctx->clientPages($tech, (int) $id);
+        Assert::notContains('Run outside the window', $all, 'technicians have no override');
         Assert::status(403, $tech->post('/clients/' . $id . '/scan', ['_csrf' => $page->csrf(), 'outside_window' => '1', 'reason' => 'urgent']), 'technician override refused');
         $tech->submit('/clients/' . $id, '/clients/' . $id . '/scan', []);
         $ctx->cli('bin/worker.php', ['--no-schedule', '--job=' . $job($ctx, $id)['id']]);
@@ -171,7 +172,7 @@ return [
         Assert::same('cancelled', $job($ctx, $id)['status']);
 
         $admin->submit('/clients/' . $id, '/clients/' . $id . '/scan', ['outside_window' => '1', 'reason' => '']);
-        Assert::contains('Give a reason', $admin->get('/clients/' . $id)->body);
+        Assert::contains('Give a reason', $ctx->clientPages($admin, (int) $id));
         $admin->submit('/clients/' . $id, '/clients/' . $id . '/scan', ['outside_window' => '1', 'reason' => 'Client asked for a re-check after a firewall change']);
         [$code, $out] = $ctx->cli('bin/worker.php', ['--no-schedule', '--job=' . $job($ctx, $id)['id']]);
         Assert::same('done', $job($ctx, $id)['status'], $out);
@@ -222,7 +223,7 @@ return [
         Assert::same('partial', $job($ctx, $id)['status']);
         Assert::contains('paused', (string) $job($ctx, $id)['summary']);
         $admin->submit('/clients/' . $id, '/clients/' . $id . '/scan', []);
-        Assert::contains('Scanning is paused', $admin->get('/clients/' . $id)->body, 'nothing can be queued while paused');
+        Assert::contains('Scanning is paused', $ctx->clientPages($admin, (int) $id), 'nothing can be queued while paused');
         $admin->submit('/', '/scanning/resume', []);
     },
     'weekly schedule queues eligible clients once; orphaned jobs are recovered' => function (TestContext $ctx): void {

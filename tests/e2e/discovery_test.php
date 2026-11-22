@@ -42,8 +42,8 @@ return [
         $id = $newClient($ctx, $admin, 'Discovery Example Ltd', "discovery.example\n203.0.113.10");
         @unlink($ctx->dnsLog);
         $res = $admin->submit('/clients/' . $id, '/clients/' . $id . '/discover', []);
-        Assert::redirect('/clients/' . $id, $res);
-        $page = $admin->get('/clients/' . $id)->body;
+        Assert::redirect('/clients/' . $id . '/discovery', $res);
+        $page = $ctx->clientPages($admin, (int) $id);
         Assert::contains('Discovery finished with some problems', $page, 'the mock has a timing-out and a garbage name, so the run is partial');
 
         $s = $suggestions($ctx, $id);
@@ -84,12 +84,12 @@ return [
         $id = (int) $ctx->db->query("SELECT id FROM clients WHERE name = 'Discovery Example Ltd'")->fetchColumn();
         $before = count($suggestions($ctx, $id));
         $sid = (int) $ctx->db->query("SELECT id FROM target_suggestions WHERE client_id = {$id} AND value = 'gw.discovery.example'")->fetchColumn();
-        Assert::redirect('/clients/' . $id, $admin->submit('/clients/' . $id, '/suggestions/' . $sid . '/dismiss', []));
+        Assert::redirect('/clients/' . $id . '/discovery', $admin->submit('/clients/' . $id, '/suggestions/' . $sid . '/dismiss', []));
         $admin->submit('/clients/' . $id, '/clients/' . $id . '/discover', []);
         $after = $suggestions($ctx, $id);
         Assert::same($before - 1, count($after), 'no duplicates, dismissed one not back');
         Assert::true(isset($suggestions($ctx, $id, 'dismissed')['gw.discovery.example']), 'still dismissed after re-run');
-        Assert::contains('Dismissed suggestions (1)', $admin->get('/clients/' . $id)->body);
+        Assert::contains('Dismissed suggestions (1)', $ctx->clientPages($admin, (int) $id));
         $admin->submit('/clients/' . $id, '/suggestions/' . $sid . '/restore', []);
         Assert::true(isset($suggestions($ctx, $id)['gw.discovery.example']), 'restored');
     },
@@ -112,8 +112,8 @@ return [
             'approved_on' => gmdate('Y-m-d'), 'valid_from' => gmdate('Y-m-d'), 'valid_until' => gmdate('Y-m-d', time() + 86400 * 300),
             'document_ref' => 'TICKET-2002', 'notes' => '', 'scope' => html_entity_decode($m[1]), 'confirm' => '1', 'replaces' => (string) $oldAuth,
         ]);
-        Assert::redirect('/clients/' . $id, $res);
-        Assert::contains('replaces authorisation(s) #' . $oldAuth, $admin->get('/clients/' . $id)->body);
+        Assert::redirect('/clients/' . $id . '/authorisations', $res);
+        Assert::contains('replaces authorisation(s) #' . $oldAuth, $ctx->clientPages($admin, (int) $id));
         Assert::contains('Replaced by authorisation #', (string) $ctx->db->query("SELECT revoke_reason FROM scan_authorisations WHERE id = {$oldAuth}")->fetchColumn());
         Assert::true(App::scope()->isInScope($id, 'vpn.discovery.example'), 'approved name now in scope');
         Assert::true(App::scope()->isInScope($id, '203.0.113.10'), 'old scope carried over');
@@ -147,7 +147,7 @@ return [
         Assert::same('Client withdrew consent', $ctx->db->query("SELECT revoke_reason FROM scan_authorisations WHERE id = {$active}")->fetchColumn(), 'reason kept');
 
         // Saving again (now without the revoked one) works and leaves the expired entry's history alone.
-        Assert::redirect('/clients/' . $id, $admin->post('/clients/' . $id . '/authorisations', ['valid_from' => gmdate('Y-m-d'), 'replaces' => (string) $expired] + $fields + ['_csrf' => $res->csrf()]));
+        Assert::redirect('/clients/' . $id . '/authorisations', $admin->post('/clients/' . $id . '/authorisations', ['valid_from' => gmdate('Y-m-d'), 'replaces' => (string) $expired] + $fields + ['_csrf' => $res->csrf()]));
         Assert::same(null, $ctx->db->query("SELECT revoked_at FROM scan_authorisations WHERE id = {$expired}")->fetchColumn(), 'expired authorisation not rewritten');
     },
     'an accepted suggestion comes back when it drops out of scope; archived clients are read-only' => function (TestContext $ctx): void {
@@ -186,18 +186,19 @@ return [
         }
         $view = $ctx->login('dview', 'Dview-Pass-0001!');
         $page = $view->get('/clients/' . $id);
-        Assert::notContains('Discover now', $page->body);
-        Assert::notContains('>Dismiss<', $page->body);
+        $all = $ctx->clientPages($view, (int) $id);
+        Assert::notContains('Discover now', $all);
+        Assert::notContains('>Dismiss<', $all);
         $t = $page->csrf();
         Assert::status(403, $view->post('/clients/' . $id . '/discover', ['_csrf' => $t]), 'viewer cannot run discovery');
         Assert::status(403, $view->post('/suggestions/' . $sid . '/dismiss', ['_csrf' => $t]), 'viewer cannot dismiss');
 
         $tech = $ctx->login('dtech', 'Dtech-Pass-0001!');
-        $page = $tech->get('/clients/' . $id)->body;
+        $page = $ctx->clientPages($tech, (int) $id);
         Assert::contains('Discover now', $page);
         Assert::notContains('Add selected to a new authorisation', $page, 'technician cannot approve');
         Assert::status(403, $tech->get('/clients/' . $id . '/authorisations/new?suggestion[]=' . $sid));
-        Assert::redirect('/clients/' . $id, $tech->submit('/clients/' . $id, '/suggestions/' . $sid . '/dismiss', []));
+        Assert::redirect('/clients/' . $id . '/discovery', $tech->submit('/clients/' . $id, '/suggestions/' . $sid . '/dismiss', []));
         Assert::same('dismissed', $ctx->db->query("SELECT status FROM target_suggestions WHERE id = {$sid}")->fetchColumn());
     },
     'discovery refuses without an active authorisation, or when paused' => function (TestContext $ctx) use ($newClient): void {
@@ -206,16 +207,16 @@ return [
             'scan_window_start' => '22:00', 'scan_window_end' => '06:00', 'notes' => '']);
         $bare = (int) basename((string) $res->location());
         $admin->submit('/clients/' . $bare, '/clients/' . $bare . '/discover', []);
-        Assert::contains('no active authorisation', $admin->get('/clients/' . $bare)->body);
+        Assert::contains('no active authorisation', $ctx->clientPages($admin, (int) $bare));
 
         $id = $newClient($ctx, $admin, 'Paused Discovery Example', 'quiet.example');
         $admin->submit('/', '/scanning/pause', []);
         $admin->submit('/clients/' . $id, '/clients/' . $id . '/discover', []);
-        Assert::contains('Scanning is paused, so discovery is paused too', $admin->get('/clients/' . $id)->body);
+        Assert::contains('Scanning is paused, so discovery is paused too', $ctx->clientPages($admin, (int) $id));
         $admin->submit('/', '/scanning/resume', []);
         $admin->submit('/clients/' . $id, '/clients/' . $id . '/pause', []);
         $admin->submit('/clients/' . $id, '/clients/' . $id . '/discover', []);
-        Assert::contains('Scanning is paused', $admin->get('/clients/' . $id)->body);
+        Assert::contains('Scanning is paused', $ctx->clientPages($admin, (int) $id));
         Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM discovery_runs WHERE client_id IN ({$bare}, {$id})")->fetchColumn(), 'no runs recorded');
         $admin->submit('/clients/' . $id, '/clients/' . $id . '/resume', []);
     },
@@ -223,7 +224,7 @@ return [
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $id = (int) $ctx->db->query("SELECT id FROM clients WHERE name = 'Paused Discovery Example'")->fetchColumn();
         $admin->submit('/clients/' . $id, '/clients/' . $id . '/discover', []);
-        $page = $admin->get('/clients/' . $id)->body;
+        $page = $ctx->clientPages($admin, (int) $id);
         Assert::contains('Discovery finished: 2 new suggestion(s).', $page, 'www.quiet.example and the domain\'s address 203.0.113.60');
         Assert::contains('Completed', $page);
         $values = $ctx->db->query("SELECT value FROM target_suggestions WHERE client_id = {$id} ORDER BY value")->fetchAll(PDO::FETCH_COLUMN);
@@ -231,7 +232,7 @@ return [
 
         $dead = $newClient($ctx, $admin, 'Dead Resolver Example', 'deadzone.example');
         $admin->submit('/clients/' . $dead, '/clients/' . $dead . '/discover', []);
-        $page = $admin->get('/clients/' . $dead)->body;
+        $page = $ctx->clientPages($admin, (int) $dead);
         Assert::contains('DNS resolver is not answering', $page);
         Assert::same('failed', $ctx->db->query("SELECT status FROM discovery_runs WHERE client_id = {$dead}")->fetchColumn());
     },
@@ -239,7 +240,7 @@ return [
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $id = $newClient($ctx, $admin, 'Crtsh Outage Example', 'crtsh-down.example');
         $admin->submit('/clients/' . $id, '/clients/' . $id . '/discover', []);
-        $page = $admin->get('/clients/' . $id)->body;
+        $page = $ctx->clientPages($admin, (int) $id);
         Assert::contains('Certificate log lookup for crtsh-down.example failed: crt.sh returned HTTP 500', $page);
         Assert::same('partial', $ctx->db->query("SELECT status FROM discovery_runs WHERE client_id = {$id}")->fetchColumn());
     },

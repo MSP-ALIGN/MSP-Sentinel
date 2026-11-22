@@ -18,6 +18,6 @@
                 <?php if ($serverUrl === ''): ?><div class="text-warning"><?= e(__('Set app.public_url in the config so this command shows your address.')) ?></div><?php endif; ?></li>
             <li><?= e(__('The agent appears on the client page within a minute. It only connects out to Sentinel over HTTPS; no firewall rule is needed at the site.')) ?></li>
         </ol>
-        <a class="btn btn-outline-secondary" href="<?= e(url('/clients/' . (int) $client['id'] . '#agents')) ?>"><?= e(__('Back to the client')) ?></a>
+        <a class="btn btn-outline-secondary" href="<?= e(url('/clients/' . (int) $client['id'] . '/agents')) ?>"><?= e(__('Back to the client')) ?></a>
     </div>
 </div>

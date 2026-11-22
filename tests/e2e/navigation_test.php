@@ -12,6 +12,34 @@ use Sentinel\Tests\Assert;
 use Sentinel\Tests\TestContext;
 
 return [
+    'client pages: one page per section, with the client menu in the sidebar' => function (TestContext $ctx): void {
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $id = (int) $ctx->db->query('SELECT id FROM clients WHERE is_archived = 0 ORDER BY id LIMIT 1')->fetchColumn();
+        Assert::true($id > 0, 'a client exists');
+        foreach (\Sentinel\Controllers\ClientController::SECTIONS as $section) {
+            $path = '/clients/' . $id . ($section === 'overview' ? '' : '/' . $section);
+            $res = $admin->get($path);
+            Assert::same(200, $res->status, $path);
+            Assert::contains('aria-label="Client sections"', $res->body, "{$path}: client menu");
+            Assert::contains('All clients', $res->body, "{$path}: way back");
+            Assert::true((bool) preg_match('#href="' . preg_quote($path, '#') . '" class="nav-link active" aria-current="page"#', $res->body), "{$path}: its own item is active");
+            Assert::notContains('aria-label="Main menu"', $res->body, "{$path}: main menu replaced");
+        }
+        // Each section shows only itself: discovery isn't on the findings page, and so on.
+        Assert::notContains('Discover now', $admin->get('/clients/' . $id . '/findings')->body);
+        Assert::status(404, $admin->get('/clients/' . $id . '/nonsense'));
+        Assert::status(404, $admin->get('/clients/999999/findings'));
+        // Pages about the client (edit form, new authorisation) keep its menu; the client list doesn't.
+        Assert::contains('aria-label="Client sections"', $admin->get('/clients/' . $id . '/edit')->body);
+        Assert::contains('aria-label="Client sections"', $admin->get('/clients/' . $id . '/authorisations/new')->body);
+        Assert::contains('aria-label="Main menu"', $admin->get('/clients')->body);
+        // Viewers get the same pages.
+        if ((int) $ctx->db->query("SELECT COUNT(*) FROM users WHERE username = 'navview'")->fetchColumn() === 0) {
+            $ctx->createUser('navview', 'viewer', 'Navview-Pass-01!');
+        }
+        $view = $ctx->login('navview', 'Navview-Pass-01!');
+        Assert::contains('aria-label="Client sections"', $view->get('/clients/' . $id . '/devices')->body);
+    },
     'administration is its own section, reached from the user menu' => function (TestContext $ctx): void {
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $home = $admin->get('/')->body;

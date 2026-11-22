@@ -46,7 +46,7 @@ return [
     'the client page shows what matters first; lower severities are tucked away' => function (TestContext $ctx): void {
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $id = (int) $ctx->db->query("SELECT id FROM clients WHERE name = 'Scan Example Ltd'")->fetchColumn();
-        $page = $admin->get('/clients/' . $id)->body;
+        $page = $ctx->clientPages($admin, (int) $id);
         foreach (['CVE-2099-0001', 'Known exploited', 'Used by ransomware', 'Confirmed: reported version is affected', 'Product found, version unknown',
                   'CVE-2099-0101', '+2 lower-severity vulnerabilities', 'Coverage:', 'EPSS 97.1%', 'https://nvd.nist.gov/vuln/detail/CVE-2099-0001'] as $text) {
             Assert::contains($text, $page);
@@ -103,7 +103,7 @@ return [
         App::vulnMatcher()->matchClient($id, 0);
         Assert::same(['distro'], $ctx->db->query("SELECT DISTINCT confidence FROM service_vulns WHERE service_id = {$svc}")->fetchAll(PDO::FETCH_COLUMN), 'backports possible: not confirmed');
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
-        Assert::contains('the fix may be backported', $admin->get('/clients/' . $id)->body);
+        Assert::contains('the fix may be backported', $ctx->clientPages($admin, (int) $id));
         $ctx->db->exec("UPDATE services SET extra_info = '' WHERE id = {$svc}");
 
         // Upgrade to a version NVD hasn't been asked about yet (no fetch budget): old matches go.

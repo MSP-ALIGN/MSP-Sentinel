@@ -22,6 +22,6 @@ use Sentinel\Core\Csrf;
         </select>
     </div>
     <div class="card-footer d-flex gap-2"><button type="submit" class="btn btn-primary" <?= $orgs === [] ? 'disabled' : '' ?>><?= e(__('Link')) ?></button>
-        <a class="btn btn-outline-secondary" href="<?= e(url('/clients/' . (int) $client['id'] . '#devices')) ?>"><?= e(__('Cancel')) ?></a></div>
+        <a class="btn btn-outline-secondary" href="<?= e(url('/clients/' . (int) $client['id'] . '/devices')) ?>"><?= e(__('Cancel')) ?></a></div>
     </form>
 </div>

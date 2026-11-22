@@ -129,7 +129,7 @@ final class DashboardData
         return array_map(static fn (array $r): array => [
             'at' => (string) $r['at'], 'kind' => (string) $r['kind'], 'severity' => $r['severity'], 'title' => (string) $r['title'],
             'client' => (string) $r['client'], 'client_id' => (int) $r['client_id'],
-            'link' => str_starts_with((string) $r['kind'], 'scan_') ? '/clients/' . (int) $r['client_id'] . '#scans' : '/findings/' . (int) $r['ref'],
+            'link' => str_starts_with((string) $r['kind'], 'scan_') ? '/clients/' . (int) $r['client_id'] . '/scans' : '/findings/' . (int) $r['ref'],
         ], array_slice($all, 0, $limit));
     }
 

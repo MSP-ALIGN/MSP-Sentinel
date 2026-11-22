@@ -42,6 +42,6 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
         </div>
     </div>
     <div class="card-footer d-flex gap-2"><button class="btn btn-primary" type="submit"><?= e(__('Record and sign')) ?></button>
-        <a class="btn btn-outline-secondary" href="<?= e(url('/clients/' . (int) $client['id'] . '#agents')) ?>"><?= e(__('Cancel')) ?></a></div>
+        <a class="btn btn-outline-secondary" href="<?= e(url('/clients/' . (int) $client['id'] . '/agents')) ?>"><?= e(__('Cancel')) ?></a></div>
     </form>
 </div>

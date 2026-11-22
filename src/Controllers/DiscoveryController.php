@@ -36,7 +36,7 @@ final class DiscoveryController extends Controller
         } catch (DnsException | \InvalidArgumentException $ex) {
             // Missing or invalid dns.resolver / crtsh.base_url in the config file.
             Session::flash('danger', __('Discovery is not configured correctly: {e}', ['e' => $ex->getMessage()]));
-            return Response::redirect('/clients/' . $clientId);
+            return Response::redirect('/clients/' . $clientId . '/discovery');
         }
         @set_time_limit(60);
         $budget = (float) App::config()->get('discovery.manual_budget', 25);
@@ -50,7 +50,7 @@ final class DiscoveryController extends Controller
             default => 'danger',
         };
         Session::flash($type, $result['message']);
-        return Response::redirect('/clients/' . $clientId);
+        return Response::redirect('/clients/' . $clientId . '/discovery');
     }
 
     /** POST /suggestions/{id}/dismiss */
@@ -73,15 +73,15 @@ final class DiscoveryController extends Controller
         $client = App::clients()->find($clientId);
         if ($client === null || (int) $client['is_archived'] === 1) {
             Session::flash('info', __('Restore the client first.'));
-            return Response::redirect('/clients/' . $clientId);
+            return Response::redirect('/clients/' . $clientId . '/discovery');
         }
         if ($suggestion['status'] === 'accepted') {
             Session::flash('info', __('This suggestion is already part of an authorisation.'));
-            return Response::redirect('/clients/' . $clientId);
+            return Response::redirect('/clients/' . $clientId . '/discovery');
         }
         App::suggestions()->setStatus((int) $suggestion['id'], $status, (int) $this->user()['id']);
         $this->audit($request, $status === 'dismissed' ? 'suggestion.dismissed' : 'suggestion.restored', 'suggestion', (int) $suggestion['id'],
             ['client_id' => $clientId, 'value' => $suggestion['value']]);
-        return Response::redirect('/clients/' . $clientId);
+        return Response::redirect('/clients/' . $clientId . '/discovery');
     }
 }

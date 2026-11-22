@@ -12,7 +12,7 @@ $chip = static function (string $sev, string $text): string {
 $matched = array_values(array_filter($device['software'], static fn (array $s): bool => $s['cpe'] !== ''));
 $other = count($device['software']) - count($matched);
 ?>
-<p class="small"><a href="<?= e(url('/clients/' . (int) $client['id'] . '#devices')) ?>"><i class="bi bi-arrow-left me-1" aria-hidden="true"></i><?= e($client['name']) ?></a></p>
+<p class="small"><a href="<?= e(url('/clients/' . (int) $client['id'] . '/devices')) ?>"><i class="bi bi-arrow-left me-1" aria-hidden="true"></i><?= e($client['name']) ?></a></p>
 <div class="row g-3">
     <div class="col-lg-5">
         <div class="card mb-3">

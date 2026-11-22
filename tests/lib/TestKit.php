@@ -319,6 +319,23 @@ final class TestContext
      * Full sign-in for a user: password, then 2FA enrolment (first time) or a TOTP code.
      * Returns the client, signed in.
      */
+    /**
+     * All of a client's pages (overview and every section) in one string, for checks that don't care which page
+     * shows something. Every page must load (200), so a broken section fails here too.
+     */
+    public function clientPages(HttpClient $client, int $clientId): string
+    {
+        $out = '';
+        foreach (array_merge([''], array_map(static fn (string $s): string => '/' . $s, array_slice(\Sentinel\Controllers\ClientController::SECTIONS, 1))) as $suffix) {
+            $res = $client->get('/clients/' . $clientId . $suffix);
+            if ($res->status !== 200) {
+                throw new \RuntimeException("/clients/{$clientId}{$suffix} returned HTTP {$res->status}");
+            }
+            $out .= $res->body;
+        }
+        return $out;
+    }
+
     public function login(string $username, string $password, ?HttpClient $client = null): HttpClient
     {
         $client ??= $this->client();

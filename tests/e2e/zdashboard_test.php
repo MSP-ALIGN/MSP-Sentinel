@@ -40,7 +40,7 @@ return [
         Assert::notContains('<script', $live->body, 'scan data in the panels is escaped');
 
         $cid = (int) $ctx->db->query("SELECT id FROM clients WHERE is_archived = 0 ORDER BY id LIMIT 1")->fetchColumn();
-        $page = $admin->get('/clients/' . $cid)->body;
+        $page = $ctx->clientPages($admin, (int) $cid);
         Assert::contains('data-refresh-url="/clients/' . $cid . '/overview"', $page);
         Assert::contains('RISK / 100', $page);
         $frag = $admin->get('/clients/' . $cid . '/overview');
@@ -54,7 +54,7 @@ return [
 
         // The trend uses recorded daily counts.
         $ctx->db->exec("INSERT IGNORE INTO finding_stats (client_id, day, fail_open, warn_open) VALUES ({$cid}, UTC_DATE() - INTERVAL 3 DAY, 7, 2), ({$cid}, UTC_DATE() - INTERVAL 2 DAY, 5, 4)");
-        $page = $admin->get('/clients/' . $cid)->body;
+        $page = $ctx->clientPages($admin, (int) $cid);
         Assert::contains('class="trend"', $page);
         Assert::notContains('The trend builds up day by day', substr($page, 0, (int) strpos($page, 'id="findings"')));
     },

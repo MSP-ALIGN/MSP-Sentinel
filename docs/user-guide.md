@@ -10,6 +10,14 @@ A short tour for technicians and viewers. The in-app **Help** page has more deta
 | Technician | Also run discovery, queue and cancel scans, triage findings, create reports, pause scanning |
 | Admin | Also manage users, clients and authorisations, settings, alerts, branding, API tokens and the System page; resume scanning; delete reports |
 
+## A client's pages
+
+Open a client from **Clients** and the left menu switches to that client: **Overview** (risk, trend, details, scanning
+and sites), **Findings**, then **External** (scans and ports, vulnerabilities, certificates and web pages, website and
+email), **Internal** (agents, devices) and **Manage** (authorisations, discovery, reports). Each is its own page with
+its own address, so you can bookmark or share a link to, say, a client's devices. **All clients** at the top takes you
+back. The client's forms (edit, new authorisation, agent enrolment, a device) keep the same menu.
+
 ## A client from start to finish
 
 1. **Add the client** (admin): name, time zone and a scan window (when scans may run, in the client's time).
@@ -30,19 +38,19 @@ A short tour for technicians and viewers. The in-app **Help** page has more deta
 6. **Alerts**: new and returning Fail findings are announced straight away (bell, email, Teams or Slack); a summary
    follows each scan. Choose your emails on your profile.
 7. **Reports**: create an Executive summary for management and a Technical findings report for IT (Reports card on
-   the client page). Print to PDF from the browser. Reports are frozen: they never change after they are made.
+   the client's **Reports** page). Print to PDF from the browser. Reports are frozen: they never change after they are made.
 
 ## On-premises agents
 
 For a client's internal network, install an agent at the site (see [`agent.md`](agent.md)): record an internal
 authorisation for the site, create an enrolment code, and run the agent installer with it. Internal devices, their
-services and certificates then appear on the client page, with findings and new-device alerts.
+services and certificates then appear on the client's **Devices** and **Agents** pages, with findings and new-device alerts.
 
 ## Website and email checks
 
 With each scan and once a day, Sentinel checks every website it found (HTTPS, headers, cookies, a short fixed list of
 commonly exposed files, and the CMS and libraries it can see) and the SPF, DMARC and DKIM records of every authorised
-domain that receives email. Results are on the client page under **Website and email security**. Exposed files are
+domain that receives email. Results are on the client's **Website & email** page. Exposed files are
 only reported when their content proves it, and their content is never stored. Email checks use DNS only.
 
 ## Grades
@@ -53,7 +61,7 @@ only reported when their content proves it, and their content is never stored. E
 - **Warning:** fix soon. For example: a certificate expiring within 14 days, old TLS versions, an exposed VPN portal,
   a website without an HTTPS redirect, HSTS or Content-Security-Policy, insecure cookies, missing SPF or DMARC (or
   DMARC set to p=none), or a confirmed high-severity vulnerability.
-- **Info:** shown on the client page, not a finding.
+- **Info:** shown on the client's pages, not a finding.
 
 Vulnerabilities say whether they are **confirmed** for the exact version or only **possible** (version unknown, or a
 distribution build that may already carry the fix). Sentinel never guesses a version.

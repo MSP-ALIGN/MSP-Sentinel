@@ -52,7 +52,7 @@ return [
         Assert::same('warn', $finding($ctx, $id, 'vuln:203.0.113.161:80:CVE-2099-0101')['severity'], 'possible known-exploited warns');
         Assert::same([], $finding($ctx, $id, 'vuln:203.0.113.160:22:CVE-2099-0003'), 'medium (info) does not become a finding');
 
-        $page = $admin->get('/clients/' . $id)->body;
+        $page = $ctx->clientPages($admin, (int) $id);
         Assert::contains('Remote Desktop open to the internet', $page);
         Assert::contains('2 Fail', $page);
         $show = $admin->get('/findings/' . (int) $kev['id'])->body;

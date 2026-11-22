@@ -58,7 +58,7 @@ return [
         Assert::contains('Riverside Example Ltd', $admin->get('/clients')->body);
         Assert::same(4, (int) $ctx->db->query("SELECT COUNT(DISTINCT name) FROM clients WHERE is_demo = 1")->fetchColumn(), 'unique names, even next to a real client of the same name');
         Assert::contains('>Demo<', $admin->get('/clients')->body, 'Demo badge on the client list');
-        $page = $admin->get('/clients/' . $riverside)->body;
+        $page = $ctx->clientPages($admin, (int) $riverside);
         Assert::contains('Demo client: made-up data', $page);
         $device = (int) $ctx->db->query("SELECT id FROM devices WHERE client_id = {$riverside} AND source = 'agent' ORDER BY id LIMIT 1")->fetchColumn();
         $report = (int) $ctx->db->query("SELECT id FROM reports WHERE client_id = {$riverside} ORDER BY id LIMIT 1")->fetchColumn();
@@ -83,9 +83,9 @@ return [
             + (int) $ctx->db->query('SELECT COUNT(*) FROM agent_jobs WHERE client_id IN (' . implode(',', $ids) . ") AND status IN ('queued','sent')")->fetchColumn();
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $admin->submit('/clients/' . $riverside, '/clients/' . $riverside . '/scan', []);
-        Assert::contains('never scanned', $admin->get('/clients/' . $riverside)->body, 'manual scan refused with a clear message');
+        Assert::contains('never scanned', $ctx->clientPages($admin, (int) $riverside), 'manual scan refused with a clear message');
         $admin->submit('/clients/' . $riverside, '/clients/' . $riverside . '/discover', []);
-        Assert::contains('never scanned', $admin->get('/clients/' . $riverside)->body, 'discovery refused');
+        Assert::contains('never scanned', $ctx->clientPages($admin, (int) $riverside), 'discovery refused');
         $site = (int) $ctx->db->query("SELECT site_id FROM agents WHERE client_id = {$riverside}")->fetchColumn();
         $admin->submit('/clients/' . $riverside, '/clients/' . $riverside . '/sites/' . $site . '/scan', ['reason' => 'Demo test']);
         $finding = (int) $ctx->db->query("SELECT id FROM findings WHERE client_id = {$riverside} AND status = 'open' AND finding_key LIKE 'port:%' LIMIT 1")->fetchColumn();

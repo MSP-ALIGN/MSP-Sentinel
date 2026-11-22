@@ -66,6 +66,10 @@ $router->add('GET', '/clients', [ClientController::class, 'index']);
 $router->add('GET', '/clients/new', [ClientController::class, 'create'], $admin);
 $router->add('POST', '/clients', [ClientController::class, 'store'], $admin);
 $router->add('GET', '/clients/{id}', [ClientController::class, 'show']);
+// A client's pages, one per section (the overview is /clients/{id}); see ClientController::SECTIONS.
+foreach (['findings', 'scans', 'vulnerabilities', 'certificates', 'website', 'agents', 'devices', 'authorisations', 'discovery', 'reports'] as $clientSection) {
+    $router->add('GET', '/clients/{id}/' . $clientSection, [ClientController::class, 'show']);
+}
 $router->add('GET', '/clients/{id}/overview', [ClientController::class, 'overview'], ['passive' => true]);
 $router->add('GET', '/clients/{id}/edit', [ClientController::class, 'edit'], $admin);
 $router->add('POST', '/clients/{id}', [ClientController::class, 'update'], $admin);

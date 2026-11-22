@@ -65,7 +65,7 @@ final class ReportController extends Controller
         $period = $request->input('period');
         if ($kinds === null || !array_key_exists($period, self::PERIODS)) {
             Session::flash('danger', __('Choose a report type and period.'));
-            return Response::redirect('/clients/' . (int) $client['id'] . '#reports');
+            return Response::redirect('/clients/' . (int) $client['id'] . '/reports');
         }
         [$start, $end] = self::period($period);
         $user = $this->user();
@@ -75,7 +75,7 @@ final class ReportController extends Controller
                 $id = App::reportService()->generate($client, $kind, $start, $end, (int) $user['id'], (string) $user['display_name']);
             } catch (\RuntimeException $ex) {
                 Session::flash('danger', $ex->getMessage());
-                return Response::redirect('/clients/' . (int) $client['id'] . '#reports');
+                return Response::redirect('/clients/' . (int) $client['id'] . '/reports');
             }
             $ids[] = $id;
             $this->audit($request, 'report.created', 'report', $id, ['client' => (int) $client['id'], 'kind' => $kind, 'period' => $start . '..' . $end]);
@@ -91,16 +91,16 @@ final class ReportController extends Controller
         $on = $request->input('report_monthly') === '1';
         if ($on && (int) ($client['is_demo'] ?? 0) === 1) {
             Session::flash('info', __('This is a demo client with made-up data: it never emails reports.'));
-            return Response::redirect('/clients/' . (int) $client['id'] . '#reports');
+            return Response::redirect('/clients/' . (int) $client['id'] . '/reports');
         }
         $list = array_values(array_unique(array_filter(array_map('trim', preg_split('/[,;\s]+/', $request->input('report_recipients')) ?: []))));
         if (count($list) > 5 || array_filter($list, static fn (string $a): bool => !SmtpMailer::validAddress($a)) !== []) {
             Session::flash('danger', __('Report recipients: up to 5 valid email addresses, separated by commas.'));
-            return Response::redirect('/clients/' . (int) $client['id'] . '#reports');
+            return Response::redirect('/clients/' . (int) $client['id'] . '/reports');
         }
         if ($on && $list === []) {
             Session::flash('danger', __('To send monthly reports, enter at least one recipient.'));
-            return Response::redirect('/clients/' . (int) $client['id'] . '#reports');
+            return Response::redirect('/clients/' . (int) $client['id'] . '/reports');
         }
         App::db()->prepare('UPDATE clients SET report_monthly = :m, report_recipients = :r, updated_at = UTC_TIMESTAMP() WHERE id = :id')
             ->execute(['m' => $on ? 1 : 0, 'r' => implode(',', $list), 'id' => (int) $client['id']]);
@@ -109,7 +109,7 @@ final class ReportController extends Controller
         if ($on && App::settings()->get('email_enabled') !== '1') {
             Session::flash('warning', __('Email alerts are turned off in Settings, so monthly reports will be created but not emailed.'));
         }
-        return Response::redirect('/clients/' . (int) $client['id'] . '#reports');
+        return Response::redirect('/clients/' . (int) $client['id'] . '/reports');
     }
 
     /** GET /reports/{id}: details and actions. */

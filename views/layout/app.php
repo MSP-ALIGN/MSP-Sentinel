@@ -113,7 +113,7 @@ try {
         </div>
     </nav>
 
-    <aside class="app-sidebar bg-body-secondary shadow<?= $inAdmin ? ' is-admin' : '' ?>" data-bs-theme="dark">
+    <aside class="app-sidebar bg-body-secondary shadow<?= $inAdmin ? ' is-admin' : (isset($clientNav) ? ' is-client' : '') ?>" data-bs-theme="dark">
         <div class="sidebar-brand">
             <a href="<?= e(url('/')) ?>" class="brand-link" title="<?= e($product) ?>">
                 <img src="<?= e(asset('img/logo.svg')) ?>" alt="" class="brand-logo" width="34" height="34">
@@ -131,6 +131,27 @@ try {
                     <li class="nav-header"><?= e(__('LEAVE')) ?></li>
                     <li class="nav-item"><a href="<?= e(url('/')) ?>" class="nav-link admin-exit"><i class="nav-icon bi bi-arrow-left-circle" aria-hidden="true"></i><p><?= e(__('Back to Sentinel')) ?></p></a></li>
                     <?= $navItem('/help', 'bi-question-circle', __('Help')) ?>
+                </ul>
+            </nav>
+            <?php elseif (isset($clientNav) && is_array($clientNav)): ?>
+            <?php // A client's own menu (ClientController::nav): its sections, with the way back to all clients. ?>
+            <nav class="mt-2" aria-label="<?= e(__('Client menu')) ?>">
+                <ul class="nav sidebar-menu flex-column">
+                    <li class="nav-item"><a href="<?= e(url('/clients')) ?>" class="nav-link admin-exit"><i class="nav-icon bi bi-arrow-left-circle" aria-hidden="true"></i><p><?= e(__('All clients')) ?></p></a></li>
+                </ul>
+            </nav>
+            <div class="client-mode" title="<?= e($clientNav['name']) ?>"><i class="bi bi-building" aria-hidden="true"></i><span><?= e($clientNav['name']) ?></span>
+                <?php if ($clientNav['demo']): ?><span class="badge text-bg-info"><?= e(__('Demo')) ?></span><?php endif; ?>
+                <?php if ($clientNav['archived']): ?><span class="badge text-bg-secondary"><?= e(__('Archived')) ?></span><?php endif; ?></div>
+            <nav aria-label="<?= e(__('Client sections')) ?>">
+                <ul class="nav sidebar-menu flex-column">
+                    <?php foreach ($clientNav['groups'] as $group): ?>
+                    <?php if ($group['label'] !== null): ?><li class="nav-header"><?= e(mb_strtoupper($group['label'])) ?></li><?php endif; ?>
+                    <?php foreach ($group['items'] as $it): ?>
+                    <li class="nav-item"><a href="<?= e(url($it['url'])) ?>" class="nav-link<?= $it['active'] ? ' active' : '' ?>"<?= $it['active'] ? ' aria-current="page"' : '' ?>>
+                        <i class="nav-icon bi <?= e($it['icon']) ?>" aria-hidden="true"></i><p><?= e($it['label']) ?><?php if (($it['badge'] ?? 0) > 0): ?> <span class="badge text-bg-danger ms-1"><?= (int) $it['badge'] ?></span><?php endif; ?></p></a></li>
+                    <?php endforeach; ?>
+                    <?php endforeach; ?>
                 </ul>
             </nav>
             <?php else: ?>

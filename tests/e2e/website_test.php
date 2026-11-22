@@ -126,7 +126,7 @@ return [
     'client page, findings filter, report guidance and roles' => function (TestContext $ctx) use ($setup): void {
         $cid = $setup($ctx);
         $view = $ctx->login('admin', 'Admin-Pass-0001!');
-        $page = $view->get('/clients/' . $cid)->body;
+        $page = $ctx->clientPages($view, (int) $cid);
         foreach (['Website and email security', 'Configuration file with secrets exposed (.env)', 'WordPress', 'SPF lets anyone send email as this domain', 'Receives no email (no MX)'] as $s) {
             Assert::contains($s, $page);
         }

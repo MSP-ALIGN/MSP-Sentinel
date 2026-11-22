@@ -34,7 +34,7 @@ final class InventoryController extends Controller
         $client = $this->client($params);
         if ((int) $client['is_archived'] === 1) {
             Session::flash('warning', __('This client is archived. Restore it before linking it.'));
-            return Response::redirect('/clients/' . (int) $client['id']);
+            return Response::redirect('/clients/' . (int) $client['id'] . '/devices');
         }
         [$name, $source] = $this->source($request->query('source'));
         $orgs = [];
@@ -57,11 +57,11 @@ final class InventoryController extends Controller
         $client = $this->client($params);
         if ((int) $client['is_archived'] === 1) {
             Session::flash('warning', __('This client is archived. Restore it before linking it.'));
-            return Response::redirect('/clients/' . (int) $client['id']);
+            return Response::redirect('/clients/' . (int) $client['id'] . '/devices');
         }
         if ((int) ($client['is_demo'] ?? 0) === 1) {
             Session::flash('info', __('This is a demo client with made-up data: it can\'t be linked to a real inventory source.'));
-            return Response::redirect('/clients/' . (int) $client['id']);
+            return Response::redirect('/clients/' . (int) $client['id'] . '/devices');
         }
         [$name, $source] = $this->source($request->input('source'));
         $orgId = $request->input('org_id');
@@ -69,7 +69,7 @@ final class InventoryController extends Controller
             $orgs = $source->organisations();
         } catch (InventoryException $ex) {
             Session::flash('danger', __('{source} could not be reached: {e}', ['source' => $source->label(), 'e' => mb_substr($ex->getMessage(), 0, 300)]));
-            return Response::redirect('/clients/' . (int) $client['id'] . '#devices');
+            return Response::redirect('/clients/' . (int) $client['id'] . '/devices');
         }
         $org = null;
         foreach ($orgs as $o) {
@@ -89,7 +89,7 @@ final class InventoryController extends Controller
         }
         $this->audit($request, 'inventory.linked', 'client', (int) $client['id'], ['source' => $name, 'org_id' => mb_substr($org['id'], 0, 64), 'org_name' => mb_substr($org['name'], 0, 200)]);
         Session::flash('success', __('Linked to {org}. Devices appear after the first sync (within a minute).', ['org' => $org['name']]));
-        return Response::redirect('/clients/' . (int) $client['id'] . '#devices');
+        return Response::redirect('/clients/' . (int) $client['id'] . '/devices');
     }
 
     /** POST /clients/{id}/inventory/unlink (admins): devices are marked removed and their findings resolve. */
@@ -102,7 +102,7 @@ final class InventoryController extends Controller
             $this->audit($request, 'inventory.unlinked', 'client', (int) $client['id'], ['source' => $name]);
         }
         Session::flash('success', __('Unlinked. Its devices are no longer shown and their findings were closed (noted as unlinked, not as fixed).'));
-        return Response::redirect('/clients/' . (int) $client['id'] . '#devices');
+        return Response::redirect('/clients/' . (int) $client['id'] . '/devices');
     }
 
     /** POST /clients/{id}/inventory/sync (technicians and admins): sync within a minute (worker). */
@@ -121,7 +121,7 @@ final class InventoryController extends Controller
             $this->audit($request, 'inventory.sync_requested', 'client', (int) $client['id'], ['source' => $name]);
             Session::flash('success', __('Sync requested. It runs within a minute (after any scan already running).'));
         }
-        return Response::redirect('/clients/' . (int) $client['id'] . '#devices');
+        return Response::redirect('/clients/' . (int) $client['id'] . '/devices');
     }
 
     /** GET /clients/{id}/devices/{device}: one internal device with its software, vulnerabilities and missing updates. */

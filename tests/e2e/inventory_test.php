@@ -55,7 +55,7 @@ return [
     'admins link a client to an organisation; a name match is only suggested' => function (TestContext $ctx) use ($setup): void {
         $cid = $setup($ctx);
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
-        Assert::contains('Link to an organisation', $admin->get('/clients/' . $cid)->body);
+        Assert::contains('Link to an organisation', $ctx->clientPages($admin, (int) $cid));
         $form = $admin->get('/clients/' . $cid . '/inventory/link?source=ninjaone')->body;
         Assert::true(preg_match('/<option value="org-101" selected>Riverbend Example Ltd \(suggested\)/', $form) === 1, 'suggested by name, ignoring "Ltd"');
         Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM source_links WHERE client_id = {$cid}")->fetchColumn(), 'nothing linked automatically');
@@ -69,7 +69,7 @@ return [
         $admin->submit('/clients/' . $cid . '/inventory/link?source=ninjaone', '/clients/' . $cid . '/inventory/link', ['source' => 'ninjaone', 'org_id' => 'org-999']);
         Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM source_links WHERE client_id = {$cid}")->fetchColumn(), 'unknown organisation refused');
         Assert::status(404, $admin->submit('/clients/' . $cid, '/clients/' . $cid . '/inventory/link', ['source' => 'other', 'org_id' => 'org-101']), 'unknown source');
-        Assert::redirect('/clients/' . $cid . '#devices', $admin->submit('/clients/' . $cid . '/inventory/link?source=ninjaone', '/clients/' . $cid . '/inventory/link', ['source' => 'ninjaone', 'org_id' => 'org-101']));
+        Assert::redirect('/clients/' . $cid . '/devices', $admin->submit('/clients/' . $cid . '/inventory/link?source=ninjaone', '/clients/' . $cid . '/inventory/link', ['source' => 'ninjaone', 'org_id' => 'org-101']));
         Assert::same('Riverbend Example Ltd', (string) $ctx->db->query("SELECT org_name FROM source_links WHERE client_id = {$cid}")->fetchColumn());
         Assert::contains('inventory.linked', (string) $ctx->db->query("SELECT GROUP_CONCAT(action) FROM audit_log")->fetchColumn());
         // One organisation, one client.
@@ -121,7 +121,7 @@ return [
     'pages: client card, device page, findings filter, report guidance; data is escaped' => function (TestContext $ctx) use ($setup): void {
         $cid = $setup($ctx);
         $view = $ctx->login('admin', 'Admin-Pass-0001!');
-        $page = $view->get('/clients/' . $cid)->body;
+        $page = $ctx->clientPages($view, (int) $cid);
         foreach (['Internal devices', 'RB-WS-01', 'Operating system no longer gets security updates', 'Antivirus or EDR is turned off', 'linked to Riverbend Example Ltd'] as $s) {
             Assert::contains($s, $page);
         }
@@ -177,7 +177,7 @@ return [
         $r = App::inventorySync()->syncClient($cid, 'ninjaone');
         Assert::same('error', $r['status']);
         Assert::same($before, (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE client_id = {$cid} AND removed_at IS NULL")->fetchColumn(), 'a failure removes nothing');
-        Assert::contains('Sync failed', $ctx->login('admin', 'Admin-Pass-0001!')->get('/clients/' . $cid)->body);
+        Assert::contains('Sync failed', $ctx->clientPages($ctx->login('admin', 'Admin-Pass-0001!'), (int) $cid));
         $ctx->db->exec("UPDATE source_links SET org_id = 'org-101' WHERE client_id = {$cid}");
         // Sync now (technicians) marks the link due; unlink (admins) removes devices and resolves their findings.
         $tech = $ctx->login('invtech', 'Invtech-Pass-0001!');

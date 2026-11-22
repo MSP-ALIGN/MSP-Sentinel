@@ -72,49 +72,84 @@ final class ClientController extends Controller
         return Response::redirect('/clients/' . $id);
     }
 
-    /** GET /clients/{id} */
+    /**
+     * The client's pages: one URL per section (GET /clients/{id} is the overview, /clients/{id}/findings, ...),
+     * each with the client's own menu in the sidebar. Only the data the section shows is loaded.
+     */
+    public const SECTIONS = ['overview', 'findings', 'scans', 'vulnerabilities', 'certificates', 'website', 'agents', 'devices', 'authorisations', 'discovery', 'reports'];
+
+    /**
+     * GET /clients/{id} and /clients/{id}/{section} (any signed-in role; actions inside are role-checked by their routes).
+     * Untrusted: the path (the section must be one of SECTIONS, else the overview) and the client ID (404 if unknown).
+     */
     public function show(Request $request, array $params): Response
     {
         $client = $this->findOr404($params);
+        $cid = (int) $client['id'];
+        $last = substr($request->path, (int) strrpos($request->path, '/') + 1);
+        $section = in_array($last, self::SECTIONS, true) ? $last : 'overview';
         $today = ScopeService::today((string) $client['timezone']);
-        $authorisations = App::authorisations()->forClient((int) $client['id']);
-        foreach ($authorisations as &$a) {
-            $a['status'] = ScopeService::status($a, $today);
+        $authorisations = static function () use ($cid, $today): array {
+            $rows = App::authorisations()->forClient($cid);
+            foreach ($rows as &$a) {
+                $a['status'] = ScopeService::status($a, $today);
+            }
+            return $rows;
+        };
+        $web = static fn (): \Sentinel\Web\WebsiteRepository => new \Sentinel\Web\WebsiteRepository(App::db());
+        // What each section needs (closures, so a page only runs its own queries).
+        $loaders = [
+            'overview' => ['sites' => fn () => App::clients()->sites($cid), 'authorisations' => $authorisations, 'overview' => fn () => self::overviewData($client),
+                           'openJob' => fn () => App::scans()->openJob($cid), 'windowOpen' => fn () => ScanWindow::isOpen($client)],
+            'findings' => ['clientFindings' => fn () => App::findings()->search(['client' => $cid, 'status' => 'open'])['rows']],
+            'scans' => ['openJob' => fn () => App::scans()->openJob($cid), 'recentJobs' => fn () => App::scans()->recentJobs($cid), 'services' => fn () => App::scans()->openServices($cid),
+                        'scanLog' => fn () => App::scans()->logForClient($cid, 30), 'ports' => fn () => PortProfile::forClient($client), 'windowOpen' => fn () => ScanWindow::isOpen($client)],
+            'vulnerabilities' => ['vulns' => fn () => App::vulns()->forClient($cid), 'vulnCoverage' => fn () => App::vulns()->coverage($cid), 'feeds' => fn () => App::vulns()->feedStatuses()],
+            'certificates' => ['tlsEndpoints' => fn () => App::endpoints()->tlsForClient($cid), 'webPages' => fn () => App::endpoints()->webForClient($cid)],
+            'website' => ['websiteChecks' => fn () => $web()->checksForClient($cid), 'emailChecks' => fn () => $web()->emailForClient($cid)],
+            'agents' => ['agentSites' => fn () => self::agentSites($client)],
+            'devices' => ['inventorySources' => fn () => array_map(static fn (\Sentinel\Inventory\InventorySource $s): string => $s->label(), App::inventorySources()),
+                          'inventoryLinks' => fn () => array_map(fn (\Sentinel\Inventory\InventorySource $s): ?array => App::inventory()->link($cid, $s->name()), App::inventorySources()),
+                          'devices' => fn () => App::inventory()->devicesForClient($cid, 500),
+                          'deviceTotal' => fn () => (int) App::db()->query('SELECT COUNT(*) FROM devices WHERE removed_at IS NULL AND client_id = ' . $cid)->fetchColumn(),
+                          'devicePatches' => fn () => App::inventory()->patchesByDevice($cid)],
+            'authorisations' => ['authorisations' => $authorisations],
+            'discovery' => ['suggestions' => fn () => App::suggestions()->forClient($cid, 'pending'), 'dismissed' => fn () => App::suggestions()->forClient($cid, 'dismissed'),
+                            'lastRun' => fn () => App::suggestions()->lastRun($cid)],
+            'reports' => ['clientReports' => fn () => App::reports()->list($cid, 20)],
+        ];
+        $data = ['client' => $client, 'section' => $section, 'today' => $today, 'globallyPaused' => App::scope()->globallyPaused(),
+                 'findingCounts' => App::findings()->counts($cid), 'authorisations' => [], 'sites' => []];
+        foreach ($loaders[$section] as $key => $load) {
+            $data[$key] = $load();
         }
-        unset($a);
-        return $this->page('clients/show', (string) $client['name'], [
-            'client' => $client,
-            'sites' => App::clients()->sites((int) $client['id']),
-            'authorisations' => $authorisations,
-            'today' => $today,
-            'globallyPaused' => App::scope()->globallyPaused(),
-            'suggestions' => App::suggestions()->forClient((int) $client['id'], 'pending'),
-            'dismissed' => App::suggestions()->forClient((int) $client['id'], 'dismissed'),
-            'lastRun' => App::suggestions()->lastRun((int) $client['id']),
-            'openJob' => App::scans()->openJob((int) $client['id']),
-            'recentJobs' => App::scans()->recentJobs((int) $client['id']),
-            'services' => App::scans()->openServices((int) $client['id']),
-            'scanLog' => App::scans()->logForClient((int) $client['id'], 30),
-            'ports' => PortProfile::forClient($client),
-            'windowOpen' => ScanWindow::isOpen($client),
-            'tlsEndpoints' => App::endpoints()->tlsForClient((int) $client['id']),
-            'webPages' => App::endpoints()->webForClient((int) $client['id']),
-            'vulns' => App::vulns()->forClient((int) $client['id']),
-            'vulnCoverage' => App::vulns()->coverage((int) $client['id']),
-            'clientFindings' => App::findings()->search(['client' => (int) $client['id'], 'status' => 'open'])['rows'],
-            'findingCounts' => App::findings()->counts((int) $client['id']),
-            'feeds' => App::vulns()->feedStatuses(),
-            'clientReports' => App::reports()->list((int) $client['id'], 5),
-            'websiteChecks' => (new \Sentinel\Web\WebsiteRepository(App::db()))->checksForClient((int) $client['id']),
-            'emailChecks' => (new \Sentinel\Web\WebsiteRepository(App::db()))->emailForClient((int) $client['id']),
-            'overview' => self::overviewData($client),
-            'inventorySources' => array_map(static fn (\Sentinel\Inventory\InventorySource $s): string => $s->label(), App::inventorySources()),
-            'inventoryLinks' => array_map(fn (\Sentinel\Inventory\InventorySource $s): ?array => App::inventory()->link((int) $client['id'], $s->name()), App::inventorySources()),
-            'devices' => App::inventory()->devicesForClient((int) $client['id'], 500),
-            'deviceTotal' => (int) App::db()->query('SELECT COUNT(*) FROM devices WHERE removed_at IS NULL AND client_id = ' . (int) $client['id'])->fetchColumn(),
-            'devicePatches' => App::inventory()->patchesByDevice((int) $client['id']),
-            'agentSites' => self::agentSites($client),
-        ]);
+        $data['clientNav'] = self::nav($client, $section, $data['findingCounts']);
+        return $this->page('clients/show', (string) $client['name'], $data);
+    }
+
+    /**
+     * The client's menu for the sidebar: sections in groups, with the current one marked.
+     *
+     * @param array<string,mixed> $client
+     * @param array<string,mixed> $counts FindingRepository::counts()
+     * @return array<string,mixed>
+     */
+    public static function nav(array $client, string $section, array $counts): array
+    {
+        $item = static fn (string $key, string $label, string $icon): array => ['key' => $key, 'label' => $label, 'icon' => $icon,
+            'url' => '/clients/' . (int) $client['id'] . ($key === 'overview' ? '' : '/' . $key), 'active' => $key === $section];
+        $open = (int) ($counts['fail'] ?? 0) + (int) ($counts['warn'] ?? 0);
+        return [
+            'name' => (string) $client['name'], 'id' => (int) $client['id'], 'demo' => (int) ($client['is_demo'] ?? 0) === 1, 'archived' => (int) $client['is_archived'] === 1,
+            'groups' => [
+                ['label' => null, 'items' => [$item('overview', __('Overview'), 'bi-speedometer2'), $item('findings', __('Findings'), 'bi-flag') + ['badge' => $open]]],
+                ['label' => __('External'), 'items' => [$item('scans', __('Scans & ports'), 'bi-hdd-network'), $item('vulnerabilities', __('Vulnerabilities'), 'bi-bug'),
+                    $item('certificates', __('Certificates & web'), 'bi-shield-lock'), $item('website', __('Website & email'), 'bi-globe')]],
+                ['label' => __('Internal'), 'items' => [$item('agents', __('Agents'), 'bi-router'), $item('devices', __('Devices'), 'bi-pc-display')]],
+                ['label' => __('Manage'), 'items' => [$item('authorisations', __('Authorisations'), 'bi-file-earmark-check'), $item('discovery', __('Discovery'), 'bi-search'),
+                    $item('reports', __('Reports'), 'bi-file-earmark-text')]],
+            ],
+        ];
     }
 
     /**
@@ -158,7 +193,7 @@ final class ClientController extends Controller
         $summary = $data->clients($cid)[0] ?? ['fail' => 0, 'warn' => 0, 'kev' => 0, 'score' => 0, 'level' => 'good', 'last_scan' => null];
         return [
             'summary' => $summary,
-            'window' => \Sentinel\Dashboard\DashboardData::window($client),
+            'window' => (int) ($client['is_demo'] ?? 0) === 1 ? null : \Sentinel\Dashboard\DashboardData::window($client), // demo clients are never scanned
             'paused' => (int) $client['scanning_paused'] === 1 || App::scope()->globallyPaused(),
             'trend' => $data->trend(90, $cid, (int) $summary['fail'], (int) $summary['warn']),
             'surface' => $data->surface($cid),

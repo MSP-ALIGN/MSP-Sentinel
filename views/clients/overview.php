@@ -16,15 +16,15 @@ $w = $ov['window'];
         <p class="gauge-level level-<?= e($c['level']) ?>"><i class="bi <?= e($levelIcon($c['level'])) ?>" aria-hidden="true"></i> <?= e($levelWord($c['level'])) ?></p>
     </section>
     <section class="hud hud-kpis" aria-label="<?= e(__('Totals')) ?>">
-        <a class="kpi kpi-fail" href="#findings"><span class="kpi-n"><?= (int) $c['fail'] ?></span><span class="kpi-l"><i class="bi bi-x-octagon" aria-hidden="true"></i> <?= e(__('Open Fail')) ?></span></a>
-        <a class="kpi kpi-warn" href="#findings"><span class="kpi-n"><?= (int) $c['warn'] ?></span><span class="kpi-l"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> <?= e(__('Open Warning')) ?></span></a>
-        <a class="kpi kpi-kev" href="#vulns"><span class="kpi-n"><?= (int) $c['kev'] ?></span><span class="kpi-l"><i class="bi bi-bug" aria-hidden="true"></i> <?= e(__('Known exploited')) ?></span></a>
-        <a class="kpi" href="#scans"><span class="kpi-n"><?= (int) $ov['surface']['hosts'] ?></span><span class="kpi-l"><i class="bi bi-hdd-network" aria-hidden="true"></i> <?= e(__('Hosts')) ?></span></a>
-        <a class="kpi" href="#scans"><span class="kpi-n"><?= (int) $ov['surface']['services'] ?></span><span class="kpi-l"><i class="bi bi-door-open" aria-hidden="true"></i> <?= e(__('Open services')) ?></span></a>
+        <a class="kpi kpi-fail" href="<?= e(url('/clients/' . (int) $client['id'] . '/findings')) ?>"><span class="kpi-n"><?= (int) $c['fail'] ?></span><span class="kpi-l"><i class="bi bi-x-octagon" aria-hidden="true"></i> <?= e(__('Open Fail')) ?></span></a>
+        <a class="kpi kpi-warn" href="<?= e(url('/clients/' . (int) $client['id'] . '/findings')) ?>"><span class="kpi-n"><?= (int) $c['warn'] ?></span><span class="kpi-l"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> <?= e(__('Open Warning')) ?></span></a>
+        <a class="kpi kpi-kev" href="<?= e(url('/clients/' . (int) $client['id'] . '/vulnerabilities')) ?>"><span class="kpi-n"><?= (int) $c['kev'] ?></span><span class="kpi-l"><i class="bi bi-bug" aria-hidden="true"></i> <?= e(__('Known exploited')) ?></span></a>
+        <a class="kpi" href="<?= e(url('/clients/' . (int) $client['id'] . '/scans')) ?>"><span class="kpi-n"><?= (int) $ov['surface']['hosts'] ?></span><span class="kpi-l"><i class="bi bi-hdd-network" aria-hidden="true"></i> <?= e(__('Hosts')) ?></span></a>
+        <a class="kpi" href="<?= e(url('/clients/' . (int) $client['id'] . '/scans')) ?>"><span class="kpi-n"><?= (int) $ov['surface']['services'] ?></span><span class="kpi-l"><i class="bi bi-door-open" aria-hidden="true"></i> <?= e(__('Open services')) ?></span></a>
         <?php if ($ov['paused']): ?>
         <div class="kpi kpi-window is-paused"><span class="kpi-n kpi-small"><?= e(__('Paused')) ?></span><span class="kpi-l"><i class="bi bi-pause-circle" aria-hidden="true"></i> <?= e(__('Scanning is paused')) ?></span></div>
         <?php else: ?>
-        <div class="kpi kpi-window <?= $w !== null && $w['open'] ? 'is-open' : '' ?>"><span class="kpi-n kpi-small"><?= e($w === null ? '—' : $duration($w['in'])) ?></span><span class="kpi-l"><i class="bi bi-clock" aria-hidden="true"></i> <?= e($w === null ? __('No valid scan window') : ($w['open'] ? __('Window open, closes in') : __('Window opens in'))) ?></span></div>
+        <div class="kpi kpi-window <?= $w !== null && $w['open'] ? 'is-open' : '' ?>"><span class="kpi-n kpi-small"><?= e($w === null ? '—' : $duration($w['in'])) ?></span><span class="kpi-l"><i class="bi bi-clock" aria-hidden="true"></i> <?= e($w === null ? ((int) ($client['is_demo'] ?? 0) === 1 ? __('Demo client: never scanned') : __('No valid scan window')) : ($w['open'] ? __('Window open, closes in') : __('Window opens in'))) ?></span></div>
         <?php endif; ?>
     </section>
     <section class="hud hud-trend" aria-labelledby="h-c-trend">

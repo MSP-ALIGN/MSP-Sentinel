@@ -1,7 +1,9 @@
 <?php
 /**
- * Client detail: details, scanning state, authorisations (with scope) and sites.
- * Expects: $client, $sites, $authorisations (each with 'status' and 'entries'), $today, $globallyPaused, $currentUser.
+ * A client's pages: the section in $section (ClientController::SECTIONS), with the client's menu in the sidebar
+ * ($clientNav, drawn by the layout). Shared notices first, then only that section.
+ * Expects: $client, $section, $today, $globallyPaused, $currentUser, $findingCounts, and the section's own data
+ * (ClientController::show loads it): e.g. $sites/$authorisations/$overview for the overview.
  * Every value is escaped. Actions are shown only to roles allowed to use them (the routes enforce it too).
  */
 use Sentinel\Auth\Role;
@@ -23,6 +25,7 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
 <div class="alert alert-secondary"><i class="bi bi-archive me-1" aria-hidden="true"></i><?= e(__('This client is archived. It will not be scanned.')) ?></div>
 <?php endif; ?>
 
+<?php if ($section === 'overview'): ?>
 <?php if (!$archived): ?>
 <div class="dash-actions"><button type="button" class="btn btn-sm btn-outline-secondary refresh-toggle" data-refresh-toggle aria-pressed="false" data-label-pause="<?= e(__('Pause updates')) ?>" data-label-resume="<?= e(__('Resume updates')) ?>"><?= e(__('Pause updates')) ?></button></div>
 <div id="live-client" data-refresh-url="<?= e(url('/clients/' . $clientId . '/overview')) ?>" aria-live="off">
@@ -30,7 +33,7 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
 </div>
 <?php endif; ?>
 <div class="row g-3">
-    <div class="col-lg-4">
+    <div class="col-xl-4 col-lg-6">
         <div class="card mb-3">
             <div class="card-header d-flex align-items-center">
                 <h2 class="card-title h5 mb-0"><?= e(__('Details')) ?></h2>
@@ -56,6 +59,8 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
             <?php endif; ?>
         </div>
 
+    </div>
+    <div class="col-xl-4 col-lg-6">
         <div class="card mb-3">
             <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Scanning')) ?></h2></div>
             <div class="card-body">
@@ -118,11 +123,9 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
             </div>
             <?php endif; ?>
         </div>
-    </div>
-
-    <div class="col-lg-8">
-        <?php require __DIR__ . '/findings.php'; ?>
-        <?php require __DIR__ . '/reports.php'; ?>
+        </div>
+</div>
+<?php elseif ($section === 'authorisations'): ?>
         <div class="card">
             <div class="card-header d-flex align-items-center flex-wrap gap-2">
                 <h2 class="card-title h5 mb-0"><?= e(__('Authorised to scan')) ?></h2>
@@ -181,12 +184,7 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
                 <?php endforeach; ?>
             </div>
         </div>
-        <?php require __DIR__ . '/scans.php'; ?>
-        <?php require __DIR__ . '/vulns.php'; ?>
-        <?php require __DIR__ . '/exposure.php'; ?>
-        <?php require __DIR__ . '/website.php'; ?>
-        <?php require __DIR__ . '/agents.php'; ?>
-        <?php require __DIR__ . '/devices.php'; ?>
-        <?php require __DIR__ . '/discovery.php'; ?>
-    </div>
-</div>
+<?php else: ?>
+<?php require __DIR__ . '/' . ['findings' => 'findings', 'scans' => 'scans', 'vulnerabilities' => 'vulns', 'certificates' => 'exposure', 'website' => 'website',
+    'agents' => 'agents', 'devices' => 'devices', 'discovery' => 'discovery', 'reports' => 'reports'][$section] . '.php'; ?>
+<?php endif; ?>

@@ -37,6 +37,7 @@ return [
         [
             'title' => 'Clients and the "authorised to scan" register',
             'paragraphs' => [
+                'Opening a client switches the left menu to that client: Overview, Findings, External (scans and ports, vulnerabilities, certificates and web, website and email), Internal (agents, devices) and Manage (authorisations, discovery, reports). All clients at the top goes back.',
                 'Sentinel only ever scans systems a client has authorised. Before anything is scanned for a client, an admin records who at the client approved it (name, role, date), for which dates, and exactly which IP addresses, ranges and domains are covered. Open the client and choose "Record authorisation".',
                 'Scope entries: one per line. Public IP addresses (for example 203.0.113.10), ranges up to /24, and domain names. Write *.client-domain.com to include all subdomains; list the bare domain separately if it should be scanned too. Private and internal addresses are refused, because this version only scans from the internet. Shared suffixes such as *.co.uk or *.github.io are refused too, because they belong to many unrelated owners.',
                 'Authorisations cannot be edited. If the scope changes, revoke the old authorisation (with a reason) and record a new one. That way the register always shows exactly what was approved and when.',
@@ -196,6 +197,13 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.13.0',
+            'date' => '2026-11-22',
+            'items' => [
+                'A client opens with its own menu on the left (Overview, Findings, External, Internal, Manage), one page per section, instead of one long page.',
+            ],
+        ],
         [
             'version' => '1.12.1',
             'date' => '2026-11-22',

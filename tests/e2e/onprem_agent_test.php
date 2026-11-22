@@ -72,7 +72,7 @@ return [
         $tech = $ctx->login('agtech', 'Agtech-Pass-0001!');
         Assert::status(403, $tech->get('/clients/' . $cid . '/sites/' . $site . '/internal-authorisations/new'));
         Assert::status(403, $tech->submit('/clients/' . $cid, '/clients/' . $cid . '/sites/' . $site . '/enrol', []), 'only admins create enrolment codes');
-        Assert::contains('10.90.0.0/24', $admin->get('/clients/' . $cid)->body);
+        Assert::contains('10.90.0.0/24', $ctx->clientPages($admin, (int) $cid));
     },
     'enrolment: one-time code, token stored hashed, server key pinned' => function (TestContext $ctx) use ($setup, $agentDir): void {
         [$cid, $site] = $setup($ctx);
@@ -118,7 +118,7 @@ return [
         Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM notifications WHERE kind = 'new_device'")->fetchColumn(), 'first scan is the baseline');
         Assert::contains('starting point', (string) $ctx->db->query("SELECT summary FROM agent_jobs WHERE id = {$job}")->fetchColumn());
         Assert::contains('Example NAS Login', (string) $ctx->db->query("SELECT web FROM device_ports WHERE device_id = {$dev} AND port = 443")->fetchColumn());
-        Assert::contains("10.90.0.10", $ctx->login('admin', 'Admin-Pass-0001!')->get('/clients/' . $cid)->body);
+        Assert::contains("10.90.0.10", $ctx->clientPages($ctx->login('admin', 'Admin-Pass-0001!'), (int) $cid));
     },
     'a light sweep finds a new device and alerts; replays and other jobs are refused' => function (TestContext $ctx) use ($setup, $runAgent, $agentDir): void {
         [$cid, $site] = $setup($ctx);

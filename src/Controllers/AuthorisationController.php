@@ -90,7 +90,7 @@ final class AuthorisationController extends Controller
         $clientId = (int) $client['id'];
         if ((int) $client['is_archived'] === 1) {
             Session::flash('danger', __('Restore the client before recording a new authorisation.'));
-            return Response::redirect('/clients/' . $clientId);
+            return Response::redirect('/clients/' . $clientId . '/authorisations');
         }
         $today = ScopeService::today((string) $client['timezone']);
         $values = [];
@@ -199,7 +199,7 @@ final class AuthorisationController extends Controller
         foreach (array_slice($overlaps, 0, 10) as $hit) {
             Session::flash('warning', __('{value} is also in scope for client "{client}". Check that this is not a typo.', $hit));
         }
-        return Response::redirect('/clients/' . $clientId);
+        return Response::redirect('/clients/' . $clientId . '/authorisations');
     }
 
     /** POST /authorisations/{id}/revoke */
@@ -210,15 +210,15 @@ final class AuthorisationController extends Controller
         $reason = $request->input('reason');
         if ($reason === '' || mb_strlen($reason) > 500) {
             Session::flash('danger', __('Give a reason for revoking (up to 500 characters).'));
-            return Response::redirect('/clients/' . $clientId);
+            return Response::redirect('/clients/' . $clientId . '/authorisations');
         }
         if (!App::authorisations()->revoke((int) $auth['id'], (int) $this->user()['id'], $reason)) {
             Session::flash('info', __('This authorisation was already revoked.'));
-            return Response::redirect('/clients/' . $clientId);
+            return Response::redirect('/clients/' . $clientId . '/authorisations');
         }
         $this->audit($request, 'authorisation.revoked', 'authorisation', (int) $auth['id'], ['client_id' => $clientId, 'reason' => $reason]);
         Session::flash('success', __('Authorisation revoked. Its targets will no longer be scanned unless another active authorisation covers them.'));
-        return Response::redirect('/clients/' . $clientId);
+        return Response::redirect('/clients/' . $clientId . '/authorisations');
     }
 
     /** Strict YYYY-MM-DD check (rejects 2026-02-30). */

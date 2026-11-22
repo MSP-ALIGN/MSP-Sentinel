@@ -2,6 +2,14 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.13.0 (2026-11-22): client pages
+
+- Opening a client now switches the left menu to **that client's own menu**: Overview, Findings, External (scans and
+  ports, vulnerabilities, certificates and web, website and email), Internal (agents, devices) and Manage
+  (authorisations, discovery, reports), with **All clients** to go back. No more one long page.
+- Each section is its own page with its own address (for example `/clients/12/devices`), and only loads what it shows.
+- The client's forms and device pages keep the client menu; actions return you to the page you were on.
+
 ### 1.12.1 (2026-11-22): one-click Update now
 
 - **Update now** is a one-click admin action again (with an "Are you sure?" prompt): no password or 2FA code. The

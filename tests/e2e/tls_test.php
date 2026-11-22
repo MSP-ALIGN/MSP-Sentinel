@@ -55,7 +55,7 @@ return [
         ksort($web);
         Assert::same(['203.0.113.180:443' => 'vpn_portal', '203.0.113.180:80' => null, '203.0.113.181:443' => 'firewall_admin', '203.0.113.182:8443' => 'device_admin'], $web);
 
-        $page = $admin->get('/clients/' . $id)->body;
+        $page = $ctx->clientPages($admin, (int) $id);
         foreach (['Self-signed certificate', 'Still accepts TLS 1.0', 'Weak key (RSA 1024 bits)', 'Certificate expires in', 'Certificate does not match the name portal.tlscheck.example',
                   'Firewall admin page reachable from the internet', 'VPN login portal exposed', 'Device management page reachable', 'Welcome to Example Co'] as $text) {
             Assert::contains($text, $page);
