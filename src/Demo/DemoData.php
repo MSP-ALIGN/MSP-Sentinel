@@ -152,6 +152,15 @@ final class DemoData
     /** One client: authorisation, external results, scans, discovery, and its agent site if it has one. */
     private function loadClient(array $spec): int
     {
+        // Client names are unique: if a real client already has this name, the demo one gets a suffix.
+        $taken = $this->db->prepare('SELECT COUNT(*) FROM clients WHERE name = :n');
+        foreach (['', ' (demo)', ' (demo 2)', ' (demo 3)'] as $suffix) {
+            $taken->execute(['n' => $spec['name'] . $suffix]);
+            if ((int) $taken->fetchColumn() === 0) {
+                $spec['name'] .= $suffix;
+                break;
+            }
+        }
         $this->db->prepare(
             "INSERT INTO clients (name, timezone, scan_window_start, scan_window_end, notes, ports_extra, ports_excluded, created_by, created_at, updated_at, is_demo, report_monthly)
              VALUES (:n, :tz, '22:00:00', '05:00:00', :notes, '', '', :u, UTC_TIMESTAMP() - INTERVAL 120 DAY, UTC_TIMESTAMP(), 1, 0)"

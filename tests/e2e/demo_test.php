@@ -56,6 +56,7 @@ return [
 
         // The pages render with the demo content.
         Assert::contains('Riverside Example Ltd', $admin->get('/clients')->body);
+        Assert::same(4, (int) $ctx->db->query("SELECT COUNT(DISTINCT name) FROM clients WHERE is_demo = 1")->fetchColumn(), 'unique names, even next to a real client of the same name');
         Assert::contains('>Demo<', $admin->get('/clients')->body, 'Demo badge on the client list');
         $page = $admin->get('/clients/' . $riverside)->body;
         Assert::contains('Demo client: made-up data', $page);
@@ -102,9 +103,17 @@ return [
             Assert::true($refused, 'repository refuses demo clients');
         }
         // The scheduler and the agent scheduler skip them.
-        App::scanWorker()->scheduleDue();
-        App::agentService()->scheduleDue();
-        Assert::same(0, $jobs(), 'schedulers skip demo clients');
+        // (They may queue jobs for the other test clients: those are removed again, so later tests see the same state.)
+        $maxScan = (int) $ctx->db->query('SELECT COALESCE(MAX(id), 0) FROM scan_jobs')->fetchColumn();
+        $maxAgent = (int) $ctx->db->query('SELECT COALESCE(MAX(id), 0) FROM agent_jobs')->fetchColumn();
+        try {
+            App::scanWorker()->scheduleDue();
+            App::agentService()->scheduleDue();
+            Assert::same(0, $jobs(), 'schedulers skip demo clients');
+        } finally {
+            $ctx->db->exec("DELETE FROM scan_jobs WHERE id > {$maxScan}");
+            $ctx->db->exec("DELETE FROM agent_jobs WHERE id > {$maxAgent}");
+        }
         // The demo agent can never authenticate: its token was thrown away.
         Assert::same(null, App::agents()->authenticate('Bearer ' . str_repeat('a', 64)));
     },
