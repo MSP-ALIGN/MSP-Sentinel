@@ -228,6 +228,9 @@ if ! id sentinel >/dev/null 2>&1; then
 fi
 run install -d -o root -g sentinel -m 0750 "$APP_DIR"
 run rsync -a --exclude '/config/config.php*' --exclude /storage/ --exclude /dist/ "$SRC/" "$APP_DIR/"
+# A release archive has no BUILD stamp: drop one left by an earlier git-based install, so the
+# interface never shows a stale branch (or a development badge) for this code.
+[ -f "$SRC/BUILD" ] || run rm -f "$APP_DIR/BUILD"
 fix_permissions
 [ -d "$APP_DIR/storage" ] || run install -d -o sentinel -g sentinel -m 2770 "$APP_DIR/storage"
 run install -d -o sentinel -g sentinel -m 2770 /var/log/msp-sentinel

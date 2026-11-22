@@ -86,7 +86,7 @@ It is the same guided install. The difference is where the code comes from:
 | Command | `.../main/install.sh` | `.../develop/install-dev.sh` |
 | Follows | `main` (merged, released changes) | `develop` (newest changes, before they are released) |
 | `sudo msp-sentinel-update` | fetches the newest `main` | fetches the newest `develop` |
-| Web interface | no marker | a yellow **Development build** badge on every page; the branch and commit under Administration → System |
+| Web interface | the branch and commit under Administration → System | the same, plus a yellow **Development build** badge on every page |
 
 A suggested flow: changes land on `develop`, run `sudo msp-sentinel-update` on the development server and test them,
 then merge `develop` into `main` and update production.
@@ -97,6 +97,11 @@ Keep the two apart:
   rules apply.
 - A development server has its own database and app key. Don't restore a production backup onto it unless you mean
   to copy client data there.
+
+Any branch other than `main` counts as a development build (a fork whose production branch has another name shows
+the badge too). Running the other branch's command on an installed server does not switch it quietly: it asks you to
+type the new branch name, or needs `SENTINEL_SWITCH_BRANCH=1` when unattended. To stay on the current branch, use
+`sudo msp-sentinel-update`.
 
 `SENTINEL_BRANCH` picks another branch, for example a feature branch to test before it is merged. An on-premises agent
 can follow `develop` the same way: `curl ... | sudo -E SENTINEL_BRANCH=develop bash` with `.../develop/install-agent.sh`.
@@ -124,6 +129,7 @@ curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install
 | `SENTINEL_ADMIN_USER`, `SENTINEL_ADMIN_NAME`, `SENTINEL_ADMIN_EMAIL` | First admin; without a terminal a random password is printed once |
 | `SENTINEL_BRANCH` | Branch to install and update from (default `main`; `install-dev.sh` defaults to `develop`) |
 | `SENTINEL_REPO` | `owner/name` of a fork |
+| `SENTINEL_SWITCH_BRANCH=1` | Allow switching an installed server to another branch without asking |
 | `SENTINEL_FORCE=1` | Skip the operating system check |
 | `SENTINEL_DRY_RUN=1` | Show every step without changing anything |
 

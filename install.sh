@@ -77,6 +77,18 @@ if [ "${SENTINEL_FORCE:-0}" != 1 ]; then
   esac
 fi
 
+# An installed server keeps the branch it follows. Running another branch's one-liner on it (for example
+# install-dev.sh on production) must not quietly switch it: that needs a confirmation or SENTINEL_SWITCH_BRANCH=1.
+if [ -f "$APP_DIR/config/config.php" ] && [ -f /etc/msp-sentinel/update.env ]; then
+  current_branch="$(sed -n 's/^SENTINEL_BRANCH=\([A-Za-z0-9._/-]*\)$/\1/p' /etc/msp-sentinel/update.env | head -1)"
+  if [ -n "$current_branch" ] && [ "$current_branch" != "$BRANCH" ] && [ "${SENTINEL_SWITCH_BRANCH:-0}" != 1 ]; then
+    printf '%sThis server follows the %s branch;%s this command is for %s.\n' "$c_err" "$current_branch" "$c_0" "$BRANCH"
+    have_tty || die "Not switching branches without confirmation. Set SENTINEL_SWITCH_BRANCH=1 to switch it to $BRANCH, or run: sudo msp-sentinel-update"
+    read -r -p "Switch this server from $current_branch to $BRANCH? Type the new branch name to confirm: " reply </dev/tty
+    [ "$reply" = "$BRANCH" ] || die "Nothing was changed. To update on $current_branch, run: sudo msp-sentinel-update"
+  fi
+fi
+
 log "Fetching MSP Sentinel ($REPO, branch $BRANCH)"
 if [ -n "${SENTINEL_SRC:-}" ] && [ "$DRY" = 1 ]; then
   SRC_DIR="$SENTINEL_SRC"   # dry runs (tests): use an existing checkout, fetch nothing
@@ -122,11 +134,14 @@ UPD
 
 if [ -f "$APP_DIR/config/config.php" ]; then
   log "Existing install found: upgrading"
-  install_update_command
   args=(--upgrade)
   [ "$DRY" = 1 ] && args+=(--dry-run)
   [ "${SENTINEL_FORCE:-0}" = 1 ] && args+=(--skip-os-check)
-  exec bash "$SRC_DIR/install/install.sh" "${args[@]}"
+  # The update command (and the branch it follows) is only rewritten once the upgrade worked, so a refused
+  # upgrade (for example a downgrade) leaves the server following its old branch.
+  bash "$SRC_DIR/install/install.sh" "${args[@]}"
+  install_update_command
+  exit 0
 fi
 
 # ------------------------------------------------------------------ wizard ----

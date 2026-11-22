@@ -87,6 +87,10 @@ return [
             Assert::contains($step, $dev);
         }
         Assert::notContains('Development build', implode("\n", $lines), 'main installs are not marked');
+        $boot = (string) file_get_contents($root . '/install.sh');
+        Assert::true(str_contains($boot, 'SENTINEL_SWITCH_BRANCH') && strpos($boot, 'SENTINEL_SWITCH_BRANCH') < strpos($boot, 'log "Fetching MSP Sentinel'), 'branch switch is confirmed before anything is fetched');
+        Assert::true((bool) preg_match('/bash "\$SRC_DIR\/install\/install.sh" "\$\{args\[@\]\}"\n\s*install_update_command/', $boot), 'update.env is rewritten only after a successful upgrade');
+        Assert::contains('[ -f "$SRC/BUILD" ] || run rm -f "$APP_DIR/BUILD"', (string) file_get_contents($root . '/install/install.sh'), 'stale build stamp removed');
         exec($env . 'SENTINEL_BRANCH="x;rm" bash ' . escapeshellarg($root . '/install-dev.sh') . ' </dev/null 2>&1', $l6, $rc6);
         Assert::true($rc6 !== 0, 'bad branch refused before any download');
         foreach (['install.sh', 'install-agent.sh', 'install-dev.sh'] as $f) {
