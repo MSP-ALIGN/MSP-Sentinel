@@ -60,6 +60,10 @@ final class Settings
         'worker_last_tick' => '',
         'update_latest_version' => '',
         'update_checked_at' => '',
+        // Vulnerability data refresh (FeedSchedule): last run start and end, and the last "Refresh now" (UTC).
+        'feeds_run_started' => '',
+        'feeds_run_finished' => '',
+        'feeds_requested_at' => '',
         // NinjaOne (Administration > Integrations): instance host, API client ID, and on/off. The client secret
         // is in ninjaone_client_secret (encrypted, see SECRETS).
         'ninjaone_enabled' => '0',

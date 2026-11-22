@@ -9,7 +9,7 @@ use Sentinel\Core\Csrf;
 $a = $alerts;
 $statusBadge = ['sent' => 'text-bg-success', 'pending' => 'text-bg-secondary', 'failed' => 'text-bg-danger'];
 ?>
-<div class="card mt-3" id="alerts">
+<div class="card">
     <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Alerts')) ?></h2></div>
     <form method="post" action="<?= e(url('/admin/alerts')) ?>" novalidate autocomplete="off">
     <div class="card-body">

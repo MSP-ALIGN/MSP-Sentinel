@@ -78,6 +78,7 @@ final class AdminController extends Controller
             'alerts' => self::alertSettings(),
             'branding' => ReportController::brandingSettings(),
             'duePolicy' => App::fixWorkflow()->policy(),
+            'feedsRefresh' => (new \Sentinel\Vulns\FeedSchedule(App::settings()))->status(),
         ]);
     }
 
@@ -141,7 +142,8 @@ final class AdminController extends Controller
         if ($errors !== []) {
             return $this->page('settings/index', __('Settings'), ['values' => $values, 'errors' => $errors,
                 'feeds' => App::vulns()->feedStatuses(), 'nvdKeySet' => trim((string) App::config()->get('nvd.api_key', '')) !== '',
-                'nvdKeyUsable' => \Sentinel\Vulns\FeedUpdater::usableKey(App::config()) !== null, 'alerts' => self::alertSettings(), 'branding' => ReportController::brandingSettings(), 'duePolicy' => App::fixWorkflow()->policy()], 422);
+                'nvdKeyUsable' => \Sentinel\Vulns\FeedUpdater::usableKey(App::config()) !== null, 'alerts' => self::alertSettings(), 'branding' => ReportController::brandingSettings(), 'duePolicy' => App::fixWorkflow()->policy(),
+                'feedsRefresh' => (new \Sentinel\Vulns\FeedSchedule(App::settings()))->status()], 422);
         }
 
         $settings = App::settings();
@@ -157,5 +159,24 @@ final class AdminController extends Controller
         }
         Session::flash('success', __('Settings saved.'));
         return Response::redirect('/admin/settings');
+    }
+
+    /**
+     * POST /admin/feeds/refresh (admins; CSRF-checked like every POST): ask for a vulnerability data refresh. The
+     * cron job (bin/feeds.php --if-due, every 5 minutes) picks it up; nothing runs in this web request.
+     * Untrusted input: none.
+     */
+    public function refreshFeeds(Request $request): Response
+    {
+        $schedule = new \Sentinel\Vulns\FeedSchedule(App::settings());
+        $status = $schedule->status();
+        if ($status['running'] || $status['requested']) {
+            Session::flash('info', __('A refresh is already waiting or running.'));
+        } else {
+            $schedule->request();
+            $this->audit($request, 'feeds.refresh_requested');
+            Session::flash('success', __('Refresh requested: it starts within 5 minutes and can take a while the first time.'));
+        }
+        return Response::redirect('/admin/settings#feeds');
     }
 }

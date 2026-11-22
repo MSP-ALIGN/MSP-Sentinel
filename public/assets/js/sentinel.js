@@ -106,6 +106,27 @@
         });
     });
 
+    // Tabs whose panes are addressed by the page's #hash (Settings): open the tab named in the address, and keep the
+    // address in step when another tab is chosen, so a redirect after saving ("#alerts") lands on the right tab.
+    document.querySelectorAll('[data-hash-tabs]').forEach(function (list) {
+        var show = function (hash) {
+            var button = hash && /^#[a-z0-9-]+$/.test(hash) ? list.querySelector('[data-bs-target="' + hash + '"]') : null;
+            if (button && window.bootstrap) {
+                window.bootstrap.Tab.getOrCreateInstance(button).show();
+                // The browser jumps to the element named in the address; keep the tabs and the title in view instead.
+                window.requestAnimationFrame(function () { window.scrollTo(0, 0); });
+            }
+        };
+        show(window.location.hash);
+        list.addEventListener('shown.bs.tab', function (event) {
+            var target = event.target.getAttribute('data-bs-target');
+            if (target && window.history && window.history.replaceState) {
+                window.history.replaceState(null, '', target);
+            }
+        });
+        window.addEventListener('hashchange', function () { show(window.location.hash); });
+    });
+
     document.addEventListener('submit', function (event) {
         var form = event.target;
         var message = form && form.getAttribute ? form.getAttribute('data-confirm') : null;

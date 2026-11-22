@@ -1,10 +1,23 @@
 <?php
-/** General settings. Expects: $values (untrusted strings), $errors. */
+/**
+ * Settings (admins), in tabs: General, Alerts, Fix due dates, Report branding, Vulnerability data.
+ * Expects: $values (untrusted strings), $errors, $alerts, $duePolicy, $branding, $feeds, $nvdKeySet, $nvdKeyUsable,
+ * $feedsRefresh (FeedSchedule::status()). Each tab pane's id is its address (#alerts, #due-dates, ...): the page
+ * opens that tab (sentinel.js), so redirects after saving land on the right one. Every value is escaped.
+ */
 use Sentinel\Core\Csrf;
 
 $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' : '';
 ?>
-<div class="row"><div class="col-lg-7">
+<ul class="nav nav-tabs mb-3" role="tablist" data-hash-tabs>
+    <?php foreach (['general' => [__('General'), 'bi-sliders'], 'alerts' => [__('Alerts'), 'bi-bell'], 'due-dates' => [__('Fix due dates'), 'bi-calendar-check'],
+                    'branding' => [__('Report branding'), 'bi-palette'], 'feeds' => [__('Vulnerability data'), 'bi-database']] as $id => [$label, $icon]): ?>
+    <li class="nav-item" role="presentation"><button class="nav-link<?= $id === 'general' ? ' active' : '' ?>" id="<?= e($id) ?>-tab" data-bs-toggle="tab" data-bs-target="#<?= e($id) ?>" type="button" role="tab"
+        aria-controls="<?= e($id) ?>" aria-selected="<?= $id === 'general' ? 'true' : 'false' ?>"><i class="bi <?= e($icon) ?> me-1" aria-hidden="true"></i><?= e($label) ?></button></li>
+    <?php endforeach; ?>
+</ul>
+<div class="row"><div class="col-xl-8"><div class="tab-content">
+<div class="tab-pane fade show active" id="general" role="tabpanel" aria-labelledby="general-tab" tabindex="0">
 <div class="card">
     <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('General')) ?></h2></div>
     <form method="post" action="<?= e(url('/admin/settings')) ?>" novalidate>
@@ -26,10 +39,12 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
     <div class="card-footer"><button type="submit" class="btn btn-primary"><?= e(__('Save settings')) ?></button></div>
     </form>
 </div>
-<?php require __DIR__ . '/alerts.php'; ?>
-<?php require __DIR__ . '/due.php'; ?>
-<?php require __DIR__ . '/branding.php'; ?>
-<div class="card mt-3">
+</div>
+<div class="tab-pane fade" id="alerts" role="tabpanel" aria-labelledby="alerts-tab" tabindex="0"><?php require __DIR__ . '/alerts.php'; ?></div>
+<div class="tab-pane fade" id="due-dates" role="tabpanel" aria-labelledby="due-dates-tab" tabindex="0"><?php require __DIR__ . '/due.php'; ?></div>
+<div class="tab-pane fade" id="branding" role="tabpanel" aria-labelledby="branding-tab" tabindex="0"><?php require __DIR__ . '/branding.php'; ?></div>
+<div class="tab-pane fade" id="feeds" role="tabpanel" aria-labelledby="feeds-tab" tabindex="0">
+<div class="card">
     <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Vulnerability data')) ?></h2></div>
     <div class="card-body small">
         <table class="table table-sm mb-2">
@@ -50,7 +65,8 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
             $nvdKeySet => __('The NVD API key in the config file is not used: it is malformed, or nvd.base_url is not https.'),
             default => __('No NVD API key configured: NVD queries are limited to about 5 per 30 seconds. Add nvd.api_key to config/config.php to speed them up.'),
         }) ?></p>
-        <p class="mb-0 text-body-secondary"><?= e(__('Refreshed daily by bin/feeds.php (cron).')) ?></p>
+        <?php require __DIR__ . '/../partials/feeds_refresh.php'; ?>
     </div>
 </div>
-</div></div>
+</div>
+</div></div></div>

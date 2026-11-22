@@ -44,7 +44,7 @@ $kevUpdated = $feeds['kev']['last_success'] ?? null;
 <div class="card mt-3" id="vulns">
     <div class="card-header d-flex align-items-center flex-wrap gap-2">
         <h2 class="card-title h5 mb-0"><?= e(__('Vulnerabilities')) ?></h2>
-        <span class="small text-body-secondary ms-auto"><?= e($kevUpdated !== null ? __('Known-exploited list updated {d} UTC', ['d' => $kevUpdated]) : __('Vulnerability data has not been downloaded yet (bin/feeds.php).')) ?></span>
+        <span class="small text-body-secondary ms-auto"><?= e($kevUpdated !== null ? __('Known-exploited list updated {d} UTC', ['d' => $kevUpdated]) : __('Vulnerability data has not been downloaded yet: it starts automatically within a few minutes of installing.')) ?></span>
     </div>
     <div class="card-body">
         <p class="small text-body-secondary"><?= e(__('Matched from the product and version each service reports, using NVD, the CISA list of known exploited vulnerabilities and EPSS exploit-likelihood scores. "Confirmed" means the reported version is affected; banners can be wrong. Without a version, only known-exploited issues are shown, marked as possible.')) ?></p>

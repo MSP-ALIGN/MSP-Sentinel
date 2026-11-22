@@ -7,7 +7,7 @@ use Sentinel\Core\Csrf;
 
 $bv = $branding;
 ?>
-<div class="card mt-3" id="branding">
+<div class="card">
     <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Report branding')) ?></h2></div>
     <form method="post" action="<?= e(url('/admin/branding')) ?>" enctype="multipart/form-data" novalidate>
         <?= Csrf::field() ?>

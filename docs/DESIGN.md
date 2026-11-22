@@ -42,7 +42,7 @@ Sentinel's findings through the API.
    - Certificates and TLS: checks expiry, chain, weak protocols and hostname match.
    - Admin pages: an HTTP GET of `/` on the web ports. It matches the title and headers against a small list of
      signatures, using generic product names only.
-4. **Threat feeds** (`bin/feeds.php`, daily):
+4. **Threat feeds** (`bin/feeds.php --if-due`, checked every 5 minutes, run daily or on request):
    - downloads the CISA KEV catalog and EPSS scores;
    - makes rate-limited NVD CVE lookups by CPE (Common Platform Enumeration, a standard product ID), with an
      optional NVD API key.

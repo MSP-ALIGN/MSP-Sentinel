@@ -2,6 +2,17 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.15.0 (2026-11-22): tabbed settings and vulnerability data on demand
+
+- **Administration → Settings** is now in tabs: General, Alerts, Fix due dates, Report branding and Vulnerability
+  data. Links and saves land on the right tab.
+- **Refresh now** for vulnerability data (CISA KEV, NVD, EPSS) in the Vulnerability data tab: it starts within
+  5 minutes, and the tab shows when it is waiting, running and finished.
+- **No more waiting for the first download:** the built-in scheduled job now checks every 5 minutes and refreshes when
+  due (daily), so a new server has its vulnerability data within minutes of installing instead of the next morning.
+  Existing servers pick up the new schedule with their next update. The health check no longer asks you to add a
+  cron job that is already there.
+
 ### 1.14.0 (2026-11-22): NinjaOne
 
 - **NinjaOne connector**, read-only, built on NinjaOne's published Public API 2.0. Every 6 hours, each linked client

@@ -3,9 +3,14 @@
 declare(strict_types=1);
 
 /**
- * CLI: refresh vulnerability data and re-match every open service. Run daily from cron:
+ * CLI: refresh vulnerability data and re-match every open service.
  *
- *   41 4 * * *  php /path/to/msp-sentinel/bin/feeds.php
+ *   php bin/feeds.php            refresh now
+ *   php bin/feeds.php --if-due   refresh only when due (see Vulns\FeedSchedule): the installer's cron job runs this
+ *                                every 5 minutes, so data arrives within minutes of installing and "Refresh now"
+ *                                in the web interface starts within 5 minutes. Otherwise it refreshes daily.
+ *
+ * Only one run at a time (database lock): a run that finds another one going exits at once.
  *
  * Steps: CISA KEV catalog -> NVD product queries that are new or older than
  * 7 days (rate-limited) -> re-match all services -> EPSS scores for matched CVEs.
@@ -26,6 +31,25 @@ use Sentinel\Core\App;
 
 try {
     App::boot();
+    $schedule = new \Sentinel\Vulns\FeedSchedule(App::settings());
+    $opts = getopt('', ['if-due']);
+    if (isset($opts['if-due']) && !$schedule->due()) {
+        exit(0); // not due: nothing to do (this runs every 5 minutes)
+    }
+    $lock = App::db()->quote('msp_sentinel_feeds_' . substr(hash('sha256', (string) App::db()->query('SELECT DATABASE()')->fetchColumn()), 0, 16));
+    if ((int) App::db()->query("SELECT GET_LOCK({$lock}, 0)")->fetchColumn() !== 1) {
+        fwrite(STDOUT, "Another feeds run is still going.\n");
+        exit(0);
+    }
+    $schedule->started();
+    register_shutdown_function(static function () use ($schedule): void {
+        try {
+            $schedule->finished();
+        } catch (\Throwable) {
+            // the database went away: the next run starts over
+        }
+    });
+    fwrite(STDOUT, '[' . gmdate('Y-m-d H:i:s') . "] Refreshing vulnerability data\n");
     $updater = App::feedUpdater();
     $exit = 0;
     $alerts = App::alerts();

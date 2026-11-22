@@ -198,6 +198,14 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.15.0',
+            'date' => '2026-11-22',
+            'items' => [
+                'Settings in tabs: General, Alerts, Fix due dates, Report branding, Vulnerability data.',
+                'Refresh now for vulnerability data, and the first download starts within minutes of installing.',
+            ],
+        ],
+        [
             'version' => '1.14.0',
             'date' => '2026-11-22',
             'items' => [

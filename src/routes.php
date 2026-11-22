@@ -149,6 +149,7 @@ $router->add('POST', '/admin/integrations/ninjaone/test', [IntegrationsControlle
 $router->add('GET', '/admin/settings', [AdminController::class, 'settings'], $admin);
 $router->add('POST', '/admin/settings', [AdminController::class, 'saveSettings'], $admin);
 $router->add('POST', '/admin/settings/due-dates', [AdminController::class, 'saveDuePolicy'], $admin);
+$router->add('POST', '/admin/feeds/refresh', [AdminController::class, 'refreshFeeds'], $admin);
 $router->add('POST', '/admin/alerts', [AlertController::class, 'save'], $admin);
 $router->add('POST', '/admin/alerts/test', [AlertController::class, 'test'], $admin);
 $router->add('GET', '/admin/system', [SystemController::class, 'index'], $admin);

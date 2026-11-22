@@ -123,4 +123,45 @@ return [
         App::vulnMatcher()->matchClient($id, 0);
         Assert::same(4, (int) $ctx->db->query("SELECT COUNT(*) FROM service_vulns WHERE service_id = {$svc}")->fetchColumn());
     },
+    'vulnerability data: refreshed when due, or within minutes of Refresh now; one run at a time' => function (TestContext $ctx): void {
+        $s = App::settings();
+        $schedule = new \Sentinel\Vulns\FeedSchedule($s);
+        // Pretend the last run finished an hour ago: not due, so the 5-minute cron check does nothing.
+        $s->set('feeds_run_started', gmdate('Y-m-d H:i:s', time() - 3600));
+        $s->set('feeds_run_finished', gmdate('Y-m-d H:i:s', time() - 3500));
+        $s->set('feeds_requested_at', '');
+        [$code, $out] = $ctx->cli('bin/feeds.php', ['--if-due']);
+        Assert::same(0, $code, $out);
+        Assert::notContains('Refreshing', $out, 'not due: nothing runs');
+        // An admin clicks Refresh now (Settings, Vulnerability data tab).
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $page = $admin->get('/admin/settings')->body;
+        foreach (['data-hash-tabs', 'data-bs-target="#alerts"', 'data-bs-target="#feeds"', 'id="due-dates"', 'id="branding"'] as $part) {
+            Assert::contains($part, $page, "settings tab {$part}");
+        }
+        Assert::contains('Refresh now', $page);
+        Assert::redirect('/admin/settings#feeds', $admin->submit('/admin/settings', '/admin/feeds/refresh', []));
+        Assert::contains('it starts within 5 minutes', $admin->get('/admin/settings')->body);
+        Assert::true($schedule->status()['requested'] && $schedule->due(), 'requested, so due');
+        $admin->submit('/admin/settings', '/admin/feeds/refresh', []);
+        Assert::contains('already waiting or running', $admin->get('/admin/settings')->body);
+        // The next cron check runs it (against the mock feeds), and then it is no longer due.
+        [$code, $out] = $ctx->cli('bin/feeds.php', ['--if-due']);
+        Assert::contains('Refreshing vulnerability data', $out);
+        $st = $schedule->status();
+        Assert::true(!$st['requested'] && !$st['running'] && $st['finished'] !== '', 'finished: ' . json_encode($st));
+        Assert::true(!$schedule->due(), 'not due again until tomorrow');
+        // Due again after 20 hours, or straight away on a server that never refreshed.
+        Assert::true($schedule->due(time() + 21 * 3600), 'daily');
+        $s->set('feeds_run_started', '');
+        Assert::true($schedule->due(), 'never refreshed: due');
+        // Technicians can't ask.
+        if ((int) $ctx->db->query("SELECT COUNT(*) FROM users WHERE username = 'feedtech'")->fetchColumn() === 0) {
+            $ctx->createUser('feedtech', 'technician', 'Feedtech-Pass-01!');
+        }
+        $tech = $ctx->login('feedtech', 'Feedtech-Pass-01!');
+        Assert::status(403, $tech->post('/admin/feeds/refresh', ['_csrf' => $tech->get('/')->csrf()]));
+        $s->set('feeds_run_started', gmdate('Y-m-d H:i:s'));
+        $s->set('feeds_run_finished', gmdate('Y-m-d H:i:s'));
+    },
 ];

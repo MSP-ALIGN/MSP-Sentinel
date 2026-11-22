@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.14.0](https://img.shields.io/badge/version-1.14.0-ff5a1f?style=flat-square)
+![Version 1.15.0](https://img.shields.io/badge/version-1.15.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -149,6 +149,17 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
 
 ## What's new
 
+### 1.15.0 (2026-11-22): tabbed settings and vulnerability data on demand
+
+- **Administration → Settings** is now in tabs: General, Alerts, Fix due dates, Report branding and Vulnerability
+  data. Links and saves land on the right tab.
+- **Refresh now** for vulnerability data (CISA KEV, NVD, EPSS) in the Vulnerability data tab: it starts within
+  5 minutes, and the tab shows when it is waiting, running and finished.
+- **No more waiting for the first download:** the built-in scheduled job now checks every 5 minutes and refreshes when
+  due (daily), so a new server has its vulnerability data within minutes of installing instead of the next morning.
+  Existing servers pick up the new schedule with their next update. The health check no longer asks you to add a
+  cron job that is already there.
+
 ### 1.14.0 (2026-11-22): NinjaOne
 
 - **NinjaOne connector**, read-only, built on NinjaOne's published Public API 2.0. Every 6 hours, each linked client
@@ -161,6 +172,9 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
 - Honest by design: anything NinjaOne doesn't report stays "unknown" rather than becoming a finding, and a sync with
   a failed page changes nothing.
 
+<details>
+<summary><b>Earlier releases (1.13.1 to 1.0.0)</b></summary>
+
 ### 1.13.1 (2026-11-22): Update now fixes
 
 - Clicking **Update now** again within 15 minutes now says when the next update can start, instead of seemingly
@@ -169,9 +183,6 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
   the helper's own one-update-per-15-minutes rule stays).
 - An upgrade no longer stops at "Service files" when that helper is stuck; it resets it, or warns and carries on.
 - If a request is not picked up, the System page says how to fix it on the server and lets you remove the request.
-
-<details>
-<summary><b>Earlier releases (1.13.0 to 1.0.0)</b></summary>
 
 ### 1.13.0 (2026-11-22): client pages
 

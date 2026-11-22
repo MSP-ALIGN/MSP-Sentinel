@@ -248,7 +248,7 @@ Cron jobs, as an **unprivileged** user (the worker refuses to run as root):
 
 ```
 * * * * *  php /opt/msp-sentinel/bin/worker.php
-41 4 * * * php /opt/msp-sentinel/bin/feeds.php
+*/5 * * * * php /opt/msp-sentinel/bin/feeds.php --if-due
 17 3 * * 0 php /opt/msp-sentinel/bin/discover.php
 23 2 * * * php /opt/msp-sentinel/bin/backup.php --dir=/var/backups/msp-sentinel --keep=14
 ```
