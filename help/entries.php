@@ -97,6 +97,24 @@ return [
             ],
         ],
         [
+            'title' => 'On-premises agents (internal scans)',
+            'paragraphs' => [
+                'An agent is a small Linux appliance at the client\'s site. It only connects out to Sentinel, finds the devices on the internal network with their open services, certificates and web pages, and reports them. A full scan runs weekly and a light sweep daily, inside the client\'s scan window; admins can also press Scan now (with a reason).',
+                'An agent scans only the networks in a signed internal authorisation for its site: who at the client approved it, the dates, and exactly which private networks (each at most a /16). Sentinel signs the authorisation and every job; the agent checks both signatures and refuses any target outside the signed networks.',
+                'To add one: record an internal authorisation for the site, click Create an enrolment code (admins; shown once, valid once for 24 hours), and run the agent installer on the appliance with that code. Pause on the site stops agent scans within a minute; revoking an agent stops its token at once.',
+                'Findings: known vulnerabilities in the services found (distribution builds are never "confirmed"), and certificates that are expired, accept old TLS or use a weak key. Self-signed certificates are normal inside a network and not findings. After the first scan (the baseline), devices never seen before are announced as new devices, unless NinjaOne already knows them.',
+            ],
+        ],
+        [
+            'title' => 'Internal devices and NinjaOne',
+            'paragraphs' => [
+                'Internal devices come from the on-premises agent and, once it is connected, from NinjaOne. Each client page shows them under Internal devices; a device page lists its open services, installed software with known vulnerabilities, and missing updates.',
+                'Grading: a Windows version without security updates, or antivirus/EDR missing or turned off, is a Fail. Antivirus definitions out of date, disk encryption off on a workstation, security updates missing for more than 30 days, and updates that failed are Warnings. Vulnerable software gets one finding per device and program, graded by its worst CVE.',
+                'Only programs in Sentinel\'s software catalogue are matched to vulnerabilities, and only with a clean version number; other programs are listed but not matched. When a program updates before vulnerability data for the new version is available, its findings wait instead of resolving.',
+                'The NinjaOne connector itself is not available yet: it is added in a later release.',
+            ],
+        ],
+        [
             'title' => 'Fix workflow: owners, due dates and verify fix',
             'paragraphs' => [
                 'Every open finding has a due date: 7 days for known-exploited vulnerabilities (CISA KEV), 14 days for other Fail findings and 30 days for Warnings, counted from when it was first seen or last reopened. Admins can change these days under Administration > Settings > Due dates, and can set a different date on one finding (with a reason). Accepted risks, false positives and resolved findings are never due.',
@@ -174,6 +192,16 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '2.0.0',
+            'date' => '2026-11-22',
+            'items' => [
+                'On-premises agents: internal network scans from a small Linux appliance at the client\'s site, with signed internal authorisations and signed jobs.',
+                'Internal devices with open services, certificates and web pages; vulnerable services and certificate problems become findings.',
+                'New-device alerts after a site\'s first scan, and a kill switch per site.',
+                'Groundwork for NinjaOne: installed software matched to vulnerabilities, unsupported Windows, antivirus, encryption and missing updates (the connector follows in a later release).',
+            ],
+        ],
         [
             'version' => '1.5.0',
             'date' => '2026-11-22',

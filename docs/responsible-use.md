@@ -5,6 +5,8 @@ Sentinel scans systems on the internet. Scanning without permission can be illeg
 - **Only scan what you are authorised to scan.** Get written permission from each client (see the
   [sample form](authorisation-form.md)), and from hosting or cloud providers where their terms require it.
   Record every approval in Sentinel's register: Sentinel refuses to touch anything outside an active authorisation.
+- **Internal networks need their own approval.** Record an internal authorisation per site before an agent scans,
+  listing exactly the internal networks the client approved.
 - **Stay gentle.** The defaults (TCP connect scans, low rates, a scan window, the start page plus a short fixed list
   of about ten paths per web service, email records by DNS only) are chosen to avoid disruption. "Verify fix"
   rechecks may run outside the scan window, but only touch the one port or domain of that finding, at most every

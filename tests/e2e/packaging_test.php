@@ -34,6 +34,25 @@ return [
         array_map('unlink', glob($out . '/*') ?: []);
         rmdir($out);
     },
+    'agent installer: dry run, input checks, hardened unprivileged service' => function (TestContext $ctx): void {
+        $root = dirname(__DIR__, 2);
+        $code = 'SNE-ABCDE-FGHJK-LMNPQ-RSTUV';
+        exec('bash ' . escapeshellarg($root . '/install/agent-install.sh') . ' --dry-run --skip-os-check --server https://sentinel.example --code ' . $code . ' 2>&1', $lines, $rc);
+        $out = implode("\n", $lines);
+        Assert::same(0, $rc, $out);
+        foreach (['php8.4-cli', 'nmap', 'useradd --system', 'runuser -u sentinel-agent', 'sentinel-agent.php enrol', 'systemctl enable --now sentinel-agent'] as $step) {
+            Assert::contains($step, $out);
+        }
+        foreach ([['--server http://sentinel.example --code ' . $code, 'plain http refused'], ['--server "https://x.example/;rm" --code ' . $code, 'odd server value refused'],
+                  ['--server https://sentinel.example --code bad', 'bad code refused']] as [$args, $why]) {
+            exec('bash ' . escapeshellarg($root . '/install/agent-install.sh') . ' --dry-run --skip-os-check ' . $args . ' 2>&1', $l, $c);
+            Assert::same(1, $c, $why);
+        }
+        $unit = (string) file_get_contents($root . '/install/templates/sentinel-agent.service');
+        foreach (['User=sentinel-agent', 'NoNewPrivileges=yes', 'CapabilityBoundingSet=', 'ProtectSystem=strict', 'RestartPreventExitStatus=3'] as $line) {
+            Assert::contains($line, $unit);
+        }
+    },
     'installer dry run shows every step and never a secret' => function (TestContext $ctx): void {
         $root = dirname(__DIR__, 2);
         exec('bash ' . escapeshellarg($root . '/install/install.sh') . ' --dry-run --skip-os-check --domain sentinel.example 2>&1', $lines, $code);
@@ -59,7 +78,7 @@ return [
         // Templates: every placeholder is one the installer fills.
         foreach (glob($root . '/install/templates/*') ?: [] as $t) {
             preg_match_all('/__([A-Z]+)__/', (string) file_get_contents($t), $m);
-            Assert::same([], array_diff(array_unique($m[1]), ['DOMAIN', 'ROOT', 'CERT', 'KEY', 'PHP']), basename($t));
+            Assert::same([], array_diff(array_unique($m[1]), ['DOMAIN', 'ROOT', 'CERT', 'KEY', 'PHP', 'CONF']), basename($t));
         }
         Assert::contains('fastcgi_param HTTP_AUTHORIZATION', (string) file_get_contents($root . '/install/templates/nginx.conf'));
         Assert::notContains(' root ', (string) preg_replace('/^#.*$/m', '', (string) file_get_contents($root . '/install/templates/cron')), 'no cron job runs as root');

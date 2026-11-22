@@ -75,7 +75,7 @@ switch ($command) {
         }
         $ca = is_string($opts['ca'] ?? null) ? $opts['ca'] : null;
         try {
-            $res = (new Http($server, null, $ca, $testMode))->post('/agent/v1/enrol', ['code' => $code, 'hostname' => (string) gethostname(), 'version' => Runner::VERSION]);
+            $res = (new Http($server, null, $ca, $testMode))->post('/agent/v1/enrol', ['code' => $code, 'hostname' => (string) gethostname(), 'version' => Runner::version()]);
         } catch (\Throwable $ex) {
             fwrite(STDERR, $ex->getMessage() . "\n");
             exit(1);
@@ -104,14 +104,14 @@ switch ($command) {
         $connector = $testMode && is_array($c['testing'] ?? null) ? Connector::fromTesting($c['testing']) : Connector::direct();
         $http = new Http((string) $c['server'], (string) $c['token'], is_string($c['ca_file'] ?? null) ? $c['ca_file'] : null, $testMode);
         if ($command === 'status') {
-            $res = $http->post('/agent/v1/poll', ['hostname' => (string) gethostname(), 'version' => Runner::VERSION, 'running' => []]);
+            $res = $http->post('/agent/v1/poll', ['hostname' => (string) gethostname(), 'version' => Runner::version(), 'running' => []]);
             $say('Agent #' . $c['agent_id'] . ' → ' . $c['server'] . ': ' . ($res['status'] === 200 ? 'connected' . (($res['data']['paused'] ?? false) ? ' (scanning paused)' : '') : 'HTTP ' . $res['status']));
             exit($res['status'] === 200 ? 0 : 1);
         }
         $runner = new Runner($http, new JobVerifier((string) $c['server_public_key'], (int) $c['agent_id']), new State((string) ($c['state_file'] ?? dirname($configFile) . '/state.json')),
             new NmapRunner((string) ($c['nmap_path'] ?? '/usr/bin/nmap')), new TlsChecker($connector), new HttpProbe($connector), $say,
             $testMode && is_string($c['testing']['arp_file'] ?? null) ? $c['testing']['arp_file'] : '/proc/net/arp');
-        $say('Agent #' . $c['agent_id'] . ' started (version ' . Runner::VERSION . ').');
+        $say('Agent #' . $c['agent_id'] . ' started (version ' . Runner::version() . ').');
         do {
             try {
                 $wait = $runner->pollOnce();

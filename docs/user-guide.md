@@ -32,6 +32,12 @@ A short tour for technicians and viewers. The in-app **Help** page has more deta
 7. **Reports**: create an Executive summary for management and a Technical findings report for IT (Reports card on
    the client page). Print to PDF from the browser. Reports are frozen: they never change after they are made.
 
+## On-premises agents
+
+For a client's internal network, install an agent at the site (see [`agent.md`](agent.md)): record an internal
+authorisation for the site, create an enrolment code, and run the agent installer with it. Internal devices, their
+services and certificates then appear on the client page, with findings and new-device alerts.
+
 ## Website and email checks
 
 With each scan and once a day, Sentinel checks every website it found (HTTPS, headers, cookies, a short fixed list of

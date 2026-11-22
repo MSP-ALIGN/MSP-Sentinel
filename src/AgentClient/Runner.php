@@ -27,7 +27,13 @@ use Sentinel\Scanning\TlsChecker;
  */
 final class Runner
 {
-    public const VERSION = '2.0.0';
+    /** The release version (VERSION file), reported to Sentinel at each check-in. */
+    public static function version(): string
+    {
+        $v = trim((string) @file_get_contents(dirname(__DIR__, 2) . '/VERSION'));
+        return preg_match('/^\d+\.\d+\.\d+$/', $v) === 1 ? $v : 'unknown';
+    }
+
     private const MAX_HOSTS = 20000;
     private const CHECK_IN = 30;
 
@@ -57,7 +63,7 @@ final class Runner
      */
     public function pollOnce(): int
     {
-        $res = $this->http->post('/agent/v1/poll', ['hostname' => (string) gethostname(), 'version' => self::VERSION, 'running' => []]);
+        $res = $this->http->post('/agent/v1/poll', ['hostname' => (string) gethostname(), 'version' => self::version(), 'running' => []]);
         if ($res['status'] === 401) {
             ($this->log)('Sentinel no longer accepts this agent (revoked?). Stopping.');
             return -1;
@@ -180,7 +186,7 @@ final class Runner
         }
         $this->lastCheck = microtime(true);
         try {
-            $res = $this->http->post('/agent/v1/poll', ['hostname' => (string) gethostname(), 'version' => self::VERSION, 'running' => [$jobId]]);
+            $res = $this->http->post('/agent/v1/poll', ['hostname' => (string) gethostname(), 'version' => self::version(), 'running' => [$jobId]]);
         } catch (\Throwable) {
             return false; // Sentinel briefly unreachable: carry on (the job's own limits still apply)
         }

@@ -19,6 +19,10 @@ sign-in, patched, backed up.
 - **API:** bearer tokens only (no cookies), limited to chosen clients, expiring, optional IP allowlist, rate-limited;
   writes are opt-in and audited.
 - **Reports:** frozen with a SHA-256, served with a policy that allows no scripts.
+- **On-premises agents:** outbound-only; scan only networks in a signed internal authorisation (Ed25519, key derived
+  from the app key, never stored in the database); every job signed and checked by the agent (scope, expiry, replay);
+  tokens and enrolment codes stored only as keyed hashes; unprivileged, hardened service; revocable. See
+  [`agent.md`](agent.md).
 - **Audit log:** sign-ins, changes, triage, scans, API writes and retention runs. It is never pruned.
 
 ## Your checklist

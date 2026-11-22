@@ -1,0 +1,150 @@
+#!/usr/bin/env bash
+# MSP Sentinel on-premises agent installer for Ubuntu 24.04 LTS and Debian 12 (a mini-PC or VM at the client's site).
+#
+# Install (from the unpacked release folder, with a one-time code from the client page in Sentinel):
+#   sudo ./install/agent-install.sh --server https://sentinel.msp.example --code SNE-XXXXX-XXXXX-XXXXX-XXXXX [--ca /path/ca.pem]
+# Upgrade (from the NEW release folder; keeps the enrolment):
+#   sudo ./install/agent-install.sh --upgrade
+# Remove (also revoke the agent in Sentinel):
+#   sudo ./install/agent-install.sh --uninstall
+# See what it would do, without changing anything:
+#   ./install/agent-install.sh --dry-run --server https://sentinel.msp.example --code SNE-...
+#
+# What it does (install): installs PHP (CLI) and nmap, creates the unprivileged
+# "sentinel-agent" system user, copies the release to /opt/sentinel-agent,
+# enrols the agent with the code (pinning Sentinel's signing key), and starts
+# the hardened systemd service "sentinel-agent".
+#
+# Security notes:
+# - The agent runs as "sentinel-agent", never root, with no extra capabilities:
+#   scans are unprivileged TCP connect scans. The systemd unit locks down the
+#   file system (only its state folder is writable) and forbids privilege gain.
+# - The config (with the agent token) is in /etc/sentinel-agent, readable only
+#   by the agent's user (0600). The token is never printed.
+# - The agent only connects out to Sentinel over HTTPS; no inbound port is opened.
+# - Safe to re-run: an existing enrolment is kept unless you remove it.
+set -euo pipefail
+
+APP_DIR=/opt/sentinel-agent
+CONF_DIR=/etc/sentinel-agent
+PHPV=8.4
+PHP_BIN="php${PHPV}"
+SRC="$(cd "$(dirname "$0")/.." && pwd)"
+
+mode=install
+server=""
+code=""
+ca=""
+dry=0
+skip_os=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --server) server="${2:-}"; shift 2 ;;
+    --code) code="${2:-}"; shift 2 ;;
+    --ca) ca="${2:-}"; shift 2 ;;
+    --upgrade) mode=upgrade; shift ;;
+    --uninstall) mode=uninstall; shift ;;
+    --dry-run) dry=1; shift ;;
+    --skip-os-check) skip_os=1; shift ;;
+    -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
+    *) echo "Unknown option: $1 (see --help)" >&2; exit 2 ;;
+  esac
+done
+
+say() { printf '\n==> %s\n' "$*"; }
+die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
+run() {
+  if [ "$dry" -eq 1 ]; then printf '  [dry-run] %s\n' "$*"; else "$@"; fi
+}
+write_file() {
+  local path="$1" mode="$2"
+  if [ "$dry" -eq 1 ]; then printf '  [dry-run] write %s (mode %s)\n' "$path" "$mode"; cat > /dev/null; return; fi
+  ( umask 077; cat > "$path.tmp" )
+  chmod "$mode" "$path.tmp"
+  mv -f "$path.tmp" "$path"
+}
+copy_code() {
+  run install -d -o root -g sentinel-agent -m 0750 "$APP_DIR"
+  run rsync -a --delete --exclude /config/ --exclude /storage/ --exclude /dist/ --exclude /tests/ "$SRC/" "$APP_DIR/"
+  run chown -R root:sentinel-agent "$APP_DIR"
+  run find "$APP_DIR" -type d -exec chmod 0750 {} +
+  run find "$APP_DIR" -type f -exec chmod 0640 {} +
+  run chmod 0750 "$APP_DIR/install/agent-install.sh"
+}
+unit() {
+  sed -e "s#__ROOT__#${APP_DIR}#g" -e "s#__PHP__#/usr/bin/${PHP_BIN}#g" -e "s#__CONF__#${CONF_DIR}#g" "$SRC/install/templates/sentinel-agent.service"
+}
+
+[ -f "$SRC/VERSION" ] && [ -f "$SRC/bin/sentinel-agent.php" ] || die "Run this from an unpacked MSP Sentinel release."
+if [ "$dry" -eq 0 ] && [ "$(id -u)" -ne 0 ]; then die "Run as root (sudo)."; fi
+
+if [ "$mode" = uninstall ]; then
+  say "Removing the agent"
+  run systemctl disable --now sentinel-agent || true
+  run rm -f /etc/systemd/system/sentinel-agent.service
+  run systemctl daemon-reload
+  run rm -rf "$APP_DIR" "$CONF_DIR"
+  run userdel sentinel-agent || true
+  echo "  Removed. Also revoke the agent on the client page in Sentinel, so its token stops working."
+  exit 0
+fi
+
+if [ "$skip_os" -eq 0 ]; then
+  [ -r /etc/os-release ] || die "Cannot detect the operating system."
+  . /etc/os-release
+  case "${ID:-}-${VERSION_ID:-}" in
+    ubuntu-24.04|debian-12) ;;
+    *) die "Supported: Ubuntu 24.04 and Debian 12 (found ${PRETTY_NAME:-unknown}). Use --skip-os-check at your own risk." ;;
+  esac
+fi
+
+if [ "$mode" = upgrade ]; then
+  [ -f "$CONF_DIR/agent.json" ] || [ "$dry" -eq 1 ] || die "No enrolled agent found ($CONF_DIR/agent.json)."
+  say "Upgrading the agent to $(tr -d '[:space:]' < "$SRC/VERSION")"
+  run systemctl stop sentinel-agent || true
+  copy_code
+  unit | write_file /etc/systemd/system/sentinel-agent.service 0644
+  run systemctl daemon-reload
+  run systemctl start sentinel-agent
+  say "Done"
+  exit 0
+fi
+
+# ---------------------------------------------------------------- install
+case "$server" in https://*) ;; *) die "Give the Sentinel address with --server https://..." ;; esac
+printf '%s' "$server" | grep -Eq '^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?/?$' || die "The --server value must be https://host[:port] only."
+printf '%s' "$code" | grep -Eq '^SNE(-[A-Z2-9]{5}){4}$' || die "Give the one-time code from Sentinel with --code SNE-XXXXX-XXXXX-XXXXX-XXXXX."
+if [ -n "$ca" ] && [ ! -r "$ca" ] && [ "$dry" -eq 0 ]; then die "CA file not readable: $ca"; fi
+if [ -f "$CONF_DIR/agent.json" ] && [ "$dry" -eq 0 ]; then die "This machine is already enrolled. Use --upgrade, or --uninstall first."; fi
+
+say "Packages (PHP ${PHPV} CLI, nmap)"
+run apt-get update
+run apt-get install -y ca-certificates curl gnupg rsync nmap
+if [ "${ID:-}" = debian ]; then
+  # PHP 8.4 from packages.sury.org (Debian 12 ships 8.2).
+  run install -d -m 0755 /etc/apt/keyrings
+  run curl -fsSL https://packages.sury.org/php/apt.gpg -o /etc/apt/keyrings/sury-php.gpg
+  echo "deb [signed-by=/etc/apt/keyrings/sury-php.gpg] https://packages.sury.org/php/ $(. /etc/os-release && echo "$VERSION_CODENAME") main" | write_file /etc/apt/sources.list.d/sury-php.list 0644
+else
+  # PHP 8.4 from the ondrej/php PPA (Ubuntu 24.04 ships 8.3); adding it again is harmless.
+  run apt-get install -y software-properties-common
+  run add-apt-repository -y ppa:ondrej/php
+fi
+run apt-get update
+run apt-get install -y "php${PHPV}-cli" "php${PHPV}-curl" "php${PHPV}-xml" "php${PHPV}-mbstring"
+
+say "System user and code"
+if ! id sentinel-agent >/dev/null 2>&1; then run useradd --system --home-dir /nonexistent --no-create-home --shell /usr/sbin/nologin sentinel-agent; fi
+copy_code
+run install -d -o sentinel-agent -g sentinel-agent -m 0700 "$CONF_DIR"
+if [ -n "$ca" ]; then run install -o root -g sentinel-agent -m 0640 "$ca" "$CONF_DIR/ca.pem"; ca="$CONF_DIR/ca.pem"; fi
+
+say "Enrolling with Sentinel (pins its signing key)"
+# The code goes on the agent's own command line only for this one call; it works once and expires in 24 hours.
+run runuser -u sentinel-agent -- "$PHP_BIN" "$APP_DIR/bin/sentinel-agent.php" enrol --server "$server" --code "$code" --config "$CONF_DIR/agent.json" ${ca:+--ca "$ca"}
+
+say "Service"
+unit | write_file /etc/systemd/system/sentinel-agent.service 0644
+run systemctl daemon-reload
+run systemctl enable --now sentinel-agent
+say "Done. The agent checks in within a minute; see the client page in Sentinel. Logs: journalctl -u sentinel-agent"

@@ -2,6 +2,23 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 2.0.0 (2026-11-22): on-premises agents
+
+- **Internal scans** from a small Linux appliance at the client's site (Ubuntu 24.04 or Debian 12). The agent only
+  connects out to Sentinel. Weekly full scans (devices, open services and versions, certificates, start pages) and
+  daily light sweeps, inside the scan window; admins can scan now with a reason.
+- **Signed scope:** each site gets an internal authorisation (private networks only, size-limited) that Sentinel
+  signs with a key outside the database. Every job is signed too; the agent checks both signatures and refuses any
+  target outside the signed networks. Results outside the authorisation are ignored.
+- **Findings:** vulnerable services (distribution builds never "confirmed"), and certificates that are expired,
+  accept TLS 1.0/1.1 or use a weak key. **New-device alerts** after a site's first (baseline) scan, unless NinjaOne
+  already knows the device.
+- **Control:** one-time enrolment codes, revocable agents, a kill switch per site, and an installer with a hardened,
+  unprivileged systemd service. See [`docs/agent.md`](docs/agent.md).
+- **Internal devices groundwork** for NinjaOne: installed software matched to vulnerabilities (one finding per device
+  and program), unsupported Windows versions, antivirus, disk encryption and missing updates, with an Internet /
+  Internal filter on the findings list. The NinjaOne connector itself follows in a later release.
+
 ### 1.5.0 (2026-11-22): fix workflow
 
 - **Owners:** technicians and admins assign findings to an active technician or admin ("Assign to me" for yourself).

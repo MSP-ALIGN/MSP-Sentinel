@@ -1,0 +1,34 @@
+# MSP Sentinel on-premises agent (written by install/agent-install.sh).
+[Unit]
+Description=MSP Sentinel on-premises agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sentinel-agent
+Group=sentinel-agent
+ExecStart=__PHP__ __ROOT__/bin/sentinel-agent.php run --config __CONF__/agent.json
+Restart=on-failure
+RestartSec=60
+# Exit code 3: Sentinel revoked this agent. Don't restart; uninstall it.
+RestartPreventExitStatus=3
+# Hardening: unprivileged scans only, read-only system, only the agent's folder writable.
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=__CONF__
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
