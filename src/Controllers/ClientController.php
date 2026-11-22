@@ -100,6 +100,8 @@ final class ClientController extends Controller
             'webPages' => App::endpoints()->webForClient((int) $client['id']),
             'vulns' => App::vulns()->forClient((int) $client['id']),
             'vulnCoverage' => App::vulns()->coverage((int) $client['id']),
+            'clientFindings' => App::findings()->search(['client' => (int) $client['id'], 'status' => 'open'])['rows'],
+            'findingCounts' => App::findings()->counts((int) $client['id']),
             'feeds' => App::vulns()->feedStatuses(),
         ]);
     }

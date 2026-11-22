@@ -36,6 +36,18 @@ final class EndpointRepository
         return in_array($port, self::WEB_PORTS, true) || preg_match('/^(http|https|ssl\/http|http-alt|http-proxy)/i', $serviceName) === 1;
     }
 
+    /**
+     * Hostnames stored on an asset (names that resolved to it in earlier scans).
+     *
+     * @return list<string>
+     */
+    public function assetHostnames(int $assetId): array
+    {
+        $stmt = $this->db->prepare('SELECT hostnames FROM assets WHERE id = :id');
+        $stmt->execute(['id' => $assetId]);
+        return array_values(array_filter(explode(',', (string) $stmt->fetchColumn())));
+    }
+
     /** The asset ID of a client's address, or null. */
     public function assetId(int $clientId, string $ip): ?int
     {

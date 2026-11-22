@@ -78,6 +78,7 @@ try {
                 <ul class="nav sidebar-menu flex-column" role="menu">
                     <?= $navItem('/', 'bi-speedometer2', __('Dashboard')) ?>
                     <?= $navItem('/clients', 'bi-building', __('Clients')) ?>
+                    <?= $navItem('/findings', 'bi-exclamation-diamond', __('Findings')) ?>
                     <?php if ($isAdmin): ?>
                     <li class="nav-header"><?= e(__('ADMINISTRATION')) ?></li>
                     <?= $navItem('/users', 'bi-people', __('Users')) ?>

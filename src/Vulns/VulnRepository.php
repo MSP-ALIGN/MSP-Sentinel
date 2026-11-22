@@ -243,6 +243,31 @@ final class VulnRepository
     }
 
     /**
+     * Open services ("ip:port") of a client whose vulnerability data is not
+     * available yet (pending or failed lookups). Their vulnerability findings
+     * must not be auto-resolved: absence of data is not evidence of a fix.
+     *
+     * @return array<string,true>
+     */
+    public function servicesAwaitingData(int $clientId): array
+    {
+        $stmt = $this->db->prepare("SELECT a.ip, s.port, s.cpe FROM services s JOIN assets a ON a.id = s.asset_id WHERE a.client_id = :c AND s.is_open = 1");
+        $stmt->execute(['c' => $clientId]);
+        $out = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $cpe = Cpe::parse((string) $row['cpe']);
+            if ($cpe === null) {
+                continue;
+            }
+            $q = $this->query(Cpe::matchString($cpe));
+            if ($q === null || $q['fetched_at'] === null) {
+                $out[$row['ip'] . ':' . $row['port']] = true;
+            }
+        }
+        return $out;
+    }
+
+    /**
      * Replace the KEV catalog (in one transaction).
      *
      * @param list<array<string,mixed>> $rows Parsed KEV rows.

@@ -1,13 +1,29 @@
 <?php
 /**
  * Dashboard.
- * Expects: $currentUser, $version, $clientCount, $activeAuthorisations, $expiringAuthorisations, $expiringCerts, $kevCounts, $globallyPaused.
+ * Expects: $currentUser, $version, $clientCount, $activeAuthorisations, $expiringAuthorisations, $expiringCerts, $kevCounts, $findingCounts, $globallyPaused.
  */
 ?>
 <?php if ($globallyPaused): ?>
 <?php require __DIR__ . '/partials/kill_switch.php'; ?>
 <?php endif; ?>
 <div class="row g-3">
+    <div class="col-md-6 col-xl-3">
+        <a class="text-decoration-none" href="<?= e(url('/findings', ['severity' => 'fail'])) ?>">
+        <div class="small-box <?= $findingCounts['fail'] > 0 ? 'text-bg-danger' : 'text-bg-success' ?>">
+            <div class="inner"><h3><?= e($findingCounts['fail']) ?></h3><p><?= e(__('Open Fail findings')) ?></p></div>
+            <i class="small-box-icon bi bi-x-octagon" aria-hidden="true"></i>
+        </div>
+        </a>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <a class="text-decoration-none" href="<?= e(url('/findings', ['severity' => 'warn'])) ?>">
+        <div class="small-box <?= $findingCounts['warn'] > 0 ? 'text-bg-warning' : 'text-bg-success' ?>">
+            <div class="inner"><h3><?= e($findingCounts['warn']) ?></h3><p><?= e(__('Open Warning findings')) ?></p></div>
+            <i class="small-box-icon bi bi-exclamation-triangle" aria-hidden="true"></i>
+        </div>
+        </a>
+    </div>
     <div class="col-md-6 col-xl-3">
         <a class="text-decoration-none" href="<?= e(url('/clients')) ?>">
         <div class="small-box text-bg-primary">

@@ -4,14 +4,30 @@ Self-hosted security monitoring for MSPs (managed service providers). Sentinel *
 exposure and vulnerabilities across your clients, monitors them and alerts on them. Its companion product,
 MSP Align, plans, reports and proves, using Sentinel's findings.
 
-> **Status: early development (0.6.0).** Sign-in, users, clients, the "authorised to scan" register, passive
-> discovery, gentle port scanning, certificate and admin-page checks, and **vulnerability matching** are in place.
-> Findings with triage, reports, alerts and the API come next. See [`docs/DESIGN.md`](docs/DESIGN.md) for the v1.0 design and
+> **Status: early development (0.7.0).** Sign-in, users, clients, the "authorised to scan" register, passive
+> discovery, gentle port scanning, certificate and admin-page checks, vulnerability matching, and **findings with
+> triage** are in place. Reports, alerts and the API come next. See [`docs/DESIGN.md`](docs/DESIGN.md) for the v1.0 design and
 > [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full plan (external scanning, internal agent, pen testing).
 
 Sentinel is free software under the [GNU AGPL-3.0](LICENSE). Each MSP runs its own copy and owns its data.
 
 ## What's new
+
+### 0.7.0 (2026-11-22): findings and triage
+
+- One **findings list** per client, built from everything graded so far: exposed high-risk services,
+  certificate problems, exposed admin pages and portals, and vulnerabilities. Only **Fail** and **Warning** items
+  become findings; Info items stay in the client panels.
+- **Lifecycle**:
+  - a finding is **resolved** automatically when a check really sees the problem gone;
+  - if the problem comes back, the same finding **reopens** and is marked "reappeared", with its history kept. An
+    earlier accepted or false-positive decision is kept when the evidence is unchanged.
+- **Triage** (technicians and admins, a note is always required):
+  - **accepted risk** stays until the problem goes away;
+  - **false positive** reopens by itself if the evidence changes (for example a different version is reported);
+  - each finding has a full history, and every decision is in the audit log.
+- A **Findings** page across all clients, with filters (client, status, grade, type). There is also a findings card
+  at the top of each client page and open Fail/Warning counts on the dashboard.
 
 ### 0.6.0 (2026-11-22): vulnerability matching
 

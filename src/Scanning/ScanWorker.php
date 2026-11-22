@@ -7,6 +7,7 @@ namespace Sentinel\Scanning;
 use PDO;
 use Sentinel\Clients\ClientRepository;
 use Sentinel\Discovery\DnsClient;
+use Sentinel\Findings\FindingsEngine;
 use Sentinel\Discovery\DnsException;
 use Sentinel\Discovery\DnsMessage;
 use Sentinel\Scope\AuthorisationRepository;
@@ -53,6 +54,7 @@ final class ScanWorker
         private readonly ?HttpProbe $http = null,
         private readonly ?EndpointRepository $endpoints = null,
         private readonly ?VulnMatcher $matcher = null,
+        private readonly ?FindingsEngine $findings = null,
     ) {
         $this->log ??= static function (string $line): void {
         };
@@ -346,6 +348,7 @@ final class ScanWorker
                 error_log('[msp-sentinel] vulnerability matching failed for client ' . $clientId . ': ' . $ex->getMessage());
             }
         }
+        $this->refreshFindings($clientId, $summary);
         $this->scans->finish($jobId, $status, $summary);
         return "Job {$jobId} {$status}: {$summary['hosts_scanned']} scanned, {$summary['hosts_skipped']} skipped, {$summary['hosts_failed']} failed.";
     }
@@ -391,6 +394,7 @@ final class ScanWorker
         if ($stopReason !== null) {
             $summary['messages'][] = $stopReason;
         }
+        $this->refreshFindings($clientId, $summary);
         $this->scans->finish($jobId, $status, $summary);
         return "TLS job {$jobId} {$status}: {$summary['endpoints_checked']} endpoint(s) checked.";
     }
@@ -409,11 +413,16 @@ final class ScanWorker
         if ($this->tls === null || $this->http === null || $this->endpoints === null) {
             return;
         }
-        $names = array_values(array_slice(array_filter($hostnames, fn (string $h): bool => $this->scope->isInScope($clientId, $h)), 0, 3));
         $assetId = $this->endpoints->assetId($clientId, $ip);
         if ($assetId === null) {
             return;
         }
+        // The same names in every job (port scan, resumed scan, daily check): this job's names plus
+        // the names stored on the asset, in-scope only, sorted, at most 3. Otherwise certificate rows
+        // and findings would flip between "with name" and "without name".
+        $all = array_unique(array_merge($hostnames, $this->endpoints->assetHostnames($assetId)));
+        sort($all);
+        $names = array_values(array_slice(array_filter($all, fn (string $h): bool => $h !== '' && $this->scope->isInScope($clientId, $h)), 0, 3));
         $checked = ['tls' => 0, 'web' => 0];
         $logId = null;
         $portList = implode(',', array_map(static fn (array $s): string => (string) $s['port'], array_filter($services,
@@ -429,6 +438,7 @@ final class ScanWorker
             $logId ??= $this->scans->logStart($jobId, $clientId, $ip, $names === [] ? null : implode(',', $names), $portList, 'running', __('Certificate and web page checks'));
             if ($isTls) {
                 $snis = $names === [] ? [null] : $names;
+                $allOk = true;
                 foreach ($snis as $i => $sni) {
                     if ($shouldStop($ip)) {
                         $this->scans->logFinish($logId, 'stopped', __('Stopped during certificate checks.'));
@@ -447,9 +457,14 @@ final class ScanWorker
                         $result += $this->tls->probeProtocols($ip, $port, $sni);
                     }
                     $this->endpoints->saveTls($assetId, $port, (string) $sni, $result);
+                    $allOk = $allOk && $result['ok'];
                     $checked['tls']++;
                 }
-                $this->endpoints->pruneTls($assetId, $port, array_map(static fn (?string $n): string => (string) $n, $snis));
+                // Remove rows for names no longer used, but only when every check succeeded:
+                // a failed check must never make an old certificate (and its findings) disappear.
+                if ($allOk) {
+                    $this->endpoints->pruneTls($assetId, $port, array_map(static fn (?string $n): string => (string) $n, $snis));
+                }
             }
             if ($isWeb) {
                 if ($shouldStop($ip)) {
@@ -473,6 +488,25 @@ final class ScanWorker
             $this->scans->logFinish($logId, 'checked', __('{t} certificate check(s), {w} web page(s)', ['t' => $checked['tls'], 'w' => $checked['web']]));
         }
         $summary['endpoints_checked'] = ($summary['endpoints_checked'] ?? 0) + $checked['tls'] + $checked['web'];
+    }
+
+    /**
+     * Update the client's findings after a job (errors are logged, never fatal to the job).
+     *
+     * @param array<string,mixed> $summary Receives the new and resolved counts.
+     */
+    private function refreshFindings(int $clientId, array &$summary): void
+    {
+        if ($this->findings === null) {
+            return;
+        }
+        try {
+            $f = $this->findings->refreshClient($clientId);
+            $summary['findings_opened'] = $f['opened'] + $f['reopened'];
+            $summary['findings_resolved'] = $f['resolved'];
+        } catch (\Throwable $ex) {
+            error_log('[msp-sentinel] findings refresh failed for client ' . $clientId . ': ' . $ex->getMessage());
+        }
     }
 
     /** The message used when the window closes (also used to recognise that case). */

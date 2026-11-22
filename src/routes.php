@@ -17,6 +17,7 @@ use Sentinel\Controllers\AuthController;
 use Sentinel\Controllers\AuthorisationController;
 use Sentinel\Controllers\ClientController;
 use Sentinel\Controllers\DiscoveryController;
+use Sentinel\Controllers\FindingController;
 use Sentinel\Controllers\ScanController;
 use Sentinel\Controllers\ScanningController;
 use Sentinel\Controllers\PageController;
@@ -75,6 +76,11 @@ $router->add('POST', '/suggestions/{id}/restore', [DiscoveryController::class, '
 // Port scans: technicians and admins queue and cancel (the outside-window override is admin-only, checked in the controller)
 $router->add('POST', '/clients/{id}/scan', [ScanController::class, 'queue'], $technician);
 $router->add('POST', '/scans/{id}/cancel', [ScanController::class, 'cancel'], $technician);
+
+// Findings: everyone views; technicians and admins triage
+$router->add('GET', '/findings', [FindingController::class, 'index']);
+$router->add('GET', '/findings/{id}', [FindingController::class, 'show']);
+$router->add('POST', '/findings/{id}/triage', [FindingController::class, 'triage'], $technician);
 
 // Global kill switch
 $router->add('POST', '/scanning/pause', [ScanningController::class, 'pause'], $technician);

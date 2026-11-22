@@ -45,6 +45,13 @@ try {
         fwrite(STDOUT, 'EPSS failed: ' . $ex->getMessage() . "\n");
         $exit = 1;
     }
+    // New data can create or resolve findings (and accepted risks can be affected), so refresh them all.
+    try {
+        fwrite(STDOUT, 'Findings: refreshed for ' . App::findingsEngine()->refreshAll() . " client(s)\n");
+    } catch (\Throwable $ex) {
+        fwrite(STDOUT, 'Findings failed: ' . $ex->getMessage() . "\n");
+        $exit = 1;
+    }
     exit($exit);
 } catch (\Throwable $ex) {
     fwrite(STDERR, 'Feeds failed: ' . $ex->getMessage() . "\n");

@@ -11,6 +11,8 @@ use Sentinel\Auth\Role;
 use Sentinel\Auth\UserRepository;
 use Sentinel\Clients\ClientRepository;
 use Sentinel\Discovery\CrtShClient;
+use Sentinel\Findings\FindingRepository;
+use Sentinel\Findings\FindingsEngine;
 use Sentinel\Discovery\DiscoveryService;
 use Sentinel\Discovery\DnsClient;
 use Sentinel\Discovery\SuggestionRepository;
@@ -190,7 +192,7 @@ final class App
         $connector = Connector::fromConfig($config);
         $caFile = (string) $config->get('tls.ca_file', '');
         return new ScanWorker(self::db(), self::clients(), self::authorisations(), self::scans(), self::scope(), NmapRunner::fromConfig($config), $dns, $log,
-            new TlsChecker($connector, $caFile === '' ? null : $caFile), new HttpProbe($connector), self::endpoints(), self::vulnMatcher(15));
+            new TlsChecker($connector, $caFile === '' ? null : $caFile), new HttpProbe($connector), self::endpoints(), self::vulnMatcher(15), self::findingsEngine());
     }
 
     /** Vulnerability data and match store. */
@@ -213,6 +215,18 @@ final class App
     public static function vulnMatcher(int $timeout = 60): VulnMatcher
     {
         return new VulnMatcher(self::db(), self::vulns(), FeedUpdater::fromConfig(self::config(), self::vulns(), $timeout));
+    }
+
+    /** Findings store (list, history, triage). */
+    public static function findings(): FindingRepository
+    {
+        return new FindingRepository(self::db());
+    }
+
+    /** Builds findings from the current scan data. */
+    public static function findingsEngine(): FindingsEngine
+    {
+        return new FindingsEngine(self::db(), self::endpoints(), self::vulns());
     }
 
     /** TLS endpoint and web page store. */

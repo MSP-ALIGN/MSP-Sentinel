@@ -87,6 +87,15 @@ return [
             ],
         ],
         [
+            'title' => 'Findings and triage',
+            'paragraphs' => [
+                'Findings bring together everything Sentinel grades as Fail or Warning for a client: high-risk services open to the internet, certificate problems, exposed admin pages and portals, and vulnerabilities. Info items are not findings; they stay visible in the client panels.',
+                'A finding resolves by itself when a check really sees the problem gone, for example a port that a complete scan finds closed. A host that simply wasn\'t scanned keeps its findings. If a resolved problem comes back, the same finding reopens and is marked "Reappeared", with its whole history. If it had been accepted or marked as a false positive and the evidence is the same, that decision is kept. While a service\'s new vulnerability data is still being fetched, its vulnerability findings are not resolved.',
+                'Technicians and admins can triage a finding, always with a note. "Accepted risk" means the client knows and accepts it; it stays accepted until the problem goes away. "False positive" means it isn\'t really a problem; it reopens automatically if the evidence changes, for example if a different version is reported. You can also reopen a finding to undo a decision. Resolving is never done by hand: only checks resolve findings.',
+                'The Findings page lists findings across all clients, with filters for client, status, grade and type. Each decision appears in the finding\'s history and in the audit log.',
+            ],
+        ],
+        [
             'title' => 'Audit log',
             'paragraphs' => [
                 'Admins can see a record of sign-ins, failed sign-ins, user changes and settings changes under Administration > Audit log. Entries cannot be edited or deleted from the web interface.',
@@ -94,6 +103,15 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '0.7.0',
+            'date' => '2026-11-22',
+            'items' => [
+                'Findings: one list of Fail and Warning items per client, plus a Findings page across all clients with filters.',
+                'Automatic resolution when checks see a problem gone; the same finding reopens (marked "Reappeared") if it returns.',
+                'Triage with a required note: accepted risk, or false positive (reopens if the evidence changes); full history.',
+            ],
+        ],
         [
             'version' => '0.6.0',
             'date' => '2026-11-22',
