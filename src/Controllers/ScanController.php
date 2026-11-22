@@ -64,6 +64,7 @@ final class ScanController extends Controller
         $db->beginTransaction();
         try {
             $db->prepare('SELECT id FROM clients WHERE id = :id FOR UPDATE')->execute(['id' => $clientId]);
+            App::scans()->cancelQueuedTlsJobs($clientId); // a port scan includes the certificate checks
             if (App::scans()->openJob($clientId) !== null) {
                 $db->rollBack();
                 Session::flash('info', __('A scan for this client is already queued or running.'));

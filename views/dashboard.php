@@ -1,14 +1,14 @@
 <?php
 /**
  * Dashboard.
- * Expects: $currentUser, $version, $clientCount, $activeAuthorisations, $expiringAuthorisations, $globallyPaused.
+ * Expects: $currentUser, $version, $clientCount, $activeAuthorisations, $expiringAuthorisations, $expiringCerts, $globallyPaused.
  */
 ?>
 <?php if ($globallyPaused): ?>
 <?php require __DIR__ . '/partials/kill_switch.php'; ?>
 <?php endif; ?>
 <div class="row g-3">
-    <div class="col-md-4">
+    <div class="col-md-6 col-xl-3">
         <a class="text-decoration-none" href="<?= e(url('/clients')) ?>">
         <div class="small-box text-bg-primary">
             <div class="inner"><h3><?= e($clientCount) ?></h3><p><?= e(__('Clients')) ?></p></div>
@@ -16,16 +16,22 @@
         </div>
         </a>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-6 col-xl-3">
         <div class="small-box <?= $activeAuthorisations > 0 ? 'text-bg-success' : 'text-bg-secondary' ?>">
             <div class="inner"><h3><?= e($activeAuthorisations) ?></h3><p><?= e(__('Active scan authorisations')) ?></p></div>
             <i class="small-box-icon bi bi-file-earmark-check" aria-hidden="true"></i>
         </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-6 col-xl-3">
         <div class="small-box <?= $expiringAuthorisations > 0 ? 'text-bg-warning' : 'text-bg-secondary' ?>">
             <div class="inner"><h3><?= e($expiringAuthorisations) ?></h3><p><?= e(__('Authorisations ending within 30 days')) ?></p></div>
             <i class="small-box-icon bi bi-calendar-x" aria-hidden="true"></i>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="small-box <?= $expiringCerts > 0 ? 'text-bg-danger' : 'text-bg-secondary' ?>">
+            <div class="inner"><h3><?= e($expiringCerts) ?></h3><p><?= e(__('Certificates expired or expiring within 14 days')) ?></p></div>
+            <i class="small-box-icon bi bi-shield-exclamation" aria-hidden="true"></i>
         </div>
     </div>
 </div>

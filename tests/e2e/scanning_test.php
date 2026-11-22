@@ -67,7 +67,7 @@ return [
         sort($targets);
         Assert::same(['2001:db8:10::30', '203.0.113.160', '203.0.113.161'], $targets, 'nmap only ever saw in-scope addresses');
 
-        $log = $ctx->db->query("SELECT target, result, detail FROM scan_log WHERE client_id = {$id} ORDER BY target")->fetchAll();
+        $log = $ctx->db->query("SELECT target, result, detail FROM scan_log WHERE client_id = {$id} AND result <> 'checked' ORDER BY target")->fetchAll();
         $byTarget = array_column($log, null, 'target');
         Assert::same('skipped_out_of_scope', $byTarget['198.51.100.50']['result'], 'outside alias address skipped');
         Assert::contains('www.discovery.example', $byTarget['198.51.100.50']['detail']);

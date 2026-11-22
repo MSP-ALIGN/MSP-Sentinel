@@ -33,6 +33,7 @@ final class PageController extends Controller
             'activeAuthorisations' => $active,
             'expiringAuthorisations' => $expiring,
             'globallyPaused' => App::scope()->globallyPaused(),
+            'expiringCerts' => App::endpoints()->countExpiring(\Sentinel\Scanning\ExposureRules::EXPIRY_WARN_DAYS),
         ]);
     }
 

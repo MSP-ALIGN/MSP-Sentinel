@@ -14,7 +14,11 @@ use Sentinel\Discovery\CrtShClient;
 use Sentinel\Discovery\DiscoveryService;
 use Sentinel\Discovery\DnsClient;
 use Sentinel\Discovery\SuggestionRepository;
+use Sentinel\Scanning\Connector;
+use Sentinel\Scanning\EndpointRepository;
+use Sentinel\Scanning\HttpProbe;
 use Sentinel\Scanning\NmapRunner;
+use Sentinel\Scanning\TlsChecker;
 use Sentinel\Scanning\ScanRepository;
 use Sentinel\Scanning\ScanWorker;
 use Sentinel\Scope\AuthorisationRepository;
@@ -180,7 +184,16 @@ final class App
         } catch (\RuntimeException) {
             $dns = null; // without a resolver, only listed IP addresses are scanned
         }
-        return new ScanWorker(self::db(), self::clients(), self::authorisations(), self::scans(), self::scope(), NmapRunner::fromConfig($config), $dns, $log);
+        $connector = Connector::fromConfig($config);
+        $caFile = (string) $config->get('tls.ca_file', '');
+        return new ScanWorker(self::db(), self::clients(), self::authorisations(), self::scans(), self::scope(), NmapRunner::fromConfig($config), $dns, $log,
+            new TlsChecker($connector, $caFile === '' ? null : $caFile), new HttpProbe($connector), self::endpoints());
+    }
+
+    /** TLS endpoint and web page store. */
+    public static function endpoints(): EndpointRepository
+    {
+        return new EndpointRepository(self::db());
     }
 
     /** Recovery code store. */

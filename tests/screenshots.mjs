@@ -88,7 +88,7 @@ await page.fill('#scope', '# Office and website\n203.0.113.10\n198.51.100.0/28\n
 await page.check('#confirm');
 await page.click('.app-content form button.btn-primary[type=submit]');
 await shot(page, '15-authorisation-errors');
-await page.fill('#scope', '# Office and website\n203.0.113.10\n203.0.113.160\ndiscovery.example');
+await page.fill('#scope', '# Office and website\n203.0.113.10\n203.0.113.160\n203.0.113.180\n203.0.113.181\ndiscovery.example');
 await page.check('#confirm');
 await page.click('.app-content form button.btn-primary[type=submit]');
 await page.waitForURL(/\/clients\/\d+$/);
@@ -104,6 +104,7 @@ execFileSync('php', [new URL('../bin/worker.php', import.meta.url).pathname, '--
   { env: { ...process.env, SENTINEL_CONFIG: `${serve.dir}/config.php`, SENTINEL_ALLOW_ROOT: '1' } });
 await page.goto(clientUrl);
 await page.locator('#scans').screenshot({ path: `${out}19-port-scan.png` });
+await page.locator('#exposure').screenshot({ path: `${out}20-certificates-web.png` });
 await page.goto(`${base}/clients`);
 await shot(page, '17-clients');
 await page.goto(`${base}/`);

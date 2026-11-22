@@ -90,6 +90,11 @@
       "A": [
         "203.0.113.62"
       ]
+    },
+    "portal.tlscheck.example": {
+      "A": [
+        "203.0.113.182"
+      ]
     }
   },
   "behaviours": {

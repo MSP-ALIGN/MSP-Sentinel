@@ -52,6 +52,12 @@ return [
         'host_timeout' => 1500,
     ],
 
+    // TLS checks. Leave ca_file empty to use the system trust store. Set it to a PEM file with extra CAs
+    // (e.g. an internal CA): they are ADDED to the system store, not used instead of it.
+    'tls' => [
+        'ca_file' => '',
+    ],
+
     'discovery' => [
         // Seconds a "Discover now" click may take before it stops (the weekly job has no limit).
         'manual_budget' => 25,

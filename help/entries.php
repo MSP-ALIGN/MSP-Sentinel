@@ -66,6 +66,15 @@ return [
             ],
         ],
         [
+            'title' => 'Certificates and exposed admin pages',
+            'paragraphs' => [
+                'After each port scan, and once a day inside the scan window, Sentinel connects briefly to each TLS service it found. It reads the certificate (expiry, issuer, whether it is trusted and matches the name, key size) and checks whether old TLS 1.0 or 1.1 is still accepted.',
+                'It also requests the start page of each web port once, without logging in or guessing paths, and recognises firewall and device admin pages, VPN portals, remote desktop web access and other login pages from their wording.',
+                'Grading: an expired certificate, or a firewall or device admin page reachable from the internet, is a Fail. A certificate expiring within 14 days, self-signed or untrusted certificates, name mismatches, old TLS and weak keys are Warnings. VPN portals and remote desktop web access are Warnings too: they are often meant to be reachable, so make sure they are patched and use MFA.',
+                'Mail services that start TLS later in the connection (STARTTLS on ports 25, 587, 143) are not checked yet.',
+            ],
+        ],
+        [
             'title' => 'Audit log',
             'paragraphs' => [
                 'Admins can see a record of sign-ins, failed sign-ins, user changes and settings changes under Administration > Audit log. Entries cannot be edited or deleted from the web interface.',
@@ -73,6 +82,15 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '0.5.0',
+            'date' => '2026-11-22',
+            'items' => [
+                'TLS certificate checks after every port scan and daily: expiry, trust, name match, weak keys, old TLS 1.0/1.1.',
+                'Detection of firewall and device admin pages, VPN portals and remote desktop web access on open web ports.',
+                'Dashboard count of certificates expired or expiring within 14 days.',
+            ],
+        ],
         [
             'version' => '0.4.0',
             'date' => '2026-11-21',

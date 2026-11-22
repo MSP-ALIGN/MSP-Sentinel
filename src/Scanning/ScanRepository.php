@@ -27,14 +27,18 @@ final class ScanRepository
     /**
      * Queue a job.
      *
-     * @param array{ips:list<string>,hostnames:list<string>,ports:list<int>} $payload Targets and ports at queue time.
+     * @param array<string,mixed> $payload Targets at queue time: ips/hostnames/ports for 'ports' jobs, endpoints for 'tls' jobs.
+     * @param string $type 'ports' (port scan) or 'tls' (daily certificate and web page re-check).
      */
-    public function queue(int $clientId, string $trigger, ?int $userId, bool $outsideWindow, ?string $reason, array $payload): int
+    public function queue(int $clientId, string $trigger, ?int $userId, bool $outsideWindow, ?string $reason, array $payload, string $type = 'ports'): int
     {
+        if (!in_array($type, ['ports', 'tls'], true)) {
+            throw new \InvalidArgumentException('Unknown job type.');
+        }
         $this->db->prepare(
             "INSERT INTO scan_jobs (client_id, job_type, trigger_type, requested_by, outside_window, override_reason, status, payload, created_at)
-             VALUES (:c, 'ports', :t, :u, :o, :r, 'queued', :p, UTC_TIMESTAMP())"
-        )->execute(['c' => $clientId, 't' => $trigger, 'u' => $userId, 'o' => $outsideWindow ? 1 : 0, 'r' => $reason,
+             VALUES (:c, :type, :t, :u, :o, :r, 'queued', :p, UTC_TIMESTAMP())"
+        )->execute(['c' => $clientId, 'type' => $type, 't' => $trigger, 'u' => $userId, 'o' => $outsideWindow ? 1 : 0, 'r' => $reason,
                     'p' => json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)]);
         return (int) $this->db->lastInsertId();
     }
@@ -53,14 +57,14 @@ final class ScanRepository
     }
 
     /**
-     * The client's queued or running job, if any.
+     * The client's queued or running job (of one type, or any type), if any.
      *
      * @return array<string,mixed>|null
      */
-    public function openJob(int $clientId): ?array
+    public function openJob(int $clientId, ?string $type = null): ?array
     {
-        $stmt = $this->db->prepare("SELECT * FROM scan_jobs WHERE client_id = :c AND status IN ('queued','running') ORDER BY id LIMIT 1");
-        $stmt->execute(['c' => $clientId]);
+        $stmt = $this->db->prepare("SELECT * FROM scan_jobs WHERE client_id = :c AND status IN ('queued','running') AND (:t IS NULL OR job_type = :t2) ORDER BY id LIMIT 1");
+        $stmt->execute(['c' => $clientId, 't' => $type, 't2' => $type]);
         $row = $stmt->fetch();
         return $row === false ? null : self::decode($row);
     }
@@ -91,11 +95,11 @@ final class ScanRepository
     }
 
     /** When the client's last scheduled job that wasn't cancelled or failed was queued (UTC), or null. */
-    public function lastScheduledAt(int $clientId): ?string
+    public function lastScheduledAt(int $clientId, string $type = 'ports'): ?string
     {
-        // Cancelled (e.g. during a pause) and failed jobs don't count: the weekly scan is still due.
-        $stmt = $this->db->prepare("SELECT MAX(created_at) FROM scan_jobs WHERE client_id = :c AND trigger_type = 'scheduled' AND status NOT IN ('cancelled','failed')");
-        $stmt->execute(['c' => $clientId]);
+        // Cancelled (e.g. during a pause) and failed jobs don't count: the scheduled scan is still due.
+        $stmt = $this->db->prepare("SELECT MAX(created_at) FROM scan_jobs WHERE client_id = :c AND job_type = :t AND trigger_type = 'scheduled' AND status NOT IN ('cancelled','failed')");
+        $stmt->execute(['c' => $clientId, 't' => $type]);
         $v = $stmt->fetchColumn();
         return $v === null || $v === false ? null : (string) $v;
     }
@@ -135,6 +139,16 @@ final class ScanRepository
         $stmt = $this->db->prepare("UPDATE scan_jobs SET cancel_requested = 1 WHERE id = :id AND status = 'running'");
         $stmt->execute(['id' => $jobId]);
         return $stmt->rowCount() === 1 ? 'requested' : 'not_open';
+    }
+
+    /**
+     * Cancel a client's QUEUED daily certificate jobs (a port scan re-checks certificates anyway).
+     */
+    public function cancelQueuedTlsJobs(int $clientId): void
+    {
+        $this->db->prepare("UPDATE scan_jobs SET status = 'cancelled', finished_at = UTC_TIMESTAMP(),
+                            summary = '{\"messages\":[\"Replaced by a port scan, which re-checks certificates too.\"]}'
+                            WHERE client_id = :c AND job_type = 'tls' AND status = 'queued'")->execute(['c' => $clientId]);
     }
 
     /** True if someone asked to cancel this running job. */

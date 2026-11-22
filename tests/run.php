@@ -33,6 +33,7 @@ if (PHP_SAPI !== 'cli') {
 
 require dirname(__DIR__) . '/src/bootstrap.php';
 require __DIR__ . '/lib/TestKit.php';
+require __DIR__ . '/lib/TlsFixtures.php';
 
 use Sentinel\Tests\AssertionFailed;
 use Sentinel\Tests\TestContext;
@@ -148,6 +149,29 @@ try {
         . escapeshellarg($outDir . '/nmap-args.log') . " \"\$@\"\n");
     chmod($nmapWrapper, 0700);
     $cfg['scanner'] = ['nmap_path' => $nmapWrapper, 'host_timeout' => 60];
+
+    // Mock TLS/HTTP servers on 127.0.0.1 with throwaway certificates. The TLS and HTTP checks reach them
+    // through testing.redirect_connections (honoured only together with allow_documentation_ranges).
+    $certs = \Sentinel\Tests\TlsFixtures::create($outDir);
+    $page = static function (string $name, string $html) use ($outDir): string {
+        file_put_contents($outDir . '/page-' . $name . '.html', $html);
+        return $outDir . '/page-' . $name . '.html';
+    };
+    $tlsMocks = [
+        '203.0.113.180:443' => ['modern', $certs['good'], $page('vpn', '<html><head><title>SSL VPN Portal - Sign in</title></head><body><form><input type="password" name="p"></form></body></html>')],
+        '203.0.113.180:80' => ['plain', '-', $page('plain', '<html><head><title>Welcome to Example Co</title></head><body>We sell routers and switches.</body></html>')],
+        '203.0.113.181:443' => ['legacy', $certs['weak'], $page('fw', '<html><head><title>Firewall Administration</title></head><body><form><input type="password"></form></body></html>')],
+        '203.0.113.182:8443' => ['modern', $certs['wrongname'], $page('router', '<html><head><title>Router Management</title></head><body><script>var x="</title>";</script><input type=password></body></html>')],
+    ];
+    $redirects = [];
+    foreach ($tlsMocks as $target => [$mode, $pem, $htmlFile]) {
+        $localPort = $freePort();
+        $redirects[$target] = $localPort;
+        $mocks[] = proc_open([PHP_BINARY, __DIR__ . '/mocks/tls_server.php', (string) $localPort, $mode, $pem, $htmlFile],
+            [0 => ['file', '/dev/null', 'r'], 1 => ['file', $outDir . '/mock-tls.log', 'a'], 2 => ['file', $outDir . '/mock-tls.log', 'a']], $pipes);
+    }
+    $cfg['testing']['redirect_connections'] = $redirects;
+    $cfg['tls'] = ['ca_file' => $certs['ca']];
     file_put_contents($configPath, '<?php return ' . var_export($cfg, true) . ";\n");
     for ($i = 0; $i < 50 && @fsockopen('127.0.0.1', $crtshPort) === false; $i++) {
         usleep(100000);

@@ -56,5 +56,37 @@
   },
   "203.0.113.166": {
     "behaviour": "hosttimeout"
+  },
+  "203.0.113.180": {
+    "open": [
+      {
+        "port": 80,
+        "name": "http",
+        "product": "ExampleServer"
+      },
+      {
+        "port": 443,
+        "name": "https",
+        "product": "ExampleServer"
+      }
+    ]
+  },
+  "203.0.113.181": {
+    "open": [
+      {
+        "port": 443,
+        "name": "https",
+        "product": "ExampleServer"
+      }
+    ]
+  },
+  "203.0.113.182": {
+    "open": [
+      {
+        "port": 8443,
+        "name": "https-alt",
+        "product": "ExampleServer"
+      }
+    ]
   }
 }

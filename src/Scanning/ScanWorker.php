@@ -48,6 +48,9 @@ final class ScanWorker
         private readonly NmapRunner $nmap,
         private readonly ?DnsClient $dns,
         private $log = null,
+        private readonly ?TlsChecker $tls = null,
+        private readonly ?HttpProbe $http = null,
+        private readonly ?EndpointRepository $endpoints = null,
     ) {
         $this->log ??= static function (string $line): void {
         };
@@ -100,6 +103,20 @@ final class ScanWorker
             }
             $last = $this->scans->lastScheduledAt($id);
             if ($last !== null && strtotime($last . ' UTC') > time() - self::SCHEDULE_DAYS * 86400) {
+                // No port scan due: queue the daily certificate and web page re-check if it's due.
+                try {
+                    $lastTls = $this->scans->lastScheduledAt($id, 'tls');
+                    $recent = max(strtotime($last . ' UTC'), $lastTls === null ? 0 : (int) strtotime($lastTls . ' UTC'));
+                    // Only queue it while the window is open (so it never sits in the queue blocking a manual scan)
+                    // and while the client still has an active scope.
+                    if ($this->endpoints !== null && $recent <= time() - 86400 && ScanWindow::isOpen($client) && $this->payloadFor($client) !== null
+                        && ($endpoints = $this->endpoints->checkableEndpoints($id)) !== []) {
+                        $this->scans->queue($id, 'scheduled', null, false, null, ['endpoints' => $endpoints], 'tls');
+                        $count++;
+                    }
+                } catch (\Throwable $ex) {
+                    ($this->log)("Could not schedule the certificate check for client {$id}: " . $ex->getMessage());
+                }
                 continue;
             }
             try {
@@ -109,6 +126,7 @@ final class ScanWorker
                 }
                 $this->scans->queue($id, 'scheduled', null, false, null, $payload);
                 $count++;
+                continue; // the port scan re-checks certificates too, so no TLS job is needed this time
             } catch (\Throwable $ex) {
                 // One client's problem must never stop every other client from being scanned.
                 ($this->log)("Could not schedule client {$id}: " . $ex->getMessage());
@@ -187,6 +205,9 @@ final class ScanWorker
         $clientId = (int) $job['client_id'];
         if (!$this->scans->claim($jobId)) {
             return "Job {$jobId} was taken or cancelled.";
+        }
+        if (($job['job_type'] ?? 'ports') === 'tls') {
+            return $this->runTlsJob($job);
         }
         $ports = array_values(array_filter((array) ($job['payload']['ports'] ?? []), 'is_int'));
         $portText = PortProfile::toNmapArg($ports);
@@ -292,6 +313,9 @@ final class ScanWorker
             $this->scans->logFinish($logId, 'scanned', __('{n} open port(s)', ['n' => count($parsed['open'])]) . ($parsed['complete'] ? '' : ' ' . __('(incomplete)')));
             $summary['hosts_scanned']++;
             $summary['open_ports'] += count($parsed['open']);
+            // Certificates and web pages on the open ports just found (same scope and stop rules).
+            $services = array_map(static fn (array $s): array => ['port' => $s['port'], 'service' => $s['service']], $parsed['open']);
+            $this->checkEndpoints($jobId, $clientId, (string) $ip, array_values(array_unique($hostnames)), $services, $shouldStop, $summary);
         }
 
         if ($stopReason !== null) {
@@ -309,6 +333,131 @@ final class ScanWorker
         }
         $this->scans->finish($jobId, $status, $summary);
         return "Job {$jobId} {$status}: {$summary['hosts_scanned']} scanned, {$summary['hosts_skipped']} skipped, {$summary['hosts_failed']} failed.";
+    }
+
+    /**
+     * Daily re-check of known TLS endpoints and web pages (no port scan).
+     *
+     * @param array<string,mixed> $job Already claimed.
+     */
+    private function runTlsJob(array $job): string
+    {
+        $jobId = (int) $job['id'];
+        $clientId = (int) $job['client_id'];
+        $overrideWindow = (int) $job['outside_window'] === 1;
+        $summary = ['hosts_scanned' => 0, 'hosts_skipped' => 0, 'hosts_failed' => 0, 'open_ports' => 0, 'endpoints_checked' => 0, 'messages' => []];
+        $stopReason = null;
+        $shouldStop = function (?string $ip = null) use ($jobId, $clientId, $overrideWindow, &$stopReason): bool {
+            $stopReason = $this->stopReason($jobId, $clientId, $overrideWindow);
+            return $stopReason !== null || ($ip !== null && !$this->scope->isInScope($clientId, $ip));
+        };
+        $byIp = [];
+        foreach ((array) ($job['payload']['endpoints'] ?? []) as $ep) {
+            $ip = ScopeService::canonicalTarget((string) ($ep['ip'] ?? ''));
+            if ($ip === null || filter_var($ip, FILTER_VALIDATE_IP) === false || !is_int($ep['port'] ?? null)) {
+                continue;
+            }
+            $byIp[$ip]['services'][] = ['port' => $ep['port'], 'service' => (string) ($ep['service'] ?? '')];
+            $byIp[$ip]['hostnames'] = (array) ($ep['hostnames'] ?? []);
+        }
+        foreach ($byIp as $ip => $data) {
+            if ($shouldStop()) {
+                break;
+            }
+            if (!$this->scope->isInScope($clientId, (string) $ip)) {
+                $this->scans->logStart($jobId, $clientId, (string) $ip, null, '', 'skipped_out_of_scope', __('Not in an active authorisation.'));
+                $summary['hosts_skipped']++;
+                continue;
+            }
+            $this->checkEndpoints($jobId, $clientId, (string) $ip, $data['hostnames'], $data['services'], $shouldStop, $summary);
+            $summary['hosts_scanned']++;
+        }
+        $status = $stopReason !== null ? ($this->scans->cancelRequested($jobId) ? 'cancelled' : 'partial') : 'done';
+        if ($stopReason !== null) {
+            $summary['messages'][] = $stopReason;
+        }
+        $this->scans->finish($jobId, $status, $summary);
+        return "TLS job {$jobId} {$status}: {$summary['endpoints_checked']} endpoint(s) checked.";
+    }
+
+    /**
+     * Check certificates and web pages on one host's open ports.
+     * Logs one scan-log row for the host's endpoint checks.
+     *
+     * @param list<string>                            $hostnames Names that resolved to this IP (only in-scope ones are used).
+     * @param list<array{port:int,service:string}>    $services
+     * @param callable(?string):bool                  $shouldStop
+     * @param array<string,mixed>                     $summary
+     */
+    private function checkEndpoints(int $jobId, int $clientId, string $ip, array $hostnames, array $services, callable $shouldStop, array &$summary): void
+    {
+        if ($this->tls === null || $this->http === null || $this->endpoints === null) {
+            return;
+        }
+        $names = array_values(array_slice(array_filter($hostnames, fn (string $h): bool => $this->scope->isInScope($clientId, $h)), 0, 3));
+        $assetId = $this->endpoints->assetId($clientId, $ip);
+        if ($assetId === null) {
+            return;
+        }
+        $checked = ['tls' => 0, 'web' => 0];
+        $logId = null;
+        $portList = implode(',', array_map(static fn (array $s): string => (string) $s['port'], array_filter($services,
+            static fn (array $s): bool => EndpointRepository::isTls((int) $s['port'], (string) $s['service']) || EndpointRepository::isWeb((int) $s['port'], (string) $s['service']))));
+        try {
+        foreach ($services as $svc) {
+            $port = (int) $svc['port'];
+            $isTls = EndpointRepository::isTls($port, (string) $svc['service']);
+            $isWeb = EndpointRepository::isWeb($port, (string) $svc['service']);
+            if (!$isTls && !$isWeb) {
+                continue;
+            }
+            $logId ??= $this->scans->logStart($jobId, $clientId, $ip, $names === [] ? null : implode(',', $names), $portList, 'running', __('Certificate and web page checks'));
+            if ($isTls) {
+                $snis = $names === [] ? [null] : $names;
+                foreach ($snis as $i => $sni) {
+                    if ($shouldStop($ip)) {
+                        $this->scans->logFinish($logId, 'stopped', __('Stopped during certificate checks.'));
+                        return;
+                    }
+                    $result = $this->tls->check($ip, $port, $sni, fn (): bool => $shouldStop($ip));
+                    if (!empty($result['stopped'])) {
+                        $this->scans->logFinish($logId, 'stopped', __('Stopped during certificate checks.'));
+                        return;
+                    }
+                    if ($i === 0 && $result['ok']) {
+                        if ($shouldStop($ip)) {
+                            $this->scans->logFinish($logId, 'stopped', __('Stopped during certificate checks.'));
+                            return;
+                        }
+                        $result += $this->tls->probeProtocols($ip, $port, $sni);
+                    }
+                    $this->endpoints->saveTls($assetId, $port, (string) $sni, $result);
+                    $checked['tls']++;
+                }
+                $this->endpoints->pruneTls($assetId, $port, array_map(static fn (?string $n): string => (string) $n, $snis));
+            }
+            if ($isWeb) {
+                if ($shouldStop($ip)) {
+                    $this->scans->logFinish($logId, 'stopped', __('Stopped during web page checks.'));
+                    return;
+                }
+                $this->endpoints->saveWeb($assetId, $port, $this->http->fetch($ip, $port, $isTls ? 'https' : 'http', $names[0] ?? null));
+                $checked['web']++;
+            }
+        }
+        } catch (\Throwable $ex) {
+            // A problem with one host's checks (e.g. a database hiccup while saving) must not abort the whole job.
+            error_log('[msp-sentinel] endpoint checks failed for ' . $ip . ': ' . $ex->getMessage());
+            if ($logId !== null) {
+                $this->scans->logFinish($logId, 'error', __('Certificate and web page checks failed: {e}', ['e' => mb_substr($ex->getMessage(), 0, 200)]));
+            }
+            $summary['hosts_failed']++;
+            return;
+        }
+        if ($logId !== null) {
+            $this->scans->logFinish($logId, 'checked', __('{t} certificate check(s), {w} web page(s)', ['t' => $checked['tls'], 'w' => $checked['web']]));
+        }
+        $summary['endpoints_checked'] = ($summary['endpoints_checked'] ?? 0) + $checked['tls'] + $checked['web'];
     }
 
     /** The message used when the window closes (also used to recognise that case). */

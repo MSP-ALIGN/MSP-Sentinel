@@ -96,6 +96,8 @@ final class ClientController extends Controller
             'scanLog' => App::scans()->logForClient((int) $client['id'], 30),
             'ports' => PortProfile::forClient($client),
             'windowOpen' => ScanWindow::isOpen($client),
+            'tlsEndpoints' => App::endpoints()->tlsForClient((int) $client['id']),
+            'webPages' => App::endpoints()->webForClient((int) $client['id']),
         ]);
     }
 

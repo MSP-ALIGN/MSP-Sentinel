@@ -4,13 +4,29 @@ Self-hosted security monitoring for MSPs (managed service providers). Sentinel *
 exposure and vulnerabilities across your clients, monitors them and alerts on them. Its companion product,
 MSP Align, plans, reports and proves, using Sentinel's findings.
 
-> **Status: early development (0.4.0).** Sign-in, users, clients, the "authorised to scan" register, passive
-> discovery and **gentle external port scanning** are in place. Vulnerability matching, findings and reports come next. See [`docs/DESIGN.md`](docs/DESIGN.md) for the v1.0 design and
+> **Status: early development (0.5.0).** Sign-in, users, clients, the "authorised to scan" register, passive
+> discovery, gentle port scanning, and **certificate and admin-page checks** are in place. Vulnerability matching,
+> findings and reports come next. See [`docs/DESIGN.md`](docs/DESIGN.md) for the v1.0 design and
 > [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full plan (external scanning, internal agent, pen testing).
 
 Sentinel is free software under the [GNU AGPL-3.0](LICENSE). Each MSP runs its own copy and owns its data.
 
 ## What's new
+
+### 0.5.0 (2026-11-22): certificates and exposed admin pages
+
+- **TLS certificate checks** after every port scan and once a day (in the scan window): expiry, issuer, self-signed
+  or untrusted chain, name match (using in-scope hostnames as SNI), key size, signature algorithm, the negotiated
+  protocol, and whether old **TLS 1.0/1.1** is still accepted.
+- **Web page detection**: one request for the start page of each open web port (no logins, no path guessing),
+  matched against generic signatures:
+  - firewall or device admin pages (**Fail**);
+  - VPN portals and remote desktop web access (**Warning**);
+  - other login pages (**Info**).
+- Grading follows the agreed rules: an expired certificate fails; one expiring within 14 days or with weak TLS
+  gets a warning. The dashboard counts certificates expired or expiring within 14 days.
+- Same safety as port scans: scope, kill switches and window are checked before every connection. Each result
+  is logged in the scan log.
 
 ### 0.4.0 (2026-11-21): port scanning
 
