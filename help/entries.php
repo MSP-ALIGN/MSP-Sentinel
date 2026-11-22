@@ -194,6 +194,15 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.8.0',
+            'date' => '2026-11-22',
+            'items' => [
+                'One-line install on Debian 13 (curl ... install.sh | sudo -E bash), with sudo msp-sentinel-update for upgrades.',
+                'One-line install for on-premises agents too (install-agent.sh).',
+                'Debian 13 is now the recommended system; Debian 12 and Ubuntu 24.04 still work.',
+            ],
+        ],
+        [
             'version' => '1.7.0',
             'date' => '2026-11-22',
             'items' => [

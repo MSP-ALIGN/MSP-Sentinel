@@ -34,6 +34,30 @@ return [
         array_map('unlink', glob($out . '/*') ?: []);
         rmdir($out);
     },
+    'one-line installer: asks or reads settings, refuses bad input, hands over to the installer' => function (TestContext $ctx): void {
+        $root = dirname(__DIR__, 2);
+        $env = 'SENTINEL_DRY_RUN=1 SENTINEL_FORCE=1 SENTINEL_SRC=' . escapeshellarg($root) . ' ';
+        exec($env . 'SENTINEL_DOMAIN=Sentinel.Example bash ' . escapeshellarg($root . '/install.sh') . ' </dev/null 2>&1', $lines, $rc);
+        $out = implode("\n", $lines);
+        Assert::same(0, $rc, $out);
+        foreach (['Installing MSP Sentinel for https://sentinel.example', 'msp-sentinel-update', 'php8.4-fpm', 'migrate.php', 'nginx -t'] as $step) {
+            Assert::contains($step, $out);
+        }
+        exec($env . 'SENTINEL_DOMAIN=sentinel.example SENTINEL_TLS=letsencrypt SENTINEL_LE_EMAIL=ops@msp.example bash ' . escapeshellarg($root . '/install.sh') . ' </dev/null 2>&1', $l2, $rc2);
+        Assert::same(0, $rc2, implode("\n", $l2));
+        Assert::contains('certbot certonly', implode("\n", $l2), 'Let\'s Encrypt chosen');
+        foreach ([['SENTINEL_DOMAIN="bad domain;rm"', 'bad host name'], ['SENTINEL_DOMAIN=sentinel.example SENTINEL_TLS=other', 'bad TLS mode'],
+                  ['SENTINEL_DOMAIN=sentinel.example SENTINEL_BRANCH="../x"', 'bad branch'], ['SENTINEL_DOMAIN=sentinel.example SENTINEL_REPO="a/b c"', 'bad repository'],
+                  ['', 'no host name and no terminal']] as [$vars, $why]) {
+            exec($env . $vars . ' bash ' . escapeshellarg($root . '/install.sh') . ' </dev/null 2>&1', $l, $c);
+            Assert::true($c !== 0, $why);
+        }
+        foreach (['install.sh', 'install-agent.sh'] as $f) {
+            exec('bash -n ' . escapeshellarg($root . '/' . $f) . ' 2>&1', $l, $c);
+            Assert::same(0, $c, $f . ' syntax');
+        }
+        Assert::contains('debian-13', (string) file_get_contents($root . '/install/install.sh'), 'Debian 13 supported');
+    },
     'agent installer: dry run, input checks, hardened unprivileged service' => function (TestContext $ctx): void {
         $root = dirname(__DIR__, 2);
         $code = 'SNE-ABCDE-FGHJK-LMNPQ-RSTUV';

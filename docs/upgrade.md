@@ -3,6 +3,16 @@
 Sentinel follows semantic versioning: `x.Y.0` releases add features, `x.y.Z` releases only fix things. Read the
 release notes ([CHANGELOG.md](../CHANGELOG.md)) before upgrading.
 
+## With the one-line install
+
+If you installed with the one-line command, run:
+
+```sh
+sudo msp-sentinel-update
+```
+
+It fetches the branch the server follows (see `/etc/msp-sentinel/update.env`) and runs the upgrade below.
+
 ## With the installer
 
 1. Download and verify the new release (see [install.md](install.md), step 1) and unpack it.

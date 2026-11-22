@@ -1,7 +1,7 @@
 # Installing MSP Sentinel
 
-This guide installs Sentinel on a fresh **Ubuntu 24.04 LTS** or **Debian 12** server with Nginx, PHP-FPM 8.4 and
-MariaDB. The installer does everything; the manual steps at the end are for other setups.
+This guide installs Sentinel on a fresh **Debian 13** server (Debian 12 and Ubuntu 24.04 LTS also work) with Nginx,
+PHP-FPM 8.4 and MariaDB. The installer does everything; the manual steps at the end are for other setups.
 
 ## Before you start
 
@@ -15,6 +15,39 @@ MariaDB. The installer does everything; the manual steps at the end are for othe
   - `api.github.com` for the daily update check (optional, can be turned off).
 - Written permission from each client to scan the addresses you will add. Sentinel records these approvals, but
   getting them is your job.
+
+## One-line install (recommended)
+
+On a fresh Debian 13 VM (a minimal Debian may need `apt install -y curl sudo` first, as root):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install.sh | sudo -E bash
+```
+
+It asks for the host name, the certificate type (`letsencrypt` or `selfsigned`), the Let's Encrypt email if needed,
+and the first admin. It fetches Sentinel from GitHub into `/opt/msp-sentinel-src`, runs the installer below, and adds
+the command `sudo msp-sentinel-update` for later upgrades. Run it again on an installed server and it upgrades.
+
+Unattended (for example from cloud-init), set the answers as environment variables:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install.sh | sudo -E \
+  SENTINEL_DOMAIN=sentinel.msp.example SENTINEL_TLS=letsencrypt SENTINEL_LE_EMAIL=ops@msp.example \
+  SENTINEL_ADMIN_USER=jdoe SENTINEL_ADMIN_NAME="Jane Doe" SENTINEL_ADMIN_EMAIL=jdoe@msp.example bash
+```
+
+| Variable | Meaning |
+|---|---|
+| `SENTINEL_DOMAIN` | Host name users browse to |
+| `SENTINEL_TLS` | `letsencrypt` (public DNS, port 80 open) or `selfsigned` (default) |
+| `SENTINEL_LE_EMAIL` | Let's Encrypt expiry notices |
+| `SENTINEL_ADMIN_USER`, `SENTINEL_ADMIN_NAME`, `SENTINEL_ADMIN_EMAIL` | First admin; without a terminal a random password is printed once |
+| `SENTINEL_BRANCH` | Branch to install and update from (default `main`; `develop` for a test server, then use `.../develop/install.sh` in the URL) |
+| `SENTINEL_REPO` | `owner/name` of a fork |
+| `SENTINEL_FORCE=1` | Skip the operating system check |
+| `SENTINEL_DRY_RUN=1` | Show every step without changing anything |
+
+The one-line install follows the branch, not a signed release. For signed releases, use the steps below.
 
 ## Install with the installer
 

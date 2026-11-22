@@ -49,8 +49,14 @@ results are kept on the appliance and sent again until Sentinel accepts them.
 
 1. On the client page, under **On-premises agents**, record an internal authorisation for the site.
 2. Click **Create an enrolment code** (admins). The code is shown once and works once, within 24 hours.
-3. On the appliance (Ubuntu 24.04 or Debian 12, a mini-PC or VM with a network interface on the internal network),
-   copy and unpack the Sentinel release archive, then run:
+3. On the appliance (Debian 13, or Debian 12 / Ubuntu 24.04; a mini-PC or VM with a network interface on the
+   internal network), either use the one-line install, which asks for the Sentinel address and the code:
+
+   ```sh
+   curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install-agent.sh | sudo -E bash
+   ```
+
+   (upgrade later with `sudo msp-sentinel-agent-update`), or copy and unpack the Sentinel release archive and run:
 
    ```sh
    sudo ./install/agent-install.sh --server https://sentinel.msp.example

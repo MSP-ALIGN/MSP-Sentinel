@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# MSP Sentinel on-premises agent installer for Ubuntu 24.04 LTS and Debian 12 (a mini-PC or VM at the client's site).
+# MSP Sentinel on-premises agent installer for Debian 13 (also Debian 12 and Ubuntu 24.04 LTS), on a mini-PC or VM at
+# the client's site. One-line install from GitHub: see install-agent.sh at the top of the repository.
 #
 # Install (from the unpacked release folder, with a one-time code from the client page in Sentinel; without
 # --code it asks for the code, which keeps it out of the shell history and the process list):
@@ -97,8 +98,8 @@ if [ "$skip_os" -eq 0 ]; then
   [ -r /etc/os-release ] || die "Cannot detect the operating system."
   . /etc/os-release
   case "${ID:-}-${VERSION_ID:-}" in
-    ubuntu-24.04|debian-12) ;;
-    *) die "Supported: Ubuntu 24.04 and Debian 12 (found ${PRETTY_NAME:-unknown}). Use --skip-os-check at your own risk." ;;
+    debian-13|debian-12|ubuntu-24.04) ;;
+    *) die "Supported: Debian 13 (recommended), Debian 12 and Ubuntu 24.04 (found ${PRETTY_NAME:-unknown}). Use --skip-os-check at your own risk." ;;
   esac
 fi
 
@@ -117,8 +118,12 @@ fi
 # ---------------------------------------------------------------- install
 case "$server" in https://*) ;; *) die "Give the Sentinel address with --server https://..." ;; esac
 printf '%s' "$server" | grep -Eq '^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?/?$' || die "The --server value must be https://host[:port] only."
+# From the one-line installer (install-agent.sh) the code arrives on stdin; otherwise ask on the terminal.
+if [ -z "$code" ] && [ "${SENTINEL_AGENT_CODE_STDIN:-0}" = 1 ]; then
+  read -r code || true
+fi
 if [ -z "$code" ] && [ "$dry" -eq 0 ]; then
-  read -r -s -p "One-time enrolment code from Sentinel: " code; echo
+  { read -r -s -p "One-time enrolment code from Sentinel: " code; echo; } </dev/tty
 fi
 [ "$dry" -eq 1 ] && [ -z "$code" ] && code="SNE-XXXXX-XXXXX-XXXXX-XXXXX"
 printf '%s' "$code" | grep -Eq '^SNE(-[A-Z2-9]{5}){4}$' || die "That is not a valid enrolment code (SNE-XXXXX-XXXXX-XXXXX-XXXXX)."
@@ -128,7 +133,9 @@ if [ -f "$CONF_DIR/agent.json" ] && [ "$dry" -eq 0 ]; then die "This machine is 
 say "Packages (PHP ${PHPV} CLI, nmap)"
 run apt-get update
 run apt-get install -y ca-certificates curl gnupg rsync nmap
-if [ "${ID:-}" = debian ]; then
+if [ "${ID:-}-${VERSION_ID:-}" = debian-13 ]; then
+  : # Debian 13 ships PHP 8.4 itself.
+elif [ "${ID:-}" = debian ]; then
   # PHP 8.4 from packages.sury.org (Debian 12 ships 8.2).
   run install -d -m 0755 /etc/apt/keyrings
   run curl -fsSL https://packages.sury.org/php/apt.gpg -o /etc/apt/keyrings/sury-php.gpg

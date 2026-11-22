@@ -2,6 +2,17 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.8.0 (2026-11-22): one-line install on Debian 13
+
+- **One-line install** on a fresh Debian 13 VM:
+  `curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install.sh | sudo -E bash`. It asks for the
+  host name, certificate and first admin (or takes them from environment variables for unattended installs), and adds
+  `sudo msp-sentinel-update` for upgrades.
+- The same for on-premises agents: `install-agent.sh`, with `sudo msp-sentinel-agent-update`.
+- **Debian 13** is now the recommended system (it ships PHP 8.4, so no extra package source is needed). Debian 12 and
+  Ubuntu 24.04 still work.
+- The installers ask their questions on the terminal, so they also work when piped from `curl`.
+
 ### 1.7.0 (2026-11-22): risky internal protocols
 
 - The on-premises agent now checks each device of a full scan for risky protocols, read-only:

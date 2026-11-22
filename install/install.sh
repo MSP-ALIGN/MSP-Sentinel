@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# MSP Sentinel installer and upgrader for Ubuntu 24.04 LTS and Debian 12 (Nginx, PHP-FPM 8.4, MariaDB).
+# MSP Sentinel installer and upgrader for Debian 13 (also Debian 12 and Ubuntu 24.04 LTS): Nginx, PHP-FPM 8.4, MariaDB.
+#
+# One-line install from GitHub (runs this script for you): see install.sh at the top of the repository.
 #
 # Install (from the unpacked release folder):
 #   sudo ./install/install.sh --domain sentinel.msp.example [--certbot --email admin@msp.example]
@@ -102,8 +104,8 @@ if [ "$skip_os" -eq 0 ]; then
   [ -r /etc/os-release ] || die "Cannot detect the operating system."
   . /etc/os-release
   case "${ID:-}-${VERSION_ID:-}" in
-    ubuntu-24.04|debian-12) ;;
-    *) die "Supported: Ubuntu 24.04 and Debian 12 (found ${PRETTY_NAME:-unknown}). Use --skip-os-check at your own risk." ;;
+    debian-13|debian-12|ubuntu-24.04) ;;
+    *) die "Supported: Debian 13 (recommended), Debian 12 and Ubuntu 24.04 (found ${PRETTY_NAME:-unknown}). Use --skip-os-check at your own risk." ;;
   esac
 fi
 
@@ -162,7 +164,9 @@ say "Installing MSP Sentinel $new_version for https://$domain"
 say "Packages"
 run apt-get update
 run apt-get install -y ca-certificates curl gnupg lsb-release rsync nmap nginx mariadb-server mariadb-client openssl
-if [ "${ID:-ubuntu}" = debian ]; then
+if [ "${ID:-}-${VERSION_ID:-}" = debian-13 ]; then
+  : # Debian 13 ships PHP 8.4 itself: no extra package source needed.
+elif [ "${ID:-ubuntu}" = debian ]; then
   # PHP 8.4 from packages.sury.org (Debian 12 ships 8.2).
   run install -d -m 0755 /etc/apt/keyrings
   run curl -fsSL https://packages.sury.org/php/apt.gpg -o /etc/apt/keyrings/sury-php.gpg
@@ -250,11 +254,22 @@ else
 fi
 
 say "First admin"
-if [ "$existing" -eq 0 ] && [ "$dry" -eq 0 ] && [ -t 0 ]; then
-  read -r -p "Admin user name: " admin_user
-  read -r -p "Admin display name: " admin_name
-  read -r -p "Admin email: " admin_email
-  runuser -u sentinel -- "$PHP_BIN" "$APP_DIR/bin/create-admin.php" --username="$admin_user" --name="$admin_name" --email="$admin_email"
+# Questions go to the terminal (/dev/tty), so this also works when the script itself arrives on stdin (curl | bash).
+# Unattended: set SENTINEL_ADMIN_USER, SENTINEL_ADMIN_NAME and SENTINEL_ADMIN_EMAIL; a random password is then printed once.
+have_tty() { [ -r /dev/tty ] && (: </dev/tty) 2>/dev/null; }
+admin_user="${SENTINEL_ADMIN_USER:-}"; admin_name="${SENTINEL_ADMIN_NAME:-}"; admin_email="${SENTINEL_ADMIN_EMAIL:-}"
+if [ "$existing" -eq 1 ] || [ "$dry" -eq 1 ]; then
+  echo "  Skipped (existing install or dry run)."
+elif have_tty; then
+  [ -n "$admin_user" ] || read -r -p "Admin user name: " admin_user </dev/tty
+  [ -n "$admin_name" ] || read -r -p "Admin display name: " admin_name </dev/tty
+  [ -n "$admin_email" ] || read -r -p "Admin email: " admin_email </dev/tty
+  runuser -u sentinel -- "$PHP_BIN" "$APP_DIR/bin/create-admin.php" --username="$admin_user" --name="$admin_name" --email="$admin_email" </dev/tty
+elif [ -n "$admin_user" ] && [ -n "$admin_name" ] && [ -n "$admin_email" ]; then
+  admin_pass="$(openssl rand -base64 48 | tr -dc 'A-Za-z0-9' | cut -c1-20)Aa1!"
+  printf '%s\n' "$admin_pass" | runuser -u sentinel -- "$PHP_BIN" "$APP_DIR/bin/create-admin.php" --username="$admin_user" --name="$admin_name" --email="$admin_email"
+  echo "  Admin $admin_user created. Password (shown once, change it after signing in): $admin_pass"
+  unset admin_pass
 else
   echo "  Create it later: sudo -u sentinel $PHP_BIN $APP_DIR/bin/create-admin.php --username=jdoe --name=\"Jane Doe\" --email=jdoe@msp.example"
 fi
