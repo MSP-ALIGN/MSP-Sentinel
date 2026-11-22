@@ -28,11 +28,14 @@ return [
 
         $u->submit('/profile', '/profile/theme', ['ui_theme' => 'light']);
         Assert::contains('<html lang="en" data-bs-theme="light">', $u->get('/')->body, 'light chosen');
+        Assert::same('{"ui_theme":"light"}', (string) $ctx->db->query("SELECT details FROM audit_log WHERE action = 'user.ui_theme' ORDER BY id DESC LIMIT 1")->fetchColumn(), 'audited');
         $u->submit('/profile', '/profile/theme', ['ui_theme' => '"><script>alert(1)</script>']);
         Assert::same('light', $ctx->db->query("SELECT ui_theme FROM users WHERE username = 'themeuser'")->fetchColumn(), 'only dark or light accepted');
         Assert::status(400, $u->post('/profile/theme', ['ui_theme' => 'dark']), 'CSRF-checked');
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
-        Assert::contains('data-bs-theme="dark"', $admin->get('/')->body, 'one user\'s choice does not affect others');
+        $home = $admin->get('/')->body;
+        Assert::contains('data-bs-theme="dark"', $home, 'one user\'s choice does not affect others');
+        Assert::true((bool) preg_match('/class="brand-link" title="[^"]+"/', $home), 'full product name on hover (long names are shortened)');
 
         foreach (['/assets/img/logo.svg' => 'image/svg', '/assets/css/theme.css' => 'text/css', '/assets/vendor/fonts/chakra-petch-600.woff2' => ''] as $path => $type) {
             $res = $ctx->client()->get($path);

@@ -85,7 +85,7 @@ try {
 
     <aside class="app-sidebar bg-body-secondary shadow" data-bs-theme="dark">
         <div class="sidebar-brand">
-            <a href="<?= e(url('/')) ?>" class="brand-link">
+            <a href="<?= e(url('/')) ?>" class="brand-link" title="<?= e($product) ?>">
                 <img src="<?= e(asset('img/logo.svg')) ?>" alt="" class="brand-logo" width="34" height="34">
                 <span class="brand-text"><?= e($product) ?></span>
             </a>

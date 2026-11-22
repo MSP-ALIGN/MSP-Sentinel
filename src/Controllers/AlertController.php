@@ -13,10 +13,10 @@ use Sentinel\Core\Session;
 
 /**
  * Alerts: admin settings (SMTP, team addresses, webhook) with test buttons,
- * the in-app notification list, and each user's email preference.
+ * the in-app notification list, and each user's email and appearance preferences.
  *
  * Access (enforced by the routes): settings and tests are admin-only;
- * notifications and the email preference belong to the signed-in user.
+ * notifications and the email and appearance preferences belong to the signed-in user.
  *
  * Untrusted: every form field.
  *
@@ -192,7 +192,12 @@ final class AlertController extends Controller
         return Response::redirect('/profile');
     }
 
-    /** POST /profile/theme: the signed-in user's interface theme (dark or light). Untrusted: the choice (fixed list). */
+    /**
+     * POST /profile/theme: the signed-in user's interface theme (dark or light).
+     *
+     * Untrusted: the choice, checked against a fixed list. Only the caller's own row is
+     * written; the kernel has already checked sign-in and CSRF. Audited like the email preference.
+     */
     public function theme(Request $request): Response
     {
         $theme = $request->input('ui_theme');
@@ -200,7 +205,9 @@ final class AlertController extends Controller
             Session::flash('danger', __('Choose dark or light.'));
             return Response::redirect('/profile#appearance');
         }
-        App::db()->prepare('UPDATE users SET ui_theme = :t WHERE id = :id')->execute(['t' => $theme, 'id' => (int) $this->user()['id']]);
+        $uid = (int) $this->user()['id'];
+        App::db()->prepare('UPDATE users SET ui_theme = :t WHERE id = :id')->execute(['t' => $theme, 'id' => $uid]);
+        $this->audit($request, 'user.ui_theme', 'user', $uid, ['ui_theme' => $theme]);
         Session::flash('success', __('Appearance saved.'));
         return Response::redirect('/profile#appearance');
     }
