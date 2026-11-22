@@ -125,6 +125,7 @@ curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install
 | `SENTINEL_FIREWALL` | `y` (default) or `n` |
 | `SENTINEL_FAIL2BAN` | `y` (default) or `n` |
 | `SENTINEL_AUTO_UPDATES` | `y` (default) or `n` |
+| `SENTINEL_WEB_UPDATE` | `y` (default) or `n`: **Update now** in Administration → System (see [upgrade.md](upgrade.md#from-the-web-interface)) |
 | `SENTINEL_BACKUP_PASSPHRASE` | Backup encryption passphrase, at least 12 characters (empty: unencrypted) |
 | `SENTINEL_ADMIN_USER`, `SENTINEL_ADMIN_NAME`, `SENTINEL_ADMIN_EMAIL` | First admin; without a terminal a random password is printed once |
 | `SENTINEL_BRANCH` | Branch to install and update from (default `main`; `install-dev.sh` defaults to `develop`) |
@@ -177,7 +178,7 @@ The one-line install follows the branch, not a signed release. For signed releas
    sudo ./install/install.sh --domain sentinel.msp.example --tls proxy --proxy-ip 192.0.2.10
    ```
 
-   Other options: `--no-firewall`, `--no-fail2ban`, `--no-auto-updates`. For encrypted backups, set
+   Other options: `--no-firewall`, `--no-fail2ban`, `--no-auto-updates`, `--no-web-update`. For encrypted backups, set
    `SENTINEL_BACKUP_PASSPHRASE` in the environment (`sudo -E`). `./install/install.sh --help` lists them all.
 
 4. The installer asks for the first admin's user name, name, email and password. Then open
@@ -200,6 +201,7 @@ The one-line install follows the branch, not a signed release. For signed releas
 | Cron jobs: worker every minute, feeds daily, discovery weekly, backup daily | `/etc/cron.d/msp-sentinel` |
 | Logs (rotated weekly) | `/var/log/msp-sentinel/` |
 | Daily backups (keep 14; encrypted if a passphrase was set) | `/var/backups/msp-sentinel/`, settings in `/etc/msp-sentinel/backup.env` |
+| Update now from the web interface (one-line installs; unless turned off) | `msp-sentinel-web-update.path`, `/usr/local/sbin/msp-sentinel-update-runner`, `/var/lib/msp-sentinel-update/` |
 | Firewall, fail2ban, automatic security updates (unless turned off) | `ufw`, `/etc/fail2ban/jail.d/msp-sentinel.local`, `/etc/apt/apt.conf.d/20auto-upgrades` |
 
 Re-running the installer with the same version is safe: it keeps the config, database and app key and re-applies

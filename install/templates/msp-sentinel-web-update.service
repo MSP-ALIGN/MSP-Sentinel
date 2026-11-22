@@ -1,0 +1,12 @@
+# MSP Sentinel: runs one update requested from the web interface (see msp-sentinel-update-runner).
+[Unit]
+Description=MSP Sentinel update requested from the web interface
+After=network-online.target mariadb.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/msp-sentinel-update-runner
+TimeoutStartSec=3h
+# Not killed when the PHP-FPM or Nginx it reloads restart.
+KillMode=process

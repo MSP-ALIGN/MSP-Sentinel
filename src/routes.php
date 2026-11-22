@@ -147,6 +147,7 @@ $router->add('GET', '/admin/system', [SystemController::class, 'index'], $admin)
 $router->add('POST', '/admin/system/retention', [SystemController::class, 'retention'], $admin);
 $router->add('POST', '/admin/system/updates', [SystemController::class, 'updates'], $admin);
 $router->add('POST', '/admin/system/demo', [SystemController::class, 'demo'], $admin);
+$router->add('POST', '/admin/system/update', [SystemController::class, 'update'], $admin);
 $router->add('GET', '/admin/api', [ApiAdminController::class, 'index'], $admin);
 $router->add('POST', '/admin/api/tokens', [ApiAdminController::class, 'create'], $admin);
 $router->add('POST', '/admin/api/tokens/{id}/revoke', [ApiAdminController::class, 'revoke'], $admin);

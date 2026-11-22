@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.11.0](https://img.shields.io/badge/version-1.11.0-ff5a1f?style=flat-square)
+![Version 1.12.0](https://img.shields.io/badge/version-1.12.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -105,7 +105,7 @@ A guided install walks you through seven steps and shows a summary before it cha
 7. First admin
 
 It then sets up Nginx, PHP-FPM 8.4, MariaDB, the database, a fresh app key, cron jobs, HTTPS and log rotation. Upgrade later with
-`sudo msp-sentinel-update`. The step-by-step guide, unattended installs and signed release archives: see [docs/install.md](docs/install.md).
+`sudo msp-sentinel-update`, or with **Update now** under Administration → System. The step-by-step guide, unattended installs and signed release archives: see [docs/install.md](docs/install.md).
 
 A development server that follows the `develop` branch, to try changes before production (marked
 **Development build** in the web interface):
@@ -149,6 +149,18 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
 
 ## What's new
 
+### 1.12.0 (2026-11-22): update from the web interface
+
+- **Update now** under **Administration → System**, on development and production servers installed with the
+  one-line command. It asks for your password and a 2FA code, then runs the same `msp-sentinel-update` as on the
+  server (backup first, fetch, database changes, health check) and shows its progress and output.
+- The web app still runs without privileges: it only leaves an empty request file, and a small root-owned systemd
+  service on the server runs the fixed update command. Admin-only, rate-limited and audited. Turn it off on the
+  server with one command (see [docs/upgrade.md](docs/upgrade.md#from-the-web-interface)).
+- **Update available** notice: servers that follow a branch see how many new commits it has since their install
+  (part of the daily update check, or **Check now**).
+- Existing servers get both with their next `sudo msp-sentinel-update`.
+
 ### 1.11.0 (2026-11-22): demo data
 
 - **Demo data** for trying Sentinel out, testing or training: four made-up clients with findings of every kind
@@ -160,6 +172,9 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
   badge, and every scan path refuses them: scheduled and manual scans, verify fix, discovery, agent jobs, inventory
   sync and vulnerability look-ups. Removing demo data deletes only demo clients and what belongs to them.
 
+<details>
+<summary><b>Earlier releases (1.10.0 to 1.0.0)</b></summary>
+
 ### 1.10.0 (2026-11-22): development servers
 
 - **One-line install for a development server** that follows the `develop` branch, so changes can be tried before
@@ -169,9 +184,6 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
 - Development servers show a **Development build** badge on every page. Administration → System shows the branch
   and commit of every install made with the one-line installer.
 - See "Development server" in [docs/install.md](docs/install.md).
-
-<details>
-<summary><b>Earlier releases (1.9.0 to 1.0.0)</b></summary>
 
 ### 1.9.0 (2026-11-22): guided install
 

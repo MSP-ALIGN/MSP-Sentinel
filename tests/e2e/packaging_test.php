@@ -148,6 +148,48 @@ return [
         Assert::contains('fastcgi_param HTTP_AUTHORIZATION', (string) file_get_contents($root . '/install/templates/nginx.conf'));
         Assert::notContains(' root ', (string) preg_replace('/^#.*$/m', '', (string) file_get_contents($root . '/install/templates/cron')), 'no cron job runs as root');
     },
+    'web update runner: removes the request without reading it, runs the fixed command, reports progress' => function (TestContext $ctx): void {
+        $root = dirname(__DIR__, 2);
+        $dir = sys_get_temp_dir() . '/sentinel-runner-' . bin2hex(random_bytes(4));
+        mkdir($dir . '/state', 0750, true);
+        mkdir($dir . '/storage');
+        // The template with its fixed paths pointed into the sandbox (and no "sentinel" group needed).
+        $script = strtr((string) file_get_contents($root . '/install/templates/msp-sentinel-update-runner'), [
+            'STATE=/var/lib/msp-sentinel-update' => 'STATE=' . $dir . '/state', '__ROOT__' => $dir, '/usr/local/sbin/msp-sentinel-update' => $dir . '/fake-update',
+            'chgrp sentinel' => 'true']);
+        file_put_contents($dir . '/runner', $script);
+        $run = static function () use ($dir): void {
+            exec('bash ' . escapeshellarg($dir . '/runner') . ' 2>&1', $o, $c);
+        };
+        $status = static fn (): array => json_decode((string) @file_get_contents($dir . '/state/status.json'), true) ?: [];
+        file_put_contents($dir . '/fake-update', "#!/bin/sh\necho \"updating \$*\"\nexit 0\n");
+        chmod($dir . '/fake-update', 0755);
+
+        // Turned off (no "enabled" marker): the request is removed and nothing runs.
+        touch($dir . '/storage/update-request');
+        $run();
+        Assert::true(!file_exists($dir . '/storage/update-request') && $status() === [], 'off: nothing runs');
+
+        // A request that is a symlink to a file root must not touch: only the link is removed.
+        touch($dir . '/state/enabled');
+        file_put_contents($dir . '/precious', 'keep me');
+        symlink($dir . '/precious', $dir . '/storage/update-request');
+        $run();
+        Assert::same('keep me', file_get_contents($dir . '/precious'), 'symlink target untouched');
+        Assert::true(!is_link($dir . '/storage/update-request'), 'link removed');
+        Assert::same(['done', 0], [$status()['state'] ?? '', $status()['exit'] ?? -1]);
+        Assert::contains('updating', (string) file_get_contents($dir . '/state/update.log'), 'output logged');
+        Assert::notContains('keep me', (string) file_get_contents($dir . '/state/update.log'), 'the request is never read');
+
+        // A failing update is reported with its exit code.
+        file_put_contents($dir . '/fake-update', "#!/bin/sh\necho boom\nexit 3\n");
+        $run();
+        Assert::same(['failed', 3], [$status()['state'] ?? '', $status()['exit'] ?? -1]);
+        // The units point at the runner and the request file.
+        Assert::contains('PathExists=__ROOT__/storage/update-request', (string) file_get_contents($root . '/install/templates/msp-sentinel-web-update.path'));
+        Assert::contains('ExecStart=/usr/local/sbin/msp-sentinel-update-runner', (string) file_get_contents($root . '/install/templates/msp-sentinel-web-update.service'));
+        exec('rm -rf ' . escapeshellarg($dir));
+    },
     'setup-config writes a valid private config and never overwrites one' => function (TestContext $ctx): void {
         $root = dirname(__DIR__, 2);
         $path = sys_get_temp_dir() . '/sentinel-setup-' . bin2hex(random_bytes(4)) . '.php';

@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# MSP Sentinel: runs "Update now" requests from the web interface. Started by msp-sentinel-web-update.path when
+# the web app creates __ROOT__/storage/update-request. Installed by the one-line installer; see docs/upgrade.md.
+#
+# Security notes:
+# - The request file is never read: it only signals "update". It is removed first (removing a symlink is harmless),
+#   and the same fixed command always runs: /usr/local/sbin/msp-sentinel-update (backup, fetch, migrate, check).
+# - Progress goes to /var/lib/msp-sentinel-update (root:sentinel 0750), which the web app can read but not write,
+#   so nothing the web app controls can redirect what root writes.
+# - One update at a time (flock); the web app re-checks the admin's password and a 2FA code before requesting.
+set -uo pipefail
+umask 027
+STATE=/var/lib/msp-sentinel-update
+REQUEST=__ROOT__/storage/update-request
+
+rm -f -- "$REQUEST"
+[ -f "$STATE/enabled" ] || exit 0   # turned off by the administrator
+exec 9>"$STATE/lock"
+flock -n 9 || exit 0                # already running
+
+started="$(date -u '+%Y-%m-%d %H:%M:%S')"
+status() {  # status STATE FINISHED EXIT
+  printf '{"state":"%s","started":"%s","finished":"%s","exit":%d}\n' "$1" "$started" "$2" "$3" > "$STATE/status.json.tmp"
+  chgrp sentinel "$STATE/status.json.tmp" && chmod 0640 "$STATE/status.json.tmp" && mv -f "$STATE/status.json.tmp" "$STATE/status.json"
+}
+: > "$STATE/update.log"
+chgrp sentinel "$STATE/update.log"
+chmod 0640 "$STATE/update.log"
+status running "" 0
+echo "Update requested from the web interface; started $started UTC." >> "$STATE/update.log"
+if [ ! -x /usr/local/sbin/msp-sentinel-update ]; then
+  echo "msp-sentinel-update is not installed: this server was not set up with the one-line installer." >> "$STATE/update.log"
+  status failed "$(date -u '+%Y-%m-%d %H:%M:%S')" 127
+  exit 0
+fi
+/usr/local/sbin/msp-sentinel-update >> "$STATE/update.log" 2>&1
+rc=$?
+status "$( [ "$rc" -eq 0 ] && echo done || echo failed )" "$(date -u '+%Y-%m-%d %H:%M:%S')" "$rc"
+exit 0

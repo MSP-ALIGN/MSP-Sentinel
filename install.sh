@@ -20,7 +20,8 @@
 #    SENTINEL_TLS          letsencrypt (public DNS + port 80 open), selfsigned (default) or proxy
 #    SENTINEL_LE_EMAIL     Let's Encrypt expiry notices (letsencrypt only)
 #    SENTINEL_PROXY_IP     the reverse proxy's IP address (proxy only)
-#    SENTINEL_FIREWALL / SENTINEL_FAIL2BAN / SENTINEL_AUTO_UPDATES   1 (default) or 0
+#    SENTINEL_FIREWALL / SENTINEL_FAIL2BAN / SENTINEL_AUTO_UPDATES   y (default) or n
+#    SENTINEL_WEB_UPDATE   y (default) or n: "Update now" in Administration > System
 #    SENTINEL_BACKUP_PASSPHRASE   encrypt nightly backups (at least 12 characters; empty: unencrypted)
 #    SENTINEL_ADMIN_USER / SENTINEL_ADMIN_NAME / SENTINEL_ADMIN_EMAIL   first admin (password printed once)
 #    SENTINEL_REPO         owner/name (default MSP-ALIGN/MSP-Sentinel)
@@ -104,7 +105,7 @@ else
   # Build stamp (copied into the app): the web interface shows the branch and commit, and marks non-main
   # installs as development builds so nobody mistakes a test server for production.
   if [ "$DRY" = 1 ]; then echo "  [dry-run] write $SRC_DIR/BUILD (branch $BRANCH)"
-  else printf 'branch=%s\ncommit=%s\n' "$BRANCH" "$(git -C "$SRC_DIR" rev-parse HEAD)" > "$SRC_DIR/BUILD"; fi
+  else printf 'branch=%s\ncommit=%s\nrepo=%s\n' "$BRANCH" "$(git -C "$SRC_DIR" rev-parse HEAD)" "$REPO" > "$SRC_DIR/BUILD"; fi
 fi
 if [ "$BRANCH" != main ]; then
   printf '%sDevelopment build:%s branch %s gets changes before they are released. Use it for a test server, not for client work.\n' "$c_err" "$c_0" "$BRANCH"
@@ -126,7 +127,7 @@ set -Eeuo pipefail
 [[ "$SENTINEL_BRANCH" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]{0,59}$ && "$SENTINEL_BRANCH" != *..* ]] || { echo "Bad branch in update.env" >&2; exit 1; }
 git -C /opt/msp-sentinel-src fetch --depth 1 origin "$SENTINEL_BRANCH"
 git -C /opt/msp-sentinel-src reset --hard FETCH_HEAD
-printf 'branch=%s\ncommit=%s\n' "$SENTINEL_BRANCH" "$(git -C /opt/msp-sentinel-src rev-parse HEAD)" > /opt/msp-sentinel-src/BUILD
+printf 'branch=%s\ncommit=%s\nrepo=%s\n' "$SENTINEL_BRANCH" "$(git -C /opt/msp-sentinel-src rev-parse HEAD)" "$SENTINEL_REPO" > /opt/msp-sentinel-src/BUILD
 exec bash /opt/msp-sentinel-src/install/install.sh --upgrade
 UPD
   chmod 0755 /usr/local/sbin/msp-sentinel-update
@@ -262,6 +263,7 @@ args=(--domain "$SENTINEL_DOMAIN" --tls "$SENTINEL_TLS")
 [ "$SENTINEL_FIREWALL" = 1 ] || args+=(--no-firewall)
 [ "$SENTINEL_FAIL2BAN" = 1 ] || args+=(--no-fail2ban)
 [ "$SENTINEL_AUTO_UPDATES" = 1 ] || args+=(--no-auto-updates)
+case "${SENTINEL_WEB_UPDATE:-y}" in n|N|no|NO|0) args+=(--no-web-update) ;; esac
 [ "$DRY" = 1 ] && args+=(--dry-run)
 [ "${SENTINEL_FORCE:-0}" = 1 ] && args+=(--skip-os-check)
 # The admin details and the backup passphrase travel in the environment, never on a command line.

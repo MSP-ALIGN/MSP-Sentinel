@@ -61,6 +61,14 @@ if ($path === '/releases/latest') {
     echo json_encode(['tag_name' => 'v9.9.9', 'prerelease' => false, 'draft' => false, 'html_url' => 'javascript:alert(1)']);
     exit;
 }
+if (preg_match('#^/compare/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/([0-9a-f]{40})\.\.\.([A-Za-z0-9._%-]+)$#', $path, $m) === 1) {
+    // Fake GitHub compare API: the branch is 3 commits ahead of any installed commit, except one marked current.
+    header('Content-Type: application/json');
+    $current = $m[2] === str_repeat('c', 40);
+    echo json_encode(['status' => $current ? 'identical' : 'ahead', 'ahead_by' => $current ? 0 : 3, 'behind_by' => 0,
+        'commits' => $current ? [] : [['sha' => str_repeat('1', 40)], ['sha' => str_repeat('2', 40)], ['sha' => 'abcdef0123456789abcdef0123456789abcdef01', 'html_url' => 'javascript:alert(1)']]]);
+    exit;
+}
 if ($path === '/releases/pre') {
     header('Content-Type: application/json');
     echo json_encode(['tag_name' => 'v10.0.0', 'prerelease' => true]);

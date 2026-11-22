@@ -1,0 +1,11 @@
+# MSP Sentinel: "Update now" from the web interface starts msp-sentinel-web-update.service.
+# Turn it off: systemctl disable --now msp-sentinel-web-update.path && rm -f /var/lib/msp-sentinel-update/enabled
+[Unit]
+Description=MSP Sentinel update requests from the web interface
+
+[Path]
+PathExists=__ROOT__/storage/update-request
+Unit=msp-sentinel-web-update.service
+
+[Install]
+WantedBy=multi-user.target

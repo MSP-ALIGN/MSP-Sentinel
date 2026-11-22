@@ -1,7 +1,8 @@
 <?php
 /**
  * System page (admins): health checks, version/updates, data retention.
- * Expects: $checks, $demoLoaded (bool), $version, $build (null or branch/commit/development), $newer, $updateEnabled, $checkedAt, $retention, $retentionLast, $sourceUrl.
+ * Expects: $checks, $demoLoaded (bool), $version, $build (null or branch/commit/development), $branchStatus (null or branch/behind/head),
+ *          $webUpdate (available, pending, status, log), $newer, $updateEnabled, $checkedAt, $retention, $retentionLast, $sourceUrl.
  * Every value is escaped. Status is shown with an icon and a word, not colour alone.
  */
 use Sentinel\Core\Csrf;
@@ -33,12 +34,52 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
     <div class="card-body small">
         <p class="mb-2"><?= e(__('Installed: {v}', ['v' => $version])) ?><?php if ($build !== null): ?> · <?= e(__('branch {b}, commit {c}', ['b' => $build['branch'], 'c' => $build['commit']])) ?><?php endif; ?></p>
         <?php if ($build !== null && $build['development']): ?>
-        <div class="alert alert-warning py-2"><?= e(__('Development build: this server follows the {b} branch, so it gets changes before they are released. Use it to test, not for client work. sudo msp-sentinel-update fetches the newest {b}.', ['b' => $build['branch']])) ?></div>
+        <div class="alert alert-warning py-2"><?= e(__('Development build: this server follows the {b} branch, so it gets changes before they are released. Use it to test, not for client work. Update now (below) or sudo msp-sentinel-update fetches the newest {b}.', ['b' => $build['branch']])) ?></div>
         <?php endif; ?>
         <?php if ($newer !== null): ?>
         <div class="alert alert-info py-2"><?= e(__('Version {v} is available.', ['v' => $newer])) ?> <a href="<?= e(rtrim($sourceUrl, '/') . '/releases') ?>" rel="noopener noreferrer" target="_blank"><?= e(__('Release notes')) ?></a></div>
         <?php endif; ?>
-        <p class="text-body-secondary"><?= e($updateEnabled ? __('Once a day the worker asks the releases feed for the latest version. Nothing else is sent. Last check: {t}', ['t' => $checkedAt !== '' ? $checkedAt . ' UTC' : __('not yet')]) : __('The update check is off.')) ?></p>
+        <?php if ($branchStatus !== null): ?>
+        <?php if ($branchStatus['behind'] > 0): ?>
+        <div class="alert alert-info py-2"><i class="bi bi-arrow-up-circle me-1" aria-hidden="true"></i><?= e(__('Update available: the {b} branch has {n} new commit(s) since this install (newest {h}).', ['b' => $branchStatus['branch'], 'n' => $branchStatus['behind'], 'h' => $branchStatus['head'] !== '' ? $branchStatus['head'] : '?'])) ?></div>
+        <?php else: ?>
+        <p class="mb-2"><i class="bi bi-check-circle text-success me-1" aria-hidden="true"></i><?= e(__('Up to date with the {b} branch.', ['b' => $branchStatus['branch']])) ?></p>
+        <?php endif; ?>
+        <?php endif; ?>
+        <?php $wu = $webUpdate; $st = $wu['status']; ?>
+        <div class="border rounded p-2 mb-3" id="update-now">
+            <h3 class="h6"><?= e(__('Update now')) ?></h3>
+            <?php if (!$wu['available']): ?>
+            <p class="mb-0 text-body-secondary"><?= e($build !== null
+                ? __('Updating from the web interface is turned off on this server. Run sudo msp-sentinel-update on the server.')
+                : __('This server was installed from a release download, so it is updated on the server: see docs/upgrade.md.')) ?></p>
+            <?php else: ?>
+            <?php if ($wu['pending']): ?>
+            <p class="mb-2"><span class="badge text-bg-info"><?= e(__('Waiting')) ?></span> <?= e(__('The update was requested and starts within a few seconds.')) ?></p>
+            <?php elseif ($st['state'] === 'running' && !$st['stale']): ?>
+            <p class="mb-2"><span class="badge text-bg-warning"><i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i><?= e(__('Running')) ?></span> <?= e(__('Started {t} UTC. Sentinel may be unavailable for a minute while it restarts; refresh this page to follow it.', ['t' => $st['started']])) ?></p>
+            <?php elseif ($st['state'] === 'done'): ?>
+            <p class="mb-2"><span class="badge text-bg-success"><i class="bi bi-check-circle me-1" aria-hidden="true"></i><?= e(__('Done')) ?></span> <?= e(__('Last update finished {t} UTC.', ['t' => $st['finished']])) ?></p>
+            <?php elseif ($st['state'] === 'failed' || $st['stale']): ?>
+            <p class="mb-2"><span class="badge text-bg-danger"><i class="bi bi-x-octagon me-1" aria-hidden="true"></i><?= e(__('Failed')) ?></span> <?= e($st['stale'] ? __('The last update started {t} UTC and never finished (the server may have restarted).', ['t' => $st['started']]) : __('The last update stopped with an error at {t} UTC (exit code {c}). Sentinel kept running the previous version; see the output below.', ['t' => $st['finished'], 'c' => $st['exit']])) ?></p>
+            <?php endif; ?>
+            <?php if ($wu['log'] !== ''): ?>
+            <details class="mb-2"<?= $st['state'] === 'failed' || ($st['state'] === 'running' && !$st['stale']) ? ' open' : '' ?>><summary><?= e(__('Output of the last update')) ?></summary><pre class="small mb-0 mt-1 update-log"><?= e($wu['log']) ?></pre></details>
+            <?php endif; ?>
+            <?php if (!$wu['pending'] && !($st['state'] === 'running' && !$st['stale'])): ?>
+            <p class="text-body-secondary mb-2"><?= e($build !== null
+                ? __('Fetches the newest {b} branch, backs up first, applies database changes and checks health. Same as sudo msp-sentinel-update on the server.', ['b' => $build['branch']])
+                : __('Backs up first, applies database changes and checks health.')) ?></p>
+            <form method="post" action="<?= e(url('/admin/system/update')) ?>" class="row g-2 align-items-end" autocomplete="off" data-confirm="<?= e(__('Update Sentinel now? It backs up first and may be unavailable for a minute.')) ?>">
+                <?= Csrf::field() ?>
+                <div class="col-sm-5"><label class="form-label mb-0" for="upd-password"><?= e(__('Your password')) ?></label><input class="form-control form-control-sm" type="password" id="upd-password" name="password" required autocomplete="current-password"></div>
+                <div class="col-sm-3"><label class="form-label mb-0" for="upd-code"><?= e(__('2FA code')) ?></label><input class="form-control form-control-sm" id="upd-code" name="code" inputmode="numeric" pattern="[0-9 ]{6,7}" required autocomplete="one-time-code"></div>
+                <div class="col-sm-4"><button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-cloud-arrow-down me-1" aria-hidden="true"></i><?= e(__('Update now')) ?></button></div>
+            </form>
+            <?php endif; ?>
+            <?php endif; ?>
+        </div>
+        <p class="text-body-secondary"><?= e($updateEnabled ? __('Once a day the worker asks GitHub for the latest release (and, for installs that follow a branch, how many commits the branch has moved on). Nothing else is sent. Last check: {t}', ['t' => $checkedAt !== '' ? $checkedAt . ' UTC' : __('not yet')]) : __('The update check is off.')) ?></p>
         <form method="post" action="<?= e(url('/admin/system/updates')) ?>" class="mb-2">
             <?= Csrf::field() ?>
             <div class="form-check"><input class="form-check-input" type="checkbox" id="update_check_enabled" name="update_check_enabled" value="1" <?= $updateEnabled ? 'checked' : '' ?>>

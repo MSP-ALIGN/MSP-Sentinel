@@ -7,7 +7,7 @@
 #   sudo ./install/install.sh --domain sentinel.msp.example [--tls letsencrypt --email admin@msp.example]
 #   sudo ./install/install.sh --domain sentinel.msp.example --tls proxy --proxy-ip 192.0.2.10
 #   Options: --tls letsencrypt|selfsigned|proxy (default selfsigned; --certbot is the same as --tls letsencrypt),
-#   --proxy-ip IP, --no-firewall, --no-fail2ban, --no-auto-updates. A backup passphrase can be given in the
+#   --proxy-ip IP, --no-firewall, --no-fail2ban, --no-auto-updates, --no-web-update. A backup passphrase can be given in the
 #   environment variable SENTINEL_BACKUP_PASSPHRASE (never on the command line).
 # Upgrade (from the NEW release folder):
 #   sudo ./install/install.sh --upgrade
@@ -50,6 +50,7 @@ certbot=0
 tls=selfsigned
 proxy_ip=""
 firewall=1
+web_update=1
 fail2ban=1
 auto_updates=1
 dry=0
@@ -67,6 +68,7 @@ while [ $# -gt 0 ]; do
     --no-firewall) firewall=0; shift ;;
     --no-fail2ban) fail2ban=0; shift ;;
     --no-auto-updates) auto_updates=0; shift ;;
+    --no-web-update) web_update=0; shift ;;
     --upgrade) mode=upgrade; shift ;;
     --dry-run) dry=1; shift ;;
     --skip-os-check) skip_os=1; shift ;;
@@ -91,6 +93,30 @@ write_service_files() {
   render php-fpm-pool.conf | write_file "/etc/php/${PHPV}/fpm/pool.d/msp-sentinel.conf" 0644
   render cron | write_file /etc/cron.d/msp-sentinel 0644
   render logrotate | write_file /etc/logrotate.d/msp-sentinel 0644
+  write_web_update
+}
+# "Update now" in the web interface: a root-owned runner started by a systemd path unit when the web app creates
+# storage/update-request (see src/System/WebUpdate.php). Only for installs made with the one-line installer
+# (they have msp-sentinel-update). An administrator who turned it off keeps it off across upgrades.
+write_web_update() {
+  local state=/var/lib/msp-sentinel-update
+  [ -f /etc/msp-sentinel/update.env ] || [ "$dry" -eq 1 ] || return 0
+  if [ "$web_update" -eq 0 ]; then
+    run rm -f "$state/enabled"
+    if [ "$dry" -eq 1 ]; then echo "  [dry-run] systemctl disable --now msp-sentinel-web-update.path"; else systemctl disable --now msp-sentinel-web-update.path >/dev/null 2>&1 || true; fi
+    return 0
+  fi
+  if [ "$mode" = upgrade ] && [ -d "$state" ] && [ ! -f "$state/enabled" ]; then
+    echo "  Updating from the web interface stays off on this server (it was turned off)."
+    return 0
+  fi
+  run install -d -o root -g sentinel -m 0750 "$state"
+  render msp-sentinel-update-runner | write_file /usr/local/sbin/msp-sentinel-update-runner 0755
+  render msp-sentinel-web-update.path | write_file /etc/systemd/system/msp-sentinel-web-update.path 0644
+  render msp-sentinel-web-update.service | write_file /etc/systemd/system/msp-sentinel-web-update.service 0644
+  run install -m 0644 /dev/null "$state/enabled"
+  run systemctl daemon-reload
+  run systemctl enable --now msp-sentinel-web-update.path
 }
 die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 # valid_ip ADDR: one IPv4 address (each part 0-255) or an IPv6 address (hex groups and colons only).
@@ -107,6 +133,15 @@ valid_ip() {
   local IFS=:
   for g in $a; do [ -z "$g" ] && continue; [ "${#g}" -le 4 ] || return 1; n=$((n + 1)); done
   if [[ "$a" == *::* ]]; then [ "$n" -le 7 ]; else [ "$n" -eq 8 ] && [[ "$a" != :* && "$a" != *: ]]; fi
+}
+# Older msp-sentinel-update commands wrote the build stamp without the repository: add it from update.env
+# (checked as owner/name) so the web interface can tell how far behind its branch this server is.
+stamp_repo() {
+  [ "$dry" -eq 0 ] && [ -f "$SRC/BUILD" ] && [ -f /etc/msp-sentinel/update.env ] || return 0
+  grep -q '^repo=' "$SRC/BUILD" && return 0
+  local r; r="$(sed -n 's/^SENTINEL_REPO=\([A-Za-z0-9_.-]*\/[A-Za-z0-9_.-]*\)$/\1/p' /etc/msp-sentinel/update.env | head -1)"
+  [ -n "$r" ] && printf 'repo=%s\n' "$r" >> "$SRC/BUILD"
+  return 0
 }
 # Run a command, or only show it in a dry run.
 run() {
@@ -165,6 +200,7 @@ if [ "$mode" = upgrade ]; then
   run install -d -o sentinel -g sentinel -m 0700 /var/backups/msp-sentinel
   run runuser -u sentinel -- sh -c '[ -f /etc/msp-sentinel/backup.env ] && . /etc/msp-sentinel/backup.env; exec "$0" "$1"/bin/backup.php --dir=/var/backups/msp-sentinel --keep=14 ${SENTINEL_BACKUP_ENCRYPT:+--encrypt}' "$PHP_BIN" "$APP_DIR"
   say "Replacing the code (config and storage are kept)"
+stamp_repo
   run rsync -a --delete --exclude '/config/config.php*' --exclude /storage/ --exclude /dist/ "$SRC/" "$APP_DIR/"
   fix_permissions
   say "Database migrations"
@@ -227,6 +263,7 @@ if ! id sentinel >/dev/null 2>&1; then
   run useradd --system --home-dir "$APP_DIR" --no-create-home --shell /usr/sbin/nologin sentinel
 fi
 run install -d -o root -g sentinel -m 0750 "$APP_DIR"
+stamp_repo
 run rsync -a --exclude '/config/config.php*' --exclude /storage/ --exclude /dist/ "$SRC/" "$APP_DIR/"
 # A release archive has no BUILD stamp: drop one left by an earlier git-based install, so the
 # interface never shows a stale branch (or a development badge) for this code.

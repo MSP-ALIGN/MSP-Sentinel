@@ -207,7 +207,9 @@ try {
     $cfg['nvd'] = ['base_url' => "http://127.0.0.1:{$feedsPort}", 'api_key' => 'test-' . bin2hex(random_bytes(12)), 'delay' => 0];
     $cfg['kev'] = ['url' => "http://127.0.0.1:{$feedsPort}/kev.json"];
     $cfg['epss'] = ['base_url' => "http://127.0.0.1:{$feedsPort}"];
-    $cfg['updates'] = ['url' => "http://127.0.0.1:{$feedsPort}/releases/latest"]; // never the real releases feed in tests
+    $cfg['updates'] = ['url' => "http://127.0.0.1:{$feedsPort}/releases/latest", // never the real releases feed in tests
+                       'compare_url' => "http://127.0.0.1:{$feedsPort}/compare/{repo}/{base}...{head}"];
+    $cfg['web_update'] = ['state_dir' => $outDir . '/web-update']; // never /var/lib in tests
     $cfg['app']['public_url'] = 'https://sentinel.example';
 
     // Fake mail servers on 127.0.0.1: plain (local relay style) and STARTTLS with a test certificate for "localhost".

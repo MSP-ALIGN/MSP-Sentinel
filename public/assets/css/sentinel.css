@@ -12,3 +12,6 @@
 .notification-count { position: absolute; top: .2rem; right: -.1rem; font-size: .65rem; }
 .notification-unread { background: var(--bs-primary-bg-subtle); }
 .branding-logo { max-height: 48px; max-width: 200px; background: #fff; border: 1px solid var(--bs-border-color); padding: 2px; }
+
+/* System page: output of the last update (scrolls instead of growing the page). */
+.update-log { max-height: 20rem; overflow: auto; white-space: pre-wrap; }

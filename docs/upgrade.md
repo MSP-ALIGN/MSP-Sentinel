@@ -13,6 +13,38 @@ sudo msp-sentinel-update
 
 It fetches the branch the server follows (see `/etc/msp-sentinel/update.env`) and runs the upgrade below.
 
+### From the web interface
+
+On servers installed with the one-line command, admins can also click **Update now** under
+**Administration → System → Version and updates**. It asks for your password and a 2FA code, then runs exactly the
+same `msp-sentinel-update` on the server: backup first, fetch the branch, database changes, health check. Sentinel
+may be unavailable for a minute while it restarts. Refresh the page to see the progress and the output.
+
+How it works, and why it is safe:
+- The web app runs without privileges and cannot update itself. It only creates an empty file,
+  `/opt/msp-sentinel/storage/update-request`.
+- A systemd path unit (`msp-sentinel-web-update.path`) notices the file and starts
+  `/usr/local/sbin/msp-sentinel-update-runner` as root. The runner deletes the file without reading it, and always
+  runs the same fixed command. Nothing typed in the browser reaches it.
+- Progress is written to `/var/lib/msp-sentinel-update/` (`status.json`, `update.log`), which the web app can read but
+  not change.
+- Only admins can ask, only with their password and a fresh 2FA code, at most 5 tries per 15 minutes, and every
+  request (and every refusal) is in the audit log.
+
+Servers installed before 1.12.0 get it with their next `sudo msp-sentinel-update`. Servers installed from a release
+download (below) don't have it: update those on the server.
+
+To turn it off on a server (it stays off across upgrades):
+
+```sh
+sudo systemctl disable --now msp-sentinel-web-update.path
+sudo rm -f /var/lib/msp-sentinel-update/enabled
+```
+
+To turn it back on, run the installer again from `/opt/msp-sentinel-src` after recreating the marker:
+`sudo install -m 0644 /dev/null /var/lib/msp-sentinel-update/enabled && sudo msp-sentinel-update`. Install without it
+from the start with `SENTINEL_WEB_UPDATE=n` (one-line install) or `--no-web-update` (installer).
+
 ## With the installer
 
 1. Download and verify the new release (see [install.md](install.md), step 1) and unpack it.
@@ -66,3 +98,7 @@ The restore puts the database back as it was before the upgrade's migrations. Se
 
 Once a day the worker asks the releases feed for the latest version (nothing else is sent). Admins see newer
 versions under **Administration → System** and in the health check. Turn the check off there if you prefer.
+
+Servers installed with the one-line command also know the branch and commit they run. The same daily check asks
+GitHub how many commits that branch has moved on since, so a development server following `develop` (or production
+following `main`) shows **Update available: the develop branch has N new commit(s)**. **Check now** asks straight away.

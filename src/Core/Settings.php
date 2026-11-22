@@ -60,6 +60,11 @@ final class Settings
         'worker_last_tick' => '',
         'update_latest_version' => '',
         'update_checked_at' => '',
+        // Git-based installs: commits the followed branch is ahead of the installed commit, its newest commit, and
+        // the installed commit the answer is for (so an answer for an older commit is never shown after updating).
+        'update_branch_behind' => '',
+        'update_branch_head' => '',
+        'update_branch_base' => '',
         'retention_last_run' => '',
         // Fix workflow: days to fix by severity (known-exploited first), and the last daily reminder run (Y-m-d, UTC).
         'due_days_kev' => '7',

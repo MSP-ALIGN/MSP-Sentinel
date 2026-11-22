@@ -71,7 +71,7 @@ final class App
     private static ?Audit $audit = null;
     private static ?Crypto $crypto = null;
     private static ?string $version = null;
-    /** @var array{branch:string,commit:string}|false|null */
+    /** @var array{branch:string,commit:string,sha:string,repo:string}|false|null */
     private static array|false|null $build = null;
 
     /** Load configuration (and nothing else). Safe for CLI tools. */
@@ -264,10 +264,17 @@ final class App
     /** Daily update check (config updates.url). */
     public static function updates(): UpdateChecker
     {
-        return new UpdateChecker(self::settings(), (string) self::config()->get('updates.url', UpdateChecker::DEFAULT_URL), self::version(), self::webhookTestMode());
+        return new UpdateChecker(self::settings(), (string) self::config()->get('updates.url', UpdateChecker::DEFAULT_URL), self::version(), self::webhookTestMode(),
+            self::build(), (string) self::config()->get('updates.compare_url', UpdateChecker::DEFAULT_COMPARE_URL));
     }
 
     /** Data retention (admin settings). */
+    /** "Update now" requests and the root-owned runner's status (see WebUpdate). */
+    public static function webUpdate(): \Sentinel\System\WebUpdate
+    {
+        return new \Sentinel\System\WebUpdate((string) self::config()->get('web_update.state_dir', '/var/lib/msp-sentinel-update'), SENTINEL_ROOT . '/storage/update-request');
+    }
+
     public static function retention(): Retention
     {
         return new Retention(self::db(), self::settings(), self::audit());
@@ -417,7 +424,7 @@ final class App
      * Untrusted: the file is root-owned, but it is still parsed strictly (branch-name and hex-commit patterns)
      * and anything else is ignored; views escape the values as always.
      *
-     * @return array{branch:string,commit:string,development:bool}|null
+     * @return array{branch:string,commit:string,sha:string,repo:string,development:bool}|null
      */
     public static function build(): ?array
     {
@@ -427,7 +434,8 @@ final class App
             if (is_string($raw)
                 && preg_match('/^branch=([A-Za-z0-9][A-Za-z0-9._\/-]{0,59})$/m', $raw, $b) === 1 && !str_contains($b[1], '..')
                 && preg_match('/^commit=([0-9a-f]{7,40})$/m', $raw, $c) === 1) {
-                self::$build = ['branch' => $b[1], 'commit' => substr($c[1], 0, 12)];
+                $repo = preg_match('/^repo=([A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100})$/m', $raw, $r) === 1 ? $r[1] : '';
+                self::$build = ['branch' => $b[1], 'commit' => substr($c[1], 0, 12), 'sha' => $c[1], 'repo' => $repo];
             }
         }
         return self::$build === false ? null : self::$build + ['development' => self::$build['branch'] !== 'main'];

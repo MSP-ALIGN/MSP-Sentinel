@@ -39,6 +39,14 @@ return [
     // Turn it off under Administration > System. Point it at your own mirror if you prefer.
     'updates' => [
         'url' => 'https://api.github.com/repos/msp-align/msp-sentinel/releases/latest',
+        // Installs made with the one-line installer: how many commits their branch is ahead (same daily check).
+        'compare_url' => 'https://api.github.com/repos/{repo}/compare/{base}...{head}',
+    ],
+
+    // "Update now" in Administration > System: where the root-owned update runner writes its progress.
+    // Set up by the one-line installer; see docs/upgrade.md to turn it off.
+    'web_update' => [
+        'state_dir' => '/var/lib/msp-sentinel-update',
     ],
 
     // Passive discovery (DNS lookups and certificate logs).

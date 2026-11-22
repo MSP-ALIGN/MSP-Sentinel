@@ -31,6 +31,8 @@ final class SystemController extends Controller
             'build' => App::build(),
             'demoLoaded' => (new \Sentinel\Demo\DemoData(App::db(), (int) $this->user()['id']))->isLoaded(),
             'newer' => App::updates()->newer(),
+            'branchStatus' => App::updates()->branchStatus(),
+            'webUpdate' => ['available' => App::webUpdate()->available(), 'pending' => App::webUpdate()->pending(), 'status' => App::webUpdate()->status(), 'log' => App::webUpdate()->log()],
             'updateEnabled' => $s->get('update_check_enabled') === '1',
             'checkedAt' => $s->get('update_checked_at'),
             'retention' => ['scans' => $s->get('retention_scans_months'), 'findings' => $s->get('retention_findings_months'), 'reports' => $s->get('retention_reports_months')],
@@ -66,6 +68,52 @@ final class SystemController extends Controller
             Session::flash('danger', __('The demo data could not be changed. The error is in the web server log.'));
         }
         return Response::redirect('/admin/system#demo');
+    }
+
+    /**
+     * POST /admin/system/update (admins; CSRF-checked like every POST): ask the server's update runner to run
+     * msp-sentinel-update. Re-checks the admin's password and a fresh 2FA code first, because this starts an
+     * upgrade as root on the server; at most 5 tries per 15 minutes per admin.
+     * Untrusted: "password" and "code" (only compared, never stored or logged).
+     */
+    public function update(Request $request): Response
+    {
+        $user = $this->user();
+        $id = (int) $user['id'];
+        $back = Response::redirect('/admin/system#updates');
+        $bucket = 'web_update:' . $id;
+        if (App::limiter()->tooMany($bucket, 5, 900)) {
+            Session::flash('danger', __('Too many attempts. Wait 15 minutes and try again.'));
+            return $back;
+        }
+        App::limiter()->hit($bucket);
+        $fresh = App::db()->prepare('SELECT password_hash, totp_secret_enc, totp_enabled_at, totp_last_step FROM users WHERE id = :id');
+        $fresh->execute(['id' => $id]);
+        $row = $fresh->fetch();
+        $code = preg_replace('/\s+/', '', $request->input('code')) ?? '';
+        $ok = $row !== false && \Sentinel\Auth\Passwords::verify($request->input('password'), (string) $row['password_hash']);
+        if ($ok) {
+            // 2FA is required for every admin; a code is single-use (the step is claimed like at sign-in).
+            $step = $row['totp_enabled_at'] !== null && preg_match('/^\d{6}$/', $code) === 1
+                ? \Sentinel\Auth\Totp::verify(App::crypto()->decrypt((string) $row['totp_secret_enc']), $code, $row['totp_last_step'] === null ? null : (int) $row['totp_last_step'])
+                : null;
+            $ok = $step !== null && App::users()->claimTotpStep($id, $step);
+        }
+        if (!$ok) {
+            $this->audit($request, 'system.update_denied', null, null, ['reason' => 'password or 2FA code incorrect']);
+            Session::flash('danger', __('The password or the two-factor code is not correct.'));
+            return $back;
+        }
+        App::limiter()->clear($bucket);
+        if (!App::webUpdate()->request()) {
+            Session::flash('warning', App::webUpdate()->available()
+                ? __('An update is already waiting or running.')
+                : __('Updating from the web interface is not set up on this server. Run sudo msp-sentinel-update on the server.'));
+            return $back;
+        }
+        $this->audit($request, 'system.update_requested', null, null, ['version' => App::version(), 'build' => App::build()['commit'] ?? null]);
+        Session::flash('success', __('Update requested. The server starts it within a few seconds: Sentinel backs up first, and may be unavailable for a minute while it restarts. Refresh this page to follow it.'));
+        return $back;
     }
 
     /** POST /admin/system/retention */

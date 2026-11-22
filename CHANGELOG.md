@@ -2,6 +2,18 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.12.0 (2026-11-22): update from the web interface
+
+- **Update now** under **Administration → System**, on development and production servers installed with the
+  one-line command. It asks for your password and a 2FA code, then runs the same `msp-sentinel-update` as on the
+  server (backup first, fetch, database changes, health check) and shows its progress and output.
+- The web app still runs without privileges: it only leaves an empty request file, and a small root-owned systemd
+  service on the server runs the fixed update command. Admin-only, rate-limited and audited. Turn it off on the
+  server with one command (see [docs/upgrade.md](docs/upgrade.md#from-the-web-interface)).
+- **Update available** notice: servers that follow a branch see how many new commits it has since their install
+  (part of the daily update check, or **Check now**).
+- Existing servers get both with their next `sudo msp-sentinel-update`.
+
 ### 1.11.0 (2026-11-22): demo data
 
 - **Demo data** for trying Sentinel out, testing or training: four made-up clients with findings of every kind
