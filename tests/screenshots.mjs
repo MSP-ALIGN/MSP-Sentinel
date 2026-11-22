@@ -175,6 +175,17 @@ await shot(page, '34-api');
 // System page (health, updates, retention) after one worker run, so the heartbeat shows.
 await page.goto(`${base}/admin/system`);
 await shot(page, '35-system');
+// Light theme (per-user choice on the profile), then back to the dark default.
+await page.goto(`${base}/profile`);
+await page.check('#theme-light');
+await page.click('#appearance button[type=submit]');
+await page.waitForURL(/\/profile/);
+await page.goto(clientUrl);
+await shot(page, '36-client-light');
+await page.goto(`${base}/profile`);
+await page.check('#theme-dark');
+await page.click('#appearance button[type=submit]');
+await page.waitForURL(/\/profile/);
 await page.goto(`${base}/clients`);
 await shot(page, '17-clients');
 await page.goto(`${base}/`);

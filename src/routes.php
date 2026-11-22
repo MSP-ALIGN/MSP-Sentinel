@@ -55,6 +55,7 @@ $router->add('GET', '/profile/password', [ProfileController::class, 'showPasswor
 $router->add('POST', '/profile/password', [ProfileController::class, 'changePassword'], $duringPasswordChange);
 $router->add('POST', '/profile/recovery-codes', [ProfileController::class, 'regenerateRecoveryCodes']);
 $router->add('POST', '/profile/alerts', [AlertController::class, 'preference']);
+$router->add('POST', '/profile/theme', [AlertController::class, 'theme']);
 $router->add('GET', '/notifications', [AlertController::class, 'notifications']);
 
 // Clients: everyone views; admins manage; technicians may pause (only admins resume)

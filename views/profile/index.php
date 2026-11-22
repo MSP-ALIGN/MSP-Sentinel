@@ -35,6 +35,22 @@ use Sentinel\Core\Csrf;
             <div class="card-footer"><button type="submit" class="btn btn-outline-primary btn-sm"><?= e(__('Save preference')) ?></button></div>
             </form>
         </div>
+        <div class="card mb-3" id="appearance">
+            <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Appearance')) ?></h2></div>
+            <form method="post" action="<?= e(url('/profile/theme')) ?>">
+            <div class="card-body">
+                <?= Csrf::field() ?>
+                <?php foreach (['dark' => __('Dark console (default)'), 'light' => __('Light, for bright rooms')] as $k => $l): ?>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="ui_theme" id="theme-<?= e($k) ?>" value="<?= e($k) ?>" <?= ($currentUser['ui_theme'] ?? 'dark') === $k ? 'checked' : '' ?>>
+                    <label class="form-check-label" for="theme-<?= e($k) ?>"><?= e($l) ?></label>
+                </div>
+                <?php endforeach; ?>
+                <p class="form-text mb-0"><?= e(__('Only changes how Sentinel looks for you. Client reports always use their own printable style.')) ?></p>
+            </div>
+            <div class="card-footer"><button type="submit" class="btn btn-outline-primary btn-sm"><?= e(__('Save appearance')) ?></button></div>
+            </form>
+        </div>
         <div class="card">
             <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Two-factor authentication')) ?></h2></div>
             <form method="post" action="<?= e(url('/profile/recovery-codes')) ?>" novalidate>

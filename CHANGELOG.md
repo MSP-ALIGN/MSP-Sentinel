@@ -2,6 +2,16 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.1.0 (2026-11-22): console look and new logo
+
+- A new **dark "operations console" look** for the web interface: near-black panels with ember accents, angular
+  cards, a subtle grid, uppercase headings in Chakra Petch and data in JetBrains Mono (both bundled locally under
+  the SIL Open Font License, so nothing loads from other sites).
+- A new **logo**: an original "radar iris" eye in a hexagon, used in the menu, on the sign-in page and as the
+  browser icon. Its radar sweep is still for anyone who prefers reduced motion.
+- **Dark by default, light per user:** choose under My profile → Appearance.
+- Severity still never relies on colour alone, and client reports keep their clean, printable, MSP-branded style.
+
 ### 1.0.0 (2026-11-22): first stable release
 
 - **Ready for other MSPs to install:** a release archive with checksums, and an installer for Ubuntu 24.04 and

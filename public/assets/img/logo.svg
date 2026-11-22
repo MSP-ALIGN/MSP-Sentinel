@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="MSP Sentinel">
+  <!-- MSP Sentinel mark: an original "radar iris" eye inside a hexagon. The iris is a radar sweep;
+       the slit pupil watches. Geometric and flat on purpose (no flames, towers or other borrowed imagery). -->
+  <defs>
+    <linearGradient id="ember" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffb347"/>
+      <stop offset="0.55" stop-color="#ff5a1f"/>
+      <stop offset="1" stop-color="#c81e1e"/>
+    </linearGradient>
+    <radialGradient id="iris" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffd27a"/>
+      <stop offset="0.6" stop-color="#ff6a21"/>
+      <stop offset="1" stop-color="#7a1408"/>
+    </radialGradient>
+    <linearGradient id="sweep" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#fff3d6" stop-opacity="0"/>
+      <stop offset="1" stop-color="#fff3d6" stop-opacity="0.85"/>
+    </linearGradient>
+    <clipPath id="eye">
+      <path d="M6 32 L18 22 Q32 13 46 22 L58 32 L46 42 Q32 51 18 42 Z"/>
+    </clipPath>
+    <style>
+      .sweep { transform-origin: 32px 32px; animation: spin 4s linear infinite; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) { .sweep { animation: none; } }
+    </style>
+  </defs>
+  <!-- hexagon frame -->
+  <path d="M32 2 L58 17 L58 47 L32 62 L6 47 L6 17 Z" fill="#0b0d10" stroke="url(#ember)" stroke-width="2.5" stroke-linejoin="miter"/>
+  <!-- tick marks: a scope -->
+  <g stroke="#ff7a2f" stroke-width="1.6" stroke-linecap="square">
+    <path d="M32 7 V11"/><path d="M32 53 V57"/><path d="M10 32 H13" opacity="0.6"/><path d="M51 32 H54" opacity="0.6"/>
+  </g>
+  <!-- angular eye -->
+  <path d="M6 32 L18 22 Q32 13 46 22 L58 32 L46 42 Q32 51 18 42 Z" fill="#14171c" stroke="url(#ember)" stroke-width="2"/>
+  <g clip-path="url(#eye)">
+    <circle cx="32" cy="32" r="12.5" fill="url(#iris)"/>
+    <circle cx="32" cy="32" r="8" fill="none" stroke="#2a0a04" stroke-width="0.8" opacity="0.6"/>
+    <path class="sweep" d="M32 32 L32 19.5 A12.5 12.5 0 0 1 43.6 27.3 Z" fill="url(#sweep)"/>
+    <!-- slit pupil -->
+    <path d="M32 21.5 Q35.2 32 32 42.5 Q28.8 32 32 21.5 Z" fill="#060708"/>
+    <circle cx="35.5" cy="27" r="1.4" fill="#fff3d6" opacity="0.8"/>
+  </g>
+</svg>

@@ -4,7 +4,7 @@ Self-hosted security monitoring for MSPs (managed service providers). Sentinel *
 exposure and vulnerabilities across your clients, monitors them and alerts on them. Its companion product,
 MSP Align, plans, reports and proves, using Sentinel's findings.
 
-> **Status: 1.0.0, first stable release.** External exposure monitoring for MSPs: the "authorised to scan"
+> **Status: 1.1.0 (stable).** External exposure monitoring for MSPs: the "authorised to scan"
 > register, passive discovery, gentle port scanning, certificate and admin-page checks, vulnerability matching
 > (NVD, CISA KEV, EPSS), findings with triage, alerts, branded reports, an API, and an installer. See
 > [`docs/ROADMAP.md`](docs/ROADMAP.md) for what comes next (internal agent, pen testing).
@@ -12,6 +12,16 @@ MSP Align, plans, reports and proves, using Sentinel's findings.
 Sentinel is free software under the [GNU AGPL-3.0](LICENSE). Each MSP runs its own copy and owns its data.
 
 ## What's new
+
+### 1.1.0 (2026-11-22): console look and new logo
+
+- A new **dark "operations console" look** for the web interface: near-black panels with ember accents, angular
+  cards, a subtle grid, uppercase headings in Chakra Petch and data in JetBrains Mono (both bundled locally under
+  the SIL Open Font License, so nothing loads from other sites).
+- A new **logo**: an original "radar iris" eye in a hexagon, used in the menu, on the sign-in page and as the
+  browser icon. Its radar sweep is still for anyone who prefers reduced motion.
+- **Dark by default, light per user:** choose under My profile → Appearance.
+- Severity still never relies on colour alone, and client reports keep their clean, printable, MSP-branded style.
 
 ### 1.0.0 (2026-11-22): first stable release
 
@@ -96,4 +106,5 @@ Please report vulnerabilities privately. See [SECURITY.md](SECURITY.md).
 ## Third-party components
 
 Served from `public/assets/vendor/`, each with its licence file: Bootstrap 5.3.8 (MIT), AdminLTE 4.10.0 (MIT),
-Bootstrap Icons 1.13.1 (MIT), qrcode-generator 2.0.4 (MIT, licence notice in the file header).
+Bootstrap Icons 1.13.1 (MIT), qrcode-generator 2.0.4 (MIT, licence notice in the file header), and the fonts
+Chakra Petch and JetBrains Mono (SIL Open Font License 1.1, licence files in `public/assets/vendor/fonts/`).

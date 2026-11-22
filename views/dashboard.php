@@ -63,7 +63,7 @@
         <?php if (!$globallyPaused): ?><div class="ms-auto"><?php require __DIR__ . '/partials/kill_switch.php'; ?></div><?php endif; ?>
     </div>
     <div class="card-body">
-        <p><?= e(__('Version {version}: clients, sites and the "authorised to scan" register. Every scan Sentinel will ever run must fall inside an active authorisation.', ['version' => $version])) ?></p>
-        <p class="mb-0"><?= e(__('External scanning arrives in the next releases. Nothing is scanned yet.')) ?></p>
+        <p><?= e(__('MSP Sentinel {version}. Every scan stays inside an active, approved authorisation, and every action is logged.', ['version' => $version])) ?></p>
+        <p class="mb-0"><?= e(__('New client? Add it under Clients, record the authorisation with the approved addresses, then queue a scan. Findings, alerts and reports follow from there.')) ?></p>
     </div>
 </div>

@@ -25,13 +25,15 @@ try {
 }
 ?>
 <!doctype html>
-<html lang="en">
+<html lang="en" data-bs-theme="<?= ($currentUser['ui_theme'] ?? 'dark') === 'light' ? 'light' : 'dark' ?>">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= e($title ?? '') ?> · <?= e($product) ?></title>
     <link rel="stylesheet" href="<?= e(asset('vendor/bootstrap-icons/bootstrap-icons.min.css')) ?>">
+    <link rel="icon" href="<?= e(asset('img/favicon.svg')) ?>" type="image/svg+xml">
     <link rel="stylesheet" href="<?= e(asset('vendor/adminlte/adminlte.min.css')) ?>">
+    <link rel="stylesheet" href="<?= e(asset('css/theme.css')) ?>">
     <link rel="stylesheet" href="<?= e(asset('css/sentinel.css')) ?>">
 </head>
 <body class="layout-fixed sidebar-expand-lg bg-body-tertiary">
@@ -84,8 +86,8 @@ try {
     <aside class="app-sidebar bg-body-secondary shadow" data-bs-theme="dark">
         <div class="sidebar-brand">
             <a href="<?= e(url('/')) ?>" class="brand-link">
-                <i class="bi bi-shield-check brand-icon" aria-hidden="true"></i>
-                <span class="brand-text fw-light"><?= e($product) ?></span>
+                <img src="<?= e(asset('img/logo.svg')) ?>" alt="" class="brand-logo" width="34" height="34">
+                <span class="brand-text"><?= e($product) ?></span>
             </a>
         </div>
         <div class="sidebar-wrapper">

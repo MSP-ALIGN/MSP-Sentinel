@@ -145,6 +145,15 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.1.0',
+            'date' => '2026-11-22',
+            'items' => [
+                'New dark console look with ember accents, and a new radar-eye logo.',
+                'Dark by default; choose a light look for yourself under My profile, Appearance.',
+                'Client reports keep their clean, printable style.',
+            ],
+        ],
+        [
             'version' => '1.0.0',
             'date' => '2026-11-22',
             'items' => [

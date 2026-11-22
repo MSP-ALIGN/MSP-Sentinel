@@ -191,4 +191,17 @@ final class AlertController extends Controller
         Session::flash('success', __('Email preference saved.'));
         return Response::redirect('/profile');
     }
+
+    /** POST /profile/theme: the signed-in user's interface theme (dark or light). Untrusted: the choice (fixed list). */
+    public function theme(Request $request): Response
+    {
+        $theme = $request->input('ui_theme');
+        if (!in_array($theme, ['dark', 'light'], true)) {
+            Session::flash('danger', __('Choose dark or light.'));
+            return Response::redirect('/profile#appearance');
+        }
+        App::db()->prepare('UPDATE users SET ui_theme = :t WHERE id = :id')->execute(['t' => $theme, 'id' => (int) $this->user()['id']]);
+        Session::flash('success', __('Appearance saved.'));
+        return Response::redirect('/profile#appearance');
+    }
 }
