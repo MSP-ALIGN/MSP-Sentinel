@@ -47,6 +47,7 @@ final class FindingsEngine
         private readonly VulnRepository $vulns,
         private readonly ?WebsiteRepository $website = null,
         private readonly ?FixWorkflow $workflow = null,
+        private readonly ?\Sentinel\Inventory\InventoryRepository $inventory = null,
     ) {
     }
 
@@ -97,6 +98,7 @@ final class FindingsEngine
             $update = $this->db->prepare(
                 // updated_at first: MariaDB evaluates SET left to right, and it must only move on a real change.
                 'UPDATE findings SET updated_at = IF(:chg = 1, UTC_TIMESTAMP(), updated_at), severity = :sev, title = :t, detail = :d, target = :tg, evidence = :ev, asset_id = :a, cve_id = :cve,
+                        device_id = :dev,
                         status = :st, last_seen = UTC_TIMESTAMP(), resolved_at = IF(:resolved = 1, resolved_at, NULL),
                         resolved_from = IF(:resolved2 = 1, resolved_from, NULL),
                         reappeared = IF(:reap = 1, 1, reappeared), reopened_count = reopened_count + :inc,
@@ -144,7 +146,7 @@ final class FindingsEngine
                 }
                 $update->execute([
                     'sev' => $issue['severity'], 't' => $issue['title'], 'd' => $issue['detail'], 'tg' => $issue['target'], 'ev' => $issue['evidence'],
-                    'a' => $issue['asset_id'], 'cve' => $issue['cve_id'], 'st' => $newStatus, 'resolved' => 0, 'resolved2' => 0,
+                    'a' => $issue['asset_id'], 'cve' => $issue['cve_id'], 'dev' => $issue['device_id'], 'st' => $newStatus, 'resolved' => 0, 'resolved2' => 0,
                     'chg' => ($row['severity'] !== $issue['severity'] || $row['title'] !== $issue['title'] || $row['detail'] !== $issue['detail']
                         || $row['target'] !== $issue['target'] || !$sameEvidence || $newStatus !== $status) ? 1 : 0,
                     'reap' => $status === 'resolved' ? 1 : 0, 'inc' => $status === 'resolved' || $newStatus !== $status ? 1 : 0, 'id' => $id,
@@ -216,7 +218,7 @@ final class FindingsEngine
             }
             // If two sources produce the same key, keep the more severe one.
             if (!isset($issues[$key]) || ($issues[$key]['severity'] === 'warn' && $issue['severity'] === 'fail')) {
-                $issues[$key] = $issue + ['asset_id' => null, 'cve_id' => null];
+                $issues[$key] = $issue + ['asset_id' => null, 'cve_id' => null, 'source' => 'external', 'device_id' => null];
             }
         };
 
@@ -336,6 +338,40 @@ final class FindingsEngine
                 }
             }
         }
+        // Internal devices from inventory sources (NinjaOne, later the agent): unsupported OS, antivirus,
+        // encryption, missing patches, and known vulnerabilities in installed software (same grading as external).
+        if ($this->inventory !== null) {
+            $patches = $this->inventory->patchesByDevice($clientId);
+            foreach ($this->inventory->devicesForClient($clientId) as $d) {
+                foreach (\Sentinel\Inventory\DeviceRules::issues($d, $patches[(int) $d['id']] ?? []) as $issue) {
+                    if ($issue['severity'] === 'info') {
+                        continue;
+                    }
+                    $add("dev:{$d['source']}:{$d['source_id']}:{$issue['code']}", [
+                        'type' => \Sentinel\Inventory\DeviceRules::type($issue['code']), 'severity' => $issue['severity'], 'title' => $issue['text'],
+                        'detail' => $issue['detail'], 'target' => (string) ($d['name'] !== '' ? $d['name'] : $d['source_id']),
+                        // Evidence: the code plus what makes it this problem (OS build, patch list), so a false positive reopens when it changes.
+                        'evidence' => $issue['code'] . '|' . $d['os_build'] . '|' . mb_substr($issue['detail'], 0, 200),
+                        'source' => (string) $d['source'], 'device_id' => (int) $d['id'],
+                    ]);
+                }
+            }
+            foreach ($this->inventory->softwareVulns($clientId) as $v) {
+                $sev = ExposureRules::vulnSeverity(['confidence' => $v['confidence'], 'in_kev' => $v['in_kev'], 'cvss_score' => $v['cvss_score'], 'cvss_severity' => $v['cvss_severity']]);
+                if ($sev === 'info') {
+                    continue;
+                }
+                $kev = (int) $v['in_kev'] === 1;
+                $add("devvuln:{$v['source']}:{$v['source_id']}:{$v['product']}:{$v['cve_id']}", [
+                    'type' => 'vuln', 'severity' => $sev,
+                    'title' => ($kev ? __('Known exploited: ') : '') . $v['cve_id'] . ' ' . __('in {component}', ['component' => trim($v['product'] . ' ' . $v['version'])])
+                        . ' (' . ($v['cvss_score'] ?? '?') . ' ' . ucfirst(strtolower((string) $v['cvss_severity'])) . ')',
+                    'detail' => trim(($v['confidence'] === 'confirmed' ? __('confirmed for the installed version') : __('product found, version unknown')) . '. ' . mb_strimwidth((string) $v['summary'], 0, 600, '…')),
+                    'target' => (string) $v['device_name'], 'evidence' => $v['confidence'] . '|' . $v['product'] . ' ' . $v['version'], 'cve_id' => (string) $v['cve_id'],
+                    'source' => (string) $v['source'], 'device_id' => (int) $v['device_id'],
+                ]);
+            }
+        }
         return $issues;
     }
 
@@ -343,10 +379,11 @@ final class FindingsEngine
     private function insert(int $clientId, string $key, array $issue): int
     {
         $this->db->prepare(
-            'INSERT INTO findings (client_id, asset_id, finding_key, finding_type, severity, title, detail, target, evidence, cve_id, status, first_seen, last_seen, opened_at)
-             VALUES (:c, :a, :k, :type, :sev, :t, :d, :tg, :ev, :cve, \'open\', UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP())'
+            'INSERT INTO findings (client_id, asset_id, finding_key, finding_type, severity, title, detail, target, evidence, cve_id, status, first_seen, last_seen, opened_at, source, device_id)
+             VALUES (:c, :a, :k, :type, :sev, :t, :d, :tg, :ev, :cve, \'open\', UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP(), :src, :dev)'
         )->execute([
             'c' => $clientId, 'a' => $issue['asset_id'], 'k' => $key, 'type' => $issue['type'], 'sev' => $issue['severity'],
+            'src' => (string) $issue['source'], 'dev' => $issue['device_id'],
             't' => mb_substr($issue['title'], 0, 300), 'd' => mb_substr($issue['detail'], 0, 1000), 'tg' => mb_substr($issue['target'], 0, 320),
             'ev' => mb_substr($issue['evidence'], 0, 500), 'cve' => $issue['cve_id'],
         ]);

@@ -50,6 +50,7 @@ final class FindingController extends Controller
                 default => '',
             },
             'due' => in_array($request->query('due'), ['overdue', 'soon'], true) ? $request->query('due') : '',
+            'source' => in_array($request->query('source'), FindingRepository::SOURCES, true) ? $request->query('source') : '',
         ];
         if ($filters['due'] !== '' && $request->query('status') === '') {
             $filters['status'] = 'open'; // only open findings are ever due

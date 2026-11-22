@@ -46,6 +46,8 @@ try {
     fwrite(STDOUT, "Matching: {$m['services']} services, {$m['matches']} matches, {$m['pending']} waiting for data\n");
     $wm = App::vulnMatcher()->matchComponents(new \Sentinel\Web\WebsiteRepository(App::db()), null, 0);
     fwrite(STDOUT, "Website components: {$wm['components']} checked, {$wm['matches']} matches, {$wm['pending']} waiting for data\n");
+    $sm = App::vulnMatcher()->matchSoftware(App::inventory(), null, 0);
+    fwrite(STDOUT, "Installed software: {$sm['products']} products, {$sm['matches']} matches, {$sm['pending']} waiting for data\n");
     try {
         fwrite(STDOUT, 'EPSS: ' . $updater->refreshEpss() . " scores\n");
     } catch (\RuntimeException $ex) {

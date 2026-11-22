@@ -7,7 +7,7 @@
  */
 require __DIR__ . '/../partials/finding_badges.php';
 $q = static fn (array $over): array => array_filter(array_merge(['client' => $filters['client'] ?: null, 'status' => $filters['status'] === '' ? 'all' : $filters['status'],
-    'severity' => $filters['severity'] ?: null, 'type' => $filters['type'] ?: null, 'assignee' => $filters['assignee'] ?: null, 'due' => $filters['due'] ?: null], $over), static fn ($v) => $v !== null && $v !== '');
+    'severity' => $filters['severity'] ?: null, 'type' => $filters['type'] ?: null, 'assignee' => $filters['assignee'] ?: null, 'due' => $filters['due'] ?: null, 'source' => $filters['source'] ?: null], $over), static fn ($v) => $v !== null && $v !== '');
 $me = (string) (int) $currentUser['id'];
 $quick = [
     ['label' => __('Assigned to me'), 'n' => $fixCounts['mine'], 'params' => ['assignee' => 'me', 'status' => 'open'], 'active' => $filters['assignee'] === $me && $filters['due'] === '', 'icon' => 'bi-person-check'],
@@ -15,7 +15,7 @@ $quick = [
     ['label' => __('Overdue'), 'n' => $fixCounts['overdue'], 'params' => ['due' => 'overdue'], 'active' => $filters['due'] === 'overdue', 'icon' => 'bi-alarm'],
     ['label' => __('Due within {d} days', ['d' => \Sentinel\Findings\FixWorkflow::DUE_SOON_DAYS]), 'n' => $fixCounts['due_soon'], 'params' => ['due' => 'soon'], 'active' => $filters['due'] === 'soon', 'icon' => 'bi-hourglass-split'],
 ];
-$typeLabels = ['port' => __('Exposed service'), 'tls' => __('Certificate'), 'web' => __('Web page'), 'vuln' => __('Vulnerability'), 'email' => __('Email security')];
+$typeLabels = ['port' => __('Exposed service'), 'tls' => __('Certificate'), 'web' => __('Web page'), 'vuln' => __('Vulnerability'), 'email' => __('Email security'), 'patch' => __('Missing updates'), 'device' => __('Device security')];
 ?>
 <div class="row g-3 mb-3">
     <div class="col-6 col-md-3"><div class="small-box <?= $counts['fail'] > 0 ? 'text-bg-danger' : 'text-bg-secondary' ?>"><div class="inner"><h3><?= e($counts['fail']) ?></h3><p><?= e(__('Open Fail')) ?></p></div><i class="small-box-icon bi bi-x-octagon" aria-hidden="true"></i></div></div>
@@ -68,6 +68,14 @@ $typeLabels = ['port' => __('Exposed service'), 'tls' => __('Certificate'), 'web
                     <option value=""><?= e(__('Any')) ?></option>
                     <option value="overdue" <?= $filters['due'] === 'overdue' ? 'selected' : '' ?>><?= e(__('Overdue')) ?></option>
                     <option value="soon" <?= $filters['due'] === 'soon' ? 'selected' : '' ?>><?= e(__('Due soon')) ?></option>
+                </select>
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small mb-0" for="f-source"><?= e(__('Where')) ?></label>
+                <select class="form-select form-select-sm" id="f-source" name="source">
+                    <option value=""><?= e(__('Internet and internal')) ?></option>
+                    <option value="external" <?= $filters['source'] === 'external' ? 'selected' : '' ?>><?= e(__('Internet (external scan)')) ?></option>
+                    <option value="internal" <?= $filters['source'] === 'internal' ? 'selected' : '' ?>><?= e(__('Internal devices')) ?></option>
                 </select>
             </div>
             <div class="col-6 col-md-3">

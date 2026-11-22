@@ -37,6 +37,7 @@ final class Guidance
             'web' => self::web(substr($key, (int) strrpos($key, ':') + 1)),
             'vuln' => self::vuln($vuln),
             'email' => self::email(substr($key, (int) strrpos($key, ':') + 1)),
+            'device', 'patch' => self::device(substr($key, (int) strrpos($key, ':') + 1)),
             default => ['meaning' => __('This item needs a review by your IT provider.'), 'fix' => __('Review the details and decide whether to fix or accept it.')],
         };
     }
@@ -199,6 +200,41 @@ final class Guidance
             default => [
                 'meaning' => __('An email security setting for this domain should be reviewed.'),
                 'fix' => __('Review the domain\'s SPF, DKIM and DMARC records.'),
+            ],
+        };
+    }
+
+    /** @return array{meaning:string, fix:string} */
+    private static function device(string $code): array
+    {
+        return match ($code) {
+            'os_unsupported' => [
+                'meaning' => __('This computer runs a Windows version that no longer gets security fixes. New flaws found in it stay open for good.'),
+                'fix' => __('Upgrade to a supported Windows version, or replace the computer. If it is enrolled in Extended Security Updates, record that and accept the risk until the end of ESU.'),
+            ],
+            'av_missing', 'av_off' => [
+                'meaning' => __('The computer has no working antivirus or EDR, so malware and ransomware can run without being stopped or noticed.'),
+                'fix' => __('Install or turn on the company\'s antivirus/EDR and find out why it was missing or switched off.'),
+            ],
+            'av_outdated' => [
+                'meaning' => __('The antivirus can\'t recognise recent threats because its definitions are out of date.'),
+                'fix' => __('Check that the antivirus can update (internet access, licence, service running) and force an update.'),
+            ],
+            'encryption_off' => [
+                'meaning' => __('If this computer is lost or stolen, anyone can read the files on its disk.'),
+                'fix' => __('Turn on disk encryption (BitLocker on Windows, FileVault on Mac) and store the recovery key safely.'),
+            ],
+            'patches_missing' => [
+                'meaning' => __('Security updates have been available for more than 30 days but are not installed, so known flaws stay open on this computer.'),
+                'fix' => __('Install the listed updates (approve them in the patch policy if needed) and restart the computer.'),
+            ],
+            'patches_failed' => [
+                'meaning' => __('Updates tried to install but failed, so the computer may be missing security fixes without anyone noticing.'),
+                'fix' => __('Check the error on the device (disk space, pending restart, broken update service), fix it and retry the updates.'),
+            ],
+            default => [
+                'meaning' => __('A security setting on this computer should be reviewed.'),
+                'fix' => __('Review the device in your RMM tool.'),
             ],
         };
     }

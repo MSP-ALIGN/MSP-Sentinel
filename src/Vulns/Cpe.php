@@ -35,8 +35,8 @@ final class Cpe
             return null;
         }
         foreach ([$vendor, $product] as $c) {
-            // "!" occurs in real NVD products (joomla:joomla!); esc() escapes it in the 2.3 match string.
-            if (!preg_match('/^[a-z0-9][a-z0-9._\-~!]{0,99}$/D', $c)) {
+            // "!" and "+" occur in real NVD products (joomla:joomla!, notepad-plus-plus:notepad++); esc() escapes them.
+            if (!preg_match('/^[a-z0-9][a-z0-9._\-~!+]{0,99}$/D', $c)) {
                 return null;
             }
         }

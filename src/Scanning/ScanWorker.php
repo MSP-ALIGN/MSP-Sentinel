@@ -76,6 +76,7 @@ final class ScanWorker
         private readonly ?WebsiteRepository $websiteStore = null,
         private readonly ?EmailChecker $email = null,
         private readonly ?FixWorkflow $workflow = null,
+        private readonly ?\Sentinel\Inventory\InventorySync $inventory = null,
     ) {
         $this->log ??= static function (string $line): void {
         };
@@ -122,6 +123,15 @@ final class ScanWorker
                 }
             } catch (\Throwable $ex) {
                 error_log('[msp-sentinel] reports failed: ' . $ex->getMessage());
+            }
+            // Internal devices from inventory sources (NinjaOne): a few due clients per tick.
+            try {
+                $synced = $this->inventory?->syncDue() ?? 0;
+                if ($synced > 0) {
+                    $result .= " Inventory: {$synced} client(s) synced.";
+                }
+            } catch (\Throwable $ex) {
+                error_log('[msp-sentinel] inventory sync failed: ' . $ex->getMessage());
             }
             // Daily fix reminders (overdue and due-soon findings) once a day.
             try {

@@ -208,7 +208,8 @@ final class App
         $caFile = (string) $config->get('tls.ca_file', '');
         return new ScanWorker(self::db(), self::clients(), self::authorisations(), self::scans(), self::scope(), NmapRunner::fromConfig($config), $dns, $log,
             new TlsChecker($connector, $caFile === '' ? null : $caFile), new HttpProbe($connector), self::endpoints(), self::vulnMatcher(15), self::findingsEngine(), self::alerts(), self::outbox(), self::reportService(), new StatsRecorder(self::db()), self::events(), self::housekeeping(),
-            new \Sentinel\Web\WebsiteChecker(new HttpProbe($connector)), new \Sentinel\Web\WebsiteRepository(self::db()), $dns === null ? null : new \Sentinel\Web\EmailChecker($dns), self::fixWorkflow());
+            new \Sentinel\Web\WebsiteChecker(new HttpProbe($connector)), new \Sentinel\Web\WebsiteRepository(self::db()), $dns === null ? null : new \Sentinel\Web\EmailChecker($dns), self::fixWorkflow(),
+            self::inventorySources() === [] ? null : self::inventorySync());
     }
 
     /** Vulnerability data and match store. */
@@ -328,7 +329,35 @@ final class App
     /** Builds findings from the current scan data. */
     public static function findingsEngine(): FindingsEngine
     {
-        return new FindingsEngine(self::db(), self::endpoints(), self::vulns(), new \Sentinel\Web\WebsiteRepository(self::db()), self::fixWorkflow());
+        return new FindingsEngine(self::db(), self::endpoints(), self::vulns(), new \Sentinel\Web\WebsiteRepository(self::db()), self::fixWorkflow(), self::inventory());
+    }
+
+    /**
+     * Configured inventory sources by name. The fixture source exists only in the test suite (config flag AND
+     * SENTINEL_TEST_MODE=1, like webhookTestMode()). The NinjaOne connector is added here when it is configured.
+     *
+     * @return array<string,\Sentinel\Inventory\InventorySource>
+     */
+    public static function inventorySources(): array
+    {
+        $sources = [];
+        $fixture = (string) self::config()->get('testing.inventory_fixture', '');
+        if ($fixture !== '' && self::webhookTestMode()) {
+            $sources['ninjaone'] = new \Sentinel\Inventory\FixtureSource($fixture);
+        }
+        return $sources;
+    }
+
+    /** Inventory sync service (worker and "Sync now"). */
+    public static function inventorySync(): \Sentinel\Inventory\InventorySync
+    {
+        return new \Sentinel\Inventory\InventorySync(self::db(), self::inventory(), self::inventorySources(), self::vulnMatcher(15), self::findingsEngine(), self::alerts());
+    }
+
+    /** Internal devices from inventory sources. */
+    public static function inventory(): \Sentinel\Inventory\InventoryRepository
+    {
+        return new \Sentinel\Inventory\InventoryRepository(self::db());
     }
 
     /** Fix workflow: assignment, due dates. */

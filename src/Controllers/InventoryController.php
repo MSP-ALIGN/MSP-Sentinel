@@ -1,0 +1,174 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Sentinel\Controllers;
+
+use Sentinel\Core\App;
+use Sentinel\Core\HttpException;
+use Sentinel\Core\Request;
+use Sentinel\Core\Response;
+use Sentinel\Core\Session;
+use Sentinel\Inventory\InventoryException;
+
+/**
+ * Internal devices from inventory sources (NinjaOne): linking a client to an
+ * organisation in the source, "Sync now", and one device's details.
+ *
+ * Access (enforced by the routes): everyone signed in can view devices;
+ * technicians and admins can ask for a sync; only admins link and unlink.
+ *
+ * Untrusted: {id}, {device}, the chosen organisation ID and the source name
+ * (checked against the configured sources and the source's own list).
+ *
+ * Security assumptions: an organisation is linked only by an admin's explicit
+ * choice from the source's own list (suggestions are never applied
+ * automatically), and one organisation can belong to only one client.
+ * Every change is in the audit log. Syncs are read-only towards the source.
+ */
+final class InventoryController extends Controller
+{
+    /** GET /clients/{id}/inventory/link (admins): pick the organisation, with a suggestion by name. */
+    public function linkForm(Request $request, array $params): Response
+    {
+        $client = $this->client($params);
+        [$name, $source] = $this->source($request->query('source'));
+        $orgs = [];
+        $error = '';
+        try {
+            $orgs = $source->organisations();
+        } catch (InventoryException $ex) {
+            $error = __('{source} could not be reached: {e}', ['source' => $source->label(), 'e' => mb_substr($ex->getMessage(), 0, 300)]);
+        }
+        usort($orgs, static fn (array $a, array $b): int => strcasecmp($a['name'], $b['name']));
+        return $this->page('inventory/link', __('Link {client} to {source}', ['client' => $client['name'], 'source' => $source->label()]), [
+            'client' => $client, 'sourceName' => $name, 'sourceLabel' => $source->label(), 'orgs' => $orgs, 'error' => $error,
+            'suggested' => self::suggest((string) $client['name'], $orgs), 'link' => App::inventory()->link((int) $client['id'], $name),
+        ]);
+    }
+
+    /** POST /clients/{id}/inventory/link (admins). */
+    public function link(Request $request, array $params): Response
+    {
+        $client = $this->client($params);
+        [$name, $source] = $this->source($request->input('source'));
+        $orgId = $request->input('org_id');
+        try {
+            $orgs = $source->organisations();
+        } catch (InventoryException $ex) {
+            Session::flash('danger', __('{source} could not be reached: {e}', ['source' => $source->label(), 'e' => mb_substr($ex->getMessage(), 0, 300)]));
+            return Response::redirect('/clients/' . (int) $client['id'] . '#devices');
+        }
+        $org = null;
+        foreach ($orgs as $o) {
+            if ($o['id'] === $orgId) {
+                $org = $o; // only an organisation the source itself lists can be linked
+            }
+        }
+        if ($org === null) {
+            Session::flash('danger', __('Choose an organisation from the list.'));
+            return Response::redirect('/clients/' . (int) $client['id'] . '/inventory/link?source=' . rawurlencode($name));
+        }
+        try {
+            App::inventory()->setLink((int) $client['id'], $name, $org['id'], $org['name'], (int) $this->user()['id']);
+        } catch (\DomainException) {
+            Session::flash('danger', __('This organisation is already linked to another client.'));
+            return Response::redirect('/clients/' . (int) $client['id'] . '/inventory/link?source=' . rawurlencode($name));
+        }
+        $this->audit($request, 'inventory.linked', 'client', (int) $client['id'], ['source' => $name, 'org_id' => mb_substr($org['id'], 0, 64), 'org_name' => mb_substr($org['name'], 0, 200)]);
+        Session::flash('success', __('Linked to {org}. Devices appear after the first sync (within a minute).', ['org' => $org['name']]));
+        return Response::redirect('/clients/' . (int) $client['id'] . '#devices');
+    }
+
+    /** POST /clients/{id}/inventory/unlink (admins): devices are marked removed and their findings resolve. */
+    public function unlink(Request $request, array $params): Response
+    {
+        $client = $this->client($params);
+        [$name] = $this->source($request->input('source'));
+        if (App::inventory()->link((int) $client['id'], $name) !== null) {
+            App::inventory()->unlink((int) $client['id'], $name);
+            try {
+                App::findingsEngine()->refreshClient((int) $client['id']);
+            } catch (\Throwable $ex) {
+                error_log('[msp-sentinel] findings refresh after unlink failed: ' . $ex->getMessage());
+            }
+            $this->audit($request, 'inventory.unlinked', 'client', (int) $client['id'], ['source' => $name]);
+        }
+        Session::flash('success', __('Unlinked. Its devices are no longer shown and their findings were resolved.'));
+        return Response::redirect('/clients/' . (int) $client['id'] . '#devices');
+    }
+
+    /** POST /clients/{id}/inventory/sync (technicians and admins): sync within a minute (worker). */
+    public function sync(Request $request, array $params): Response
+    {
+        $client = $this->client($params);
+        [$name] = $this->source($request->input('source'));
+        if (App::inventory()->link((int) $client['id'], $name) === null) {
+            Session::flash('warning', __('This client is not linked yet.'));
+        } else {
+            App::db()->prepare('UPDATE source_links SET last_sync_at = NULL WHERE client_id = :c AND source = :s')->execute(['c' => (int) $client['id'], 's' => $name]);
+            $this->audit($request, 'inventory.sync_requested', 'client', (int) $client['id'], ['source' => $name]);
+            Session::flash('success', __('Sync requested. It runs within a minute (after any scan already running).'));
+        }
+        return Response::redirect('/clients/' . (int) $client['id'] . '#devices');
+    }
+
+    /** GET /clients/{id}/devices/{device}: one internal device with its software, vulnerabilities and missing updates. */
+    public function device(Request $request, array $params): Response
+    {
+        $client = $this->client($params);
+        $device = App::inventory()->device((int) $client['id'], (int) ($params['device'] ?? 0)) ?? throw new HttpException(404);
+        $stmt = App::db()->prepare("SELECT id, severity, status, title FROM findings WHERE client_id = :c AND device_id = :d AND status <> 'resolved' ORDER BY severity = 'fail' DESC, id");
+        $stmt->execute(['c' => (int) $client['id'], 'd' => (int) $device['id']]);
+        return $this->page('inventory/device', (string) ($device['name'] !== '' ? $device['name'] : $device['source_id']), [
+            'client' => $client, 'device' => $device, 'deviceFindings' => $stmt->fetchAll(),
+            'issues' => \Sentinel\Inventory\DeviceRules::issues($device, $device['patches']),
+        ]);
+    }
+
+    /**
+     * The client from {id} (404 if missing).
+     *
+     * @return array<string,mixed>
+     */
+    private function client(array $params): array
+    {
+        return App::clients()->find((int) ($params['id'] ?? 0)) ?? throw new HttpException(404);
+    }
+
+    /**
+     * A configured source by name (default: the first), or 404.
+     *
+     * @return array{0:string, 1:\Sentinel\Inventory\InventorySource}
+     */
+    private function source(string $name): array
+    {
+        $sources = App::inventorySources();
+        $name = $name !== '' ? $name : (string) array_key_first($sources);
+        if (!isset($sources[$name])) {
+            throw new HttpException(404);
+        }
+        return [$name, $sources[$name]];
+    }
+
+    /**
+     * The organisation whose name matches the client's (ignoring case, punctuation and company suffixes), or null.
+     * Only a suggestion: the admin still chooses and confirms.
+     *
+     * @param list<array{id:string,name:string}> $orgs
+     */
+    public static function suggest(string $clientName, array $orgs): ?string
+    {
+        $norm = static fn (string $n): string => (string) preg_replace(['/\b(ltd|limited|inc|llc|gmbh|bv|plc|pty|co|corp|corporation|company)\b\.?/i', '/[^a-z0-9]+/'], ['', ''], strtolower($n));
+        $want = $norm($clientName);
+        if ($want === '') {
+            return null;
+        }
+        foreach ($orgs as $o) {
+            if ($norm($o['name']) === $want) {
+                return $o['id'];
+            }
+        }
+        return null;
+    }
+}

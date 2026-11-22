@@ -108,6 +108,10 @@ final class ClientController extends Controller
             'websiteChecks' => (new \Sentinel\Web\WebsiteRepository(App::db()))->checksForClient((int) $client['id']),
             'emailChecks' => (new \Sentinel\Web\WebsiteRepository(App::db()))->emailForClient((int) $client['id']),
             'overview' => self::overviewData($client),
+            'inventorySources' => array_map(static fn (\Sentinel\Inventory\InventorySource $s): string => $s->label(), App::inventorySources()),
+            'inventoryLinks' => array_map(fn (\Sentinel\Inventory\InventorySource $s): ?array => App::inventory()->link((int) $client['id'], $s->name()), App::inventorySources()),
+            'devices' => App::inventory()->devicesForClient((int) $client['id']),
+            'devicePatches' => App::inventory()->patchesByDevice((int) $client['id']),
         ]);
     }
 

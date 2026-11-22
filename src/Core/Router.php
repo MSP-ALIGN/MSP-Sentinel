@@ -19,7 +19,7 @@ use Sentinel\Auth\Role;
  * Security assumptions:
  * - The default is the most restrictive useful option: signed in plus 2FA.
  *   A route has to opt out explicitly to be public.
- * - Path parameters only match the pattern given ({id} is digits only), so
+ * - Path parameters only match digits ({id}, {device}, ...), so
  *   controllers receive pre-validated IDs. They still check the ID exists.
  */
 final class Router
@@ -31,7 +31,7 @@ final class Router
      * Register a route.
      *
      * @param string                    $method  HTTP method (GET or POST).
-     * @param string                    $pattern Path like "/users/{id}". {id} matches digits only.
+     * @param string                    $pattern Path like "/users/{id}". Every {name} parameter matches digits only.
      * @param array{class-string,string} $handler [ControllerClass, method].
      * @param array<string,mixed>       $opts    Access rules: auth, role, allow_password_change.
      */
@@ -44,7 +44,8 @@ final class Router
         if (!Role::isValid((string) $opts['role'])) {
             throw new \InvalidArgumentException('Unknown role for route ' . $pattern);
         }
-        $regex = '#^' . preg_replace('/\\\\\{id\\\\\}/', '(?P<id>[1-9][0-9]{0,18})', preg_quote($pattern, '#')) . '$#';
+        // Every {name} parameter (e.g. {id}, {device}) matches a positive whole number only.
+        $regex = '#^' . preg_replace('/\\\\\{([a-z]{1,20})\\\\\}/', '(?P<$1>[1-9][0-9]{0,18})', preg_quote($pattern, '#')) . '$#';
         $this->routes[] = ['method' => strtoupper($method), 'regex' => $regex, 'handler' => $handler, 'opts' => $opts];
     }
 

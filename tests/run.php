@@ -180,6 +180,9 @@ try {
             [0 => ['file', '/dev/null', 'r'], 1 => ['file', $outDir . '/mock-tls.log', 'a'], 2 => ['file', $outDir . '/mock-tls.log', 'a']], $pipes);
     }
     $cfg['testing']['redirect_connections'] = $redirects;
+    // Inventory source (NinjaOne stand-in): tests write this file with dates relative to now.
+    file_put_contents($outDir . '/inventory.json', json_encode(['organisations' => [], 'snapshots' => new stdClass()]));
+    $cfg['testing']['inventory_fixture'] = $outDir . '/inventory.json';
     $cfg['tls'] = ['ca_file' => $certs['ca']];
 
     // Mock threat feeds (NVD, CISA KEV, FIRST EPSS) on 127.0.0.1, with made-up CVE IDs (CVE-2099-...).

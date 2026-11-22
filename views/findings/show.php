@@ -30,7 +30,8 @@ $eventLabels = [
             </div>
             <div class="card-body">
                 <h2 class="h5"><?= e($finding['title']) ?></h2>
-                <p class="mb-2"><code><?= e($finding['target']) ?></code></p>
+                <p class="mb-2"><code><?= e($finding['target']) ?></code>
+                    <?php if (($finding['device_id'] ?? null) !== null): ?> · <a href="<?= e(url('/clients/' . (int) $finding['client_id'] . '/devices/' . (int) $finding['device_id'])) ?>"><i class="bi bi-pc-display me-1" aria-hidden="true"></i><?= e(__('Device details')) ?></a> <span class="badge text-bg-dark"><?= e(__('Internal')) ?></span><?php endif; ?></p>
                 <p class="text-pre-line"><?= e($finding['detail']) ?></p>
                 <?php if ($finding['cve_id'] !== null): ?>
                 <p class="small"><a href="https://nvd.nist.gov/vuln/detail/<?= e(rawurlencode((string) $finding['cve_id'])) ?>" target="_blank" rel="noopener noreferrer"><?= e(__('{cve} on NVD', ['cve' => $finding['cve_id']])) ?></a></p>

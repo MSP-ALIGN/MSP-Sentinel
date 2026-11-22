@@ -21,6 +21,7 @@ use Sentinel\Controllers\AuthorisationController;
 use Sentinel\Controllers\ClientController;
 use Sentinel\Controllers\DiscoveryController;
 use Sentinel\Controllers\FindingController;
+use Sentinel\Controllers\InventoryController;
 use Sentinel\Controllers\ScanController;
 use Sentinel\Controllers\ScanningController;
 use Sentinel\Controllers\SystemController;
@@ -85,6 +86,12 @@ $router->add('POST', '/suggestions/{id}/restore', [DiscoveryController::class, '
 
 // Port scans: technicians and admins queue and cancel (the outside-window override is admin-only, checked in the controller)
 $router->add('POST', '/clients/{id}/scan', [ScanController::class, 'queue'], $technician);
+// Internal devices (inventory sources): everyone views; technicians ask for a sync; admins link and unlink.
+$router->add('GET', '/clients/{id}/devices/{device}', [InventoryController::class, 'device']);
+$router->add('GET', '/clients/{id}/inventory/link', [InventoryController::class, 'linkForm'], $admin);
+$router->add('POST', '/clients/{id}/inventory/link', [InventoryController::class, 'link'], $admin);
+$router->add('POST', '/clients/{id}/inventory/unlink', [InventoryController::class, 'unlink'], $admin);
+$router->add('POST', '/clients/{id}/inventory/sync', [InventoryController::class, 'sync'], $technician);
 $router->add('POST', '/scans/{id}/cancel', [ScanController::class, 'cancel'], $technician);
 
 // Findings: everyone views; technicians and admins triage

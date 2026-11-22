@@ -111,9 +111,7 @@ final class VulnMatcher
     }
 
     /**
-     * Match detected website components (CMS, JavaScript libraries) of one client or all clients.
-     * Same rules as services: a known version gives "confirmed" matches; without a version only
-     * known-exploited CVEs are kept, as "possible". Data not fetched yet stays pending for the feeds job.
+     * Match detected website components (CMS, JavaScript libraries) with a known product.
      *
      * @return array{components:int, matches:int, pending:int}
      */
@@ -123,49 +121,95 @@ final class VulnMatcher
         $mayFetch = $this->updater !== null && !$this->updater->nvdBlocked();
         foreach ($store->componentsToMatch($clientId) as $comp) {
             $stats['components']++;
-            $cpe = Cpe::parse($comp['cpe']);
-            if ($cpe === null) {
+            $result = $this->matchesForCpe($comp['cpe'], $fetchBudget, $mayFetch);
+            if ($result === false) {
                 $store->setComponentMatches($comp['id'], '', []);
                 continue;
             }
-            $queries = Cpe::matchStrings($cpe);
-            $fetched = [];
-            foreach ($queries as $query) {
-                $this->repo->ensureQuery($query);
-                $status = $this->repo->query($query);
-                if (($status['fetched_at'] ?? null) === null && $mayFetch && $fetchBudget > 0) {
-                    $fetchBudget--;
-                    try {
-                        $this->updater->fetchQuery($query);
-                    } catch (RateLimited) {
-                        $mayFetch = false;
-                    }
-                    $status = $this->repo->query($query);
-                }
-                if (($status['fetched_at'] ?? null) !== null) {
-                    $fetched[] = $query;
-                }
-            }
-            if ($fetched === []) {
+            if ($result === null) {
                 $stats['pending']++;
                 // Keep earlier matches for this same product and version until the data arrives, but drop
                 // matches of an earlier version: they would claim CVEs for a version no longer on the page.
-                $store->clearComponentMatchesUnless($comp['id'], $queries[0]);
+                $cpe = Cpe::parse($comp['cpe']);
+                $store->clearComponentMatchesUnless($comp['id'], $cpe === null ? '' : Cpe::matchStrings($cpe)[0]);
                 continue;
             }
-            $cves = [];
-            foreach ($fetched as $query) {
-                foreach ($this->repo->cvesForQuery($query) as $id) {
-                    $cves[$id] = true;
-                }
-            }
-            $matches = [];
-            foreach ($cpe['version'] !== '' ? array_keys($cves) : $this->repo->kevSubset(array_keys($cves)) as $id) {
-                $matches[$id] = $cpe['version'] !== '' ? 'confirmed' : 'possible';
-            }
-            $store->setComponentMatches($comp['id'], $queries[0], $matches);
-            $stats['matches'] += count($matches);
+            $store->setComponentMatches($comp['id'], $result['query'], $result['matches']);
+            $stats['matches'] += count($result['matches']);
         }
         return $stats;
+    }
+
+    /**
+     * Match installed software on internal devices (inventory sources), once per distinct product version.
+     * Same rules: a known version gives confirmed matches; data still missing leaves earlier matches alone.
+     *
+     * @return array{products:int, matches:int, pending:int}
+     */
+    public function matchSoftware(\Sentinel\Inventory\InventoryRepository $store, ?int $clientId, int $fetchBudget = 0): array
+    {
+        $stats = ['products' => 0, 'matches' => 0, 'pending' => 0];
+        $mayFetch = $this->updater !== null && !$this->updater->nvdBlocked();
+        foreach ($store->cpesToMatch($clientId) as $cpe) {
+            $stats['products']++;
+            $result = $this->matchesForCpe($cpe, $fetchBudget, $mayFetch);
+            if ($result === false) {
+                $store->setMatchesForCpe($clientId, $cpe, [], '');
+                continue;
+            }
+            if ($result === null) {
+                $stats['pending']++;
+                continue; // the software row is per version, so earlier matches can only be for this same version
+            }
+            $store->setMatchesForCpe($clientId, $cpe, $result['matches'], $result['query']);
+            $stats['matches'] += count($result['matches']);
+        }
+        return $stats;
+    }
+
+    /**
+     * CVE matches for one CPE (2.2 form, with or without version), fetching NVD data within the budget.
+     *
+     * @return array{query:string, matches:array<string,string>}|null|false null while data is pending;
+     *         false when the CPE can't be parsed.
+     */
+    private function matchesForCpe(string $uri, int &$fetchBudget, bool &$mayFetch): array|null|false
+    {
+        $cpe = Cpe::parse($uri);
+        if ($cpe === null) {
+            return false;
+        }
+        $queries = Cpe::matchStrings($cpe);
+        $fetched = [];
+        foreach ($queries as $query) {
+            $this->repo->ensureQuery($query);
+            $status = $this->repo->query($query);
+            if (($status['fetched_at'] ?? null) === null && $mayFetch && $fetchBudget > 0) {
+                $fetchBudget--;
+                try {
+                    $this->updater->fetchQuery($query);
+                } catch (RateLimited) {
+                    $mayFetch = false;
+                }
+                $status = $this->repo->query($query);
+            }
+            if (($status['fetched_at'] ?? null) !== null) {
+                $fetched[] = $query;
+            }
+        }
+        if ($fetched === []) {
+            return null;
+        }
+        $cves = [];
+        foreach ($fetched as $query) {
+            foreach ($this->repo->cvesForQuery($query) as $id) {
+                $cves[$id] = true;
+            }
+        }
+        $matches = [];
+        foreach ($cpe['version'] !== '' ? array_keys($cves) : $this->repo->kevSubset(array_keys($cves)) as $id) {
+            $matches[$id] = $cpe['version'] !== '' ? 'confirmed' : 'possible';
+        }
+        return ['query' => $queries[0], 'matches' => $matches];
     }
 }
