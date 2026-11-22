@@ -24,11 +24,56 @@ On a fresh Debian 13 VM (a minimal Debian may need `apt install -y curl sudo` fi
 curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install.sh | sudo -E bash
 ```
 
-It asks for the host name, the certificate type (`letsencrypt` or `selfsigned`), the Let's Encrypt email if needed,
-and the first admin. It fetches Sentinel from GitHub into `/opt/msp-sentinel-src`, runs the installer below, and adds
-the command `sudo msp-sentinel-update` for later upgrades. Run it again on an installed server and it upgrades.
+It fetches Sentinel from GitHub into `/opt/msp-sentinel-src`, walks you through seven steps, shows a summary, and
+only installs once you answer `y`. It also adds the command `sudo msp-sentinel-update` for later upgrades. Run it
+again on an installed server and it upgrades instead.
 
-Unattended (for example from cloud-init), set the answers as environment variables:
+### The guided install, step by step
+
+**Step 1 — Host name.** The name users type in the browser, for example `sentinel.msp.example`. For Let's Encrypt it
+must be in public DNS and point at this server.
+
+**Step 2 — HTTPS.** Pick one of three:
+
+| Choice | Use it when | What you need |
+|---|---|---|
+| **1) Let's Encrypt** | The server is reachable from the internet | Public DNS for the host name; ports 80 and 443 open to the internet; an email for expiry notices. Renewal is automatic. |
+| **2) Self-signed** (default) | A test server, or an internal-only server | Nothing. Browsers warn until you trust the certificate or replace it with your own in `/etc/nginx/sites-available/msp-sentinel`. |
+| **3) Behind a reverse proxy** | Your proxy or load balancer already ends HTTPS | The proxy's IP address. Sentinel listens on plain HTTP port 80 and accepts connections **from that IP only**. |
+
+For a reverse proxy, set it up to:
+- terminate HTTPS with a trusted certificate for the host name;
+- forward to `http://<sentinel-server>:80` and keep the original `Host` header;
+- send `X-Forwarded-For` (the user's address, used for sign-in rate limits and the audit log) and
+  `X-Forwarded-Proto: https`;
+- pass the `Authorization` header through (the API needs it).
+
+Sentinel trusts the forwarded headers only from the proxy IP you gave, so a user cannot fake their address.
+
+**Step 3 — Firewall (ufw).** Default yes. Allows SSH (rate-limited, on the port sshd uses), and HTTP and HTTPS — or,
+behind a proxy, port 80 from the proxy only. Everything else inbound is blocked. Say no if your cloud provider or
+another tool already manages the firewall.
+
+**Step 4 — fail2ban.** Default yes. Blocks addresses after repeated failed SSH logins. (Sentinel's own sign-in has
+its own lockout and rate limits.)
+
+**Step 5 — Automatic security updates.** Default yes. Turns on Debian's unattended-upgrades for security fixes.
+Sentinel itself is not auto-updated: run `sudo msp-sentinel-update` when you choose.
+
+**Step 6 — Backup encryption.** A passphrase of at least 12 characters, typed twice (hidden). The daily backups are
+then encrypted. Leave it empty to keep backups unencrypted. Store the passphrase in your password manager: a lost
+passphrase means the backups cannot be restored. You can set or change it later: see [backup.md](backup.md).
+
+**Step 7 — First admin.** User name, full name and email. The password is asked next, on the terminal.
+
+**Summary.** Every answer is shown again. Answer `y` to install, anything else to stop without changing anything.
+
+When it finishes, open `https://<host name>`, sign in, set up two-factor authentication, and copy
+`/opt/msp-sentinel/config/config.php` somewhere safe: its `app_key` is needed to restore a backup.
+
+### Unattended install
+
+For cloud-init or scripts, give the answers as environment variables; any step with a variable set is not asked:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install.sh | sudo -E \
@@ -39,13 +84,21 @@ curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install
 | Variable | Meaning |
 |---|---|
 | `SENTINEL_DOMAIN` | Host name users browse to |
-| `SENTINEL_TLS` | `letsencrypt` (public DNS, port 80 open) or `selfsigned` (default) |
-| `SENTINEL_LE_EMAIL` | Let's Encrypt expiry notices |
+| `SENTINEL_TLS` | `letsencrypt`, `selfsigned` (default) or `proxy` |
+| `SENTINEL_LE_EMAIL` | Let's Encrypt expiry notices (with `letsencrypt`) |
+| `SENTINEL_PROXY_IP` | The reverse proxy's IP address (with `proxy`) |
+| `SENTINEL_FIREWALL` | `y` (default) or `n` |
+| `SENTINEL_FAIL2BAN` | `y` (default) or `n` |
+| `SENTINEL_AUTO_UPDATES` | `y` (default) or `n` |
+| `SENTINEL_BACKUP_PASSPHRASE` | Backup encryption passphrase, at least 12 characters (empty: unencrypted) |
 | `SENTINEL_ADMIN_USER`, `SENTINEL_ADMIN_NAME`, `SENTINEL_ADMIN_EMAIL` | First admin; without a terminal a random password is printed once |
 | `SENTINEL_BRANCH` | Branch to install and update from (default `main`; `develop` for a test server, then use `.../develop/install.sh` in the URL) |
 | `SENTINEL_REPO` | `owner/name` of a fork |
 | `SENTINEL_FORCE=1` | Skip the operating system check |
 | `SENTINEL_DRY_RUN=1` | Show every step without changing anything |
+
+Pass the backup passphrase from a secret store, not typed on a shared command line, so it does not end up in shell
+history.
 
 The one-line install follows the branch, not a signed release. For signed releases, use the steps below.
 
@@ -54,7 +107,7 @@ The one-line install follows the branch, not a signed release. For signed releas
 1. Download the release and check it:
 
    ```sh
-   V=1.7.0   # the release you are installing (see the Releases page)
+   V=1.9.0   # the release you are installing (see the Releases page)
    curl -LO https://github.com/msp-align/msp-sentinel/releases/download/v$V/msp-sentinel-$V.tar.gz
    curl -LO https://github.com/msp-align/msp-sentinel/releases/download/v$V/SHA256SUMS
    curl -LO https://github.com/msp-align/msp-sentinel/releases/download/v$V/SHA256SUMS.asc
@@ -82,6 +135,15 @@ The one-line install follows the branch, not a signed release. For signed releas
    sudo ./install/install.sh --domain sentinel.msp.example
    ```
 
+   Or behind a reverse proxy that ends HTTPS (see step 2 above for the proxy settings):
+
+   ```sh
+   sudo ./install/install.sh --domain sentinel.msp.example --tls proxy --proxy-ip 192.0.2.10
+   ```
+
+   Other options: `--no-firewall`, `--no-fail2ban`, `--no-auto-updates`. For encrypted backups, set
+   `SENTINEL_BACKUP_PASSPHRASE` in the environment (`sudo -E`). `./install/install.sh --help` lists them all.
+
 4. The installer asks for the first admin's user name, name, email and password. Then open
    `https://sentinel.msp.example`, sign in, and set up two-factor authentication.
 
@@ -98,13 +160,14 @@ The one-line install follows the branch, not a signed release. For signed releas
 | System user that runs the worker and cron jobs | `sentinel` (no login shell) |
 | Database and user, with a random password | `msp_sentinel` on the local MariaDB |
 | PHP-FPM pool (www-data, group sentinel) | `/etc/php/8.4/fpm/pool.d/msp-sentinel.conf` |
-| Nginx site (HTTP redirects to HTTPS) | `/etc/nginx/sites-available/msp-sentinel` |
+| Nginx site (HTTP redirects to HTTPS; proxy mode: HTTP from the proxy only) | `/etc/nginx/sites-available/msp-sentinel` |
 | Cron jobs: worker every minute, feeds daily, discovery weekly, backup daily | `/etc/cron.d/msp-sentinel` |
 | Logs (rotated weekly) | `/var/log/msp-sentinel/` |
-| Daily backups (keep 14) | `/var/backups/msp-sentinel/` |
+| Daily backups (keep 14; encrypted if a passphrase was set) | `/var/backups/msp-sentinel/`, settings in `/etc/msp-sentinel/backup.env` |
+| Firewall, fail2ban, automatic security updates (unless turned off) | `ufw`, `/etc/fail2ban/jail.d/msp-sentinel.local`, `/etc/apt/apt.conf.d/20auto-upgrades` |
 
 Re-running the installer with the same version is safe: it keeps the config and database and re-applies the
-rest (for example to switch to `--certbot` later). On hosts with IPv6 turned off, the Nginx site listens on IPv4 only.
+rest (for example to switch to `--tls letsencrypt` later). On hosts with IPv6 turned off, the Nginx site listens on IPv4 only.
 
 Then check everything with `sudo -u sentinel php8.4 /opt/msp-sentinel/bin/doctor.php`, or under
 **Administration → System**.
@@ -117,7 +180,7 @@ Then check everything with `sudo -u sentinel php8.4 /opt/msp-sentinel/bin/doctor
 4. **Clients:** add a client, record the scan authorisation with the approved addresses, and run a first scan.
 5. Optionally, get a free **NVD API key** and set `nvd.api_key` in the config: vulnerability lookups get about ten
    times faster.
-6. Optionally, encrypt the daily backups: see [backup.md](backup.md).
+6. If you skipped it during install, encrypt the daily backups: see [backup.md](backup.md).
 
 ## Manual install (other systems)
 

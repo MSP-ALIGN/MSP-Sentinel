@@ -2,6 +2,19 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.9.0 (2026-11-22): guided install
+
+- The one-line install is now a **seven-step guided install** with a summary to confirm before anything changes:
+  host name, HTTPS, firewall, fail2ban, automatic security updates, backup encryption and the first admin.
+- **Three HTTPS choices:** Let's Encrypt, self-signed, or **behind a reverse proxy** (Sentinel listens on plain HTTP
+  for the proxy's address only and trusts its forwarded headers).
+- **Server hardening by default:** ufw firewall (SSH rate-limited), fail2ban for SSH, and Debian's automatic security
+  updates. Each can be turned off.
+- **Encrypted backups from day one:** set a backup passphrase during install.
+- Every answer can also be given as a `SENTINEL_*` environment variable for unattended installs. New installer
+  options: `--tls`, `--proxy-ip`, `--no-firewall`, `--no-fail2ban`, `--no-auto-updates`.
+- Step-by-step guide in [docs/install.md](docs/install.md).
+
 ### 1.8.0 (2026-11-22): one-line install on Debian 13
 
 - **One-line install** on a fresh Debian 13 VM:

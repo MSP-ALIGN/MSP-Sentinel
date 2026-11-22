@@ -3,8 +3,12 @@
 #
 # One-line install from GitHub (runs this script for you): see install.sh at the top of the repository.
 #
-# Install (from the unpacked release folder):
-#   sudo ./install/install.sh --domain sentinel.msp.example [--certbot --email admin@msp.example]
+# Install (from the unpacked release folder; the one-line install.sh at the top asks for all of this step by step):
+#   sudo ./install/install.sh --domain sentinel.msp.example [--tls letsencrypt --email admin@msp.example]
+#   sudo ./install/install.sh --domain sentinel.msp.example --tls proxy --proxy-ip 192.0.2.10
+#   Options: --tls letsencrypt|selfsigned|proxy (default selfsigned; --certbot is the same as --tls letsencrypt),
+#   --proxy-ip IP, --no-firewall, --no-fail2ban, --no-auto-updates. A backup passphrase can be given in the
+#   environment variable SENTINEL_BACKUP_PASSPHRASE (never on the command line).
 # Upgrade (from the NEW release folder):
 #   sudo ./install/install.sh --upgrade
 # See what it would do, without changing anything:
@@ -43,13 +47,23 @@ mode=install
 domain=""
 email=""
 certbot=0
+tls=selfsigned
+proxy_ip=""
+firewall=1
+fail2ban=1
+auto_updates=1
 dry=0
 skip_os=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --domain) domain="${2:-}"; shift 2 ;;
     --email) email="${2:-}"; shift 2 ;;
-    --certbot) certbot=1; shift ;;
+    --certbot) certbot=1; tls=letsencrypt; shift ;;
+    --tls) tls="${2:-}"; shift 2 ;;
+    --proxy-ip) proxy_ip="${2:-}"; shift 2 ;;
+    --no-firewall) firewall=0; shift ;;
+    --no-fail2ban) fail2ban=0; shift ;;
+    --no-auto-updates) auto_updates=0; shift ;;
     --upgrade) mode=upgrade; shift ;;
     --dry-run) dry=1; shift ;;
     --skip-os-check) skip_os=1; shift ;;
@@ -76,6 +90,15 @@ write_service_files() {
   render logrotate | write_file /etc/logrotate.d/msp-sentinel 0644
 }
 die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
+# valid_ip ADDR: one IPv4 address (each part 0-255) or an IPv6 address (hex groups and colons only).
+valid_ip() {
+  local a="$1" o
+  if [[ "$a" =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]]; then
+    for o in "${BASH_REMATCH[@]:1}"; do [ "$o" -le 255 ] || return 1; done
+    return 0
+  fi
+  [[ "$a" =~ ^[0-9A-Fa-f:]{2,39}$ && "$a" == *:*:* ]]
+}
 # Run a command, or only show it in a dry run.
 run() {
   if [ "$dry" -eq 1 ]; then printf '  [dry-run] %s\n' "$*"; else "$@"; fi
@@ -149,8 +172,13 @@ fi
 
 # ---------------------------------------------------------------- install
 [[ "$domain" =~ ^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$ ]] || die "--domain must be a host name such as sentinel.msp.example (lower case)."
+case "$tls" in letsencrypt) certbot=1 ;; selfsigned|proxy) certbot=0 ;; *) die "--tls must be letsencrypt, selfsigned or proxy." ;; esac
 if [ "$certbot" -eq 1 ]; then
-  [[ "$email" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]] || die "--certbot needs --email (for Let's Encrypt expiry notices)."
+  [[ "$email" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]] || die "--tls letsencrypt needs --email (for Let's Encrypt expiry notices)."
+fi
+if [ "$tls" = proxy ]; then
+  # One plain IP address (it goes into the Nginx allow rule, the firewall and the config): checked strictly here.
+  valid_ip "$proxy_ip" || die "--tls proxy needs --proxy-ip with the reverse proxy's IP address (one address)."
 fi
 existing=0
 if [ -f "$APP_DIR/config/config.php" ]; then
@@ -179,6 +207,11 @@ fi
 run apt-get update
 run apt-get install -y "php${PHPV}-fpm" "php${PHPV}-cli" "php${PHPV}-mysql" "php${PHPV}-mbstring" "php${PHPV}-curl" "php${PHPV}-xml" "php${PHPV}-gd"
 if [ "$certbot" -eq 1 ]; then run apt-get install -y certbot; fi
+extra=()
+[ "$firewall" -eq 1 ] && extra+=(ufw)
+[ "$fail2ban" -eq 1 ] && extra+=(fail2ban)
+[ "$auto_updates" -eq 1 ] && extra+=(unattended-upgrades)
+if [ "${#extra[@]}" -gt 0 ]; then run apt-get install -y "${extra[@]}"; fi
 
 say "System user and folders"
 if ! id sentinel >/dev/null 2>&1; then
@@ -214,9 +247,9 @@ say "Configuration"
 if [ "$existing" -eq 1 ]; then
   echo "  Kept $APP_DIR/config/config.php."
 elif [ "$dry" -eq 1 ]; then
-  echo "  [dry-run] php bin/setup-config.php --public-url=https://$domain --db-host=localhost (password on stdin)"
+  echo "  [dry-run] php bin/setup-config.php --public-url=https://$domain --db-host=localhost${proxy_ip:+ --trusted-proxy=$proxy_ip} (password on stdin)"
 else
-  printf '%s\n' "$db_pass" | "$PHP_BIN" "$APP_DIR/bin/setup-config.php" --public-url="https://$domain" --db-host=localhost --db-name="$DB_NAME" --db-user="$DB_USER"
+  printf '%s\n' "$db_pass" | "$PHP_BIN" "$APP_DIR/bin/setup-config.php" --public-url="https://$domain" --db-host=localhost --db-name="$DB_NAME" --db-user="$DB_USER" ${proxy_ip:+--trusted-proxy="$proxy_ip"}
   chown root:sentinel "$APP_DIR/config/config.php"
   chmod 0640 "$APP_DIR/config/config.php"
 fi
@@ -230,6 +263,17 @@ write_service_files
 run systemctl enable --now "php${PHPV}-fpm"
 run systemctl restart "php${PHPV}-fpm"
 
+if [ "$tls" = proxy ]; then
+  say "Nginx behind the reverse proxy ($proxy_ip)"
+  sed -e "s#__DOMAIN__#${domain}#g" -e "s#__ROOT__#${APP_DIR}#g" -e "s#__PROXY__#${proxy_ip}#g" "$SRC/install/templates/nginx-proxy.conf" \
+    | write_file /etc/nginx/sites-available/msp-sentinel 0644
+  run ln -sf /etc/nginx/sites-available/msp-sentinel /etc/nginx/sites-enabled/msp-sentinel
+  run rm -f /etc/nginx/sites-enabled/default
+  run nginx -t
+  run systemctl reload nginx
+  echo "  Point the proxy at http://<this server>:80 for https://$domain. It must pass the Host header and send"
+  echo "  X-Forwarded-For and X-Forwarded-Proto: https. Only $proxy_ip may connect."
+else
 say "Nginx and HTTPS"
 cert="/etc/ssl/msp-sentinel/selfsigned.crt"
 key="/etc/ssl/msp-sentinel/selfsigned.key"
@@ -239,6 +283,7 @@ if [ "$dry" -eq 1 ] || [ ! -f "$cert" ]; then
 fi
 render nginx.conf | write_file /etc/nginx/sites-available/msp-sentinel 0644
 run ln -sf /etc/nginx/sites-available/msp-sentinel /etc/nginx/sites-enabled/msp-sentinel
+run rm -f /etc/nginx/sites-enabled/default
 run nginx -t
 run systemctl reload nginx
 if [ "$certbot" -eq 1 ]; then
@@ -249,14 +294,62 @@ if [ "$certbot" -eq 1 ]; then
   render nginx.conf | write_file /etc/nginx/sites-available/msp-sentinel 0644
   run nginx -t
   run systemctl reload nginx
+  echo "  Let's Encrypt certificate installed; it renews automatically (certbot's timer)."
 else
-  echo "  Using a self-signed certificate. For a trusted one, re-run this installer with --domain $domain --certbot --email you@msp.example, or install your own."
+  echo "  Using a self-signed certificate. For a trusted one, re-run this installer with --tls letsencrypt --email you@msp.example, or install your own."
+fi
+fi
+
+if [ "$firewall" -eq 1 ]; then
+  say "Firewall (ufw)"
+  ssh_port="$( { sshd -T 2>/dev/null || true; } | awk '/^port /{print $2; exit}')"; ssh_port="${ssh_port:-22}"
+  run ufw default deny incoming
+  run ufw default allow outgoing
+  run ufw limit "${ssh_port}/tcp" comment 'SSH (rate-limited)'
+  if [ "$tls" = proxy ]; then
+    run ufw allow from "$proxy_ip" to any port 80 proto tcp comment 'MSP Sentinel via reverse proxy'
+  else
+    run ufw allow 80/tcp comment 'HTTP redirect and Lets Encrypt'
+    run ufw allow 443/tcp comment 'MSP Sentinel HTTPS'
+  fi
+  run ufw --force enable
+fi
+
+if [ "$fail2ban" -eq 1 ]; then
+  say "fail2ban (SSH sign-in protection)"
+  # Debian 13 logs to the journal (no /var/log/auth.log), so the systemd backend is used.
+  printf '%s\n' '# Written by the MSP Sentinel installer. Web sign-ins are throttled by Sentinel itself.' '[sshd]' 'enabled = true' 'backend = systemd' \
+    'maxretry = 5' 'findtime = 10m' 'bantime = 1h' | write_file /etc/fail2ban/jail.d/msp-sentinel.local 0644
+  run systemctl enable fail2ban
+  run systemctl restart fail2ban
+fi
+
+if [ "$auto_updates" -eq 1 ]; then
+  say "Automatic security updates"
+  printf '%s\n' 'APT::Periodic::Update-Package-Lists "1";' 'APT::Periodic::Unattended-Upgrade "1";' | write_file /etc/apt/apt.conf.d/20auto-upgrades 0644
+  run systemctl enable --now unattended-upgrades
+fi
+
+if [ -n "${SENTINEL_BACKUP_PASSPHRASE:-}" ]; then
+  say "Encrypted backups"
+  if [ "$dry" -eq 1 ]; then
+    echo "  [dry-run] write /etc/msp-sentinel/backup.env (mode 0640, root:sentinel) with the passphrase"
+  else
+    # Quoted for the shell with printf %q; readable by root and the backup job only. Never printed.
+    { echo '# Written by the MSP Sentinel installer: nightly backups are encrypted with this passphrase. Keep a copy in your vault.'
+      echo 'export SENTINEL_BACKUP_ENCRYPT=1'
+      printf 'export SENTINEL_BACKUP_PASSPHRASE=%q\n' "$SENTINEL_BACKUP_PASSPHRASE"; } > /etc/msp-sentinel/backup.env.tmp
+    chown root:sentinel /etc/msp-sentinel/backup.env.tmp
+    chmod 0640 /etc/msp-sentinel/backup.env.tmp
+    mv -f /etc/msp-sentinel/backup.env.tmp /etc/msp-sentinel/backup.env
+    echo "  Nightly backups will be encrypted. Keep the passphrase in your password vault: without it they can't be restored."
+  fi
 fi
 
 say "First admin"
 # Questions go to the terminal (/dev/tty), so this also works when the script itself arrives on stdin (curl | bash).
 # Unattended: set SENTINEL_ADMIN_USER, SENTINEL_ADMIN_NAME and SENTINEL_ADMIN_EMAIL; a random password is then printed once.
-have_tty() { [ -r /dev/tty ] && (: </dev/tty) 2>/dev/null; }
+have_tty() { [ -r /dev/tty ] && (: </dev/tty) 2>/dev/null || return 1; }
 admin_user="${SENTINEL_ADMIN_USER:-}"; admin_name="${SENTINEL_ADMIN_NAME:-}"; admin_email="${SENTINEL_ADMIN_EMAIL:-}"
 if [ "$existing" -eq 1 ] || [ "$dry" -eq 1 ]; then
   echo "  Skipped (existing install or dry run)."

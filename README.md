@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.8.0](https://img.shields.io/badge/version-1.8.0-ff5a1f?style=flat-square)
+![Version 1.9.0](https://img.shields.io/badge/version-1.9.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -94,9 +94,18 @@ One line on a fresh **Debian 13** VM (Debian 12 and Ubuntu 24.04 also work):
 curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install.sh | sudo -E bash
 ```
 
-It asks for the host name, the certificate (Let's Encrypt or self-signed) and the first admin, then sets up Nginx,
-PHP-FPM 8.4, MariaDB, the database, a fresh app key, cron jobs, HTTPS and log rotation. Upgrade later with
-`sudo msp-sentinel-update`. Unattended installs and signed release archives: see [docs/install.md](docs/install.md).
+A guided install walks you through seven steps and shows a summary before it changes anything:
+
+1. Host name
+2. HTTPS: Let's Encrypt, self-signed, or behind your reverse proxy
+3. Firewall (ufw)
+4. fail2ban
+5. Automatic security updates
+6. Backup encryption passphrase
+7. First admin
+
+It then sets up Nginx, PHP-FPM 8.4, MariaDB, the database, a fresh app key, cron jobs, HTTPS and log rotation. Upgrade later with
+`sudo msp-sentinel-update`. The step-by-step guide, unattended installs and signed release archives: see [docs/install.md](docs/install.md).
 
 For an on-premises agent at a client site (asks for the Sentinel address and the one-time code):
 
@@ -133,6 +142,19 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
 
 ## What's new
 
+### 1.9.0 (2026-11-22): guided install
+
+- The one-line install is now a **seven-step guided install** with a summary to confirm before anything changes:
+  host name, HTTPS, firewall, fail2ban, automatic security updates, backup encryption and the first admin.
+- **Three HTTPS choices:** Let's Encrypt, self-signed, or **behind a reverse proxy** (Sentinel listens on plain HTTP
+  for the proxy's address only and trusts its forwarded headers).
+- **Server hardening by default:** ufw firewall (SSH rate-limited), fail2ban for SSH, and Debian's automatic security
+  updates. Each can be turned off.
+- **Encrypted backups from day one:** set a backup passphrase during install.
+- Every answer can also be given as a `SENTINEL_*` environment variable for unattended installs. New installer
+  options: `--tls`, `--proxy-ip`, `--no-firewall`, `--no-fail2ban`, `--no-auto-updates`.
+- Step-by-step guide in [docs/install.md](docs/install.md).
+
 ### 1.8.0 (2026-11-22): one-line install on Debian 13
 
 - **One-line install** on a fresh Debian 13 VM:
@@ -144,6 +166,9 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
   Ubuntu 24.04 still work.
 - The installers ask their questions on the terminal, so they also work when piped from `curl`.
 
+<details>
+<summary><b>Earlier releases (1.7.0 to 1.0.0)</b></summary>
+
 ### 1.7.0 (2026-11-22): risky internal protocols
 
 - The on-premises agent now checks each device of a full scan for risky protocols, read-only:
@@ -153,9 +178,6 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
 - No logins: SMB and RDP are read from the protocol negotiation. The SNMP check sends one read request with the
   default community names. A check that can't decide is never a finding.
 - Plain-English explanations and fixes in reports; findings show on the device page.
-
-<details>
-<summary><b>Earlier releases (1.6.0 to 1.0.0)</b></summary>
 
 ### 1.6.0 (2026-11-22): on-premises agents
 

@@ -139,9 +139,10 @@ return [
             'title' => 'System, backups and updates (admins)',
             'paragraphs' => [
                 'Administration, System shows the health of this install: PHP, the database, migrations, nmap, whether the scan worker and the daily feeds job are running, storage, disk space, HTTPS, email and updates. Fix anything marked Problem first. The server administrator can run the same checks with php bin/doctor.php.',
-                'Once a day Sentinel asks the releases feed for the latest version (nothing else is sent) and shows it here when a newer one exists. You can turn this off. Upgrades are done on the server (install.sh --upgrade), which makes a backup first.',
+                'Once a day Sentinel asks the releases feed for the latest version (nothing else is sent) and shows it here when a newer one exists. You can turn this off. Upgrades are done on the server (sudo msp-sentinel-update, or install.sh --upgrade), which makes a backup first.',
                 'Data retention: choose how many months to keep finished scan history, resolved findings and reports. 0 keeps them forever. Older data is removed once a day and the counts are written to the audit log. The audit log itself is always kept.',
                 'Backups are made on the server with bin/backup.php (daily, if Sentinel was installed with the installer). They contain all client data and the app key, so encrypt any copy that leaves the server. See docs/backup.md.',
+                'Installing: the one-line install asks seven questions step by step (host name; HTTPS with Let\'s Encrypt, self-signed or behind a reverse proxy; firewall; fail2ban; automatic security updates; backup encryption passphrase; first admin) and shows a summary before it changes anything. Behind a reverse proxy, Sentinel only accepts plain HTTP from the proxy\'s address and trusts its X-Forwarded-For and X-Forwarded-Proto headers. See docs/install.md.',
             ],
         ],
         [
@@ -193,6 +194,15 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.9.0',
+            'date' => '2026-11-22',
+            'items' => [
+                'Guided install: seven steps and a summary to confirm (host name, HTTPS, firewall, fail2ban, automatic security updates, backup encryption, first admin).',
+                'HTTPS with Let\'s Encrypt, self-signed, or behind a reverse proxy (Sentinel accepts plain HTTP from the proxy only).',
+                'Server hardening by default: ufw, fail2ban and automatic security updates, each optional.',
+            ],
+        ],
         [
             'version' => '1.8.0',
             'date' => '2026-11-22',

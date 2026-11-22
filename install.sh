@@ -9,10 +9,16 @@
 #  Upgrade an existing install:
 #    sudo msp-sentinel-update
 #
+#  With a terminal it runs a 7-step wizard (host name, HTTPS, firewall, SSH protection, security updates,
+#  backups, first admin) and shows a summary to confirm before changing anything.
+#
 #  Unattended install: set any of these to skip the matching question
 #    SENTINEL_DOMAIN       host name users browse to, e.g. sentinel.msp.example
-#    SENTINEL_TLS          letsencrypt (public DNS + port 80 open) or selfsigned (default)
+#    SENTINEL_TLS          letsencrypt (public DNS + port 80 open), selfsigned (default) or proxy
 #    SENTINEL_LE_EMAIL     Let's Encrypt expiry notices (letsencrypt only)
+#    SENTINEL_PROXY_IP     the reverse proxy's IP address (proxy only)
+#    SENTINEL_FIREWALL / SENTINEL_FAIL2BAN / SENTINEL_AUTO_UPDATES   1 (default) or 0
+#    SENTINEL_BACKUP_PASSPHRASE   encrypt nightly backups (at least 12 characters; empty: unencrypted)
 #    SENTINEL_ADMIN_USER / SENTINEL_ADMIN_NAME / SENTINEL_ADMIN_EMAIL   first admin (password printed once)
 #    SENTINEL_REPO         owner/name (default MSP-ALIGN/MSP-Sentinel)
 #    SENTINEL_BRANCH       branch to install and update from (default main; develop for test servers)
@@ -43,7 +49,7 @@ die() { printf '%sERROR:%s %s\n' "$c_err" "$c_0" "$*" >&2; exit 1; }
 trap 'die "Install stopped at line $LINENO (command: $BASH_COMMAND)"' ERR
 run() { if [ "$DRY" = 1 ]; then printf '  [dry-run] %s\n' "$*"; else "$@"; fi; }
 # Questions go to the terminal: under `curl | bash` the script itself is on stdin.
-have_tty() { [ -r /dev/tty ] && (: </dev/tty) 2>/dev/null; }
+have_tty() { [ -r /dev/tty ] && (: </dev/tty) 2>/dev/null || return 1; }
 # ask VAR "Prompt" "default": from the environment if set, else the terminal, else the default (or stop if required).
 ask() {
   local __var=$1 prompt=$2 def=${3:-} reply=
@@ -112,19 +118,119 @@ if [ -f "$APP_DIR/config/config.php" ]; then
   exec bash "$SRC_DIR/install/install.sh" "${args[@]}"
 fi
 
-ask SENTINEL_DOMAIN "Host name users browse to (e.g. sentinel.msp.example)"
+# ------------------------------------------------------------------ wizard ----
+step() { if have_tty; then printf '\n%s[%s/7] %s%s\n' "$c_ok" "$1" "$2" "$c_0"; fi; }
+note() { if have_tty; then printf '      %s\n' "$@"; fi; }
+# ask_yes VAR "Question" default(1|0): yes/no, from the environment (1/0) or the terminal.
+ask_yes() {
+  local __var=$1 q=$2 def=$3 reply=
+  if [ -n "${!__var:-}" ]; then [[ "${!__var}" =~ ^[01]$ ]] || die "$__var must be 1 or 0."; return; fi
+  if ! have_tty; then printf -v "$__var" '%s' "$def"; return; fi
+  read -r -p "      $q [$( [ "$def" = 1 ] && echo Y/n || echo y/N )]: " reply </dev/tty
+  case "${reply,,}" in y|yes) printf -v "$__var" 1 ;; n|no) printf -v "$__var" 0 ;; *) printf -v "$__var" '%s' "$def" ;; esac
+}
+valid_ip() {
+  local a="$1" o
+  if [[ "$a" =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]]; then
+    for o in "${BASH_REMATCH[@]:1}"; do [ "$o" -le 255 ] || return 1; done; return 0
+  fi
+  [[ "$a" =~ ^[0-9A-Fa-f:]{2,39}$ && "$a" == *:*:* ]]
+}
+if have_tty; then printf '\n%sMSP Sentinel setup%s: seven short steps, then a summary to confirm. Nothing changes before you confirm.\n' "$c_ok" "$c_0"; fi
+
+step 1 "Host name"
+note "The name users type in the browser, e.g. sentinel.msp.example. It must point at this server (or at your proxy)."
+ask SENTINEL_DOMAIN "      Host name"
 SENTINEL_DOMAIN="$(printf '%s' "$SENTINEL_DOMAIN" | tr 'A-Z' 'a-z')"
 [[ "$SENTINEL_DOMAIN" =~ ^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$ ]] || die "That is not a host name: $SENTINEL_DOMAIN"
-ask SENTINEL_TLS "Certificate: letsencrypt (public DNS, port 80 open) or selfsigned" "selfsigned"
-case "$SENTINEL_TLS" in letsencrypt|selfsigned) ;; *) die "SENTINEL_TLS must be letsencrypt or selfsigned." ;; esac
-args=(--domain "$SENTINEL_DOMAIN")
-if [ "$SENTINEL_TLS" = letsencrypt ]; then
-  ask SENTINEL_LE_EMAIL "Email for Let's Encrypt expiry notices"
-  [[ "$SENTINEL_LE_EMAIL" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]] || die "That is not an email address."
-  args+=(--certbot --email "$SENTINEL_LE_EMAIL")
+
+step 2 "HTTPS"
+note "1) letsencrypt  - free trusted certificate; needs public DNS for the name and port 80 reachable from the internet" \
+     "2) selfsigned   - for internal use; browsers warn until you trust the certificate" \
+     "3) proxy        - a reverse proxy (BunkerWeb, Nginx Proxy Manager, Caddy, a load balancer...) handles HTTPS;" \
+     "                  Sentinel listens on plain HTTP and only accepts the proxy's address"
+if [ -z "${SENTINEL_TLS:-}" ] && have_tty; then
+  read -r -p "      Choose 1, 2 or 3 [2]: " tls_choice </dev/tty
+  case "${tls_choice:-2}" in 1|letsencrypt) SENTINEL_TLS=letsencrypt ;; 2|selfsigned) SENTINEL_TLS=selfsigned ;; 3|proxy) SENTINEL_TLS=proxy ;; *) die "Choose 1, 2 or 3." ;; esac
 fi
+SENTINEL_TLS="${SENTINEL_TLS:-selfsigned}"
+case "$SENTINEL_TLS" in letsencrypt|selfsigned|proxy) ;; *) die "SENTINEL_TLS must be letsencrypt, selfsigned or proxy." ;; esac
+if [ "$SENTINEL_TLS" = letsencrypt ]; then
+  ask SENTINEL_LE_EMAIL "      Email for Let's Encrypt expiry notices"
+  [[ "$SENTINEL_LE_EMAIL" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]] || die "That is not an email address."
+elif [ "$SENTINEL_TLS" = proxy ]; then
+  note "The proxy must send the Host header, X-Forwarded-For and X-Forwarded-Proto: https, to http://<this server>:80."
+  ask SENTINEL_PROXY_IP "      The proxy's IP address (one address)"
+  valid_ip "$SENTINEL_PROXY_IP" || die "That is not one IP address: $SENTINEL_PROXY_IP"
+fi
+
+step 3 "Firewall"
+note "ufw: allow SSH (rate-limited) and the web ports$( [ "$SENTINEL_TLS" = proxy ] && echo ' (port 80 from the proxy only)' ), block everything else inbound."
+ask_yes SENTINEL_FIREWALL "Turn on the firewall?" 1
+
+step 4 "SSH protection"
+note "fail2ban bans addresses after repeated failed SSH sign-ins (Sentinel throttles web sign-ins itself)."
+ask_yes SENTINEL_FAIL2BAN "Install fail2ban?" 1
+
+step 5 "Automatic security updates"
+note "Debian security patches are installed automatically every day (unattended-upgrades)."
+ask_yes SENTINEL_AUTO_UPDATES "Turn on automatic security updates?" 1
+
+step 6 "Backups"
+note "Sentinel backs up its database and config every night (kept 14 days). With a passphrase they are encrypted." \
+     "Keep the passphrase in your password vault: without it an encrypted backup can't be restored. Leave empty to skip."
+if [ -z "${SENTINEL_BACKUP_PASSPHRASE:-}" ] && have_tty; then
+  while true; do
+    read -r -s -p "      Backup passphrase (at least 12 characters, empty for none): " pp1 </dev/tty; echo >/dev/tty
+    [ -z "$pp1" ] && break
+    [ "${#pp1}" -ge 12 ] || { note "Too short."; continue; }
+    read -r -s -p "      The same passphrase again: " pp2 </dev/tty; echo >/dev/tty
+    [ "$pp1" = "$pp2" ] && { SENTINEL_BACKUP_PASSPHRASE="$pp1"; break; }
+    note "They don't match; try again."
+  done
+  unset pp1 pp2
+fi
+if [ -n "${SENTINEL_BACKUP_PASSPHRASE:-}" ] && [ "${#SENTINEL_BACKUP_PASSPHRASE}" -lt 12 ]; then die "The backup passphrase must be at least 12 characters."; fi
+
+step 7 "First admin"
+note "The first administrator. You choose the password next; two-factor authentication is set up at first sign-in."
+if have_tty; then
+  ask SENTINEL_ADMIN_USER "      User name"
+  [[ "$SENTINEL_ADMIN_USER" =~ ^[A-Za-z0-9._-]{3,50}$ ]] || die "User names: 3 to 50 letters, digits, dots, dashes or underscores."
+  ask SENTINEL_ADMIN_NAME "      Display name"
+  ask SENTINEL_ADMIN_EMAIL "      Email"
+  [[ "$SENTINEL_ADMIN_EMAIL" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]] || die "That is not an email address."
+fi
+
+# ----------------------------------------------------------------- summary ----
+yn() { [ "$1" = 1 ] && echo yes || echo no; }
+if have_tty; then
+  printf '\n%sSummary%s\n' "$c_ok" "$c_0"
+  printf '      Address:            https://%s\n' "$SENTINEL_DOMAIN"
+  case "$SENTINEL_TLS" in
+    letsencrypt) printf '      HTTPS:              Let'"'"'s Encrypt (notices to %s)\n' "$SENTINEL_LE_EMAIL" ;;
+    selfsigned) printf '      HTTPS:              self-signed certificate\n' ;;
+    proxy) printf '      HTTPS:              by the reverse proxy %s (Sentinel: plain HTTP on port 80, for the proxy only)\n' "$SENTINEL_PROXY_IP" ;;
+  esac
+  printf '      Firewall (ufw):     %s\n      fail2ban (SSH):     %s\n      Security updates:   %s\n' "$(yn "$SENTINEL_FIREWALL")" "$(yn "$SENTINEL_FAIL2BAN")" "$(yn "$SENTINEL_AUTO_UPDATES")"
+  printf '      Backups encrypted:  %s\n' "$( [ -n "${SENTINEL_BACKUP_PASSPHRASE:-}" ] && echo yes || echo no )"
+  printf '      First admin:        %s (%s, %s)\n' "${SENTINEL_ADMIN_USER:-later}" "${SENTINEL_ADMIN_NAME:-}" "${SENTINEL_ADMIN_EMAIL:-}"
+  printf '      Source:             %s, branch %s\n' "$REPO" "$BRANCH"
+  read -r -p "      Install with these settings? [y/N]: " go </dev/tty
+  case "${go,,}" in y|yes) ;; *) die "Nothing was changed." ;; esac
+fi
+
+args=(--domain "$SENTINEL_DOMAIN" --tls "$SENTINEL_TLS")
+[ "$SENTINEL_TLS" = letsencrypt ] && args+=(--email "$SENTINEL_LE_EMAIL")
+[ "$SENTINEL_TLS" = proxy ] && args+=(--proxy-ip "$SENTINEL_PROXY_IP")
+[ "$SENTINEL_FIREWALL" = 1 ] || args+=(--no-firewall)
+[ "$SENTINEL_FAIL2BAN" = 1 ] || args+=(--no-fail2ban)
+[ "$SENTINEL_AUTO_UPDATES" = 1 ] || args+=(--no-auto-updates)
 [ "$DRY" = 1 ] && args+=(--dry-run)
 [ "${SENTINEL_FORCE:-0}" = 1 ] && args+=(--skip-os-check)
+# The admin details and the backup passphrase travel in the environment, never on a command line.
+export SENTINEL_ADMIN_USER="${SENTINEL_ADMIN_USER:-}" SENTINEL_ADMIN_NAME="${SENTINEL_ADMIN_NAME:-}" SENTINEL_ADMIN_EMAIL="${SENTINEL_ADMIN_EMAIL:-}"
+export SENTINEL_BACKUP_PASSPHRASE="${SENTINEL_BACKUP_PASSPHRASE:-}"
 
 log "Installing MSP Sentinel for https://$SENTINEL_DOMAIN"
 install_update_command

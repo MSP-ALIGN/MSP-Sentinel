@@ -21,7 +21,7 @@ BRANCH="${SENTINEL_BRANCH:-main}"
 SRC_DIR=/opt/sentinel-agent-src
 
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
-have_tty() { [ -r /dev/tty ] && (: </dev/tty) 2>/dev/null; }
+have_tty() { [ -r /dev/tty ] && (: </dev/tty) 2>/dev/null || return 1; }
 [[ "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die "SENTINEL_REPO must be owner/name."
 [[ "$BRANCH" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]{0,59}$ && "$BRANCH" != *..* ]] || die "SENTINEL_BRANCH is not a valid branch name."
 [ "$(id -u)" -eq 0 ] || die "Run as root: curl -fsSL ... | sudo -E bash"

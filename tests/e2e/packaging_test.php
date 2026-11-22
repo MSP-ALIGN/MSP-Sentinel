@@ -46,7 +46,27 @@ return [
         exec($env . 'SENTINEL_DOMAIN=sentinel.example SENTINEL_TLS=letsencrypt SENTINEL_LE_EMAIL=ops@msp.example bash ' . escapeshellarg($root . '/install.sh') . ' </dev/null 2>&1', $l2, $rc2);
         Assert::same(0, $rc2, implode("\n", $l2));
         Assert::contains('certbot certonly', implode("\n", $l2), 'Let\'s Encrypt chosen');
+        // Behind a reverse proxy: plain HTTP for the proxy only, firewall opened for it only, trusted in the config.
+        exec($env . 'SENTINEL_DOMAIN=sentinel.example SENTINEL_TLS=proxy SENTINEL_PROXY_IP=192.0.2.10 SENTINEL_BACKUP_PASSPHRASE=a-long-test-passphrase bash ' . escapeshellarg($root . '/install.sh') . ' </dev/null 2>&1', $l3, $rc3);
+        $proxy = implode("\n", $l3);
+        Assert::same(0, $rc3, $proxy);
+        foreach (['Nginx behind the reverse proxy (192.0.2.10)', 'ufw allow from 192.0.2.10 to any port 80', '--trusted-proxy=192.0.2.10', 'Encrypted backups', 'fail2ban', 'unattended-upgrades'] as $step) {
+            Assert::contains($step, $proxy);
+        }
+        Assert::notContains('certbot', $proxy);
+        Assert::notContains('a-long-test-passphrase', $proxy, 'the passphrase is never printed');
+        Assert::notContains('ufw allow 443', $proxy, 'no public HTTPS port in proxy mode');
+        exec($env . 'SENTINEL_DOMAIN=sentinel.example SENTINEL_FIREWALL=0 SENTINEL_FAIL2BAN=0 SENTINEL_AUTO_UPDATES=0 bash ' . escapeshellarg($root . '/install.sh') . ' </dev/null 2>&1', $l4, $rc4);
+        $off = implode("\n", $l4);
+        Assert::same(0, $rc4, $off);
+        Assert::true(!str_contains($off, 'ufw') && !str_contains($off, 'fail2ban') && !str_contains($off, 'unattended'), 'optional steps left out');
+        $tpl = (string) file_get_contents($root . '/install/templates/nginx-proxy.conf');
+        Assert::true(str_contains($tpl, 'allow __PROXY__;') && str_contains($tpl, 'deny all;') && !str_contains($tpl, 'fastcgi_param HTTPS on'), 'proxy site accepts the proxy only');
         foreach ([['SENTINEL_DOMAIN="bad domain;rm"', 'bad host name'], ['SENTINEL_DOMAIN=sentinel.example SENTINEL_TLS=other', 'bad TLS mode'],
+                  ['SENTINEL_DOMAIN=sentinel.example SENTINEL_TLS=proxy SENTINEL_PROXY_IP="1.2.3.4;rm"', 'bad proxy address'],
+                  ['SENTINEL_DOMAIN=sentinel.example SENTINEL_TLS=proxy SENTINEL_PROXY_IP=300.1.1.1', 'impossible IPv4'],
+                  ['SENTINEL_DOMAIN=sentinel.example SENTINEL_BACKUP_PASSPHRASE=short', 'short passphrase'],
+                  ['SENTINEL_DOMAIN=sentinel.example SENTINEL_FIREWALL=maybe', 'yes/no must be 1 or 0'],
                   ['SENTINEL_DOMAIN=sentinel.example SENTINEL_BRANCH="../x"', 'bad branch'], ['SENTINEL_DOMAIN=sentinel.example SENTINEL_REPO="a/b c"', 'bad repository'],
                   ['', 'no host name and no terminal']] as [$vars, $why]) {
             exec($env . $vars . ' bash ' . escapeshellarg($root . '/install.sh') . ' </dev/null 2>&1', $l, $c);
@@ -102,7 +122,7 @@ return [
         // Templates: every placeholder is one the installer fills.
         foreach (glob($root . '/install/templates/*') ?: [] as $t) {
             preg_match_all('/__([A-Z]+)__/', (string) file_get_contents($t), $m);
-            Assert::same([], array_diff(array_unique($m[1]), ['DOMAIN', 'ROOT', 'CERT', 'KEY', 'PHP', 'CONF']), basename($t));
+            Assert::same([], array_diff(array_unique($m[1]), ['DOMAIN', 'ROOT', 'CERT', 'KEY', 'PHP', 'CONF', 'PROXY']), basename($t));
         }
         Assert::contains('fastcgi_param HTTP_AUTHORIZATION', (string) file_get_contents($root . '/install/templates/nginx.conf'));
         Assert::notContains(' root ', (string) preg_replace('/^#.*$/m', '', (string) file_get_contents($root . '/install/templates/cron')), 'no cron job runs as root');
