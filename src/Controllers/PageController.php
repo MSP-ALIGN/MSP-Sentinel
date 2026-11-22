@@ -34,6 +34,7 @@ final class PageController extends Controller
             'expiringAuthorisations' => $expiring,
             'globallyPaused' => App::scope()->globallyPaused(),
             'expiringCerts' => App::endpoints()->countExpiring(\Sentinel\Scanning\ExposureRules::EXPIRY_WARN_DAYS),
+            'kevCounts' => App::vulns()->kevCounts(),
         ]);
     }
 

@@ -185,6 +185,9 @@ final class TestContext
     public int $dnsPort = 0;
     public string $dnsLog = '';
     public string $crtshUrl = '';
+    /** Mock threat-feed server base URL and its request log. */
+    public string $feedsUrl = '';
+    public string $feedsLog = '';
     /** File where the fake nmap records the arguments of every call. */
     public string $nmapLog = '';
 

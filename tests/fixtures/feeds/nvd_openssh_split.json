@@ -1,0 +1,60 @@
+{
+ "totalResults": 1,
+ "vulnerabilities": [
+  {
+   "cve": {
+    "id": "CVE-2099-0006",
+    "vulnStatus": "Analyzed",
+    "published": "2099-01-15T10:00:00.000",
+    "lastModified": "2099-02-01T08:30:00.000",
+    "descriptions": [
+     {
+      "lang": "es",
+      "value": "no"
+     },
+     {
+      "lang": "en",
+      "value": "Made-up test vulnerability CVE-2099-0006."
+     }
+    ],
+    "metrics": {
+     "cvssMetricV31": [
+      {
+       "source": "x",
+       "type": "Secondary",
+       "cvssData": {
+        "baseScore": 1.0,
+        "baseSeverity": "LOW"
+       }
+      },
+      {
+       "source": "nvd",
+       "type": "Primary",
+       "cvssData": {
+        "baseScore": 4.3,
+        "baseSeverity": "MEDIUM"
+       }
+      }
+     ]
+    },
+    "configurations": [
+     {
+      "nodes": [
+       {
+        "operator": "OR",
+        "negate": false,
+        "cpeMatch": [
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:a:openbsd:openssh:*:*:*:*:*:*:*:*",
+          "versionEndExcluding": "9.9"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  }
+ ]
+}

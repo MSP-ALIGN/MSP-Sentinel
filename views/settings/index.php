@@ -26,4 +26,28 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
     <div class="card-footer"><button type="submit" class="btn btn-primary"><?= e(__('Save settings')) ?></button></div>
     </form>
 </div>
+<div class="card mt-3">
+    <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Vulnerability data')) ?></h2></div>
+    <div class="card-body small">
+        <table class="table table-sm mb-2">
+            <thead><tr><th scope="col"><?= e(__('Feed')) ?></th><th scope="col"><?= e(__('Last success (UTC)')) ?></th><th scope="col"><?= e(__('Last attempt')) ?></th></tr></thead>
+            <tbody>
+            <?php foreach (['kev' => __('CISA Known Exploited Vulnerabilities'), 'nvd' => __('NVD (product queries)'), 'epss' => __('FIRST EPSS scores')] as $key => $label): ?>
+            <?php $f = $feeds[$key] ?? null; ?>
+            <tr>
+                <td><?= e($label) ?></td>
+                <td><?= e($f['last_success'] ?? __('never')) ?></td>
+                <td><?= e($f['last_attempt'] ?? '—') ?><?php if ($f !== null && $f['message'] !== ''): ?><div class="text-body-secondary"><?= e($f['message']) ?></div><?php endif; ?></td>
+            </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+        <p class="mb-0"><?= e(match (true) {
+            $nvdKeySet && $nvdKeyUsable => __('An NVD API key is configured (faster NVD queries).'),
+            $nvdKeySet => __('The NVD API key in the config file is not used: it is malformed, or nvd.base_url is not https.'),
+            default => __('No NVD API key configured: NVD queries are limited to about 5 per 30 seconds. Add nvd.api_key to config/config.php to speed them up.'),
+        }) ?></p>
+        <p class="mb-0 text-body-secondary"><?= e(__('Refreshed daily by bin/feeds.php (cron).')) ?></p>
+    </div>
+</div>
 </div></div>

@@ -58,6 +58,20 @@ return [
         'ca_file' => '',
     ],
 
+    // Vulnerability data (public feeds). The NVD API key is optional but makes NVD queries ~10x faster.
+    // Request one free at https://nvd.nist.gov/developers/request-an-api-key. Keep it here, never in the database.
+    'nvd' => [
+        'api_key' => '',
+        'base_url' => 'https://services.nvd.nist.gov',
+        'max_queries_per_run' => 500,
+    ],
+    'kev' => [
+        'url' => 'https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json',
+    ],
+    'epss' => [
+        'base_url' => 'https://api.first.org',
+    ],
+
     'discovery' => [
         // Seconds a "Discover now" click may take before it stops (the weekly job has no limit).
         'manual_budget' => 25,

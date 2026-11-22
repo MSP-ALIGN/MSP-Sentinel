@@ -172,6 +172,19 @@ try {
     }
     $cfg['testing']['redirect_connections'] = $redirects;
     $cfg['tls'] = ['ca_file' => $certs['ca']];
+
+    // Mock threat feeds (NVD, CISA KEV, FIRST EPSS) on 127.0.0.1, with made-up CVE IDs (CVE-2099-...).
+    $feedsPort = $freePort();
+    $feedsLog = $outDir . '/feeds-requests.log';
+    $mocks[] = proc_open([PHP_BINARY, '-S', "127.0.0.1:{$feedsPort}", __DIR__ . '/mocks/feeds_router.php'],
+        [0 => ['file', '/dev/null', 'r'], 1 => ['file', $outDir . '/mock-feeds.log', 'a'], 2 => ['file', $outDir . '/mock-feeds.log', 'a']], $pipes, null,
+        ['FEEDS_LOG' => $feedsLog, 'PATH' => (string) getenv('PATH')]);
+    $cfg['nvd'] = ['base_url' => "http://127.0.0.1:{$feedsPort}", 'api_key' => 'test-' . bin2hex(random_bytes(12)), 'delay' => 0];
+    $cfg['kev'] = ['url' => "http://127.0.0.1:{$feedsPort}/kev.json"];
+    $cfg['epss'] = ['base_url' => "http://127.0.0.1:{$feedsPort}"];
+    for ($i = 0; $i < 50 && @fsockopen('127.0.0.1', $feedsPort) === false; $i++) {
+        usleep(100000);
+    }
     file_put_contents($configPath, '<?php return ' . var_export($cfg, true) . ";\n");
     for ($i = 0; $i < 50 && @fsockopen('127.0.0.1', $crtshPort) === false; $i++) {
         usleep(100000);
@@ -205,6 +218,8 @@ try {
     $ctx->dnsLog = $dnsLog;
     $ctx->crtshUrl = "http://127.0.0.1:{$crtshPort}";
     $ctx->nmapLog = $outDir . '/nmap-args.log';
+    $ctx->feedsUrl = "http://127.0.0.1:{$feedsPort}";
+    $ctx->feedsLog = $feedsLog;
     \Sentinel\Core\App::boot(\Sentinel\Core\Config::fromArray($appConfig));
 
     if ($serve) {

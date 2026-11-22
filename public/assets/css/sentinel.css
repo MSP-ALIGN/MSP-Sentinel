@@ -10,3 +10,4 @@
 .audit-details { max-width: 28rem; }
 .text-pre-line { white-space: pre-line; }
 .scope-list code { font-size: .85rem; }
+.vuln-summary { min-width: 14rem; }

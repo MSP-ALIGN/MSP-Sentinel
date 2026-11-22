@@ -102,8 +102,11 @@ await page.waitForURL(/\/clients\/\d+/);
 const { execFileSync } = createRequire(import.meta.url)('node:child_process');
 execFileSync('php', [new URL('../bin/worker.php', import.meta.url).pathname, '--no-schedule'],
   { env: { ...process.env, SENTINEL_CONFIG: `${serve.dir}/config.php`, SENTINEL_ALLOW_ROOT: '1' } });
+execFileSync('php', [new URL('../bin/feeds.php', import.meta.url).pathname],
+  { env: { ...process.env, SENTINEL_CONFIG: `${serve.dir}/config.php` } });
 await page.goto(clientUrl);
 await page.locator('#scans').screenshot({ path: `${out}19-port-scan.png` });
+await page.locator('#vulns').screenshot({ path: `${out}21-vulnerabilities.png` });
 await page.locator('#exposure').screenshot({ path: `${out}20-certificates-web.png` });
 await page.goto(`${base}/clients`);
 await shot(page, '17-clients');

@@ -4,14 +4,31 @@ Self-hosted security monitoring for MSPs (managed service providers). Sentinel *
 exposure and vulnerabilities across your clients, monitors them and alerts on them. Its companion product,
 MSP Align, plans, reports and proves, using Sentinel's findings.
 
-> **Status: early development (0.5.0).** Sign-in, users, clients, the "authorised to scan" register, passive
-> discovery, gentle port scanning, and **certificate and admin-page checks** are in place. Vulnerability matching,
-> findings and reports come next. See [`docs/DESIGN.md`](docs/DESIGN.md) for the v1.0 design and
+> **Status: early development (0.6.0).** Sign-in, users, clients, the "authorised to scan" register, passive
+> discovery, gentle port scanning, certificate and admin-page checks, and **vulnerability matching** are in place.
+> Findings with triage, reports, alerts and the API come next. See [`docs/DESIGN.md`](docs/DESIGN.md) for the v1.0 design and
 > [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full plan (external scanning, internal agent, pen testing).
 
 Sentinel is free software under the [GNU AGPL-3.0](LICENSE). Each MSP runs its own copy and owns its data.
 
 ## What's new
+
+### 0.6.0 (2026-11-22): vulnerability matching
+
+- Services are matched to CVEs from the product and version they report:
+  - when the version is known, NVD decides which CVEs affect that exact version (**confirmed**);
+  - when only the product is known, only CISA known-exploited CVEs are shown, marked **product found, version
+    unknown**. Never guessed;
+  - a Linux distribution build (Ubuntu, Debian, RHEL...) is marked "fix may be backported", never confirmed;
+  - only CVEs where NVD marks the product itself as vulnerable are counted.
+- **Known exploited (KEV) first**, then critical and high. Each CVE shows its CVSS score, EPSS exploit
+  likelihood and ransomware use. Lower severities are counted and can be expanded.
+- Grading as agreed: confirmed KEV or critical fails; confirmed high or possible KEV gets a warning.
+- **Daily feeds job** (`bin/feeds.php`): CISA KEV catalog, NVD answers (cached 7 days, rate-limited) and FIRST
+  EPSS scores. Matching also runs right after each scan. Feed status is on the Settings page. An optional NVD
+  API key goes in the config file. NVD's rate limits are respected across processes, and a 403/429 stops
+  requests until Retry-After.
+- Dashboard tile for confirmed and possible known-exploited vulnerabilities.
 
 ### 0.5.0 (2026-11-22): certificates and exposed admin pages
 
@@ -118,6 +135,9 @@ php bin/create-admin.php --username=jdoe --name="Jane Doe" --email=jdoe@msp.exam
 
 Scan worker (required for scanning): run it every minute as an **unprivileged** user (it refuses to run as root):
 `* * * * *  php /path/to/msp-sentinel/bin/worker.php`
+
+Threat feeds (required for vulnerability matching), once a day:
+`41 4 * * *  php /path/to/msp-sentinel/bin/feeds.php`
 
 Weekly discovery (optional, recommended): add a cron job such as
 `17 3 * * 0  php /path/to/msp-sentinel/bin/discover.php`.

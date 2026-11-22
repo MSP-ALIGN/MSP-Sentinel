@@ -1,7 +1,7 @@
 <?php
 /**
  * Dashboard.
- * Expects: $currentUser, $version, $clientCount, $activeAuthorisations, $expiringAuthorisations, $expiringCerts, $globallyPaused.
+ * Expects: $currentUser, $version, $clientCount, $activeAuthorisations, $expiringAuthorisations, $expiringCerts, $kevCounts, $globallyPaused.
  */
 ?>
 <?php if ($globallyPaused): ?>
@@ -26,6 +26,12 @@
         <div class="small-box <?= $expiringAuthorisations > 0 ? 'text-bg-warning' : 'text-bg-secondary' ?>">
             <div class="inner"><h3><?= e($expiringAuthorisations) ?></h3><p><?= e(__('Authorisations ending within 30 days')) ?></p></div>
             <i class="small-box-icon bi bi-calendar-x" aria-hidden="true"></i>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+        <div class="small-box <?= $kevCounts['confirmed_kev'] > 0 ? 'text-bg-danger' : ($kevCounts['possible_kev'] > 0 ? 'text-bg-warning' : 'text-bg-secondary') ?>">
+            <div class="inner"><h3><?= e($kevCounts['confirmed_kev']) ?></h3><p><?= e(__('Known exploited vulnerabilities (confirmed)')) ?><?php if ($kevCounts['possible_kev'] > 0): ?><br><span class="small"><?= e(__('+{n} possible (version unknown)', ['n' => $kevCounts['possible_kev']])) ?></span><?php endif; ?></p></div>
+            <i class="small-box-icon bi bi-bug" aria-hidden="true"></i>
         </div>
     </div>
     <div class="col-md-6 col-xl-3">

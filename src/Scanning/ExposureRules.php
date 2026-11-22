@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Sentinel\Scanning;
 
+use Sentinel\Vulns\FeedParser;
+
 /**
  * Turns stored TLS and web-page data into issues with a severity, using the
  * agreed grading (design section 4). The findings step (later) reuses these
@@ -63,6 +65,27 @@ final class ExposureRules
             $issues[] = ['severity' => 'warn', 'code' => 'cert_weak_signature', 'text' => __('Weak signature algorithm ({alg})', ['alg' => $tls['signature_alg']])];
         }
         return $issues;
+    }
+
+    /**
+     * Severity of a vulnerability match (design section 4):
+     * FAIL: confirmed KEV, or confirmed CRITICAL. WARN: confirmed HIGH, or a
+     * KEV that is only possible (version unknown, or a distribution build that
+     * may carry the fix). Everything else is INFO (shown on request, not counted).
+     * Severity bands come from the CVSS score (v3 bands), so a CVSS v2 10.0 counts as critical.
+     *
+     * @param array<string,mixed> $v Row with confidence, in_kev, cvss_score, cvss_severity.
+     */
+    public static function vulnSeverity(array $v): string
+    {
+        $confirmed = $v['confidence'] === 'confirmed';
+        $kev = (int) ($v['in_kev'] ?? 0) === 1;
+        $band = isset($v['cvss_score']) && $v['cvss_score'] !== null ? FeedParser::severityFor((float) $v['cvss_score']) : (string) ($v['cvss_severity'] ?? '');
+        return match (true) {
+            $confirmed && ($kev || $band === 'CRITICAL') => 'fail',
+            ($confirmed && $band === 'HIGH') || (!$confirmed && $kev) => 'warn',
+            default => 'info',
+        };
     }
 
     /**

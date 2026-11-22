@@ -22,6 +22,9 @@ use Sentinel\Scanning\TlsChecker;
 use Sentinel\Scanning\ScanRepository;
 use Sentinel\Scanning\ScanWorker;
 use Sentinel\Scope\AuthorisationRepository;
+use Sentinel\Vulns\FeedUpdater;
+use Sentinel\Vulns\VulnMatcher;
+use Sentinel\Vulns\VulnRepository;
 use Sentinel\Scope\ScopeParser;
 use Sentinel\Scope\ScopeService;
 
@@ -187,7 +190,29 @@ final class App
         $connector = Connector::fromConfig($config);
         $caFile = (string) $config->get('tls.ca_file', '');
         return new ScanWorker(self::db(), self::clients(), self::authorisations(), self::scans(), self::scope(), NmapRunner::fromConfig($config), $dns, $log,
-            new TlsChecker($connector, $caFile === '' ? null : $caFile), new HttpProbe($connector), self::endpoints());
+            new TlsChecker($connector, $caFile === '' ? null : $caFile), new HttpProbe($connector), self::endpoints(), self::vulnMatcher(15));
+    }
+
+    /** Vulnerability data and match store. */
+    public static function vulns(): VulnRepository
+    {
+        return new VulnRepository(self::db());
+    }
+
+    /** Threat feed updater (NVD, KEV, EPSS), wired from config. */
+    public static function feedUpdater(): FeedUpdater
+    {
+        return FeedUpdater::fromConfig(self::config(), self::vulns());
+    }
+
+    /**
+     * Service-to-CVE matcher (may fetch missing NVD answers within a budget).
+     *
+     * @param int $timeout Per-request NVD timeout (the scan worker uses a short one).
+     */
+    public static function vulnMatcher(int $timeout = 60): VulnMatcher
+    {
+        return new VulnMatcher(self::db(), self::vulns(), FeedUpdater::fromConfig(self::config(), self::vulns(), $timeout));
     }
 
     /** TLS endpoint and web page store. */

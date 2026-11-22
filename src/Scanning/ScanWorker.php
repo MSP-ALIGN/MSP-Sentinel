@@ -11,6 +11,7 @@ use Sentinel\Discovery\DnsException;
 use Sentinel\Discovery\DnsMessage;
 use Sentinel\Scope\AuthorisationRepository;
 use Sentinel\Scope\ScopeService;
+use Sentinel\Vulns\VulnMatcher;
 
 /**
  * The scan worker: queues weekly scheduled jobs, then runs at most one job per call.
@@ -51,6 +52,7 @@ final class ScanWorker
         private readonly ?TlsChecker $tls = null,
         private readonly ?HttpProbe $http = null,
         private readonly ?EndpointRepository $endpoints = null,
+        private readonly ?VulnMatcher $matcher = null,
     ) {
         $this->log ??= static function (string $line): void {
         };
@@ -330,6 +332,19 @@ final class ScanWorker
             }
         } elseif ($status === 'done' && $summary['hosts_failed'] > 0) {
             $status = 'partial';
+        }
+        // Match what was found against vulnerability data (cached; up to 3 new products fetched now).
+        if ($this->matcher !== null && $summary['hosts_scanned'] > 0) {
+            try {
+                // A few new products, at most ~20 seconds; everything else is left to the daily feeds job.
+                $m = $this->matcher->matchClient($clientId, 3, 20.0);
+                $summary['vulnerability_matches_for_client'] = $m['matches'];
+                if ($m['pending'] > 0) {
+                    $summary['messages'][] = __('{n} product(s) are waiting for vulnerability data; the daily feeds job will fetch it.', ['n' => $m['pending']]);
+                }
+            } catch (\Throwable $ex) {
+                error_log('[msp-sentinel] vulnerability matching failed for client ' . $clientId . ': ' . $ex->getMessage());
+            }
         }
         $this->scans->finish($jobId, $status, $summary);
         return "Job {$jobId} {$status}: {$summary['hosts_scanned']} scanned, {$summary['hosts_skipped']} skipped, {$summary['hosts_failed']} failed.";

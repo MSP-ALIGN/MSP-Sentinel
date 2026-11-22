@@ -47,6 +47,9 @@ final class AdminController extends Controller
         return $this->page('settings/index', __('Settings'), [
             'values' => ['product_name' => $settings->get('product_name'), 'source_url' => $settings->get('source_url')],
             'errors' => [],
+            'feeds' => App::vulns()->feedStatuses(),
+            'nvdKeySet' => trim((string) App::config()->get('nvd.api_key', '')) !== '',
+            'nvdKeyUsable' => \Sentinel\Vulns\FeedUpdater::usableKey(App::config()) !== null,
         ]);
     }
 
@@ -63,7 +66,9 @@ final class AdminController extends Controller
             $errors['source_url'] = __('Enter a full http:// or https:// address.');
         }
         if ($errors !== []) {
-            return $this->page('settings/index', __('Settings'), ['values' => $values, 'errors' => $errors], 422);
+            return $this->page('settings/index', __('Settings'), ['values' => $values, 'errors' => $errors,
+                'feeds' => App::vulns()->feedStatuses(), 'nvdKeySet' => trim((string) App::config()->get('nvd.api_key', '')) !== '',
+                'nvdKeyUsable' => \Sentinel\Vulns\FeedUpdater::usableKey(App::config()) !== null], 422);
         }
 
         $settings = App::settings();

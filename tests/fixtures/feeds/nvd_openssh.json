@@ -1,0 +1,288 @@
+{
+ "resultsPerPage": 6,
+ "startIndex": 0,
+ "totalResults": 6,
+ "vulnerabilities": [
+  {
+   "cve": {
+    "id": "CVE-2099-0001",
+    "vulnStatus": "Analyzed",
+    "published": "2099-01-15T10:00:00.000",
+    "lastModified": "2099-02-01T08:30:00.000",
+    "descriptions": [
+     {
+      "lang": "es",
+      "value": "no"
+     },
+     {
+      "lang": "en",
+      "value": "Made-up remote code execution <script>alert(1)</script> \u0007 in the test SSH server."
+     }
+    ],
+    "metrics": {
+     "cvssMetricV31": [
+      {
+       "source": "x",
+       "type": "Secondary",
+       "cvssData": {
+        "baseScore": 1.0,
+        "baseSeverity": "LOW"
+       }
+      },
+      {
+       "source": "nvd",
+       "type": "Primary",
+       "cvssData": {
+        "baseScore": 9.8,
+        "baseSeverity": "CRITICAL"
+       }
+      }
+     ]
+    },
+    "configurations": [
+     {
+      "nodes": [
+       {
+        "operator": "OR",
+        "negate": false,
+        "cpeMatch": [
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:a:openbsd:openssh:*:*:*:*:*:*:*:*",
+          "versionEndExcluding": "9.9"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "cve": {
+    "id": "CVE-2099-0002",
+    "vulnStatus": "Analyzed",
+    "published": "2099-01-15T10:00:00.000",
+    "lastModified": "2099-02-01T08:30:00.000",
+    "descriptions": [
+     {
+      "lang": "es",
+      "value": "no"
+     },
+     {
+      "lang": "en",
+      "value": "Made-up test vulnerability CVE-2099-0002."
+     }
+    ],
+    "metrics": {
+     "cvssMetricV40": [
+      {
+       "type": "Primary",
+       "cvssData": {
+        "baseScore": 7.5
+       }
+      }
+     ]
+    },
+    "configurations": [
+     {
+      "nodes": [
+       {
+        "operator": "OR",
+        "negate": false,
+        "cpeMatch": [
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:a:openbsd:openssh:*:*:*:*:*:*:*:*",
+          "versionEndExcluding": "9.9"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "cve": {
+    "id": "CVE-2099-0003",
+    "vulnStatus": "Analyzed",
+    "published": "2099-01-15T10:00:00.000",
+    "lastModified": "2099-02-01T08:30:00.000",
+    "descriptions": [
+     {
+      "lang": "es",
+      "value": "no"
+     },
+     {
+      "lang": "en",
+      "value": "Made-up test vulnerability CVE-2099-0003."
+     }
+    ],
+    "metrics": {
+     "cvssMetricV31": [
+      {
+       "source": "x",
+       "type": "Secondary",
+       "cvssData": {
+        "baseScore": 1.0,
+        "baseSeverity": "LOW"
+       }
+      },
+      {
+       "source": "nvd",
+       "type": "Primary",
+       "cvssData": {
+        "baseScore": 5.0,
+        "baseSeverity": "MEDIUM"
+       }
+      }
+     ]
+    },
+    "configurations": [
+     {
+      "nodes": [
+       {
+        "operator": "OR",
+        "negate": false,
+        "cpeMatch": [
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:a:openbsd:openssh:*:*:*:*:*:*:*:*",
+          "versionEndExcluding": "9.9"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "cve": {
+    "id": "CVE-2099-0004",
+    "vulnStatus": "Rejected",
+    "published": "2099-01-15T10:00:00.000",
+    "lastModified": "2099-02-01T08:30:00.000",
+    "descriptions": [
+     {
+      "lang": "es",
+      "value": "no"
+     },
+     {
+      "lang": "en",
+      "value": "Made-up test vulnerability CVE-2099-0004."
+     }
+    ],
+    "metrics": {
+     "cvssMetricV31": [
+      {
+       "source": "x",
+       "type": "Secondary",
+       "cvssData": {
+        "baseScore": 1.0,
+        "baseSeverity": "LOW"
+       }
+      },
+      {
+       "source": "nvd",
+       "type": "Primary",
+       "cvssData": {
+        "baseScore": 9.9,
+        "baseSeverity": "CRITICAL"
+       }
+      }
+     ]
+    },
+    "configurations": [
+     {
+      "nodes": [
+       {
+        "operator": "OR",
+        "negate": false,
+        "cpeMatch": [
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:a:openbsd:openssh:*:*:*:*:*:*:*:*",
+          "versionEndExcluding": "9.9"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "cve": {
+    "id": "CVE-2099-0005",
+    "vulnStatus": "Analyzed",
+    "published": "2099-01-15T10:00:00.000",
+    "lastModified": "2099-02-01T08:30:00.000",
+    "descriptions": [
+     {
+      "lang": "es",
+      "value": "no"
+     },
+     {
+      "lang": "en",
+      "value": "Made-up bug in another product that merely runs alongside the SSH server."
+     }
+    ],
+    "metrics": {
+     "cvssMetricV31": [
+      {
+       "source": "x",
+       "type": "Secondary",
+       "cvssData": {
+        "baseScore": 1.0,
+        "baseSeverity": "LOW"
+       }
+      },
+      {
+       "source": "nvd",
+       "type": "Primary",
+       "cvssData": {
+        "baseScore": 9.8,
+        "baseSeverity": "CRITICAL"
+       }
+      }
+     ]
+    },
+    "configurations": [
+     {
+      "nodes": [
+       {
+        "operator": "OR",
+        "negate": false,
+        "cpeMatch": [
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:a:example:othertool:*:*:*:*:*:*:*:*",
+          "versionEndExcluding": "9.9"
+         }
+        ]
+       },
+       {
+        "operator": "OR",
+        "cpeMatch": [
+         {
+          "vulnerable": false,
+          "criteria": "cpe:2.3:a:openbsd:openssh:*:*:*:*:*:*:*:*"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "cve": {
+    "id": "NOT-A-CVE",
+    "descriptions": []
+   }
+  },
+  "garbage"
+ ]
+}

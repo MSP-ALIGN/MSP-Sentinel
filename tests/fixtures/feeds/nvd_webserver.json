@@ -1,0 +1,179 @@
+{
+ "totalResults": 3,
+ "vulnerabilities": [
+  {
+   "cve": {
+    "id": "CVE-2099-0101",
+    "vulnStatus": "Analyzed",
+    "published": "2099-01-15T10:00:00.000",
+    "lastModified": "2099-02-01T08:30:00.000",
+    "descriptions": [
+     {
+      "lang": "es",
+      "value": "no"
+     },
+     {
+      "lang": "en",
+      "value": "Made-up test vulnerability CVE-2099-0101."
+     }
+    ],
+    "metrics": {
+     "cvssMetricV31": [
+      {
+       "source": "x",
+       "type": "Secondary",
+       "cvssData": {
+        "baseScore": 1.0,
+        "baseSeverity": "LOW"
+       }
+      },
+      {
+       "source": "nvd",
+       "type": "Primary",
+       "cvssData": {
+        "baseScore": 8.8,
+        "baseSeverity": "HIGH"
+       }
+      }
+     ]
+    },
+    "configurations": [
+     {
+      "nodes": [
+       {
+        "operator": "OR",
+        "negate": false,
+        "cpeMatch": [
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:a:example:webserver:*:*:*:*:*:*:*:*",
+          "versionEndExcluding": "9.9"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "cve": {
+    "id": "CVE-2099-0102",
+    "vulnStatus": "Analyzed",
+    "published": "2099-01-15T10:00:00.000",
+    "lastModified": "2099-02-01T08:30:00.000",
+    "descriptions": [
+     {
+      "lang": "es",
+      "value": "no"
+     },
+     {
+      "lang": "en",
+      "value": "Made-up test vulnerability CVE-2099-0102."
+     }
+    ],
+    "metrics": {
+     "cvssMetricV31": [
+      {
+       "source": "x",
+       "type": "Secondary",
+       "cvssData": {
+        "baseScore": 1.0,
+        "baseSeverity": "LOW"
+       }
+      },
+      {
+       "source": "nvd",
+       "type": "Primary",
+       "cvssData": {
+        "baseScore": 7.5,
+        "baseSeverity": "HIGH"
+       }
+      }
+     ]
+    },
+    "configurations": [
+     {
+      "nodes": [
+       {
+        "operator": "OR",
+        "negate": false,
+        "cpeMatch": [
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:a:example:webserver:*:*:*:*:*:*:*:*",
+          "versionEndExcluding": "9.9"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "cve": {
+    "id": "CVE-2099-0103",
+    "vulnStatus": "Analyzed",
+    "published": "2099-01-15T10:00:00.000",
+    "lastModified": "2099-02-01T08:30:00.000",
+    "descriptions": [
+     {
+      "lang": "es",
+      "value": "no"
+     },
+     {
+      "lang": "en",
+      "value": "Made-up known-exploited bug in a web app that runs on the web server."
+     }
+    ],
+    "metrics": {
+     "cvssMetricV31": [
+      {
+       "source": "x",
+       "type": "Secondary",
+       "cvssData": {
+        "baseScore": 1.0,
+        "baseSeverity": "LOW"
+       }
+      },
+      {
+       "source": "nvd",
+       "type": "Primary",
+       "cvssData": {
+        "baseScore": 9.0,
+        "baseSeverity": "CRITICAL"
+       }
+      }
+     ]
+    },
+    "configurations": [
+     {
+      "nodes": [
+       {
+        "operator": "OR",
+        "negate": false,
+        "cpeMatch": [
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:a:example:webapp:*:*:*:*:*:*:*:*",
+          "versionEndExcluding": "9.9"
+         }
+        ]
+       },
+       {
+        "operator": "OR",
+        "cpeMatch": [
+         {
+          "vulnerable": false,
+          "criteria": "cpe:2.3:a:example:webserver:*:*:*:*:*:*:*:*"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  }
+ ]
+}

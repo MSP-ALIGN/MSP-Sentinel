@@ -98,6 +98,9 @@ final class ClientController extends Controller
             'windowOpen' => ScanWindow::isOpen($client),
             'tlsEndpoints' => App::endpoints()->tlsForClient((int) $client['id']),
             'webPages' => App::endpoints()->webForClient((int) $client['id']),
+            'vulns' => App::vulns()->forClient((int) $client['id']),
+            'vulnCoverage' => App::vulns()->coverage((int) $client['id']),
+            'feeds' => App::vulns()->feedStatuses(),
         ]);
     }
 

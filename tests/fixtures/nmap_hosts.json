@@ -32,7 +32,8 @@
       {
         "port": 80,
         "name": "http",
-        "product": "Example web"
+        "product": "Example web",
+        "cpe": "cpe:/a:example:webserver"
       }
     ]
   },

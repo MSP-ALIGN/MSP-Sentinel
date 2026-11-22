@@ -75,6 +75,18 @@ return [
             ],
         ],
         [
+            'title' => 'Vulnerabilities',
+            'paragraphs' => [
+                'Sentinel matches each open service to known vulnerabilities (CVEs) from the product and version the service reports. When the version is known, the US National Vulnerability Database (NVD) decides which CVEs affect exactly that version: these are shown as "Confirmed". The service\'s own banner can be wrong or hide backported fixes, so check before you act.',
+                'Linux distributions (Ubuntu, Debian, Red Hat and others) often fix vulnerabilities without changing the version number. When a banner shows a distribution build, matches are marked "Distribution build: the fix may be backported" instead of "Confirmed". Check the distribution\'s security notices.',
+                'Only CVEs where NVD lists the product itself as vulnerable are matched, not ones where it is merely the platform another product runs on. If some products are still waiting for data or could not be looked up, the panel says so: "no matches" is never claimed for products that weren\'t checked.',
+                'When only the product is known, Sentinel never lists the product\'s whole history. It only shows vulnerabilities that are known to be exploited (from the CISA KEV catalog), marked "Product found, version unknown".',
+                'What matters comes first: known-exploited vulnerabilities, then critical and high ones. Each shows its CVSS score and its EPSS score (how likely it is to be exploited in the next 30 days). Lower-severity matches are counted and can be expanded.',
+                'Grading: a confirmed known-exploited or critical vulnerability is a Fail. A confirmed high one, or a known-exploited one on a product whose version is unknown, is a Warning.',
+                'The data refreshes daily (bin/feeds.php). Its status is on the Settings page.',
+            ],
+        ],
+        [
             'title' => 'Audit log',
             'paragraphs' => [
                 'Admins can see a record of sign-ins, failed sign-ins, user changes and settings changes under Administration > Audit log. Entries cannot be edited or deleted from the web interface.',
@@ -82,6 +94,15 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '0.6.0',
+            'date' => '2026-11-22',
+            'items' => [
+                'Vulnerability matching against NVD, the CISA known-exploited list and EPSS scores.',
+                '"Confirmed" when the version is known; "product found, version unknown" otherwise, with known-exploited issues only.',
+                'Known exploited first, then critical and high; daily feeds job with status on the Settings page.',
+            ],
+        ],
         [
             'version' => '0.5.0',
             'date' => '2026-11-22',
