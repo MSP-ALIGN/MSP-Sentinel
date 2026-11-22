@@ -24,7 +24,7 @@ MariaDB. The installer does everything; the manual steps at the end are for othe
    curl -LO https://github.com/msp-align/msp-sentinel/releases/download/v1.0.0/msp-sentinel-1.0.0.tar.gz
    curl -LO https://github.com/msp-align/msp-sentinel/releases/download/v1.0.0/SHA256SUMS
    curl -LO https://github.com/msp-align/msp-sentinel/releases/download/v1.0.0/SHA256SUMS.asc
-   gpg --verify SHA256SUMS.asc SHA256SUMS      # signed by the maintainers' release key
+   gpg --verify SHA256SUMS.asc SHA256SUMS      # check the key fingerprint against SECURITY.md
    sha256sum -c SHA256SUMS
    tar xzf msp-sentinel-1.0.0.tar.gz
    cd msp-sentinel-1.0.0
@@ -68,6 +68,9 @@ MariaDB. The installer does everything; the manual steps at the end are for othe
 | Cron jobs: worker every minute, feeds daily, discovery weekly, backup daily | `/etc/cron.d/msp-sentinel` |
 | Logs (rotated weekly) | `/var/log/msp-sentinel/` |
 | Daily backups (keep 14) | `/var/backups/msp-sentinel/` |
+
+Re-running the installer with the same version is safe: it keeps the config and database and re-applies the
+rest (for example to switch to `--certbot` later). On hosts with IPv6 turned off, the Nginx site listens on IPv4 only.
 
 Then check everything with `sudo -u sentinel php8.4 /opt/msp-sentinel/bin/doctor.php`, or under
 **Administration → System**.

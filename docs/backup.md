@@ -30,17 +30,27 @@ Without `--dir`, backups go to `storage/backups/`. Later backups never include e
 
 ## Restore
 
+Run restores as the `sentinel` user. Only `--with-config` needs root (the config file belongs to root), so
+use `sudo` for that step alone.
+
 ```sh
 # 1. Check the backup (changes nothing):
 sudo -u sentinel php bin/restore.php --file=/var/backups/msp-sentinel/msp-sentinel-backup-....tar.gz.enc
 # 2. Restore the database:
 sudo -u sentinel php bin/restore.php --file=... --yes
 # On a new server, also restore the config (app key) and the logo:
-sudo php bin/restore.php --file=... --yes --with-config --with-storage
+sudo -u sentinel php bin/restore.php --file=... --yes --with-storage
+sudo php bin/restore.php --file=... --yes --with-config
 ```
 
-- Every file is checked against the manifest before anything changes.
-- The tables in the configured database are **replaced**.
+- Every file is checked against the manifest's checksums before anything changes, and only files listed in the
+  manifest are restored. For an unencrypted backup this catches damage, not deliberate changes: keep backups where
+  only you can write them, or encrypt them (a changed encrypted backup can't be decrypted).
+- The config is stored as data (`config.json`), never as code, so restoring a backup never runs code from it.
+- With `--with-storage`, files are written fresh (an existing file or link in the way is removed first) and stay
+  group-writable for the web server and the worker.
+- The tables in the configured database are **replaced**. While importing, the restore holds the worker's lock so
+  no scan writes into a half-restored database (if a scan is running it waits up to two minutes, then stops).
 - Pending migrations run afterwards.
 - `--with-config` restores the backup's config (above all its app key) but keeps **this** server's database
   connection settings. The current config is kept as `config.php.before-restore-<time>`.
@@ -51,5 +61,6 @@ sudo php bin/restore.php --file=... --yes --with-config --with-storage
 ## Moving to a new server
 
 1. Install the same (or newer) release with the installer.
-2. Copy the latest backup across and restore it with `--yes --with-config --with-storage`.
+2. Copy the latest backup across and restore it: once as `sentinel` with `--yes --with-storage`, then with
+   `sudo` and `--yes --with-config` (this keeps the new server's database password and brings back the app key).
 3. Point the DNS name at the new server and check **Administration → System**.

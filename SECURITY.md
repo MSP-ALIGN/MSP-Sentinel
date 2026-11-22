@@ -25,6 +25,13 @@ admin account.
 Only test against your own installation. Never test against someone else's Sentinel installation or any system you
 are not authorised to test.
 
+## Release signing
+
+Each release's `SHA256SUMS` is signed by the maintainers (`SHA256SUMS.asc`). The signing key's fingerprint is
+published here with the first signed release:
+
+- Release key fingerprint: *(to be added by the maintainers when 1.0.0 is signed)*
+
 ## Supported versions
 
 Security fixes are released for the latest 1.x version. Upgrade to it (see `docs/upgrade.md`) to stay covered.

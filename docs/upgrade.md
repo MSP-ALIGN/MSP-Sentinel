@@ -19,7 +19,10 @@ The upgrade:
 4. reloads PHP-FPM;
 5. runs the health check.
 
-It refuses to downgrade. Scans running during the upgrade continue; the next worker run uses the new code.
+It refuses to downgrade. While the code changes, the scheduled jobs are switched off; if a job such as a scan is
+running, the upgrade waits for it to finish (up to an hour; pause scanning in the web interface to stop it sooner).
+The jobs are switched back on at the end, even if the upgrade fails. The PHP-FPM pool, cron and log-rotation files
+are rewritten from the new release; the Nginx site is left as it is.
 
 ## Manual upgrade
 
@@ -31,15 +34,23 @@ sudo systemctl reload php8.4-fpm                                      # 4. clear
 php bin/doctor.php                                                    # 5. check
 ```
 
-## If something goes wrong
+## Rolling back
 
-Restore the backup made before the upgrade (with the old release's code back in place):
+The installer never downgrades, so a rollback is done by hand with the previous release and the backup the upgrade
+made first (the newest file in `/var/backups/msp-sentinel/` from before the upgrade):
 
 ```sh
-sudo -u sentinel php bin/restore.php --file=/var/backups/msp-sentinel/<file> --yes
+sudo mv /etc/cron.d/msp-sentinel /etc/msp-sentinel/cron.paused          # stop the jobs
+tar xzf msp-sentinel-<old version>.tar.gz                               # the release you had before
+sudo rsync -a --delete --exclude '/config/config.php*' --exclude /storage/ msp-sentinel-<old version>/ /opt/msp-sentinel/
+sudo find /opt/msp-sentinel -path /opt/msp-sentinel/storage -prune -o -exec chown root:sentinel {} +
+sudo chmod o+x /opt/msp-sentinel /opt/msp-sentinel/public && sudo chmod -R o+rX /opt/msp-sentinel/public/assets
+sudo -u sentinel php8.4 /opt/msp-sentinel/bin/restore.php --file=/var/backups/msp-sentinel/<pre-upgrade backup> --yes
+sudo systemctl reload php8.4-fpm
+sudo mv /etc/msp-sentinel/cron.paused /etc/cron.d/msp-sentinel          # jobs back on
 ```
 
-See [backup.md](backup.md).
+The restore puts the database back as it was before the upgrade's migrations. See [backup.md](backup.md).
 
 ## Knowing when there is an update
 

@@ -93,7 +93,6 @@ final class Migrator
         return $files;
     }
 
-    /** True if the table exists in the current database. */
     /**
      * IDs of migrations not applied yet (for the health check).
      *

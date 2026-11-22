@@ -26,7 +26,7 @@ return [
         Assert::same('0600', substr(sprintf('%o', fileperms($files[0])), -4));
         Assert::same('0700', substr(sprintf('%o', fileperms($d)), -4));
         $phar = new PharData($files[0]);
-        Assert::true(isset($phar['database.sql'], $phar['config.php'], $phar['manifest.json']), 'contents');
+        Assert::true(isset($phar['database.sql'], $phar['config.json'], $phar['manifest.json']) && !isset($phar['config.php']), 'contents (config as data, not code)');
         Assert::contains('CREATE TABLE `findings`', (string) file_get_contents('phar://' . $files[0] . '/database.sql'));
         // --keep prunes older backups.
         $ctx->cli('bin/backup.php', ['--dir=' . $d, '--keep=2']);
@@ -63,6 +63,60 @@ return [
         [$code, $out] = $ctx->cli('bin/restore.php', ['--file=' . $file], ['SENTINEL_BACKUP_PASSPHRASE' => 'correct horse battery staple']);
         Assert::same(0, $code, $out);
         Assert::contains('file(s) verified', $out);
+    },
+    'a backup can never run code or write through links' => function (TestContext $ctx) use ($dir): void {
+        $d = $dir() . '-evil';
+        array_map('unlink', glob($d . '/*') ?: []);
+        @mkdir($d, 0700, true);
+        $marker = sys_get_temp_dir() . '/sentinel-pwned-' . bin2hex(random_bytes(4));
+        $root = dirname(__DIR__, 2);
+        // A hand-made "backup" with PHP in the config and a storage file outside the manifest.
+        $work = sys_get_temp_dir() . '/sentinel-evil-' . bin2hex(random_bytes(4));
+        mkdir($work . '/storage', 0700, true);
+        file_put_contents($work . '/database.sql', 'SELECT 1;');
+        file_put_contents($work . '/config.json', '{"app_key":"x"}');
+        file_put_contents($work . '/config.php', '<?php file_put_contents(' . var_export($marker, true) . ', "ran"); return [];');
+        file_put_contents($work . '/storage/unlisted.txt', 'not in the manifest');
+        $files = [];
+        foreach (['database.sql', 'config.json', 'config.php'] as $f) {
+            $files[$f] = hash_file('sha256', $work . '/' . $f);
+        }
+        file_put_contents($work . '/manifest.json', json_encode(['product' => 'msp-sentinel', 'version' => '1.0.0', 'files' => $files]));
+        $phar = new PharData($d . '/msp-sentinel-backup-evil.tar');
+        $phar->buildFromDirectory($work);
+        $phar->compress(Phar::GZ);
+        [$code, $out] = $ctx->cli('bin/restore.php', ['--file=' . $d . '/msp-sentinel-backup-evil.tar.gz']);
+        Assert::true(!file_exists($marker), 'PHP inside a backup is never executed (dry run): ' . $out);
+        Assert::contains("app key differs", $out);
+        // Restoring storage writes only manifest-listed files, and never through a symlink already in storage/.
+        $target = sys_get_temp_dir() . '/sentinel-link-target-' . bin2hex(random_bytes(4));
+        @mkdir($root . '/storage', 02770, true);
+        $link = $root . '/storage/evil-link-' . bin2hex(random_bytes(3));
+        symlink($target, $link);
+        $b = new \Sentinel\System\Backup(\Sentinel\Core\App::config(), $root, \Sentinel\Core\App::version());
+        $refl = new ReflectionMethod($b, 'listFiles');
+        Assert::true(!in_array(basename($link), $refl->invoke($b, $root . '/storage'), true), 'links never enter a backup');
+        unlink($link);
+        // A real restore with --with-storage: the listed file is written fresh; a symlink planted at its place is not followed.
+        file_put_contents($work . '/storage/listed.txt', 'restored content');
+        $files['storage/listed.txt'] = hash_file('sha256', $work . '/storage/listed.txt');
+        file_put_contents($work . '/manifest.json', json_encode(['product' => 'msp-sentinel', 'version' => '1.0.0', 'files' => $files]));
+        @unlink($d . '/msp-sentinel-backup-evil.tar.gz');
+        $phar2 = new PharData($d . '/msp-sentinel-backup-evil2.tar');
+        $phar2->buildFromDirectory($work);
+        $phar2->compress(Phar::GZ);
+        @unlink($root . '/storage/listed.txt');
+        symlink($target, $root . '/storage/listed.txt');
+        [$code, $out] = $ctx->cli('bin/restore.php', ['--file=' . $d . '/msp-sentinel-backup-evil2.tar.gz', '--yes', '--with-storage']);
+        Assert::same(0, $code, $out);
+        Assert::true(!file_exists($target), 'nothing written through the planted link');
+        Assert::true(!is_link($root . '/storage/listed.txt') && file_get_contents($root . '/storage/listed.txt') === 'restored content', 'file written fresh');
+        unlink($root . '/storage/listed.txt');
+        Assert::true(!file_exists($marker), 'PHP inside a backup is never executed (restore)');
+        Assert::true(!file_exists($root . '/storage/unlisted.txt'), 'unlisted file not restored');
+        array_map('unlink', array_merge(glob($work . '/storage/*') ?: [], glob($work . '/*.*') ?: [], glob($d . '/*') ?: []));
+        @rmdir($work . '/storage');
+        @rmdir($work);
     },
     'restore brings the database back to the backup' => function (TestContext $ctx) use ($dir): void {
         $d = $dir() . '-restore';

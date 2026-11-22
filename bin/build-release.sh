@@ -39,7 +39,7 @@ fi
 
 mkdir -p "$out"
 name="msp-sentinel-$version"
-git archive --worktree-attributes --format=tar --prefix="$name/" HEAD | gzip -n -9 > "$out/$name.tar.gz"
+git -c tar.umask=0022 archive --worktree-attributes --format=tar --prefix="$name/" HEAD | gzip -n -9 > "$out/$name.tar.gz"
 ( cd "$out" && sha256sum "$name.tar.gz" > SHA256SUMS )
 echo "Built $out/$name.tar.gz"
 cat "$out/SHA256SUMS"

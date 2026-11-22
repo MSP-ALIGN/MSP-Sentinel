@@ -25,15 +25,15 @@ sign-in, patched, backed up.
 
 1. **HTTPS only**, with a trusted certificate (`--certbot`, or your own). Keep `app.force_secure_cookies` true.
 2. **Limit who can reach the web interface:** a firewall or VPN in front of it if you can; at least restrict SSH.
-   For an IP allowlist on the web interface, change the existing `location /` block of the HTTPS server in
-   `/etc/nginx/sites-available/msp-sentinel` (keep the API reachable for your integrations if needed):
+   For an IP allowlist on the web interface, add `allow`/`deny` lines at the top of the HTTPS `server` block in
+   `/etc/nginx/sites-available/msp-sentinel` (server level, so they cover every location), then
+   `sudo nginx -t && sudo systemctl reload nginx`. Remember that API clients and event receivers outside the list
+   are blocked too:
 
    ```nginx
-   location / {
-       allow 203.0.113.0/24;   # your office
-       deny all;
-       try_files $uri /index.php$is_args$args;
-   }
+   allow 203.0.113.0/24;   # your office
+   allow 198.51.100.7;     # MSP Align server
+   deny all;
    ```
 3. **Patch the server** (`unattended-upgrades`) and upgrade Sentinel when the System page says so.
 4. **Admins:** as few as possible; give technicians and viewers their own accounts. Remove leavers the same day

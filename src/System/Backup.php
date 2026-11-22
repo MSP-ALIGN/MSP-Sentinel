@@ -11,7 +11,10 @@ use Sentinel\Core\Config;
  * storage folder, in one .tar.gz, optionally encrypted.
  *
  * Archive layout: manifest.json (version, time, SHA-256 of each file),
- * database.sql, config.php, storage/...
+ * database.sql, config.json (the config as data, never PHP), storage/...
+ * Only files listed in the manifest are ever restored. For unencrypted
+ * backups the checksums only catch accidental damage; encryption also
+ * proves the file was not changed by someone without the passphrase.
  *
  * Encryption (".enc"): a passphrase is stretched with Argon2id
  * (sodium_crypto_pwhash, random salt), then the archive is encrypted with
@@ -54,7 +57,11 @@ final class Backup
         try {
             $this->dump($work . '/database.sql');
             $configPath = getenv('SENTINEL_CONFIG') ?: $this->root . '/config/config.php';
-            copy($configPath, $work . '/config.php');
+            // The config is stored as DATA (JSON), so restoring never runs code from a backup file.
+            $cfg = (static fn (string $p): mixed => require $p)($configPath);
+            if (!is_array($cfg) || file_put_contents($work . '/config.json', json_encode($cfg, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)) === false) {
+                throw new \RuntimeException('Could not read the config file.');
+            }
             if (is_dir($this->root . '/storage')) {
                 // Not earlier backups (they'd nest) and not the CA bundle cache (rebuilt automatically).
                 $this->copyTree($this->root . '/storage', $work . '/storage', ['backups/', 'ca/']);
@@ -65,7 +72,8 @@ final class Backup
             }
             file_put_contents($work . '/manifest.json', json_encode(['product' => 'msp-sentinel', 'version' => $this->version, 'created_at' => gmdate('Y-m-d\TH:i:s\Z'), 'files' => $files], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
             $name = 'msp-sentinel-backup-' . gmdate('Ymd-His') . '-' . bin2hex(random_bytes(3));
-            $tar = $work . '/../' . $name . '.tar';
+            $staging = $this->tempDir(); // private; removed below even if compression or encryption fails
+            $tar = $staging . '/' . $name . '.tar';
             $old = umask(0077);
             try {
                 $phar = new \PharData($tar);
@@ -88,6 +96,7 @@ final class Backup
                 @chmod($target, 0600);
             } finally {
                 umask($old);
+                $this->removeTree($staging);
             }
             return $target;
         } finally {
@@ -168,32 +177,56 @@ final class Backup
      *
      * @param string $work Folder returned by open().
      */
-    public function restore(string $work, bool $withConfig, bool $withStorage): void
+    public function restore(string $work, array $manifest, bool $withConfig, bool $withStorage): void
     {
         $files = $work . '/files';
         try {
             $this->import($files . '/database.sql');
-            if ($withStorage && is_dir($files . '/storage')) {
-                $this->copyTree($files . '/storage', $this->root . '/storage');
+            if ($withStorage) {
+                // Only files listed (and checked) in the manifest, written fresh: an existing file or a
+                // symlink at the destination is removed first, so nothing is written through a link.
+                foreach (array_keys($manifest['files']) as $rel) {
+                    if (!str_starts_with($rel, 'storage/') || str_contains($rel, '..') || str_starts_with(basename($rel), '.')) {
+                        continue;
+                    }
+                    $dest = $this->root . '/' . $rel;
+                    $this->safeDir(dirname($dest));
+                    if (is_link($dest) || file_exists($dest)) {
+                        if (is_dir($dest) && !is_link($dest)) {
+                            throw new \RuntimeException('Cannot restore ' . $rel . ': a folder is in the way.');
+                        }
+                        @unlink($dest);
+                    }
+                    $in = fopen($files . '/' . $rel, 'rb');
+                    $out = @fopen($dest, 'xb'); // fails if anything (including a link) appeared meanwhile
+                    if ($in === false || $out === false || stream_copy_to_stream($in, $out) === false) {
+                        throw new \RuntimeException('Could not write ' . $rel . '.');
+                    }
+                    fclose($in);
+                    fclose($out);
+                    @chmod($dest, 0660); // group "sentinel": both the web server and the worker can use it
+                }
             }
-            if ($withConfig && is_file($files . '/config.php')) {
+            if ($withConfig) {
                 $configPath = getenv('SENTINEL_CONFIG') ?: $this->root . '/config/config.php';
-                $restored = include $files . '/config.php';
-                $current = is_file($configPath) ? include $configPath : [];
-                if (!is_array($restored)) {
-                    throw new \RuntimeException('The config file in the backup is not valid.');
+                $restored = $this->backupConfig($work);
+                $current = is_file($configPath) ? (static fn (string $p): mixed => require $p)($configPath) : [];
+                if ($restored === null) {
+                    throw new \RuntimeException('The backup has no valid config.');
                 }
                 // Keep THIS server's database connection (a new server has its own database password);
                 // everything else, above all the app key, comes from the backup.
                 if (is_array($current) && isset($current['db'])) {
                     $restored['db'] = $current['db'];
                 }
-                if (is_file($configPath)) {
-                    copy($configPath, $configPath . '.before-restore-' . gmdate('Ymd-His'));
+                if (is_file($configPath) && !@copy($configPath, $configPath . '.before-restore-' . gmdate('Ymd-His'))) {
+                    throw new \RuntimeException('Could not keep a copy of the current config (run the restore as root for --with-config).');
                 }
-                // Writing into the existing file keeps its owner and group.
-                file_put_contents($configPath, "<?php\n\n// Restored from a backup on " . gmdate('Y-m-d') . " (database settings kept from this server).\n\nreturn "
-                    . var_export($restored, true) . ";\n", LOCK_EX);
+                // Writing into the existing file keeps its owner and group. var_export only writes literals.
+                if (@file_put_contents($configPath, "<?php\n\n// Restored from a backup on " . gmdate('Y-m-d') . " (database settings kept from this server).\n\nreturn "
+                    . var_export($restored, true) . ";\n", LOCK_EX) === false) {
+                    throw new \RuntimeException('Could not write the config file (run the restore as root for --with-config).');
+                }
                 @chmod($configPath, 0640);
             }
         } finally {
@@ -204,8 +237,39 @@ final class Backup
     /** True if the backup's app key differs from the current one (2FA and secrets would not decrypt). */
     public function appKeyDiffers(string $work): bool
     {
-        $cfg = @include $work . '/files/config.php';
-        return !is_array($cfg) || ($cfg['app_key'] ?? null) !== $this->config->get('app_key');
+        $cfg = $this->backupConfig($work);
+        return $cfg === null || ($cfg['app_key'] ?? null) !== $this->config->get('app_key');
+    }
+
+    /**
+     * The config stored in an opened backup, as data (decoded JSON; never executed), or null.
+     *
+     * @return array<string,mixed>|null
+     */
+    private function backupConfig(string $work): ?array
+    {
+        $raw = @file_get_contents($work . '/files/config.json');
+        $cfg = is_string($raw) ? json_decode($raw, true, 16) : null;
+        return is_array($cfg) && is_string($cfg['app_key'] ?? null) ? $cfg : null;
+    }
+
+    /** Create a folder (and parents) inside the install as 2770, refusing symlinks along the way. */
+    private function safeDir(string $dir): void
+    {
+        $rootStorage = $this->root . '/storage';
+        if ($dir !== $rootStorage && !str_starts_with($dir, $rootStorage . '/')) {
+            throw new \RuntimeException('Refusing to write outside storage/.');
+        }
+        $path = $this->root;
+        foreach (explode('/', substr($dir, strlen($this->root) + 1)) as $part) {
+            $path .= '/' . $part;
+            if (is_link($path)) {
+                throw new \RuntimeException('Refusing to restore through a symbolic link: ' . substr($path, strlen($this->root) + 1));
+            }
+            if (!is_dir($path) && !@mkdir($path, 02770) && !is_dir($path)) {
+                throw new \RuntimeException('Could not create ' . substr($path, strlen($this->root) + 1) . '.');
+            }
+        }
     }
 
     /** Remove an opened backup's temporary folder (when not restoring). */
@@ -261,6 +325,9 @@ final class Backup
         $state = sodium_crypto_secretstream_xchacha20poly1305_init_pull($header, $key);
         sodium_memzero($key);
         $dst = fopen($out, 'wb');
+        if ($dst === false) {
+            throw new \RuntimeException('Cannot write the decrypted file.');
+        }
         $final = false;
         while (!feof($src)) {
             $c = fread($src, self::CHUNK + SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_ABYTES);
@@ -320,11 +387,10 @@ final class Backup
      */
     private function run(array $cmd, ?string $stdinFile, string $what): void
     {
-        $proc = proc_open($cmd, [0 => $stdinFile !== null ? ['file', $stdinFile, 'r'] : ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+        $proc = proc_open($cmd, [0 => $stdinFile !== null ? ['file', $stdinFile, 'r'] : ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['pipe', 'w']], $pipes);
         if (!is_resource($proc)) {
             throw new \RuntimeException($what . ': could not start ' . basename($cmd[0]) . '.');
         }
-        stream_get_contents($pipes[1]);
         $err = (string) stream_get_contents($pipes[2]);
         $code = proc_close($proc);
         if ($code !== 0) {
@@ -365,13 +431,32 @@ final class Backup
         return $dir;
     }
 
-    /** @return list<string> Files below $dir, relative, sorted. */
-    private function listFiles(string $dir): array
+    /**
+     * Files below $dir, relative, sorted. Folders matching $skip (relative prefixes such
+     * as "backups/") and dot-folders are pruned during the walk, so an unreadable skipped
+     * folder can't break a backup.
+     *
+     * @param list<string> $skip
+     * @return list<string>
+     */
+    private function listFiles(string $dir, array $skip = []): array
     {
         $out = [];
-        $it = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS));
-        foreach ($it as $f) {
-            if ($f->isFile() && !$f->isLink()) {
+        $filter = new \RecursiveCallbackFilterIterator(new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS),
+            static function (\SplFileInfo $f) use ($dir, $skip): bool {
+                $rel = substr($f->getPathname(), strlen($dir) + 1);
+                if (str_starts_with($f->getFilename(), '.') || $f->isLink()) {
+                    return false;
+                }
+                foreach ($skip as $prefix) {
+                    if (str_starts_with($rel . ($f->isDir() ? '/' : ''), $prefix)) {
+                        return false;
+                    }
+                }
+                return true;
+            });
+        foreach (new \RecursiveIteratorIterator($filter) as $f) {
+            if ($f->isFile()) {
                 $out[] = substr($f->getPathname(), strlen($dir) + 1);
             }
         }
@@ -380,27 +465,20 @@ final class Backup
     }
 
     /**
-     * Copy a folder tree (regular files only; links are skipped).
+     * Copy a folder tree into a private temporary folder (regular files only; links and dotfiles are skipped).
      *
      * @param list<string> $skip Relative path prefixes to leave out.
      */
     private function copyTree(string $from, string $to, array $skip = []): void
     {
-        if (!is_dir($to)) {
-            mkdir($to, 0750, true);
-        }
-        foreach ($this->listFiles($from) as $rel) {
-            foreach ($skip as $prefix) {
-                if (str_starts_with($rel, $prefix) || str_starts_with(basename($rel), '.')) {
-                    continue 2;
-                }
-            }
+        foreach ($this->listFiles($from, $skip) as $rel) {
             $dest = $to . '/' . $rel;
-            if (!is_dir(dirname($dest))) {
-                mkdir(dirname($dest), 0750, true);
+            if (!is_dir(dirname($dest)) && !mkdir(dirname($dest), 0700, true)) {
+                throw new \RuntimeException('Could not create a temporary folder.');
             }
-            copy($from . '/' . $rel, $dest);
-            @chmod($dest, 0640);
+            if (!copy($from . '/' . $rel, $dest)) {
+                throw new \RuntimeException('Could not copy ' . $rel . '.');
+            }
         }
     }
 

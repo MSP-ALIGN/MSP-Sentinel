@@ -71,7 +71,14 @@ try {
         fwrite(STDOUT, 'Would replace the database "' . App::config()->get('db.name') . '"' . (isset($opts['with-config']) ? ', the config file' : '') . (isset($opts['with-storage']) ? ', the storage folder' : '') . ". Add --yes to restore.\n");
         exit(0);
     }
-    $backup->restore($work, isset($opts['with-config']), isset($opts['with-storage']));
+    // Hold the worker lock while importing, so no scan or housekeeping writes into a half-restored database.
+    $lock = App::db()->quote('msp_sentinel_worker_' . substr(hash('sha256', (string) App::db()->query('SELECT DATABASE()')->fetchColumn()), 0, 16));
+    if ((int) App::db()->query("SELECT GET_LOCK({$lock}, 120)")->fetchColumn() !== 1) {
+        $backup->discard($work);
+        fwrite(STDERR, "A scan is running. Wait for it to finish (or pause scanning), then try again.\n");
+        exit(1);
+    }
+    $backup->restore($work, $manifest, isset($opts['with-config']), isset($opts['with-storage']));
     App::boot(); // reload, in case the config was restored
     $applied = (new Migrator(App::db(), SENTINEL_ROOT . '/migrations'))->migrate();
     fwrite(STDOUT, 'Restored.' . ($applied !== [] ? ' Applied ' . count($applied) . ' migration(s).' : '') . "\n");

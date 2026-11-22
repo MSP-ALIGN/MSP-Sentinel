@@ -21,7 +21,7 @@ Sentinel is free software under the [GNU AGPL-3.0](LICENSE). Each MSP runs its o
 - **Health check:** Administration → System and `bin/doctor.php` check PHP, the database, migrations, nmap, the
   worker, the feeds, storage, HTTPS, email and updates.
 - **Backup and restore:** `bin/backup.php` (database, config and logo; optional passphrase encryption; keeps the
-  newest N) and `bin/restore.php` (verifies every file first; dry run unless `--yes`). The installer sets up daily
+  newest N) and `bin/restore.php` (checks every file against its manifest first; dry run unless `--yes`). The installer sets up daily
   backups.
 - **Update check:** once a day the worker asks the releases feed for the latest version; admins can turn it off.
 - **Data retention:** choose how many months to keep scan history, resolved findings and reports. The audit log is
@@ -52,7 +52,7 @@ Everything else is in the documentation:
 | Guide | |
 |---|---|
 | [Install](docs/install.md) | Installer, what it sets up, manual install on other systems |
-| [Upgrade](docs/upgrade.md) | `install.sh --upgrade`, manual upgrades, rolling back |
+| [Upgrade](docs/upgrade.md) | `install.sh --upgrade`, manual upgrades, rolling back by hand |
 | [Configuration](docs/configuration.md) | Every `config/config.php` option and environment variable |
 | [Security](docs/security.md) | What Sentinel protects, and your hardening checklist |
 | [Backup and restore](docs/backup.md) | Daily encrypted backups, restore, moving servers |

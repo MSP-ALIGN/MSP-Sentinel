@@ -10,7 +10,7 @@ All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` 
 - **Health check:** Administration → System and `bin/doctor.php` check PHP, the database, migrations, nmap, the
   worker, the feeds, storage, HTTPS, email and updates.
 - **Backup and restore:** `bin/backup.php` (database, config and logo; optional passphrase encryption; keeps the
-  newest N) and `bin/restore.php` (verifies every file first; dry run unless `--yes`). The installer sets up daily
+  newest N) and `bin/restore.php` (checks every file against its manifest first; dry run unless `--yes`). The installer sets up daily
   backups.
 - **Update check:** once a day the worker asks the releases feed for the latest version; admins can turn it off.
 - **Data retention:** choose how many months to keep scan history, resolved findings and reports. The audit log is

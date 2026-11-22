@@ -42,7 +42,7 @@ final class Retention
         $counts = ['scans' => 0, 'findings' => 0, 'reports' => 0];
         if (($m = $this->months('retention_scans_months')) > 0) {
             $counts['scans'] = $this->batches(
-                "SELECT id FROM scan_jobs WHERE status IN ('done','partial','failed','cancelled') AND finished_at < UTC_TIMESTAMP() - INTERVAL {$m} MONTH LIMIT " . self::BATCH,
+                "SELECT id FROM scan_jobs WHERE status IN ('done','partial','failed','cancelled') AND COALESCE(finished_at, created_at) < UTC_TIMESTAMP() - INTERVAL {$m} MONTH LIMIT " . self::BATCH,
                 ['DELETE FROM scan_log WHERE job_id IN (%s)', 'DELETE FROM scan_jobs WHERE id IN (%s)']
             );
         }

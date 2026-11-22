@@ -44,6 +44,14 @@ return [
             Assert::contains($step, $out);
         }
         Assert::notContains('IDENTIFIED BY', $out, 'database password never printed');
+        foreach (['chmod o+x /opt/msp-sentinel /opt/msp-sentinel/public', 'chmod -R o+rX /opt/msp-sentinel/public/assets'] as $step) {
+            Assert::contains($step, $out, 'Nginx can read the static files');
+        }
+        exec('bash ' . escapeshellarg($root . '/install/install.sh') . ' --dry-run --skip-os-check --upgrade 2>&1', $lu, $codeU);
+        $up = implode("\n", $lu);
+        Assert::same(0, $codeU, $up);
+        Assert::true(strpos($up, 'cron.paused') < strpos($up, 'backup.php') && strpos($up, 'backup.php') < strpos($up, 'rsync -a --delete'), 'jobs stopped, then backup, then code');
+        Assert::contains('backup.env', $up, 'pre-upgrade backup honours encryption settings');
         exec('bash ' . escapeshellarg($root . '/install/install.sh') . ' --dry-run --skip-os-check --domain "bad domain;rm" 2>&1', $l2, $code2);
         Assert::same(1, $code2, 'invalid domain refused');
         exec('bash ' . escapeshellarg($root . '/install/install.sh') . ' --dry-run --skip-os-check --domain sentinel.example --certbot 2>&1', $l3, $code3);
