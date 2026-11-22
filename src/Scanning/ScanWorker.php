@@ -539,9 +539,10 @@ final class ScanWorker
                 if ($this->website !== null && $this->websiteStore !== null && !empty($page['ok']) && isset($page['_response'])) {
                     $checks = WebsiteChecker::analyse($page['_response'], $scheme);
                     $exposed = $this->website->exposedFiles($ip, $port, $scheme, $names[0] ?? null, fn (): bool => $shouldStop($ip));
-                    // A partial run (stopped, or a request without answer) keeps earlier results for files not re-checked.
-                    $checks['exposed'] = $exposed['complete'] ? $exposed['codes']
-                        : array_values(array_unique(array_merge($exposed['codes'], (array) ($this->websiteStore->previousChecks($assetId, $port)['exposed'] ?? []))));
+                    // A partial run (stopped, or a request without answer) keeps earlier results only for files
+                    // without a conclusive answer this time: a file that now answers "not there" is fixed.
+                    $kept = $exposed['complete'] ? [] : array_diff((array) ($this->websiteStore->previousChecks($assetId, $port)['exposed'] ?? []), $exposed['checked']);
+                    $checks['exposed'] = array_values(array_unique(array_merge($exposed['codes'], $kept)));
                     $this->websiteStore->saveChecks($assetId, $port, $checks);
                 }
             }
@@ -666,8 +667,10 @@ final class ScanWorker
     }
 
     /**
-     * Email security records (SPF, DMARC, DKIM) for the client's in-scope domains, at most once a
-     * day. DNS lookups only: nothing is sent to the client's servers. Never fatal to the job.
+     * Email security records (SPF, DMARC, DKIM) for the client's in-scope domains. Each domain is
+     * checked at most every 20 hours; new domains and domains whose DNS failed are checked on the next
+     * job, and domains that left the scope are removed on every job. DNS lookups only: nothing is sent
+     * to the client's servers. Never fatal to the job.
      *
      * @param array<string,mixed> $summary
      */
@@ -677,12 +680,8 @@ final class ScanWorker
             return;
         }
         try {
-            $last = $this->websiteStore->emailCheckedAt($clientId);
-            if ($last !== null && strtotime($last . ' UTC') > time() - 20 * 3600) {
-                return;
-            }
             $client = $this->clients->find($clientId);
-            if ($client === null || (int) $client['scanning_paused'] === 1 || $this->scope->globallyPaused()) {
+            if ($client === null || (int) $client['scanning_paused'] === 1 || (int) $client['is_archived'] === 1 || $this->scope->globallyPaused()) {
                 return; // paused means paused, even for DNS-only checks
             }
             $domains = [];
@@ -690,17 +689,29 @@ final class ScanWorker
                 if ($e['entry_type'] !== 'domain') {
                     continue;
                 }
-                $d = strtolower((string) preg_replace('/^\*\./', '', (string) $e['value']));
-                $domains[$d] = true;
+                $value = strtolower((string) $e['value']);
+                $d = (string) preg_replace('/^\*\./', '', $value);
+                // "*.client.example" does not authorise client.example itself: only check names in scope.
+                if ($d === $value || $this->scope->isInScope($clientId, $d)) {
+                    $domains[$d] = true;
+                }
                 if (str_starts_with($d, 'www.') && $this->scope->isInScope($clientId, substr($d, 4))) {
                     $domains[substr($d, 4)] = true;
                 }
             }
+            $inScope = array_slice(array_keys($domains), 0, 20);
+            $times = $this->websiteStore->emailCheckedTimes($clientId);
             $results = [];
-            foreach (array_slice(array_keys($domains), 0, 20) as $d) {
-                $results[] = $this->email->check($d);
+            foreach ($inScope as $d) {
+                if (isset($times[$d]) && strtotime($times[$d] . ' UTC') > time() - 20 * 3600) {
+                    continue; // checked recently
+                }
+                // Receivers fall back to the organisational domain's DMARC record; only looked up when that domain is in scope too.
+                $parent = substr($d, (int) strpos($d, '.') + 1);
+                $org = str_contains($parent, '.') && $this->scope->isInScope($clientId, $parent) ? $parent : null;
+                $results[] = $this->email->check($d, $org);
             }
-            $this->websiteStore->saveEmail($clientId, $results);
+            $this->websiteStore->saveEmail($clientId, $results, $inScope);
             $summary['email_domains_checked'] = count($results);
         } catch (\Throwable $ex) {
             error_log('[msp-sentinel] email checks failed for client ' . $clientId . ': ' . $ex->getMessage());

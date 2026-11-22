@@ -36,6 +36,9 @@ function encodeName(string $name): string
 {
     $out = '';
     foreach (explode('.', $name) as $label) {
+        if ($label === '') {
+            continue; // "." is the root (a null MX)
+        }
         $out .= chr(strlen($label)) . $label;
     }
     return $out . "\0";

@@ -137,6 +137,45 @@
       "A": [
         "203.0.113.191"
       ]
+    },
+    "nullmx.example": {
+      "MX": [
+        "."
+      ],
+      "A": [
+        "203.0.113.191"
+      ]
+    },
+    "spf-redirect.example": {
+      "MX": [
+        "mx1.mailhost.example"
+      ],
+      "TXT": [
+        "v=spf1 redirect=_spf.mailhost.example"
+      ]
+    },
+    "_dmarc.spf-redirect.example": {
+      "TXT": [
+        "v=DMARC1; p=quarantine"
+      ]
+    },
+    "shop.mail-good.example": {
+      "MX": [
+        "mx1.mailhost.example"
+      ],
+      "TXT": [
+        "v=spf1 include:spf.mailhost.example -all"
+      ]
+    },
+    "wild.example": {
+      "MX": [
+        "mx1.mailhost.example"
+      ]
+    },
+    "www.wild.example": {
+      "A": [
+        "203.0.113.191"
+      ]
     }
   },
   "behaviours": {

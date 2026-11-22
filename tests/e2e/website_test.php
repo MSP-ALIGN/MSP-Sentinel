@@ -11,6 +11,10 @@ declare(strict_types=1);
  */
 
 use Sentinel\Core\App;
+use Sentinel\Scanning\Connector;
+use Sentinel\Scanning\HttpProbe;
+use Sentinel\Web\WebsiteChecker;
+use Sentinel\Web\WebsiteRepository;
 use Sentinel\Tests\Assert;
 use Sentinel\Tests\TestContext;
 
@@ -27,7 +31,7 @@ $setup = static function (TestContext $ctx): int {
     $admin->submit('/clients/' . $cid . '/authorisations/new', '/clients/' . $cid . '/authorisations', [
         'approved_by_name' => 'Jo Example', 'approved_by_role' => 'Owner', 'approved_on' => gmdate('Y-m-d'), 'valid_from' => gmdate('Y-m-d', time() - 86400),
         'valid_until' => gmdate('Y-m-d', time() + 86400 * 200), 'document_ref' => '', 'notes' => '',
-        'scope' => "203.0.113.190\n203.0.113.191\nmail-good.example\nmail-weak.example\nmail-none.example\nnomail.example", 'confirm' => '1']);
+        'scope' => "203.0.113.190\n203.0.113.191\nmail-good.example\nmail-weak.example\nmail-none.example\nnomail.example\nnullmx.example\nspf-redirect.example\nshop.mail-good.example\n*.wild.example", 'confirm' => '1']);
     $admin->submit('/clients/' . $cid, '/clients/' . $cid . '/scan', []);
     $job = (int) $ctx->db->query("SELECT MAX(id) FROM scan_jobs WHERE client_id = {$cid}")->fetchColumn();
     $ctx->cli('bin/worker.php', ['--no-schedule', '--job=' . $job]);
@@ -87,6 +91,36 @@ return [
         Assert::same(['selector1'], json_decode((string) $good, true)['dkim'], 'DKIM found under a common selector');
         $dnsLog = (string) @file_get_contents($ctx->dnsLog ?? '');
         Assert::true($dnsLog === '' || str_contains($dnsLog, 'TXT _dmarc.mail-weak.example'), 'DMARC looked up over DNS');
+    },
+    'email edge cases: null MX, SPF redirect, parent DMARC, wildcard-only scope' => function (TestContext $ctx) use ($setup, $finding): void {
+        $cid = $setup($ctx);
+        $domains = $ctx->db->query("SELECT domain FROM email_checks WHERE client_id = {$cid}")->fetchAll(PDO::FETCH_COLUMN);
+        Assert::true(!in_array('wild.example', $domains, true), '*.wild.example does not authorise wild.example itself: ' . implode(', ', $domains));
+        Assert::same(0, (int) $ctx->db->query("SELECT has_mx FROM email_checks WHERE client_id = {$cid} AND domain = 'nullmx.example'")->fetchColumn(), 'a null MX accepts no email');
+        Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM findings WHERE client_id = {$cid} AND finding_key LIKE 'email:nullmx.example:%'")->fetchColumn(), 'null MX: not judged');
+        Assert::same(null, $finding($ctx, $cid, 'email:spf-redirect.example:spf_weak'), 'SPF redirect= takes the policy from the target');
+        Assert::same(null, $finding($ctx, $cid, 'email:shop.mail-good.example:dmarc_missing'), 'the parent domain\'s DMARC (in scope) applies');
+        $shop = json_decode((string) $ctx->db->query("SELECT result FROM email_checks WHERE client_id = {$cid} AND domain = 'shop.mail-good.example'")->fetchColumn(), true);
+        Assert::same('mail-good.example', $shop['dmarc_from'] ?? null);
+        Assert::same('reject', $shop['dmarc_policy'] ?? null);
+    },
+    'a partial exposed-file run only keeps files without an answer; stale component matches are dropped' => function (TestContext $ctx) use ($setup): void {
+        $cid = $setup($ctx);
+        $checker = new WebsiteChecker(new HttpProbe(Connector::fromConfig(App::config())));
+        $calls = 0;
+        $r = $checker->exposedFiles('203.0.113.191', 443, 'https', null, function () use (&$calls): bool { return ++$calls > 2; });
+        Assert::same(false, $r['complete'], 'stopped early');
+        Assert::same([], $r['codes'], 'soft-404 site: nothing proven');
+        Assert::same(['exposed_git', 'exposed_env'], $r['checked'], 'only the answered codes are conclusive (backup has more paths)');
+        $full = $checker->exposedFiles('203.0.113.190', 80, 'http', null, fn (): bool => false);
+        Assert::true($full['complete'] && in_array('exposed_git', $full['checked'], true) && count($full['checked']) === 6, 'a full run checks every code');
+        // A component whose version changed while its data is pending loses the old version's matches.
+        $store = new WebsiteRepository($ctx->db);
+        $comp = (int) $ctx->db->query("SELECT wc.id FROM web_components wc JOIN component_vulns cv ON cv.component_id = wc.id WHERE wc.name = 'jQuery' LIMIT 1")->fetchColumn();
+        Assert::true($comp > 0, 'jQuery has a match to start with');
+        $ctx->db->exec("UPDATE web_components SET version = '1.12.5', cpe = 'cpe:/a:jquery:jquery:1.12.5' WHERE id = {$comp}");
+        App::vulnMatcher()->matchComponents($store, $cid, 0);
+        Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM component_vulns WHERE component_id = {$comp}")->fetchColumn(), 'no CVEs claimed for the new version');
     },
     'client page, findings filter, report guidance and roles' => function (TestContext $ctx) use ($setup): void {
         $cid = $setup($ctx);

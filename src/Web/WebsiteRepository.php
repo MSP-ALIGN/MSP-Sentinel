@@ -158,25 +158,43 @@ final class WebsiteRepository
         }
     }
 
+    /** Remove a component's matches that were made for a different CPE (an earlier version). */
+    public function clearComponentMatchesUnless(int $componentId, string $cpe): void
+    {
+        $this->db->prepare('DELETE FROM component_vulns WHERE component_id = :c AND cpe <> :cpe')->execute(['c' => $componentId, 'cpe' => $cpe]);
+    }
+
     /**
-     * Save email checks for a client's domains; domains no longer checked are removed.
+     * When each of a client's domains was last checked successfully.
+     *
+     * @return array<string,string> domain => checked_at (UTC)
+     */
+    public function emailCheckedTimes(int $clientId): array
+    {
+        $stmt = $this->db->prepare('SELECT domain, checked_at FROM email_checks WHERE client_id = :c');
+        $stmt->execute(['c' => $clientId]);
+        return array_map('strval', $stmt->fetchAll(\PDO::FETCH_KEY_PAIR));
+    }
+
+    /**
+     * Save email checks for a client's domains. Domains not in $inScope are removed; a domain whose DNS
+     * failed this time keeps its last good result (and its old checked_at, so it is retried next job).
      *
      * @param list<array<string,mixed>> $results From EmailChecker::check().
+     * @param list<string> $inScope Every domain currently in scope (checked now or not).
      */
-    public function saveEmail(int $clientId, array $results): void
+    public function saveEmail(int $clientId, array $results, array $inScope): void
     {
-        $domains = [];
+        $domains = $inScope;
         $up = $this->db->prepare(
             'INSERT INTO email_checks (client_id, domain, has_mx, result, checked_at) VALUES (:c, :d, :mx, :r, UTC_TIMESTAMP())
              ON DUPLICATE KEY UPDATE has_mx = VALUES(has_mx), result = VALUES(result), checked_at = UTC_TIMESTAMP()'
         );
         foreach ($results as $r) {
-            if ($r['error'] !== '') {
-                $domains[] = $r['domain']; // keep the last good result when DNS failed this time
-                continue;
+            if ($r['error'] !== '' || !in_array($r['domain'], $inScope, true)) {
+                continue; // keep the last good result when DNS failed this time
             }
             $up->execute(['c' => $clientId, 'd' => $r['domain'], 'mx' => $r['has_mx'] ? 1 : 0, 'r' => json_encode($r, JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE)]);
-            $domains[] = $r['domain'];
         }
         if ($domains === []) {
             $this->db->prepare('DELETE FROM email_checks WHERE client_id = :c')->execute(['c' => $clientId]);
@@ -196,14 +214,5 @@ final class WebsiteRepository
         $stmt = $this->db->prepare('SELECT domain, has_mx, result, checked_at FROM email_checks WHERE client_id = :c ORDER BY domain');
         $stmt->execute(['c' => $clientId]);
         return array_map(static fn (array $r): array => (json_decode((string) $r['result'], true) ?: []) + ['checked_at' => $r['checked_at']], $stmt->fetchAll());
-    }
-
-    /** When this client's email records were last checked (UTC), or null. */
-    public function emailCheckedAt(int $clientId): ?string
-    {
-        $stmt = $this->db->prepare('SELECT MAX(checked_at) FROM email_checks WHERE client_id = :c');
-        $stmt->execute(['c' => $clientId]);
-        $v = $stmt->fetchColumn();
-        return $v === false || $v === null ? null : (string) $v;
     }
 }

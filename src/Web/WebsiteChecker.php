@@ -53,13 +53,15 @@ final class WebsiteChecker
     ];
 
     /** Library patterns over script URLs: name => list of regexes capturing the version. */
+    // Each name must start a path segment or package name ((?<![\w-]) and "/"), so "react-bootstrap@2.7.0",
+    // "bootstrap-vue@2.23.1" or "chartjs-adapter-moment@1.0.1" are never read as Bootstrap, Vue.js or Moment.js.
     private const LIBRARIES = [
-        'jQuery' => ['~jquery[-.](\d+\.\d+\.\d+)(?:\.slim)?(?:\.min)?\.js~i', '~/jquery/(\d+\.\d+\.\d+)/~i', '~jquery@(\d+\.\d+\.\d+)~i'],
-        'Bootstrap' => ['~bootstrap(?:\.bundle)?[-.](\d+\.\d+\.\d+)(?:\.min)?\.js~i', '~/(?:twitter-)?bootstrap/(\d+\.\d+\.\d+)/~i', '~bootstrap@(\d+\.\d+\.\d+)~i'],
-        'AngularJS' => ['~angular[-.](1\.\d+\.\d+)(?:\.min)?\.js~i', '~/angular\.js/(1\.\d+\.\d+)/~i', '~angular@(1\.\d+\.\d+)~i'],
-        'Lodash' => ['~lodash[-.](\d+\.\d+\.\d+)(?:\.min)?\.js~i', '~/lodash(?:\.js)?/(\d+\.\d+\.\d+)/~i', '~lodash@(\d+\.\d+\.\d+)~i'],
-        'Moment.js' => ['~moment[-.](\d+\.\d+\.\d+)(?:\.min)?\.js~i', '~/moment(?:\.js)?/(\d+\.\d+\.\d+)/~i', '~moment@(\d+\.\d+\.\d+)~i'],
-        'Vue.js' => ['~/vue/(\d+\.\d+\.\d+)/~i', '~vue@(\d+\.\d+\.\d+)~i'],
+        'jQuery' => ['~(?:^|/)jquery[-.](\d+\.\d+\.\d+)(?:\.slim)?(?:\.min)?\.js~i', '~/jquery/(\d+\.\d+\.\d+)/~i', '~(?<![\w-])jquery@(\d+\.\d+\.\d+)~i'],
+        'Bootstrap' => ['~(?:^|/)bootstrap(?:\.bundle)?[-.](\d+\.\d+\.\d+)(?:\.min)?\.js~i', '~/(?:twitter-)?bootstrap/(\d+\.\d+\.\d+)/~i', '~(?<![\w-])bootstrap@(\d+\.\d+\.\d+)~i'],
+        'AngularJS' => ['~(?:^|/)angular[-.](1\.\d+\.\d+)(?:\.min)?\.js~i', '~/angular\.js/(1\.\d+\.\d+)/~i', '~(?<![\w-])angular@(1\.\d+\.\d+)~i'],
+        'Lodash' => ['~(?:^|/)lodash[-.](\d+\.\d+\.\d+)(?:\.min)?\.js~i', '~/lodash(?:\.js)?/(\d+\.\d+\.\d+)/~i', '~(?<![\w-])lodash@(\d+\.\d+\.\d+)~i'],
+        'Moment.js' => ['~(?:^|/)moment[-.](\d+\.\d+\.\d+)(?:\.min)?\.js~i', '~/moment(?:\.js)?/(\d+\.\d+\.\d+)/~i', '~(?<![\w-])moment@(\d+\.\d+\.\d+)~i'],
+        'Vue.js' => ['~/vue/(\d+\.\d+\.\d+)/~i', '~(?<![\w-])vue@(\d+\.\d+\.\d+)~i'],
     ];
 
     /** Half a year: the usual minimum for HSTS. */
@@ -90,8 +92,8 @@ final class WebsiteChecker
             $hasPassword = preg_match('/<input[^>]+type\s*=\s*["\']?password/i', $body) === 1;
             if ($status >= 200 && $status < 300 && $hasPassword) {
                 $out['issues'][] = 'login_over_http';
-            } elseif ($status >= 200 && $status < 300) {
-                $out['issues'][] = 'no_https_redirect';
+            } elseif (($status >= 200 && $status < 300) || ($status >= 300 && $status < 400 && !$redirectsToHttps)) {
+                $out['issues'][] = 'no_https_redirect'; // served over HTTP, or redirected to another HTTP address
             }
         } elseif ($status > 0 && $status < 400) {
             $hsts = (string) ($h['strict-transport-security'] ?? '');
@@ -128,7 +130,8 @@ final class WebsiteChecker
             }
             $cookie = strtolower($value);
             $cname = trim((string) strtok($value, '='));
-            $session = preg_match('/sess|sid|auth|token|login|jwt/i', $cname) === 1;
+            // Session-like names: the word at the start or after a separator ("PHPSESSID", "connect.sid", "auth_token"), not inside a word ("outside_pref").
+            $session = preg_match('/(^|[_.-])(sess|sid|auth|token|login|jwt)|^(phpsessid|jsessionid|aspsessionid\w*|asp\.net_sessionid)$/i', $cname) === 1;
             if (($scheme === 'https' && !preg_match('/;\s*secure\b/', $cookie)) || ($session && !preg_match('/;\s*httponly\b/', $cookie))) {
                 $insecure[] = mb_substr(preg_replace('/[^A-Za-z0-9_.-]/', '', $cname) ?: '?', 0, 40);
             }
@@ -165,7 +168,8 @@ final class WebsiteChecker
         $xgen = (string) ($headers['x-generator'] ?? '');
         if (preg_match('/^WordPress\s+(\d+\.\d+(?:\.\d+)?)/i', $generator, $m)) {
             $found['WordPress'] = ['name' => 'WordPress', 'version' => $m[1], 'kind' => 'cms'];
-        } elseif (preg_match('~/wp-(content|includes)/~i', $html)) {
+        } elseif (preg_match('~(?:src|href)\s*=\s*["\']\.?/wp-(?:content|includes)/~i', $html)) {
+            // Only the site's own (relative) /wp-content/ URLs count: a hotlinked image from another WordPress site does not.
             $found['WordPress'] = ['name' => 'WordPress', 'version' => '', 'kind' => 'cms'];
         }
         if (preg_match('/^Drupal\b/i', $generator) || preg_match('/^Drupal\b/i', $xgen)) {
@@ -195,12 +199,15 @@ final class WebsiteChecker
      * Request the fixed list of paths and report the ones whose content proves exposure.
      *
      * @param callable $shouldStop fn(): bool, checked before each request (kill switch, window, scope).
-     * @return array{codes:list<string>, complete:bool} Codes found (e.g. exposed_git); complete is false if
-     *         the run stopped early or a request failed, so earlier results for unchecked files must be kept.
+     * @return array{codes:list<string>, checked:list<string>, complete:bool} Codes found (e.g. exposed_git);
+     *         checked lists the codes with a conclusive answer (found, or every one of its paths answered).
+     *         complete is false if the run stopped early or a request failed: earlier results for codes not
+     *         in checked must then be kept ("no answer" is unknown, not "fixed").
      */
     public function exposedFiles(string $ip, int $port, string $scheme, ?string $host, callable $shouldStop): array
     {
         $found = [];
+        $answered = [];
         $complete = true;
         foreach (self::EXPOSED_PATHS as $path => [$code, $kind]) {
             if (isset($found[$code])) {
@@ -215,14 +222,26 @@ final class WebsiteChecker
                 $complete = false; // no answer: unknown, not "fixed"
                 continue;
             }
+            $answered[$code] = ($answered[$code] ?? 0) + 1;
             if ($r['status'] !== 200 && $r['status'] !== 206) {
+                continue;
+            }
+            // A compressed transfer (Content-Encoding) is not the file itself: its magic bytes prove nothing.
+            if (($r['headers']['content-encoding'] ?? '') !== '' && $kind === 'archive') {
                 continue;
             }
             if (self::proves($kind, $r['body'], strtolower($r['headers']['content-type'] ?? ''))) {
                 $found[$code] = true;
             }
         }
-        return ['codes' => array_keys($found), 'complete' => $complete];
+        // Conclusive: found, or every path of the code gave an answer (exposed_backup has several paths).
+        $checked = [];
+        foreach (array_count_values(array_column(self::EXPOSED_PATHS, 0)) as $code => $paths) {
+            if (isset($found[$code]) || ($answered[$code] ?? 0) === $paths) {
+                $checked[] = $code;
+            }
+        }
+        return ['codes' => array_keys($found), 'checked' => $checked, 'complete' => $complete];
     }
 
     /** True if the first bytes of a response prove the file is what its path says. */
@@ -233,9 +252,10 @@ final class WebsiteChecker
         return match ($kind) {
             'git' => preg_match('~^ref: refs/heads/[\w./-]+\s*$~', trim($start)) === 1 || preg_match('/^[0-9a-f]{40}\s*$/', trim($start)) === 1,
             'env' => !$looksHtml && preg_match_all('/^\s*[A-Z][A-Z0-9_]{2,}\s*=/m', $start) >= 2,
-            'archive' => str_starts_with($body, "PK\x03\x04") || str_starts_with($body, "\x1f\x8b"),
+            'archive' => !str_contains($contentType, 'html') && (str_starts_with($body, "PK\x03\x04") || str_starts_with($body, "\x1f\x8b")),
             'sql' => !$looksHtml && preg_match('/^(--\s*(MySQL|MariaDB) dump|CREATE TABLE|INSERT INTO|DROP TABLE|-- PostgreSQL database dump)/im', $start) === 1,
-            'phpinfo' => str_contains($body, 'phpinfo()') && preg_match('/PHP Version\s*</', $body) === 1,
+            // The real page starts with <title>PHP 8.x.y - phpinfo()</title> and <h1 class="p">PHP Version 8.x.y</h1>, inside the first 4 KB.
+            'phpinfo' => preg_match('~<title>PHP \d+\.\d+[\w.+-]* - phpinfo\(\)</title>~i', $body) === 1 && preg_match('~class="p">PHP Version \d+\.\d+~', $body) === 1,
             'status' => preg_match('/<title>Apache Status<\/title>|Apache Server Status for/i', $body) === 1,
             'dsstore' => str_starts_with($body, "\x00\x00\x00\x01Bud1"),
             default => false,

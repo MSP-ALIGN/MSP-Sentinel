@@ -148,7 +148,10 @@ final class VulnMatcher
             }
             if ($fetched === []) {
                 $stats['pending']++;
-                continue; // keep earlier matches until the data arrives
+                // Keep earlier matches for this same product and version until the data arrives, but drop
+                // matches of an earlier version: they would claim CVEs for a version no longer on the page.
+                $store->clearComponentMatchesUnless($comp['id'], $queries[0]);
+                continue;
             }
             $cves = [];
             foreach ($fetched as $query) {

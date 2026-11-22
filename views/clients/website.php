@@ -56,7 +56,7 @@ $chip = static function (string $sev, string $text): string {
                     <?php foreach ((array) ($m['issues'] ?? []) as $code): $r = ExposureRules::emailIssue((string) $code); ?><?= $chip($r['severity'], $r['text']) ?><?php endforeach; ?>
                     <?php foreach ((array) ($m['info'] ?? []) as $code): ?><?= $chip('info', ExposureRules::emailIssue((string) $code)['text']) ?><?php endforeach; ?><?php endif; ?></td>
                 <td class="text-break sn-records"><?php if (($m['spf'] ?? '') !== ''): ?><span class="d-block"><b>SPF</b> <code><?= e($m['spf']) ?></code></span><?php endif; ?>
-                    <?php if (($m['dmarc'] ?? '') !== ''): ?><span class="d-block"><b>DMARC</b> <code><?= e($m['dmarc']) ?></code></span><?php endif; ?>
+                    <?php if (($m['dmarc'] ?? '') !== ''): ?><span class="d-block"><b>DMARC</b><?php if (($m['dmarc_from'] ?? '') !== ''): ?> <?= e(__('(from {domain})', ['domain' => (string) $m['dmarc_from']])) ?><?php endif; ?> <code><?= e($m['dmarc']) ?></code></span><?php endif; ?>
                     <?php if (!empty($m['dkim'])): ?><span class="d-block"><b>DKIM</b> <?= e(implode(', ', (array) $m['dkim'])) ?></span><?php endif; ?></td>
             </tr>
             <?php endforeach; ?>

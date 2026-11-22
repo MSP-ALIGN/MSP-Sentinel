@@ -32,13 +32,16 @@ final class EmailChecker
     /**
      * Check one domain.
      *
+     * @param string|null $orgDomain The parent (organisational) domain, only when it is in scope too: its
+     *        DMARC record applies when the domain has none of its own (sp= or p=).
      * @return array{domain:string, has_mx:bool, spf:string, spf_all:string, dmarc:string, dmarc_policy:string, dkim:list<string>, issues:list<string>, info:list<string>, error:string}
      */
-    public function check(string $domain): array
+    public function check(string $domain, ?string $orgDomain = null): array
     {
         $out = ['domain' => $domain, 'has_mx' => false, 'spf' => '', 'spf_all' => '', 'dmarc' => '', 'dmarc_policy' => '', 'dkim' => [], 'issues' => [], 'info' => [], 'error' => ''];
         try {
-            $out['has_mx'] = $this->records($domain, DnsMessage::MX) !== [];
+            // A "null MX" (exchange ".", RFC 7505) says the domain accepts no email.
+            $out['has_mx'] = array_filter($this->records($domain, DnsMessage::MX), static fn (string $x): bool => trim($x, '. ') !== '') !== [];
             if (!$out['has_mx']) {
                 return $out;
             }
@@ -53,18 +56,28 @@ final class EmailChecker
                 if (preg_match('/(^|\s)([-~?+]?)all(\s|$)/i', $spf[0], $m)) {
                     $out['spf_all'] = $m[2] === '' ? '+' : $m[2];
                 }
+                if ($out['spf_all'] === '' && preg_match('/(^|\s)redirect=\S+/i', $spf[0])) {
+                    $out['spf_all'] = 'redirect'; // the policy comes from the redirect target (RFC 7208); not judged
+                }
                 if ($out['spf_all'] === '+') {
                     $out['issues'][] = 'spf_pass_all';
                 } elseif ($out['spf_all'] === '?' || $out['spf_all'] === '') {
                     $out['issues'][] = 'spf_weak';
                 }
             }
-            $dmarc = array_values(array_filter($this->records('_dmarc.' . $domain, DnsMessage::TXT), static fn (string $t): bool => preg_match('/^v=DMARC1\s*;/i', $t) === 1));
+            $dmarc = $this->dmarc($domain);
+            $policyTag = 'p';
+            if ($dmarc === [] && $orgDomain !== null) {
+                $dmarc = $this->dmarc($orgDomain);
+                $policyTag = 'sp'; // subdomain policy of the organisational domain, falling back to its p=
+                $out['dmarc_from'] = $orgDomain;
+            }
             if ($dmarc === []) {
                 $out['issues'][] = 'dmarc_missing';
             } else {
                 $out['dmarc'] = mb_substr($dmarc[0], 0, 500);
-                $out['dmarc_policy'] = preg_match('/;\s*p\s*=\s*(none|quarantine|reject)/i', $dmarc[0], $m) ? strtolower($m[1]) : '';
+                $policy = static fn (string $tag): string => preg_match('/;\s*' . $tag . '\s*=\s*(none|quarantine|reject)/i', $dmarc[0], $m) ? strtolower($m[1]) : '';
+                $out['dmarc_policy'] = ($policyTag === 'sp' ? $policy('sp') : '') ?: $policy('p');
                 if ($out['dmarc_policy'] === 'none' || $out['dmarc_policy'] === '') {
                     $out['issues'][] = 'dmarc_weak';
                 }
@@ -84,6 +97,16 @@ final class EmailChecker
             $out['error'] = mb_substr($ex->getMessage(), 0, 200);
         }
         return $out;
+    }
+
+    /**
+     * DMARC records published for a domain.
+     *
+     * @return list<string>
+     */
+    private function dmarc(string $domain): array
+    {
+        return array_values(array_filter($this->records('_dmarc.' . $domain, DnsMessage::TXT), static fn (string $t): bool => preg_match('/^v=DMARC1\s*;/i', $t) === 1));
     }
 
     /**
