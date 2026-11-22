@@ -56,6 +56,7 @@ final class IntegrationsController extends Controller
             Session::flash('danger', __('The client ID has unexpected characters. Copy it again from NinjaOne.'));
             return $back;
         }
+        $oldHost = $s->get('ninjaone_host');
         $changed = [];
         foreach (['ninjaone_host' => $host, 'ninjaone_client_id' => $clientId, 'ninjaone_enabled' => $enabled ? '1' : '0'] as $key => $value) {
             if ($s->get($key) !== $value) {
@@ -78,6 +79,11 @@ final class IntegrationsController extends Controller
         if ($changed !== []) {
             $s->set('ninjaone_test_result', ''); // an old test result no longer says anything
             $this->audit($request, 'settings.ninjaone_updated', null, null, ['changed' => $changed]);
+        }
+        $linked = (int) App::db()->query("SELECT COUNT(*) FROM source_links WHERE source = 'ninjaone'")->fetchColumn();
+        if ($oldHost !== '' && $host !== $oldHost && $linked > 0) {
+            // Organisation IDs belong to one NinjaOne account: links made against another one would point at the wrong data.
+            Session::flash('warning', __('The NinjaOne instance changed while {n} client(s) are linked. If this is a different NinjaOne account, unlink and link those clients again: their organisation IDs belong to the old one.', ['n' => $linked]));
         }
         $ready = App::ninjaOne() !== null;
         Session::flash($enabled && !$ready ? 'warning' : 'success', $enabled && !$ready

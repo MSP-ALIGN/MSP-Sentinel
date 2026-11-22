@@ -53,6 +53,7 @@ $n = $ninja;
             </div>
             <div class="form-check mt-3"><input class="form-check-input" type="checkbox" id="ninja-enabled" name="enabled" value="1" <?= $n['enabled'] ? 'checked' : '' ?>>
                 <label class="form-check-label" for="ninja-enabled"><?= e(__('Sync linked clients from NinjaOne')) ?></label></div>
+            <div class="form-text"><?= e(__('When syncing is off, linked clients keep the devices and findings from their last sync until it is turned on again or they are unlinked.')) ?></div>
             <button type="submit" class="btn btn-primary btn-sm mt-3"><?= e(__('Save')) ?></button>
         </form>
         <hr>

@@ -20,13 +20,14 @@ return [
         // A page size of 2 makes every list (organisations, devices, cursor reports) take several pages.
         $src = new NinjaOneSource('app.ninjarmm.com', 'test-client', 'test-secret-value', $base($ctx), 2);
         $orgs = $src->organisations();
-        Assert::same(['900', '901', '902'], array_column($orgs, 'id'), 'all organisations, across pages');
+        Assert::same(['900', '901', '902'], array_column($orgs, 'id'), 'all organisations, across pages (until an empty page)');
         Assert::same('Harbour Example Ltd', $orgs[1]['name']);
 
         $snap = $src->snapshot('901');
         Assert::true($snap['complete'], 'complete snapshot');
         $by = array_column($snap['devices'], null, 'source_id');
-        Assert::same(['11', '12', '13'], array_map('strval', array_keys($by)), 'computers only: no switch, no unapproved device');
+        Assert::same(['11', '12', '13', '17'], array_map('strval', array_keys($by)), 'computers only: no switch, no unapproved device');
+        Assert::same('', $by['17']['av_state'], 'offline a month, no inventory: antivirus unknown, never "missing"');
         $lt1 = $by['11'];
         Assert::same(['HARBOUR-LT-01', 'workstation', 'Windows 10 Pro', '19045', '22H2', ['10.30.0.11']], [$lt1['name'], $lt1['device_class'], $lt1['os_name'], $lt1['os_build'], $lt1['os_release'], $lt1['ip_addresses']]);
         Assert::same(['off', 'outdated', 'off'], [$lt1['av_state'], $lt1['av_definitions'], $lt1['encryption']], 'antivirus off, old definitions, BitLocker off');
@@ -35,12 +36,22 @@ return [
         Assert::true(is_int($lt1['last_contact']) && $lt1['last_contact'] > time() - 3600, 'last contact as Unix time');
         $srv = $by['12'];
         Assert::same(['server', 'on', 'current', ''], [$srv['device_class'], $srv['av_state'], $srv['av_definitions'], $srv['encryption']], 'no volume data: encryption unknown, not off');
-        Assert::same('failed', $srv['patches'][0]['status']);
+        Assert::same('failed', $srv['patches'][0]['status'], 'a failed install in the last 30 days (os-patch-installs)');
+        Assert::same('pending', $lt1['patches'][0]['status'], 'a failed attempt 40 days ago is history');
+        Assert::same(null, $lt1['patches'][0]['detected_at'], 'NinjaOne\'s collection time is not a detection date');
         $lt2 = $by['13'];
         Assert::same('missing', $lt2['av_state'], 'a Windows workstation with no antivirus reported');
         Assert::same('on', $lt2['encryption'], 'C: protected (another drive does not count)');
         Assert::same([], $lt2['patches'], 'rejected patches were declined on purpose: not missing');
 
+        // A server that keeps returning the same page is stopped, not looped or half-saved.
+        $stuck = false;
+        try {
+            $src->snapshot('903');
+        } catch (InventoryException $ex) {
+            $stuck = str_contains($ex->getMessage(), 'same page twice');
+        }
+        Assert::true($stuck, 'repeated page detected');
         // A failed page fails the whole snapshot (never half the data as if it were everything).
         $failed = false;
         try {
@@ -128,7 +139,11 @@ return [
             App::vulnMatcher(15), App::findingsEngine(), null);
         $r = $sync->syncClient($cid, 'ninjaone');
         Assert::same('ok', $r['status'], $r['message']);
-        Assert::same(3, (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE client_id = {$cid} AND removed_at IS NULL")->fetchColumn());
+        Assert::same(4, (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE client_id = {$cid} AND removed_at IS NULL")->fetchColumn());
+        // Missing updates count from when Sentinel first saw them: 40 days later they are late.
+        $ctx->db->exec("UPDATE device_patches p JOIN devices d ON d.id = p.device_id SET p.first_seen = UTC_TIMESTAMP() - INTERVAL 40 DAY WHERE d.client_id = {$cid}");
+        $r = $sync->syncClient($cid, 'ninjaone');
+        Assert::same('ok', $r['status'], $r['message']);
         $keys = $ctx->db->query("SELECT finding_key FROM findings WHERE client_id = {$cid} AND status = 'open'")->fetchAll(PDO::FETCH_COLUMN);
         foreach (['dev:ninjaone:11:os_unsupported', 'dev:ninjaone:11:av_off', 'dev:ninjaone:11:encryption_off', 'dev:ninjaone:11:patches_missing', 'dev:ninjaone:12:patches_failed', 'dev:ninjaone:13:av_missing'] as $k) {
             Assert::true(in_array($k, $keys, true), "finding {$k}: " . implode(', ', $keys));
@@ -141,6 +156,6 @@ return [
         $ctx->db->prepare("UPDATE source_links SET org_id = '900' WHERE client_id = :c")->execute(['c' => $cid]);
         $r = $sync->syncClient($cid, 'ninjaone');
         Assert::true($r['status'] !== 'ok', 'failed sync reported');
-        Assert::same(3, (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE client_id = {$cid} AND removed_at IS NULL")->fetchColumn(), 'devices kept');
+        Assert::same(4, (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE client_id = {$cid} AND removed_at IS NULL")->fetchColumn(), 'devices kept');
     },
 ];

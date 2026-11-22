@@ -17,8 +17,9 @@ namespace Sentinel\Inventory;
  *   [{id, systemName, displayName, dnsName, nodeClass, approvalStatus, os{name, buildNumber, releaseId},
  *   ipAddresses[], lastContact (Unix time)}].
  * - Reports with a cursor, all {cursor{name}, results[]} and filtered with df:
- *   /v2/queries/software (deviceId, name, publisher, version), /v2/queries/os-patches (pending, failed and
- *   rejected patches: id, deviceId, name, kbNumber, severity, status, timestamp),
+ *   /v2/queries/software (deviceId, name, publisher, version), /v2/queries/os-patches (patches with no
+ *   installation attempt: id, deviceId, name, kbNumber, severity, status), /v2/queries/os-patch-installs?status=FAILED
+ *   (failed attempts: id, deviceId, kbNumber, installedAt),
  *   /v2/queries/antivirus-status (deviceId, productName, productState, definitionStatus),
  *   /v2/queries/volumes?include=bl (deviceId, driveLetter, bitLockerStatus{conversionStatus, protectionStatus}).
  *
@@ -34,16 +35,16 @@ namespace Sentinel\Inventory;
  *   over verified HTTPS; redirects are not followed. The test suite may point it at a local mock (plain http).
  * - Every answer is untrusted: sizes are capped, JSON is decoded defensively and every value is cast;
  *   InventoryRepository cleans and shortens text before it is stored.
- * - Any failed page throws, so a sync never stores half the data as if it were everything (that would
- *   "resolve" findings that are still there). Hitting the page limit marks the snapshot incomplete instead.
+ * - Any failed page, a page limit hit or a server that stops moving through pages throws, so a sync never stores
+ *   half the data as if it were everything (that would "resolve" findings that are still there).
  * - The client secret and token are never logged or put in an exception message.
  */
 final class NinjaOneSource implements InventorySource
 {
     /** Page size for every list (the API's pageSize parameter). */
     private const PAGE = 500;
-    /** At most this many pages per list (500 x 200 = 100,000 rows), so a loop can never run away. */
-    private const MAX_PAGES = 200;
+    /** At most this many pages per list (500 x 4,000 = 2 million rows); hitting it fails the sync, never truncates it. */
+    private const MAX_PAGES = 4000;
     /** Largest answer accepted for one request. */
     private const MAX_BYTES = 33554432;
 
@@ -83,22 +84,27 @@ final class NinjaOneSource implements InventorySource
     {
         $out = [];
         $after = null;
-        for ($page = 0; $page < self::MAX_PAGES; $page++) {
+        // Until an empty page (not a short one: the server may cap pageSize below what was asked).
+        for ($page = 0; ; $page++) {
+            if ($page >= self::MAX_PAGES) {
+                throw new InventoryException('NinjaOne returned more organisations than Sentinel reads in one go.');
+            }
             $rows = $this->getJson('/v2/organizations', ['pageSize' => $this->pageSize] + ($after === null ? [] : ['after' => $after]));
             if (!array_is_list($rows)) {
                 throw new InventoryException('NinjaOne returned an unexpected organisation list.');
             }
+            $before = $after;
             foreach ($rows as $o) {
                 if (is_array($o) && is_int($o['id'] ?? null)) {
-                    $out[] = ['id' => (string) $o['id'], 'name' => is_string($o['name'] ?? null) ? $o['name'] : ('#' . $o['id'])];
-                    $after = $o['id'];
+                    $out[$o['id']] = ['id' => (string) $o['id'], 'name' => is_string($o['name'] ?? null) ? $o['name'] : ('#' . $o['id'])];
+                    $after = max($after ?? 0, $o['id']);
                 }
             }
-            if (count($rows) < $this->pageSize) {
-                break;
+            if ($rows === [] || $after === $before) {
+                break; // done (or the server ignored "after": stop rather than loop)
             }
         }
-        return $out;
+        return array_values($out);
     }
 
     /**
@@ -118,25 +124,24 @@ final class NinjaOneSource implements InventorySource
             throw new InventoryException('Not a NinjaOne organisation ID.');
         }
         $df = 'org = ' . $orgId;
-        $complete = true;
 
         // Devices (only approved computers: workstations and servers).
         $devices = [];
         $after = null;
         for ($page = 0; ; $page++) {
             if ($page >= self::MAX_PAGES) {
-                $complete = false;
-                break;
+                throw new InventoryException('NinjaOne returned more devices than Sentinel reads in one sync.');
             }
             $rows = $this->getJson('/v2/devices-detailed', ['df' => $df, 'pageSize' => $this->pageSize] + ($after === null ? [] : ['after' => $after]));
             if (!array_is_list($rows)) {
                 throw new InventoryException('NinjaOne returned an unexpected device list.');
             }
+            $before = $after;
             foreach ($rows as $d) {
                 if (!is_array($d) || !is_int($d['id'] ?? null)) {
                     continue;
                 }
-                $after = $d['id'];
+                $after = max($after ?? 0, $d['id']);
                 $class = self::deviceClass((string) ($d['nodeClass'] ?? ''));
                 if ($class === null || (string) ($d['approvalStatus'] ?? 'APPROVED') !== 'APPROVED') {
                     continue;
@@ -157,24 +162,39 @@ final class NinjaOneSource implements InventorySource
                     'software' => [], 'patches' => [],
                 ];
             }
-            if (count($rows) < $this->pageSize) {
-                break;
+            if ($rows === [] || $after === $before) {
+                break; // an empty page ends the list (a short one may only mean the server caps pageSize)
             }
         }
         if ($devices === []) {
-            return ['devices' => [], 'complete' => $complete];
+            return ['devices' => [], 'complete' => true];
         }
 
         // Installed software.
-        $complete = $this->eachResult('/v2/queries/software', ['df' => $df], function (array $r) use (&$devices): void {
+        $this->eachResult('/v2/queries/software', ['df' => $df], function (array $r) use (&$devices): void {
             $id = $r['deviceId'] ?? null;
             if (is_int($id) && isset($devices[$id]) && self::str($r['name'] ?? '') !== '') {
                 $devices[$id]['software'][] = ['name' => self::str($r['name']), 'publisher' => self::str($r['publisher'] ?? ''), 'version' => self::str($r['version'] ?? '')];
             }
-        }) && $complete;
+        });
 
-        // Missing OS patches (the report lists pending, failed and rejected ones; rejected were declined on purpose).
-        $complete = $this->eachResult('/v2/queries/os-patches', ['df' => $df], function (array $r) use (&$devices): void {
+        // Failed installation attempts in the last 30 days (os-patch-installs?status=FAILED), by device and patch.
+        $failedInstalls = [];
+        $this->eachResult('/v2/queries/os-patch-installs', ['df' => $df, 'status' => 'FAILED'], function (array $r) use (&$failedInstalls): void {
+            $id = $r['deviceId'] ?? null;
+            $at = is_numeric($r['installedAt'] ?? null) ? (int) $r['installedAt'] : 0;
+            if (is_int($id) && $at > time() - 30 * 86400 && strtoupper(self::str($r['status'] ?? '')) === 'FAILED') {
+                foreach ([self::str($r['id'] ?? ''), self::str($r['kbNumber'] ?? '')] as $key) {
+                    if ($key !== '') {
+                        $failedInstalls[$id][$key] = true;
+                    }
+                }
+            }
+        });
+        // Missing OS patches: "patches for which there were no installation attempts" (pending, failed and rejected
+        // states; rejected were declined on purpose). Its timestamp is when the data was collected, not when the patch
+        // appeared, so no detection date is passed: Sentinel counts from when it first saw the patch.
+        $this->eachResult('/v2/queries/os-patches', ['df' => $df], function (array $r) use (&$devices, $failedInstalls): void {
             $id = $r['deviceId'] ?? null;
             $status = strtoupper(self::str($r['status'] ?? ''));
             if (!is_int($id) || !isset($devices[$id]) || str_contains($status, 'REJECT')) {
@@ -183,14 +203,15 @@ final class NinjaOneSource implements InventorySource
             $devices[$id]['patches'][] = [
                 'patch_id' => self::str($r['id'] ?? '') ?: hash('sha256', self::str($r['name'] ?? '') . '|' . self::str($r['kbNumber'] ?? '')),
                 'name' => self::str($r['name'] ?? ''), 'kb' => self::str($r['kbNumber'] ?? ''), 'severity' => self::str($r['severity'] ?? ''),
-                'status' => str_contains($status, 'FAIL') ? 'failed' : 'pending',
-                'detected_at' => is_numeric($r['timestamp'] ?? null) ? (int) $r['timestamp'] : null,
+                'status' => str_contains($status, 'FAIL') || isset($failedInstalls[$id][self::str($r['id'] ?? '')]) || isset($failedInstalls[$id][self::str($r['kbNumber'] ?? '')])
+                    ? 'failed' : 'pending',
+                'detected_at' => null,
             ];
-        }) && $complete;
+        });
 
         // Antivirus: on if any product reports on; definitions outdated if any reports out of date.
         $avSeen = [];
-        $avOk = $this->eachResult('/v2/queries/antivirus-status', ['df' => $df], function (array $r) use (&$devices, &$avSeen): void {
+        $this->eachResult('/v2/queries/antivirus-status', ['df' => $df], function (array $r) use (&$devices, &$avSeen): void {
             $id = $r['deviceId'] ?? null;
             if (!is_int($id) || !isset($devices[$id])) {
                 return;
@@ -205,25 +226,25 @@ final class NinjaOneSource implements InventorySource
                 $d['av_product'] = self::str($r['productName'] ?? '');
             }
             $d['av_state'] = $on ? 'on' : ($d['av_state'] === 'on' ? 'on' : ($off ? 'off' : $d['av_state']));
-            if (str_contains($defs, 'OUT')) {
+            if (in_array($defs, ['OUT_OF_DATE', 'OUTDATED'], true)) {
                 $d['av_definitions'] = 'outdated';
             } elseif ($d['av_definitions'] === '' && (str_contains($defs, 'UP_TO_DATE') || str_contains($defs, 'UPTODATE') || $defs === 'CURRENT')) {
                 $d['av_definitions'] = 'current';
             }
             unset($d);
         });
-        if ($avOk) {
-            foreach ($devices as $id => &$d) {
-                if (!isset($avSeen[$id]) && $d['node_class'] === 'WINDOWS_WORKSTATION') {
-                    $d['av_state'] = 'missing'; // the report worked and lists nothing for this Windows workstation
-                }
+        // "Missing" only for a Windows workstation the report lists nothing for, that was online in the last week and
+        // whose inventory has arrived (installed software): a new or long-offline device is unknown, not unprotected.
+        foreach ($devices as $id => &$d) {
+            if (!isset($avSeen[$id]) && $d['node_class'] === 'WINDOWS_WORKSTATION' && $d['software'] !== []
+                && $d['last_contact'] !== null && $d['last_contact'] > time() - 7 * 86400) {
+                $d['av_state'] = 'missing';
             }
-            unset($d);
         }
-        $complete = $avOk && $complete;
+        unset($d);
 
         // Disk encryption from BitLocker on the system drive (C:); other systems stay unknown.
-        $complete = $this->eachResult('/v2/queries/volumes', ['df' => $df, 'include' => 'bl'], function (array $r) use (&$devices): void {
+        $this->eachResult('/v2/queries/volumes', ['df' => $df, 'include' => 'bl'], function (array $r) use (&$devices): void {
             $id = $r['deviceId'] ?? null;
             if (!is_int($id) || !isset($devices[$id]) || strtoupper(rtrim(self::str($r['driveLetter'] ?? ''), ':\\')) !== 'C' || !is_array($r['bitLockerStatus'] ?? null)) {
                 return;
@@ -231,15 +252,16 @@ final class NinjaOneSource implements InventorySource
             $bl = $r['bitLockerStatus'];
             $conv = (string) ($bl['conversionStatus'] ?? '');
             $prot = (string) ($bl['protectionStatus'] ?? '');
-            $devices[$id]['encryption'] = $prot === 'PROTECTED' || $conv === 'FULLY_ENCRYPTED' ? 'on'
+            // On only when protected (an encrypted drive with protection suspended is unknown, not on or off).
+            $devices[$id]['encryption'] = $prot === 'PROTECTED' ? 'on'
                 : ($prot === 'UNPROTECTED' && in_array($conv, ['FULLY_DECRYPTED', 'DECRYPTION_IN_PROGRESS', 'DECRYPTION_PAUSED'], true) ? 'off' : '');
-        }) && $complete;
+        });
 
         foreach ($devices as &$d) {
             unset($d['node_class']);
         }
         unset($d);
-        return ['devices' => array_values($devices), 'complete' => $complete];
+        return ['devices' => array_values($devices), 'complete' => true]; // anything less has thrown above
     }
 
     /** Sentinel's device class for a NinjaOne nodeClass, or null for devices whose checks don't apply. */
@@ -253,32 +275,46 @@ final class NinjaOneSource implements InventorySource
     }
 
     /**
-     * Walk a cursor report: first page with the filter, then the cursor name, until a short page.
+     * Walk a cursor report: the first page with the filter, then each next page with the cursor name, until an empty
+     * page. The API documents the cursor object but not how paging ends, so: an empty page ends it, the cursor name is
+     * never taken as a sign of the end, a page identical to the one before is an error (the server isn't moving on),
+     * and too many pages is an error. Any of these errors fails the sync instead of saving part of the data.
      *
      * @param callable(array<string,mixed>):void $each
-     * @return bool false when the page limit was hit (the data is incomplete)
      */
-    private function eachResult(string $path, array $query, callable $each): bool
+    private function eachResult(string $path, array $query, callable $each): void
     {
         $cursor = null;
-        for ($page = 0; $page < self::MAX_PAGES; $page++) {
+        $previous = null;
+        for ($page = 0; ; $page++) {
+            if ($page >= self::MAX_PAGES) {
+                throw new InventoryException('NinjaOne returned more data for ' . $path . ' than Sentinel reads in one sync.');
+            }
+            // The filter goes with every page (harmless if the cursor already carries it).
             $data = $this->getJson($path, $query + ['pageSize' => $this->pageSize] + ($cursor === null ? [] : ['cursor' => $cursor]));
             $results = is_array($data['results'] ?? null) ? $data['results'] : null;
             if ($results === null || !array_is_list($results)) {
                 throw new InventoryException('NinjaOne returned an unexpected answer for ' . $path . '.');
             }
+            if ($results === []) {
+                return;
+            }
+            $fingerprint = hash('sha256', json_encode($results) ?: '');
+            if ($fingerprint === $previous) {
+                throw new InventoryException('NinjaOne returned the same page twice for ' . $path . '; the sync was stopped so nothing is saved half-read.');
+            }
+            $previous = $fingerprint;
             foreach ($results as $r) {
                 if (is_array($r)) {
                     $each($r);
                 }
             }
             $next = is_array($data['cursor'] ?? null) && is_string($data['cursor']['name'] ?? null) ? $data['cursor']['name'] : '';
-            if (count($results) < $this->pageSize || $next === '' || $next === $cursor) {
-                return true;
+            if ($next === '') {
+                return; // no cursor to continue with: this was the only page
             }
             $cursor = $next;
         }
-        return false;
     }
 
     /** A bearer token (cached until a minute before it expires). */
@@ -350,7 +386,7 @@ final class NinjaOneSource implements InventorySource
             CURLOPT_HTTPHEADER => $headers,
             CURLOPT_FOLLOWLOCATION => false,
             CURLOPT_CONNECTTIMEOUT => 10,
-            CURLOPT_TIMEOUT => 120,
+            CURLOPT_TIMEOUT => 60,
             CURLOPT_PROTOCOLS => $this->baseUrl !== '' ? (CURLPROTO_HTTP | CURLPROTO_HTTPS) : CURLPROTO_HTTPS,
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,

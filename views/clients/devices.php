@@ -20,7 +20,7 @@ $chip = static function (string $sev, string $text): string {
     <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Internal devices')) ?></h2></div>
     <div class="card-body">
         <?php if ($inventorySources === []): ?>
-        <p class="small text-body-secondary mb-0"><?= e(__('No inventory source is set up yet. When NinjaOne is connected (Administration > Settings), an admin links this client to its NinjaOne organisation and its devices, installed software and missing updates appear here.')) ?></p>
+        <p class="small text-body-secondary mb-0"><?= e(__('No inventory source is set up yet. When NinjaOne is connected (Administration > Integrations), an admin links this client to its NinjaOne organisation and its devices, installed software and missing updates appear here.')) ?></p>
         <?php endif; ?>
         <?php foreach ($inventorySources as $name => $label): $link = $inventoryLinks[$name] ?? null; ?>
         <div class="d-flex flex-wrap align-items-center gap-2 mb-2 small">

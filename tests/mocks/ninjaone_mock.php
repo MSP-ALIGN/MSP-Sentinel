@@ -43,6 +43,11 @@ $devices = [
     ['id' => 14, 'organizationId' => 901, 'systemName' => 'HARBOUR-SW-01', 'nodeClass' => 'NMS_SWITCH', 'approvalStatus' => 'APPROVED'],
     ['id' => 15, 'organizationId' => 901, 'systemName' => 'HARBOUR-NEW', 'nodeClass' => 'WINDOWS_WORKSTATION', 'approvalStatus' => 'PENDING'],
     ['id' => 16, 'organizationId' => 900, 'systemName' => 'BROKEN-LT-01', 'nodeClass' => 'WINDOWS_WORKSTATION', 'approvalStatus' => 'APPROVED', 'os' => ['name' => 'Windows 11 Pro', 'buildNumber' => '26200']],
+    // Offline for a month and no inventory yet: its antivirus is unknown, not missing.
+    ['id' => 17, 'organizationId' => 901, 'systemName' => 'HARBOUR-OLD', 'nodeClass' => 'WINDOWS_WORKSTATION', 'approvalStatus' => 'APPROVED',
+     'os' => ['name' => 'Windows 11 Pro', 'buildNumber' => '26200', 'releaseId' => '25H2'], 'lastContact' => time() - 86400 * 30],
+    // Organisation 903: its software report ignores the cursor and returns the same page forever.
+    ['id' => 18, 'organizationId' => 903, 'systemName' => 'STUCK-LT-01', 'nodeClass' => 'WINDOWS_WORKSTATION', 'approvalStatus' => 'APPROVED', 'os' => ['name' => 'Windows 11 Pro', 'buildNumber' => '26200']],
 ];
 $page = static function (array $rows, string $kind): array {
     $size = max(1, min(1000, (int) ($_GET['pageSize'] ?? 100)));
@@ -70,6 +75,10 @@ if ($sub === '/v2/queries/software') {
     if ($org === 900) {
         $json(500, ['error' => 'internal']);
     }
+    if ($org === 903) {
+        $size = (int) ($_GET['pageSize'] ?? 100);
+        $json(200, ['cursor' => ['name' => 'stuck', 'offset' => 0, 'count' => $size], 'results' => array_fill(0, $size, ['deviceId' => 18, 'name' => 'Loop', 'publisher' => 'x', 'version' => '1'])]);
+    }
     $json(200, $page($only([
         ['deviceId' => 11, 'name' => 'Google Chrome', 'publisher' => 'Google LLC', 'version' => '116.0.5845.96'],
         ['deviceId' => 11, 'name' => '7-Zip 23.01 (x64)', 'publisher' => 'Igor Pavlov', 'version' => '23.01'],
@@ -81,9 +90,17 @@ if ($sub === '/v2/queries/software') {
 if ($sub === '/v2/queries/os-patches') {
     $json(200, $page($only([
         ['id' => 'aaaaaaaa-0000-0000-0000-000000000001', 'deviceId' => 11, 'name' => '2026-10 Cumulative Update for Windows 10', 'kbNumber' => 'KB5099999', 'severity' => 'CRITICAL', 'status' => 'MANUAL', 'timestamp' => time() - 86400 * 45],
-        ['id' => 'aaaaaaaa-0000-0000-0000-000000000002', 'deviceId' => 12, 'name' => 'Security update', 'kbNumber' => 'KB5088888', 'severity' => 'IMPORTANT', 'status' => 'FAILED', 'timestamp' => time() - 86400 * 3],
+        ['id' => 'aaaaaaaa-0000-0000-0000-000000000002', 'deviceId' => 12, 'name' => 'Security update', 'kbNumber' => 'KB5088888', 'severity' => 'IMPORTANT', 'status' => 'MANUAL', 'timestamp' => time() - 86400 * 3],
         ['id' => 'aaaaaaaa-0000-0000-0000-000000000003', 'deviceId' => 13, 'name' => 'Declined update', 'kbNumber' => 'KB5077777', 'severity' => 'CRITICAL', 'status' => 'REJECTED', 'timestamp' => time() - 86400 * 60],
     ]), 'pt'));
+}
+if ($sub === '/v2/queries/os-patch-installs') {
+    // Failed attempts: device 12's KB5088888 failed two days ago (counts); device 11's failed 40 days ago (too old).
+    $json(200, $page(array_values(array_filter($only([
+        ['id' => 'bbbbbbbb-0000-0000-0000-000000000001', 'deviceId' => 12, 'name' => 'Security update', 'kbNumber' => 'KB5088888', 'status' => 'FAILED', 'installedAt' => time() - 86400 * 2],
+        ['id' => 'bbbbbbbb-0000-0000-0000-000000000002', 'deviceId' => 11, 'name' => '2026-10 Cumulative Update for Windows 10', 'kbNumber' => 'KB5099999', 'status' => 'FAILED', 'installedAt' => time() - 86400 * 40],
+        ['id' => 'bbbbbbbb-0000-0000-0000-000000000003', 'deviceId' => 13, 'name' => 'Installed fine', 'kbNumber' => 'KB5066666', 'status' => 'INSTALLED', 'installedAt' => time() - 86400],
+    ]), static fn ($r) => ($_GET['status'] ?? '') === '' || $r['status'] === $_GET['status'])), 'pi'));
 }
 if ($sub === '/v2/queries/antivirus-status') {
     $json(200, $page($only([

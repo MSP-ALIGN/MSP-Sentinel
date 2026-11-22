@@ -60,7 +60,8 @@ final class DeviceRules
             if ((string) $p['status'] === 'failed') {
                 $failed[] = $p;
             } elseif (in_array(strtolower((string) $p['severity']), ['critical', 'important', 'security', 'high'], true)
-                && $p['detected_at'] !== null && strtotime($p['detected_at'] . ' UTC') < $now - self::PATCH_GRACE_DAYS * 86400) {
+                // Missing since the source says it appeared, else since Sentinel first saw it missing.
+                && ($since = $p['detected_at'] ?? $p['first_seen'] ?? null) !== null && strtotime($since . ' UTC') < $now - self::PATCH_GRACE_DAYS * 86400) {
                 $late[] = $p;
             }
         }

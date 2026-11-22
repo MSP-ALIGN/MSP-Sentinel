@@ -179,7 +179,7 @@ final class InventoryRepository
             'INSERT INTO device_patches (device_id, patch_id, name, kb, severity, status, detected_at, first_seen, last_seen)
              VALUES (:d, :pid, :n, :kb, :sev, :st, :det, UTC_TIMESTAMP(), UTC_TIMESTAMP())
              ON DUPLICATE KEY UPDATE name = VALUES(name), kb = VALUES(kb), severity = VALUES(severity), status = VALUES(status),
-                detected_at = COALESCE(VALUES(detected_at), detected_at), last_seen = UTC_TIMESTAMP(), id = LAST_INSERT_ID(id)'
+                detected_at = IF(detected_at IS NULL OR (VALUES(detected_at) IS NOT NULL AND VALUES(detected_at) < detected_at), VALUES(detected_at), detected_at), last_seen = UTC_TIMESTAMP(), id = LAST_INSERT_ID(id)'
         );
         $keep = [];
         foreach (array_slice(array_values(array_filter($patches, 'is_array')), 0, self::MAX_PATCHES) as $p) {
