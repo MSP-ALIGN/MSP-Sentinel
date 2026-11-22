@@ -13,13 +13,14 @@ Restart=on-failure
 RestartSec=60
 # Exit code 3: Sentinel revoked this agent. Don't restart; uninstall it.
 RestartPreventExitStatus=3
-# Hardening: unprivileged scans only, read-only system, only the agent's folder writable.
+# Hardening: unprivileged scans only, read-only system (config included), only the state folder writable.
 NoNewPrivileges=yes
 CapabilityBoundingSet=
 AmbientCapabilities=
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=__CONF__
+StateDirectory=sentinel-agent
+StateDirectoryMode=0700
 PrivateTmp=yes
 PrivateDevices=yes
 ProtectKernelTunables=yes
@@ -27,6 +28,15 @@ ProtectKernelModules=yes
 ProtectControlGroups=yes
 RestrictSUIDSGID=yes
 LockPersonality=yes
+SystemCallFilter=@system-service
+SystemCallArchitectures=native
+RestrictNamespaces=yes
+RestrictRealtime=yes
+ProtectProc=invisible
+ProtectClock=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+# MemoryDenyWriteExecute is left off: PHP's PCRE JIT needs executable memory.
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
 UMask=0077
 

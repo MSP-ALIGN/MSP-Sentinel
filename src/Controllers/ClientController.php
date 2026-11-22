@@ -110,7 +110,8 @@ final class ClientController extends Controller
             'overview' => self::overviewData($client),
             'inventorySources' => array_map(static fn (\Sentinel\Inventory\InventorySource $s): string => $s->label(), App::inventorySources()),
             'inventoryLinks' => array_map(fn (\Sentinel\Inventory\InventorySource $s): ?array => App::inventory()->link((int) $client['id'], $s->name()), App::inventorySources()),
-            'devices' => App::inventory()->devicesForClient((int) $client['id']),
+            'devices' => App::inventory()->devicesForClient((int) $client['id'], 500),
+            'deviceTotal' => (int) App::db()->query('SELECT COUNT(*) FROM devices WHERE removed_at IS NULL AND client_id = ' . (int) $client['id'])->fetchColumn(),
             'devicePatches' => App::inventory()->patchesByDevice((int) $client['id']),
             'agentSites' => self::agentSites($client),
         ]);

@@ -85,8 +85,11 @@ final class InventoryRepository
                 // Whole addresses only, as many as fit the column.
                 $ips = [];
                 foreach ((array) ($d['ip_addresses'] ?? []) as $ip) {
-                    if (is_string($ip) && filter_var($ip, FILTER_VALIDATE_IP) !== false && strlen(implode(',', [...$ips, $ip])) <= 500) {
-                        $ips[] = $ip;
+                    if (is_string($ip) && filter_var($ip, FILTER_VALIDATE_IP) !== false) {
+                        $ip = inet_ntop((string) inet_pton($ip)); // canonical, so addresses compare reliably
+                        if (strlen(implode(',', [...$ips, $ip])) <= 500) {
+                            $ips[] = $ip;
+                        }
                     }
                 }
                 $upDevice->execute([
@@ -196,11 +199,12 @@ final class InventoryRepository
     }
 
     /**
-     * Current (not removed) devices of a client, with counts.
+     * Current (not removed) devices of a client, with counts. No limit for findings (every device counts);
+     * the client page passes a limit.
      *
      * @return list<array<string,mixed>>
      */
-    public function devicesForClient(int $clientId): array
+    public function devicesForClient(int $clientId, ?int $limit = null): array
     {
         $stmt = $this->db->prepare(
             "SELECT d.*, (SELECT COUNT(*) FROM device_patches p WHERE p.device_id = d.id) AS patch_count,
@@ -208,7 +212,7 @@ final class InventoryRepository
                     (SELECT COUNT(*) FROM device_software s WHERE s.device_id = d.id) AS software_count,
                     (SELECT COUNT(*) FROM findings f WHERE f.device_id = d.id AND f.status = 'open' AND f.severity = 'fail') AS open_fail,
                     (SELECT COUNT(*) FROM findings f WHERE f.device_id = d.id AND f.status = 'open' AND f.severity = 'warn') AS open_warn
-             FROM devices d WHERE d.client_id = :c AND d.removed_at IS NULL ORDER BY d.name, d.id LIMIT 5000"
+             FROM devices d WHERE d.client_id = :c AND d.removed_at IS NULL ORDER BY d.name, d.id" . ($limit !== null ? ' LIMIT ' . max(1, $limit) : '')
         );
         $stmt->execute(['c' => $clientId]);
         return $stmt->fetchAll();

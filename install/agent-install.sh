@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # MSP Sentinel on-premises agent installer for Ubuntu 24.04 LTS and Debian 12 (a mini-PC or VM at the client's site).
 #
-# Install (from the unpacked release folder, with a one-time code from the client page in Sentinel):
-#   sudo ./install/agent-install.sh --server https://sentinel.msp.example --code SNE-XXXXX-XXXXX-XXXXX-XXXXX [--ca /path/ca.pem]
+# Install (from the unpacked release folder, with a one-time code from the client page in Sentinel; without
+# --code it asks for the code, which keeps it out of the shell history and the process list):
+#   sudo ./install/agent-install.sh --server https://sentinel.msp.example [--code SNE-XXXXX-XXXXX-XXXXX-XXXXX] [--ca /path/ca.pem]
 # Upgrade (from the NEW release folder; keeps the enrolment):
 #   sudo ./install/agent-install.sh --upgrade
 # Remove (also revoke the agent in Sentinel):
@@ -19,14 +20,17 @@
 # - The agent runs as "sentinel-agent", never root, with no extra capabilities:
 #   scans are unprivileged TCP connect scans. The systemd unit locks down the
 #   file system (only its state folder is writable) and forbids privilege gain.
-# - The config (with the agent token) is in /etc/sentinel-agent, readable only
-#   by the agent's user (0600). The token is never printed.
+# - The config (with the agent token and the pinned server key, site and client)
+#   is /etc/sentinel-agent/agent.json, owned by root and only readable by the
+#   agent (0640): the agent can't change what it trusts. Only its state folder
+#   /var/lib/sentinel-agent is writable. The token is never printed.
 # - The agent only connects out to Sentinel over HTTPS; no inbound port is opened.
 # - Safe to re-run: an existing enrolment is kept unless you remove it.
 set -euo pipefail
 
 APP_DIR=/opt/sentinel-agent
 CONF_DIR=/etc/sentinel-agent
+STATE_DIR=/var/lib/sentinel-agent
 PHPV=8.4
 PHP_BIN="php${PHPV}"
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
@@ -83,7 +87,7 @@ if [ "$mode" = uninstall ]; then
   run systemctl disable --now sentinel-agent || true
   run rm -f /etc/systemd/system/sentinel-agent.service
   run systemctl daemon-reload
-  run rm -rf "$APP_DIR" "$CONF_DIR"
+  run rm -rf "$APP_DIR" "$CONF_DIR" "$STATE_DIR"
   run userdel sentinel-agent || true
   echo "  Removed. Also revoke the agent on the client page in Sentinel, so its token stops working."
   exit 0
@@ -113,7 +117,11 @@ fi
 # ---------------------------------------------------------------- install
 case "$server" in https://*) ;; *) die "Give the Sentinel address with --server https://..." ;; esac
 printf '%s' "$server" | grep -Eq '^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?/?$' || die "The --server value must be https://host[:port] only."
-printf '%s' "$code" | grep -Eq '^SNE(-[A-Z2-9]{5}){4}$' || die "Give the one-time code from Sentinel with --code SNE-XXXXX-XXXXX-XXXXX-XXXXX."
+if [ -z "$code" ] && [ "$dry" -eq 0 ]; then
+  read -r -s -p "One-time enrolment code from Sentinel: " code; echo
+fi
+[ "$dry" -eq 1 ] && [ -z "$code" ] && code="SNE-XXXXX-XXXXX-XXXXX-XXXXX"
+printf '%s' "$code" | grep -Eq '^SNE(-[A-Z2-9]{5}){4}$' || die "That is not a valid enrolment code (SNE-XXXXX-XXXXX-XXXXX-XXXXX)."
 if [ -n "$ca" ] && [ ! -r "$ca" ] && [ "$dry" -eq 0 ]; then die "CA file not readable: $ca"; fi
 if [ -f "$CONF_DIR/agent.json" ] && [ "$dry" -eq 0 ]; then die "This machine is already enrolled. Use --upgrade, or --uninstall first."; fi
 
@@ -136,12 +144,21 @@ run apt-get install -y "php${PHPV}-cli" "php${PHPV}-curl" "php${PHPV}-xml" "php$
 say "System user and code"
 if ! id sentinel-agent >/dev/null 2>&1; then run useradd --system --home-dir /nonexistent --no-create-home --shell /usr/sbin/nologin sentinel-agent; fi
 copy_code
-run install -d -o sentinel-agent -g sentinel-agent -m 0700 "$CONF_DIR"
+run install -d -o root -g sentinel-agent -m 0750 "$CONF_DIR"
+run install -d -o sentinel-agent -g sentinel-agent -m 0700 "$STATE_DIR"
 if [ -n "$ca" ]; then run install -o root -g sentinel-agent -m 0640 "$ca" "$CONF_DIR/ca.pem"; ca="$CONF_DIR/ca.pem"; fi
 
-say "Enrolling with Sentinel (pins its signing key)"
-# The code goes on the agent's own command line only for this one call; it works once and expires in 24 hours.
-run runuser -u sentinel-agent -- "$PHP_BIN" "$APP_DIR/bin/sentinel-agent.php" enrol --server "$server" --code "$code" --config "$CONF_DIR/agent.json" ${ca:+--ca "$ca"}
+say "Enrolling with Sentinel (pins its signing key, site and client)"
+# The code is passed on stdin, never on a command line; it works once and expires in 24 hours.
+if [ "$dry" -eq 1 ]; then
+  printf '  [dry-run] runuser -u sentinel-agent -- %s %s/bin/sentinel-agent.php enrol --server %s --code-stdin --config %s/agent.json\n' "$PHP_BIN" "$APP_DIR" "$server" "$STATE_DIR"
+else
+  printf '%s\n' "$code" | runuser -u sentinel-agent -- "$PHP_BIN" "$APP_DIR/bin/sentinel-agent.php" enrol --server "$server" --code-stdin --config "$STATE_DIR/agent.json" ${ca:+--ca "$ca"}
+fi
+# The agent may read its config but not change it (it holds the pinned key, site and client).
+run mv -f "$STATE_DIR/agent.json" "$CONF_DIR/agent.json"
+run chown root:sentinel-agent "$CONF_DIR/agent.json"
+run chmod 0640 "$CONF_DIR/agent.json"
 
 say "Service"
 unit | write_file /etc/systemd/system/sentinel-agent.service 0644

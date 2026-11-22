@@ -164,8 +164,7 @@ final class AgentController extends Controller
     public function pause(Request $request, array $params): Response
     {
         [$client, $site] = $this->clientSite($params);
-        App::db()->prepare('UPDATE sites SET scanning_paused = 1, updated_at = UTC_TIMESTAMP() WHERE id = :s')->execute(['s' => (int) $site['id']]);
-        App::db()->prepare("UPDATE agent_jobs SET cancel_requested = 1 WHERE site_id = :s AND status IN ('queued','sent')")->execute(['s' => (int) $site['id']]);
+        App::agents()->pauseSite((int) $site['id']);
         $this->audit($request, 'site.paused', 'site', (int) $site['id'], ['client_id' => (int) $client['id']]);
         Session::flash('warning', __('Agent scans at {site} are paused. Running scans stop at the agent\'s next check-in (within a minute).', ['site' => $site['name']]));
         return Response::redirect('/clients/' . (int) $client['id'] . '#agents');
@@ -190,14 +189,12 @@ final class AgentController extends Controller
         $agent->execute(['s' => (int) $site['id']]);
         $agentId = (int) $agent->fetchColumn();
         $auth = App::agents()->activeAuthorisation((int) $site['id'], ScopeService::today((string) $client['timezone']));
-        $open = App::db()->prepare("SELECT COUNT(*) FROM agent_jobs WHERE site_id = :s AND status IN ('queued','sent')");
-        $open->execute(['s' => (int) $site['id']]);
         $error = match (true) {
             (int) $client['is_archived'] === 1 => __('This client is archived.'),
             (int) $client['scanning_paused'] === 1 || (int) $site['scanning_paused'] === 1 || App::scope()->globallyPaused() => __('Scanning is paused.'),
             $agentId === 0 => __('This site has no active agent.'),
             $auth === null => __('This site has no valid internal authorisation.'),
-            (int) $open->fetchColumn() > 0 => __('An agent scan for this site is already waiting or running.'),
+            App::agents()->openJobs((int) $site['id']) > 0 => __('An agent scan for this site is already waiting or running.'),
             $reason === '' || mb_strlen($reason) > 300 => __('Give a reason (up to 300 characters).'),
             default => null,
         };

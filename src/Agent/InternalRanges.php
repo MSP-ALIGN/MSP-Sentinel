@@ -7,7 +7,7 @@ namespace Sentinel\Agent;
 /**
  * Internal network ranges an agent may scan: single addresses or CIDR
  * networks inside private address space only (10.0.0.0/8, 172.16.0.0/12,
- * 192.168.0.0/16, 100.64.0.0/10 and IPv6 fc00::/7). Public addresses belong
+ * 192.168.0.0/16 and IPv6 fc00::/7). Public addresses belong
  * in the external authorisation, never here.
  *
  * Size limits keep scans gentle: an IPv4 network may be at most a /16
@@ -21,7 +21,8 @@ namespace Sentinel\Agent;
  */
 final class InternalRanges
 {
-    public const PRIVATE = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '100.64.0.0/10', 'fc00::/7'];
+    /** Private address space. Not 100.64.0.0/10: that is the ISP's carrier-grade NAT space, which a client can't authorise. */
+    public const PRIVATE = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', 'fc00::/7'];
     public const MAX_PREFIX_V4 = 16;
     public const MAX_PREFIX_V6 = 112;
     public const MAX_TOTAL_V4 = 262144;

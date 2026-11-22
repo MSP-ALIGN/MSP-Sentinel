@@ -95,8 +95,9 @@ return [
             kind ENUM('full','light') NOT NULL,
             trigger_type ENUM('scheduled','manual') NOT NULL DEFAULT 'scheduled',
             requested_by INT UNSIGNED NULL,
-            status ENUM('queued','sent','done','partial','failed','cancelled','expired') NOT NULL DEFAULT 'queued',
+            status ENUM('queued','sent','ingesting','done','partial','failed','cancelled','expired') NOT NULL DEFAULT 'queued',
             ports TEXT NOT NULL,
+            targets MEDIUMTEXT NULL,
             created_at DATETIME NOT NULL,
             sent_at DATETIME NULL,
             finished_at DATETIME NULL,
@@ -127,6 +128,10 @@ return [
 
         $m->addColumnIfMissing('devices', 'site_id', 'INT UNSIGNED NULL');
         $m->addColumnIfMissing('devices', 'mac', "VARCHAR(17) NOT NULL DEFAULT ''");
+        $m->addColumnIfMissing('devices', 'last_full_seen', 'DATETIME NULL');
+        if (!$m->indexExists('devices', 'idx_devices_site_mac')) {
+            $db->exec('ALTER TABLE devices ADD KEY idx_devices_site_mac (site_id, mac)');
+        }
         $m->addColumnIfMissing('device_software', 'distro', 'TINYINT(1) NOT NULL DEFAULT 0');
         $type = (string) $db->query("SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'software_vulns' AND COLUMN_NAME = 'confidence'")->fetchColumn();
         if (!str_contains($type, "'distro'")) {

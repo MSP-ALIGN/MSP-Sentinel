@@ -16,21 +16,25 @@ use Sentinel\Vulns\VulnMatcher;
  * The server side of on-premises agents: scheduling jobs, signing them for
  * the agent, and taking in results.
  *
- * Scope: every job carries the site's signed internal authorisation; the job
- * itself is signed when it is handed to the agent, and only after checking
- * again that the authorisation's signature verifies and is valid today. The
- * agent checks both signatures and that every target lies inside the signed
- * ranges, and refuses anything else. Results are accepted only for addresses
- * inside the job's authorisation.
+ * Scope: a job is only ever signed for the agent's OWN site and client, with
+ * that site's signed internal authorisation (re-verified at hand-out); its
+ * targets are the authorisation's networks, or hosts inside them (resuming an
+ * unfinished scan). The agent pinned its site and client at enrolment and
+ * checks both signatures, its site and client, and that every target lies
+ * inside the signed ranges. Results are accepted only for addresses inside
+ * the job's authorisation, and not at all once it is revoked.
  *
- * Schedule (per site with an active agent and authorisation, inside the
- * client's scan window, not paused): a full scan (discovery, ports, service
- * versions, certificates and web pages) weekly, and a light sweep (which
- * devices are there) daily, for new-device alerts.
+ * Schedule (per site with an active agent and authorisation, not paused):
+ * scheduled jobs start only inside the client's scan window and are stopped
+ * when it closes; an unfinished full scan resumes with the hosts it didn't
+ * reach in the next window. A full scan (discovery, ports, service versions,
+ * certificates, start pages) is due weekly after the last complete one; a
+ * light sweep (which devices are there) daily, for new-device alerts.
+ * Admins' "Scan now" jobs ignore the window.
  *
  * Untrusted: everything in agent results. It is validated (addresses in
- * scope, numbers in range, known values) and cleaned and shortened before
- * it is stored; counts are capped.
+ * scope, numbers in range, known values), cleaned, shortened and capped.
+ * Ports of a device are replaced only when the agent finished scanning it.
  */
 final class AgentService
 {
@@ -39,8 +43,12 @@ final class AgentService
     public const JOB_HOURS = 12;
     public const MAX_HOSTS = 20000;
     public const MAX_PORTS_PER_HOST = 200;
-    /** Devices not seen by any full scan for this long are marked removed. */
+    /** Most hosts a resumed full scan carries over. */
+    public const MAX_RESUME = 5000;
+    /** Devices no completed host scan has seen for this long are marked removed. */
     public const REMOVE_AFTER_DAYS = 30;
+    /** Hosts saved per database transaction while taking in results. */
+    private const BATCH = 250;
     /** Common internal service ports for full scans (TCP connect scan, gentle). */
     public const PORTS = [21, 22, 23, 25, 53, 80, 88, 110, 111, 135, 139, 143, 389, 443, 445, 465, 515, 548, 587, 631, 636, 873, 993, 995, 1433, 1521, 2049,
         3000, 3306, 3389, 5000, 5432, 5900, 5985, 5986, 6379, 8000, 8008, 8080, 8081, 8443, 8888, 9000, 9090, 9100, 9200, 10000, 27017];
@@ -78,29 +86,38 @@ final class AgentService
              WHERE EXISTS (SELECT 1 FROM agents a WHERE a.site_id = s.id AND a.status = 'active')"
         )->fetchAll();
         foreach ($sites as $s) {
-            if ((int) $s['scanning_paused'] === 1 || (int) $s['site_paused'] === 1 || !ScanWindow::isOpen($s)) {
+            $siteId = (int) $s['site_id'];
+            if ((int) $s['scanning_paused'] === 1 || (int) $s['site_paused'] === 1 || !ScanWindow::isOpen($s) || $this->agents->openJobs($siteId) > 0) {
                 continue;
             }
-            $open = $this->db->prepare("SELECT COUNT(*) FROM agent_jobs WHERE site_id = :s AND status IN ('queued','sent')");
-            $open->execute(['s' => $s['site_id']]);
-            if ((int) $open->fetchColumn() > 0) {
-                continue;
-            }
-            $auth = $this->agents->activeAuthorisation((int) $s['site_id'], ScopeService::today((string) $s['timezone']));
+            $auth = $this->agents->activeAuthorisation($siteId, ScopeService::today((string) $s['timezone']));
             if ($auth === null) {
                 continue;
             }
-            $last = $this->db->prepare("SELECT MAX(IF(kind = 'full', created_at, NULL)) AS full_at, MAX(created_at) AS any_at FROM agent_jobs WHERE site_id = :s AND status NOT IN ('cancelled','expired')");
-            $last->execute(['s' => $s['site_id']]);
-            $l = $last->fetch() ?: [];
-            $kind = null;
-            if ($l['full_at'] === null || strtotime($l['full_at'] . ' UTC') < time() - self::FULL_DAYS * 86400) {
-                $kind = 'full';
-            } elseif ($l['any_at'] === null || strtotime($l['any_at'] . ' UTC') < time() - self::LIGHT_HOURS * 3600) {
-                $kind = 'light';
+            // An unfinished full scan of the last week resumes with the hosts it didn't reach.
+            $lastFull = $this->db->prepare("SELECT status, summary, created_at FROM agent_jobs WHERE site_id = :s AND kind = 'full' AND status IN ('done','partial') ORDER BY id DESC LIMIT 1");
+            $lastFull->execute(['s' => $siteId]);
+            $lf = $lastFull->fetch() ?: null;
+            $remaining = [];
+            if ($lf !== null && $lf['status'] === 'partial' && strtotime($lf['created_at'] . ' UTC') > time() - self::FULL_DAYS * 86400) {
+                $remaining = array_values(array_filter((array) (json_decode((string) $lf['summary'], true)['remaining'] ?? []), static fn ($ip): bool => is_string($ip)
+                    && filter_var($ip, FILTER_VALIDATE_IP) !== false && InternalRanges::allWithin([$ip], $auth['ranges_list'])));
             }
-            if ($kind !== null) {
-                $this->agents->queueJob((int) $s['agent_id'], (int) $s['client_id'], (int) $s['site_id'], (int) $auth['id'], $kind, 'scheduled', null, $kind === 'full' ? self::PORTS : [], self::JOB_HOURS);
+            $doneFull = $this->db->prepare("SELECT MAX(created_at) FROM agent_jobs WHERE site_id = :s AND kind = 'full' AND status = 'done'");
+            $doneFull->execute(['s' => $siteId]);
+            $doneAt = $doneFull->fetchColumn();
+            $lastAny = $this->db->prepare("SELECT MAX(created_at) FROM agent_jobs WHERE site_id = :s AND status NOT IN ('cancelled','expired','failed')");
+            $lastAny->execute(['s' => $siteId]);
+            $anyAt = $lastAny->fetchColumn();
+            if ($remaining !== []) {
+                $targets = array_map(static fn (string $ip): string => $ip . (str_contains($ip, ':') ? '/128' : '/32'), array_slice($remaining, 0, self::MAX_RESUME));
+                $this->agents->queueJob((int) $s['agent_id'], (int) $s['client_id'], $siteId, (int) $auth['id'], 'full', 'scheduled', null, self::PORTS, self::JOB_HOURS, $targets);
+                $count++;
+            } elseif ($doneAt === null || $doneAt === false || strtotime($doneAt . ' UTC') < time() - self::FULL_DAYS * 86400) {
+                $this->agents->queueJob((int) $s['agent_id'], (int) $s['client_id'], $siteId, (int) $auth['id'], 'full', 'scheduled', null, self::PORTS, self::JOB_HOURS);
+                $count++;
+            } elseif ($anyAt === null || $anyAt === false || strtotime($anyAt . ' UTC') < time() - self::LIGHT_HOURS * 3600) {
+                $this->agents->queueJob((int) $s['agent_id'], (int) $s['client_id'], $siteId, (int) $auth['id'], 'light', 'scheduled', null, [], self::JOB_HOURS);
                 $count++;
             }
         }
@@ -108,7 +125,18 @@ final class AgentService
     }
 
     /**
-     * The signed form of a job for its agent, or null when it may not run (authorisation no longer valid).
+     * True if a job may run now: scheduled jobs only inside the client's scan window ("Scan now" jobs any time).
+     *
+     * @param array<string,mixed> $job
+     * @param array<string,mixed> $agent Authenticated agent with its client's window.
+     */
+    public static function inWindow(array $job, array $agent): bool
+    {
+        return $job['trigger_type'] === 'manual' || ScanWindow::isOpen($agent);
+    }
+
+    /**
+     * The signed form of a job for its agent, or null when it may not run.
      *
      * @param array<string,mixed> $job   agent_jobs row.
      * @param array<string,mixed> $agent authenticated agent (with timezone).
@@ -116,21 +144,32 @@ final class AgentService
      */
     public function signedJob(array $job, array $agent): ?array
     {
-        $auth = $this->agents->activeAuthorisation((int) $job['site_id'], ScopeService::today((string) $agent['timezone']));
-        if ($auth === null || (int) $auth['id'] !== (int) $job['authorisation_id'] || (int) $job['agent_id'] !== (int) $agent['id']) {
+        // Only the agent's own site and client: a job row pointing elsewhere (e.g. a changed database) is never signed.
+        if ((int) $job['agent_id'] !== (int) $agent['id'] || (int) $job['site_id'] !== (int) $agent['site_id'] || (int) $job['client_id'] !== (int) $agent['client_id']) {
             return null;
+        }
+        $auth = $this->agents->activeAuthorisation((int) $job['site_id'], ScopeService::today((string) $agent['timezone']));
+        if ($auth === null || (int) $auth['id'] !== (int) $job['authorisation_id']) {
+            return null;
+        }
+        $targets = $auth['ranges_list'];
+        if ($job['targets'] !== null && trim((string) $job['targets']) !== '') {
+            $targets = array_values(array_filter(array_map('trim', explode("\n", (string) $job['targets']))));
+            if ($targets === [] || !InternalRanges::allWithin($targets, $auth['ranges_list'])) {
+                return null;
+            }
         }
         $ports = array_values(array_filter(array_map('intval', explode(',', (string) $job['ports'])), static fn (int $p): bool => $p > 0 && $p < 65536));
         return $this->signer->sign([
-            'v' => 1, 'type' => 'agent_job', 'job_id' => (int) $job['id'], 'agent_id' => (int) $agent['id'], 'site_id' => (int) $job['site_id'],
-            'kind' => (string) $job['kind'], 'ports' => $ports, 'targets' => $auth['ranges_list'],
+            'v' => 1, 'type' => 'agent_job', 'job_id' => (int) $job['id'], 'agent_id' => (int) $agent['id'], 'site_id' => (int) $job['site_id'], 'client_id' => (int) $job['client_id'],
+            'kind' => (string) $job['kind'], 'ports' => $ports, 'targets' => $targets,
             'issued_at' => gmdate('Y-m-d\TH:i:s\Z'), 'expires_at' => str_replace(' ', 'T', (string) $job['expires_at']) . 'Z',
             'authorisation' => ['payload' => (string) $auth['signed_payload'], 'signature' => (string) $auth['signature']],
         ]);
     }
 
     /**
-     * Take in a job's results from its agent.
+     * Take in a job's results from its agent (the caller has claimed the job with claimIngest()).
      *
      * @param array<string,mixed> $job   agent_jobs row (sent to this agent).
      * @param array<string,mixed> $agent authenticated agent.
@@ -140,44 +179,71 @@ final class AgentService
     public function ingest(array $job, array $agent, array $data): array
     {
         $status = in_array($data['status'] ?? '', ['done', 'partial', 'failed', 'cancelled'], true) ? (string) $data['status'] : 'failed';
-        $auth = $this->db->prepare('SELECT signed_payload, signature FROM internal_authorisations WHERE id = :id');
+        $auth = $this->db->prepare('SELECT signed_payload, signature, revoked_at FROM internal_authorisations WHERE id = :id');
         $auth->execute(['id' => (int) $job['authorisation_id']]);
         $a = $auth->fetch();
         $ranges = [];
-        if ($a !== false && Signer::verify((string) $a['signed_payload'], (string) $a['signature'], $this->signer->publicKey())) {
+        if ($a !== false && $a['revoked_at'] === null && Signer::verify((string) $a['signed_payload'], (string) $a['signature'], $this->signer->publicKey())) {
             $ranges = array_values(array_map('strval', (array) (json_decode((string) $a['signed_payload'], true)['ranges'] ?? [])));
         }
         $siteId = (int) $job['site_id'];
         $clientId = (int) $job['client_id'];
         $full = $job['kind'] === 'full';
+        $messages = array_slice(array_map(static fn ($m): string => InventoryRepository::clean($m, 300), (array) ($data['messages'] ?? [])), 0, 10);
+        if ($ranges === []) {
+            // Revoked (or no longer valid) authorisation: nothing from this job is stored.
+            $this->agents->finishJob((int) $job['id'], 'cancelled', ['messages' => [__('Results ignored: the internal authorisation was revoked or is no longer valid.')]]);
+            return ['accepted' => 0, 'rejected' => count((array) ($data['hosts'] ?? [])), 'new_devices' => 0, 'status' => 'cancelled'];
+        }
         $stats = ['accepted' => 0, 'rejected' => 0, 'new_devices' => 0, 'status' => $status];
         $hadDevices = (int) $this->db->query("SELECT COUNT(*) FROM devices WHERE source = 'agent' AND site_id = {$siteId}")->fetchColumn() > 0;
+        $knownIps = $this->knownElsewhereIps($clientId);
         $new = [];
-        foreach (array_slice(array_values(array_filter((array) ($data['hosts'] ?? []), 'is_array')), 0, self::MAX_HOSTS) as $h) {
-            $ip = (string) ($h['ip'] ?? '');
-            $bin = @inet_pton($ip);
-            if ($bin === false || $ranges === [] || !InternalRanges::allWithin([inet_ntop($bin)], $ranges)) {
-                $stats['rejected']++; // never store anything outside the signed authorisation
-                continue;
+        $hosts = array_slice(array_values(array_filter((array) ($data['hosts'] ?? []), 'is_array')), 0, self::MAX_HOSTS);
+        foreach (array_chunk($hosts, self::BATCH) as $batch) {
+            $this->db->beginTransaction();
+            try {
+                foreach ($batch as $h) {
+                    $ip = self::canonicalIp($h['ip'] ?? null);
+                    if ($ip === null || !InternalRanges::allWithin([$ip], $ranges)) {
+                        $stats['rejected']++; // never store anything outside the signed authorisation
+                        continue;
+                    }
+                    $scanned = $full && ($h['scanned'] ?? false) === true && is_array($h['ports'] ?? null);
+                    [$deviceId, $isNew] = $this->upsertDevice($clientId, $siteId, $ip, $h, $scanned);
+                    if ($isNew) {
+                        $new[] = ['ip' => $ip, 'hostname' => InventoryRepository::clean($h['hostname'] ?? '', 255), 'mac' => self::mac((string) ($h['mac'] ?? ''))];
+                    }
+                    if ($scanned) {
+                        $this->savePorts($deviceId, $h['ports']); // only a finished host scan replaces what was known
+                    }
+                    $stats['accepted']++;
+                }
+                $this->db->commit();
+            } catch (\Throwable $ex) {
+                $this->db->rollBack();
+                throw $ex;
             }
-            $ip = inet_ntop($bin);
-            $isNew = $this->upsertDevice($clientId, $siteId, $ip, $h);
-            if ($isNew) {
-                $new[] = ['ip' => $ip, 'hostname' => InventoryRepository::clean((string) ($h['hostname'] ?? ''), 255), 'mac' => self::mac((string) ($h['mac'] ?? ''))];
-            }
-            if ($full && isset($h['ports']) && is_array($h['ports'])) {
-                $this->savePorts($siteId, $ip, $h['ports']);
-            }
-            $stats['accepted']++;
         }
-        // Full and complete: devices no full scan has seen for a long time are gone.
         if ($full && $status === 'done') {
-            $this->db->prepare("UPDATE devices SET removed_at = UTC_TIMESTAMP() WHERE source = 'agent' AND site_id = :s AND removed_at IS NULL AND last_seen < UTC_TIMESTAMP() - INTERVAL " . self::REMOVE_AFTER_DAYS . ' DAY')
-                ->execute(['s' => $siteId]);
+            $this->db->prepare("UPDATE devices SET removed_at = UTC_TIMESTAMP() WHERE source = 'agent' AND site_id = :s AND removed_at IS NULL
+                                AND COALESCE(last_full_seen, first_seen) < UTC_TIMESTAMP() - INTERVAL " . self::REMOVE_AFTER_DAYS . ' DAY')->execute(['s' => $siteId]);
+        }
+        $remaining = [];
+        if ($full && $status !== 'done') {
+            foreach (array_slice((array) ($data['unscanned'] ?? []), 0, self::MAX_RESUME) as $ip) {
+                $ip = self::canonicalIp($ip);
+                if ($ip !== null && InternalRanges::allWithin([$ip], $ranges)) {
+                    $remaining[] = $ip;
+                }
+            }
         }
         $stats['new_devices'] = count($new);
-        $summary = ['hosts' => $stats['accepted'], 'rejected' => $stats['rejected'], 'new_devices' => count($new),
-                    'messages' => array_slice(array_map(static fn ($m): string => InventoryRepository::clean((string) $m, 300), (array) ($data['messages'] ?? [])), 0, 10)];
+        $summary = ['hosts' => $stats['accepted'], 'rejected' => $stats['rejected'], 'new_devices' => count($new), 'messages' => $messages];
+        if ($remaining !== []) {
+            $summary['remaining'] = $remaining;
+            $summary['messages'][] = __('{n} device(s) not scanned yet; the scan continues in the next scan window.', ['n' => count($remaining)]);
+        }
         if (!$hadDevices && $new !== []) {
             $summary['messages'][] = __('First scan of this site: {n} device(s) recorded as the starting point (no new-device alerts).', ['n' => count($new)]);
         }
@@ -197,10 +263,10 @@ final class AgentService
                 error_log('[msp-sentinel] findings refresh after agent results failed: ' . $ex->getMessage());
             }
         }
-        // New devices: alert, except on a site's very first scan (that is the baseline) and for devices
-        // NinjaOne already knows (same address or name).
+        // New devices: alert, except on a site's very first scan (the baseline) and for addresses NinjaOne already knows.
+        // Device-supplied names (certificate CNs) are never used to silence an alert.
         if ($hadDevices && $new !== []) {
-            $unknown = array_values(array_filter($new, fn (array $d): bool => !$this->knownElsewhere($clientId, $d)));
+            $unknown = array_values(array_filter($new, static fn (array $d): bool => !isset($knownIps[$d['ip']])));
             if ($unknown !== []) {
                 $this->alerts?->newDevices($clientId, (string) $agent['site_name'], $unknown);
             }
@@ -208,38 +274,51 @@ final class AgentService
         return $stats;
     }
 
-    /** Insert or update one device; true if this address was never seen at this site before. */
-    private function upsertDevice(int $clientId, int $siteId, string $ip, array $h): bool
+    /**
+     * Insert or update one device. The same MAC address at the same site is the same device even when its address
+     * changed (DHCP), so it is not announced as new.
+     *
+     * @return array{0:int, 1:bool} device ID, and true if this device was never seen at this site before.
+     */
+    private function upsertDevice(int $clientId, int $siteId, string $ip, array $h, bool $scanned): array
     {
-        $sid = $siteId . ':' . $ip;
-        $exists = $this->db->prepare("SELECT id FROM devices WHERE source = 'agent' AND source_id = :sid");
-        $exists->execute(['sid' => $sid]);
-        $known = $exists->fetchColumn() !== false;
-        $hostname = InventoryRepository::clean((string) ($h['hostname'] ?? ''), 255);
+        $mac = self::mac((string) ($h['mac'] ?? ''));
+        $hostname = InventoryRepository::clean($h['hostname'] ?? '', 255);
+        $existing = null;
+        if ($mac !== '') {
+            $byMac = $this->db->prepare("SELECT id FROM devices WHERE source = 'agent' AND site_id = :s AND mac = :m ORDER BY last_seen DESC LIMIT 1");
+            $byMac->execute(['s' => $siteId, 'm' => $mac]);
+            $existing = $byMac->fetchColumn() ?: null;
+        }
+        if ($existing === null) {
+            $byId = $this->db->prepare("SELECT id FROM devices WHERE source = 'agent' AND source_id = :sid");
+            $byId->execute(['sid' => $siteId . ':' . $ip]);
+            $existing = $byId->fetchColumn() ?: null;
+        }
+        if ($existing !== null) {
+            $this->db->prepare("UPDATE devices SET client_id = :c, site_id = :site, ip_addresses = :ip, name = IF(:dns <> '', :n, IF(name = '' OR name = ip_addresses, :ip2, name)),
+                                dns_name = IF(:dns2 <> '', :dns3, dns_name), mac = IF(:mac <> '', :mac2, mac), last_contact = UTC_TIMESTAMP(), last_seen = UTC_TIMESTAMP(),
+                                last_full_seen = IF(:full = 1, UTC_TIMESTAMP(), last_full_seen), removed_at = NULL WHERE id = :id")
+                ->execute(['c' => $clientId, 'site' => $siteId, 'ip' => $ip, 'dns' => $hostname, 'n' => $hostname, 'ip2' => $ip, 'dns2' => $hostname, 'dns3' => $hostname,
+                           'mac' => $mac, 'mac2' => $mac, 'full' => $scanned ? 1 : 0, 'id' => (int) $existing]);
+            return [(int) $existing, false];
+        }
         $this->db->prepare(
-            "INSERT INTO devices (client_id, site_id, source, source_id, name, dns_name, device_class, ip_addresses, mac, last_contact, first_seen, last_seen, removed_at)
-             VALUES (:c, :site, 'agent', :sid, :n, :dns, 'other', :ip, :mac, UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP(), NULL)
-             ON DUPLICATE KEY UPDATE client_id = VALUES(client_id), site_id = VALUES(site_id), name = IF(VALUES(dns_name) <> '', VALUES(name), name),
-                dns_name = IF(VALUES(dns_name) <> '', VALUES(dns_name), dns_name), mac = IF(VALUES(mac) <> '', VALUES(mac), mac),
-                last_contact = UTC_TIMESTAMP(), last_seen = UTC_TIMESTAMP(), removed_at = NULL"
-        )->execute(['c' => $clientId, 'site' => $siteId, 'sid' => $sid, 'n' => $hostname !== '' ? $hostname : $ip, 'dns' => $hostname, 'ip' => $ip, 'mac' => self::mac((string) ($h['mac'] ?? ''))]);
-        return !$known;
+            "INSERT INTO devices (client_id, site_id, source, source_id, name, dns_name, device_class, ip_addresses, mac, last_contact, first_seen, last_seen, last_full_seen, removed_at)
+             VALUES (:c, :site, 'agent', :sid, :n, :dns, 'other', :ip, :mac, UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP(), :full, NULL)"
+        )->execute(['c' => $clientId, 'site' => $siteId, 'sid' => $siteId . ':' . $ip, 'n' => $hostname !== '' ? $hostname : $ip, 'dns' => $hostname, 'ip' => $ip, 'mac' => $mac,
+                    'full' => $scanned ? gmdate('Y-m-d H:i:s') : null]);
+        return [(int) $this->db->lastInsertId(), true];
     }
 
     /**
-     * Replace a device's open ports (full scans only), with certificate and web page summaries,
+     * Replace a device's open ports (a finished host scan), with certificate and web page summaries,
      * and its "software" rows for vulnerability matching (service CPEs reported by nmap).
      *
      * @param list<mixed> $ports
      */
-    private function savePorts(int $siteId, string $ip, array $ports): void
+    private function savePorts(int $deviceId, array $ports): void
     {
-        $dev = $this->db->prepare("SELECT id FROM devices WHERE source = 'agent' AND source_id = :sid");
-        $dev->execute(['sid' => $siteId . ':' . $ip]);
-        $deviceId = (int) $dev->fetchColumn();
-        if ($deviceId === 0) {
-            return;
-        }
         $up = $this->db->prepare(
             'INSERT INTO device_ports (device_id, port, service, product, version, extra_info, tls, web, first_seen, last_seen)
              VALUES (:d, :p, :s, :pr, :v, :x, :tls, :web, UTC_TIMESTAMP(), UTC_TIMESTAMP())
@@ -253,13 +332,13 @@ final class AgentService
             if ($port < 1 || $port > 65535 || isset($keep[$port])) {
                 continue;
             }
-            $product = InventoryRepository::clean((string) ($p['product'] ?? ''), 120);
-            $version = InventoryRepository::clean((string) ($p['version'] ?? ''), 80);
-            $extra = InventoryRepository::clean((string) ($p['extra'] ?? ''), 200);
-            $up->execute(['d' => $deviceId, 'p' => $port, 's' => InventoryRepository::clean((string) ($p['service'] ?? ''), 60), 'pr' => $product, 'v' => $version, 'x' => $extra,
+            $product = InventoryRepository::clean($p['product'] ?? '', 120);
+            $version = InventoryRepository::clean($p['version'] ?? '', 80);
+            $extra = InventoryRepository::clean($p['extra'] ?? '', 200);
+            $up->execute(['d' => $deviceId, 'p' => $port, 's' => InventoryRepository::clean($p['service'] ?? '', 60), 'pr' => $product, 'v' => $version, 'x' => $extra,
                           'tls' => self::tls($p['tls'] ?? null), 'web' => self::web($p['web'] ?? null)]);
             $keep[$port] = true;
-            $cpe = \Sentinel\Vulns\Cpe::parse((string) ($p['cpe'] ?? ''));
+            $cpe = \Sentinel\Vulns\Cpe::parse(is_string($p['cpe'] ?? null) ? $p['cpe'] : '');
             if ($cpe !== null && $cpe['part'] === 'a') {
                 $software[] = ['name' => trim(($product !== '' ? $product : $cpe['product']) . ' (port ' . $port . ')'), 'version' => $version,
                                'cpe' => 'cpe:/a:' . $cpe['vendor'] . ':' . $cpe['product'] . ($cpe['version'] !== '' ? ':' . $cpe['version'] : ''),
@@ -283,11 +362,35 @@ final class AgentService
     }
 
     /**
-     * Internal certificate issues that are findings (rules shared with external checks, filtered for internal use).
+     * Addresses that inventory sources (NinjaOne) report for the client's current devices, loaded once per upload.
      *
-     * @param array<string,mixed> $tls Stored summary.
-     * @return list<array{code:string, severity:string, text:string}>
+     * @return array<string,true>
      */
+    private function knownElsewhereIps(int $clientId): array
+    {
+        $stmt = $this->db->prepare("SELECT ip_addresses FROM devices WHERE client_id = :c AND source <> 'agent' AND removed_at IS NULL AND ip_addresses <> ''");
+        $stmt->execute(['c' => $clientId]);
+        $out = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $list) {
+            foreach (explode(',', (string) $list) as $ip) {
+                $c = self::canonicalIp($ip);
+                if ($c !== null) {
+                    $out[$c] = true;
+                }
+            }
+        }
+        return $out;
+    }
+
+    /** A canonical IP address, or null. */
+    private static function canonicalIp(mixed $ip): ?string
+    {
+        if (!is_string($ip) || filter_var(trim($ip), FILTER_VALIDATE_IP) === false) {
+            return null;
+        }
+        return inet_ntop((string) inet_pton(trim($ip)));
+    }
+
     public static function internalTlsIssues(array $tls): array
     {
         $out = [];
@@ -297,15 +400,6 @@ final class AgentService
             }
         }
         return $out;
-    }
-
-    /** True if an inventory source (NinjaOne) already knows this device (same address or host name). */
-    private function knownElsewhere(int $clientId, array $d): bool
-    {
-        $stmt = $this->db->prepare("SELECT COUNT(*) FROM devices WHERE client_id = :c AND source <> 'agent' AND removed_at IS NULL
-                                    AND (FIND_IN_SET(:ip, ip_addresses) > 0 OR (:h <> '' AND (LOWER(name) = LOWER(:h2) OR LOWER(dns_name) = LOWER(:h3) OR LOWER(SUBSTRING_INDEX(:h4, '.', 1)) = LOWER(name))))");
-        $stmt->execute(['c' => $clientId, 'ip' => $d['ip'], 'h' => $d['hostname'], 'h2' => $d['hostname'], 'h3' => $d['hostname'], 'h4' => $d['hostname']]);
-        return (int) $stmt->fetchColumn() > 0;
     }
 
     /** A MAC address in canonical form (aa:bb:cc:dd:ee:ff), or ''. */

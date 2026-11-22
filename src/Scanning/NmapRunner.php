@@ -85,7 +85,7 @@ final class NmapRunner
      */
     public function scan(string $ip, array $ports, callable $shouldStop): array
     {
-        return $this->run($this->arguments($ip, $ports), $shouldStop, $this->hostTimeoutSeconds);
+        return $this->run($this->arguments($ip, $ports), $shouldStop, $this->hostTimeoutSeconds, 5_000_000);
     }
 
     /**
@@ -125,9 +125,10 @@ final class NmapRunner
      * @param callable():bool $shouldStop
      * @return array{exit:int, xml:string, stderr:string, stopped:bool, timed_out:bool, overflow:bool}
      */
-    public function discover(array $cidrs, callable $shouldStop, int $timeoutSeconds = 14400): array
+    public function discover(array $cidrs, callable $shouldStop, int $timeoutSeconds = 57600): array
     {
-        return $this->run($this->discoveryArguments($cidrs), $shouldStop, $timeoutSeconds);
+        // Large networks: up to 16 hours and 60 MB of output (about 200,000 hosts that are up).
+        return $this->run($this->discoveryArguments($cidrs), $shouldStop, $timeoutSeconds, 60_000_000);
     }
 
     /**
@@ -136,7 +137,7 @@ final class NmapRunner
      * @param list<string> $args
      * @return array{exit:int, xml:string, stderr:string, stopped:bool, timed_out:bool, overflow:bool}
      */
-    private function run(array $args, callable $shouldStop, int $timeoutSeconds): array
+    private function run(array $args, callable $shouldStop, int $timeoutSeconds, int $maxBytes): array
     {
         $proc = proc_open($args, [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, ['PATH' => '/usr/bin:/bin', 'LANG' => 'C']);
         if (!is_resource($proc)) {
@@ -166,7 +167,7 @@ final class NmapRunner
                     }
                 }
             }
-            if (strlen($xml) > 5_000_000) {
+            if (strlen($xml) > $maxBytes) {
                 $overflow = true; // runaway output: stop rather than fill memory
             }
             $status = proc_get_status($proc);

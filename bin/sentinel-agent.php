@@ -6,6 +6,8 @@ declare(strict_types=1);
  * MSP Sentinel on-premises agent (runs on a small Linux appliance at the client's site).
  *
  *   sentinel-agent.php enrol --server https://sentinel.example --code SNE-XXXXX-... [--config FILE] [--ca FILE]
+ *   sentinel-agent.php enrol --server https://sentinel.example --code-stdin ...   (the code is read from stdin, so it
+ *       never appears in the process list)
  *   sentinel-agent.php run [--config FILE] [--once]
  *   sentinel-agent.php status [--config FILE]
  *
@@ -54,7 +56,8 @@ if (function_exists('posix_geteuid') && posix_geteuid() === 0 && getenv('SENTINE
 /** Load the agent config (or exit). */
 $load = static function () use ($configFile): array {
     $data = is_readable($configFile) ? json_decode((string) file_get_contents($configFile), true) : null;
-    if (!is_array($data) || !is_string($data['server'] ?? null) || !is_string($data['token'] ?? null) || !is_int($data['agent_id'] ?? null) || !is_string($data['server_public_key'] ?? null)) {
+    if (!is_array($data) || !is_string($data['server'] ?? null) || !is_string($data['token'] ?? null) || !is_int($data['agent_id'] ?? null) || !is_string($data['server_public_key'] ?? null)
+        || !is_int($data['site_id'] ?? null) || !is_int($data['client_id'] ?? null)) {
         fwrite(STDERR, "No valid agent config at {$configFile}. Enrol first: sentinel-agent.php enrol --server URL --code CODE\n");
         exit(1);
     }
@@ -64,7 +67,7 @@ $load = static function () use ($configFile): array {
 switch ($command) {
     case 'enrol':
         $server = is_string($opts['server'] ?? null) ? rtrim($opts['server'], '/') : '';
-        $code = is_string($opts['code'] ?? null) ? $opts['code'] : '';
+        $code = is_string($opts['code'] ?? null) ? $opts['code'] : (isset($opts['code-stdin']) ? trim((string) fgets(STDIN, 200)) : '');
         if ($server === '' || $code === '') {
             fwrite(STDERR, "Usage: sentinel-agent.php enrol --server https://sentinel.example --code SNE-XXXXX-XXXXX-XXXXX-XXXXX\n");
             exit(2);
@@ -80,11 +83,12 @@ switch ($command) {
             fwrite(STDERR, $ex->getMessage() . "\n");
             exit(1);
         }
-        if ($res['status'] !== 201 || !is_string($res['data']['token'] ?? null)) {
+        if ($res['status'] !== 201 || !is_string($res['data']['token'] ?? null) || !is_int($res['data']['site_id'] ?? null) || !is_int($res['data']['client_id'] ?? null)) {
             fwrite(STDERR, 'Enrolment refused: ' . (string) ($res['data']['error']['message'] ?? 'HTTP ' . $res['status']) . "\n");
             exit(1);
         }
-        $config = ['server' => $server, 'agent_id' => (int) $res['data']['agent_id'], 'token' => (string) $res['data']['token'],
+        $config = ['server' => $server, 'agent_id' => (int) $res['data']['agent_id'], 'site_id' => $res['data']['site_id'], 'client_id' => $res['data']['client_id'],
+                   'token' => (string) $res['data']['token'],
                    'server_public_key' => (string) $res['data']['server_public_key'], 'ca_file' => $ca, 'nmap_path' => '/usr/bin/nmap',
                    'state_file' => dirname($configFile) . '/state.json'];
         if (!is_dir(dirname($configFile))) {
@@ -94,7 +98,7 @@ switch ($command) {
         file_put_contents($configFile, json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
         umask($old);
         chmod($configFile, 0600);
-        $say('Enrolled as agent #' . $config['agent_id'] . '. Server key pinned. Config written to ' . $configFile . '.');
+        $say('Enrolled as agent #' . $config['agent_id'] . ' (site #' . $config['site_id'] . '). Server key, site and client pinned. Config written to ' . $configFile . '.');
         exit(0);
 
     case 'run':
@@ -108,7 +112,7 @@ switch ($command) {
             $say('Agent #' . $c['agent_id'] . ' → ' . $c['server'] . ': ' . ($res['status'] === 200 ? 'connected' . (($res['data']['paused'] ?? false) ? ' (scanning paused)' : '') : 'HTTP ' . $res['status']));
             exit($res['status'] === 200 ? 0 : 1);
         }
-        $runner = new Runner($http, new JobVerifier((string) $c['server_public_key'], (int) $c['agent_id']), new State((string) ($c['state_file'] ?? dirname($configFile) . '/state.json')),
+        $runner = new Runner($http, new JobVerifier((string) $c['server_public_key'], (int) $c['agent_id'], (int) $c['site_id'], (int) $c['client_id']), new State((string) ($c['state_file'] ?? dirname($configFile) . '/state.json')),
             new NmapRunner((string) ($c['nmap_path'] ?? '/usr/bin/nmap')), new TlsChecker($connector), new HttpProbe($connector), $say,
             $testMode && is_string($c['testing']['arp_file'] ?? null) ? $c['testing']['arp_file'] : '/proc/net/arp');
         $say('Agent #' . $c['agent_id'] . ' started (version ' . Runner::version() . ').');

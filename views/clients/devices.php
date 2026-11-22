@@ -2,7 +2,7 @@
 /**
  * Internal devices card on the client page (inventory sources such as NinjaOne).
  * Expects: $client, $inventorySources (name => label), $inventoryLinks (name => link row|null),
- * $devices (InventoryRepository::devicesForClient), $devicePatches (by device ID), $currentUser.
+ * $devices (InventoryRepository::devicesForClient, first 500), $deviceTotal, $devicePatches (by device ID), $currentUser.
  * Device data comes from the source (untrusted) and is always escaped.
  */
 use Sentinel\Auth\Role;
@@ -66,6 +66,7 @@ $chip = static function (string $sev, string $text): string {
             </tbody>
         </table>
         </div>
+        <?php if (($deviceTotal ?? 0) > count($devices)): ?><p class="small text-body-secondary mt-2 mb-0"><?= e(__('Showing the first {n} of {m} devices; the findings list covers all of them.', ['n' => count($devices), 'm' => $deviceTotal])) ?></p><?php endif; ?>
         <?php elseif ($inventorySources !== []): ?>
         <p class="small text-body-secondary mb-0"><?= e(__('No devices yet.')) ?></p>
         <?php endif; ?>

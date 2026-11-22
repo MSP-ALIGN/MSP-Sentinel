@@ -131,8 +131,8 @@ return [
         $note = $ctx->db->query("SELECT title, body FROM notifications WHERE kind = 'new_device' ORDER BY id DESC LIMIT 1")->fetch();
         Assert::true($note !== false && str_contains($note['title'], '1 new device(s)') && str_contains($note['body'], '10.90.0.30'), 'new device alert');
         Assert::contains('02:00:00:00:00:30', (string) $note['body'], 'MAC from the agent\'s ARP table');
-        // The same job handed out again (replay) is refused by the agent.
-        $ctx->db->exec("UPDATE agent_jobs SET status = 'sent' WHERE id = {$job}");
+        // The same job handed out again (e.g. re-queued in the database: a replay) is refused by the agent.
+        $ctx->db->exec("UPDATE agent_jobs SET status = 'queued', expires_at = UTC_TIMESTAMP() + INTERVAL 1 HOUR WHERE id = {$job}");
         [$code, $out] = $runAgent($ctx, ['run', '--once']);
         Assert::contains('replay', $out, 'replay refused');
         $ctx->db->exec("UPDATE agent_jobs SET status = 'done' WHERE id = {$job}");
@@ -156,10 +156,10 @@ return [
         Assert::same('cancelled', (string) $ctx->db->query("SELECT status FROM agent_jobs WHERE id = {$job2}")->fetchColumn());
         $ctx->db->exec("UPDATE internal_authorisations SET signed_payload = REPLACE(signed_payload, '10.91.0.0/24', '10.90.0.0/24') WHERE id = {$auth}");
         // The agent refuses jobs signed by another key, for other agents, or with targets outside the signed ranges.
-        $v = new \Sentinel\AgentClient\JobVerifier($config['server_public_key'], $agentId);
+        $v = new \Sentinel\AgentClient\JobVerifier($config['server_public_key'], $agentId, $site, $cid);
         $signer = App::agentSigner();
         $a = $ctx->db->query("SELECT signed_payload, signature FROM internal_authorisations WHERE id = {$auth}")->fetch();
-        $base = ['v' => 1, 'type' => 'agent_job', 'job_id' => 999001, 'agent_id' => $agentId, 'site_id' => $site, 'kind' => 'light', 'ports' => [], 'targets' => ['10.90.0.0/24'],
+        $base = ['v' => 1, 'type' => 'agent_job', 'job_id' => 999001, 'agent_id' => $agentId, 'site_id' => $site, 'client_id' => $cid, 'kind' => 'light', 'ports' => [], 'targets' => ['10.90.0.0/24'],
                  'issued_at' => gmdate('Y-m-d\TH:i:s\Z'), 'expires_at' => gmdate('Y-m-d\TH:i:s\Z', time() + 3600), 'authorisation' => ['payload' => $a['signed_payload'], 'signature' => $a['signature']]];
         $ok = $signer->sign($base);
         Assert::true(is_array($v->verify($ok['payload'], $ok['signature'], [])), 'a correct job is accepted');
@@ -174,6 +174,65 @@ return [
         $fakeAuth = \Sentinel\Agent\Signer::fromAppKey(random_bytes(32))->sign(json_decode($a['signed_payload'], true));
         $forged = $signer->sign(['authorisation' => $fakeAuth] + $base);
         Assert::same('authorisation not signed by the server', $v->verify($forged['payload'], $forged['signature'], []));
+        // Another client's site, with its own validly signed authorisation: refused by the server and by the agent.
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $res = $admin->submit('/clients/new', '/clients', ['name' => 'Inlet Example', 'itflow_client_id' => '', 'timezone' => 'UTC', 'scan_window_start' => '00:00', 'scan_window_end' => '23:59', 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);
+        $otherClient = (int) basename((string) $res->location());
+        $otherSite = (int) $ctx->db->query("SELECT id FROM sites WHERE client_id = {$otherClient}")->fetchColumn();
+        $admin->submit('/clients/' . $otherClient . '/sites/' . $otherSite . '/internal-authorisations/new', '/clients/' . $otherClient . '/sites/' . $otherSite . '/internal-authorisations', [
+            'approved_by_name' => 'Lee Example', 'approved_by_role' => 'Owner', 'approved_on' => gmdate('Y-m-d'), 'valid_from' => gmdate('Y-m-d'), 'valid_until' => gmdate('Y-m-d', time() + 86400 * 30),
+            'document_ref' => '', 'notes' => '', 'ranges' => '192.168.50.0/24', 'confirm' => '1']);
+        $otherAuth = (int) $ctx->db->query("SELECT id FROM internal_authorisations WHERE site_id = {$otherSite}")->fetchColumn();
+        $cross = App::agents()->queueJob($agentId, $otherClient, $otherSite, $otherAuth, 'light', 'manual', null, [], 12); // e.g. a changed database
+        $poll = json_decode($ctx->api('POST', '/agent/v1/poll', $config['token'], ['running' => []])->body, true);
+        Assert::same([], $poll['jobs'], 'never signed for another site');
+        Assert::same('cancelled', (string) $ctx->db->query("SELECT status FROM agent_jobs WHERE id = {$cross}")->fetchColumn());
+        $oa = $ctx->db->query("SELECT signed_payload, signature FROM internal_authorisations WHERE id = {$otherAuth}")->fetch();
+        $x = $signer->sign(['site_id' => $otherSite, 'client_id' => $otherClient, 'targets' => ['192.168.50.0/24'], 'authorisation' => ['payload' => $oa['signed_payload'], 'signature' => $oa['signature']]] + $base);
+        Assert::same('job is for another site or client', $v->verify($x['payload'], $x['signature'], []), 'the agent refuses it too');
+    },
+    'partial scans keep what they did not reach, resume in the next window, and respect the window' => function (TestContext $ctx) use ($setup, $agentDir): void {
+        [$cid, $site] = $setup($ctx);
+        $config = json_decode((string) file_get_contents($agentDir($ctx) . '/agent.json'), true);
+        $agentId = (int) $config['agent_id'];
+        $auth = (int) $ctx->db->query("SELECT id FROM internal_authorisations WHERE site_id = {$site}")->fetchColumn();
+        $dev = (int) $ctx->db->query("SELECT id FROM devices WHERE source_id = '{$site}:10.90.0.10'")->fetchColumn();
+        $ports = (int) $ctx->db->query("SELECT COUNT(*) FROM device_ports WHERE device_id = {$dev}")->fetchColumn();
+        Assert::true($ports > 0, 'ports known from the first scan');
+        $ctx->db->exec("UPDATE agent_jobs SET status = 'done' WHERE site_id = {$site} AND status IN ('queued','sent')");
+        $job = App::agents()->queueJob($agentId, $cid, $site, $auth, 'full', 'manual', null, [22, 443], 12);
+        $ctx->api('POST', '/agent/v1/poll', $config['token'], ['running' => []]);
+        $res = $ctx->api('POST', '/agent/v1/jobs/' . $job . '/results', $config['token'], ['status' => 'partial', 'hosts' => [['ip' => '10.90.0.10', 'scanned' => false], ['ip' => '10.90.0.20', 'scanned' => true, 'ports' => []]], 'unscanned' => ['10.90.0.10']]);
+        Assert::status(200, $res);
+        Assert::same($ports, (int) $ctx->db->query("SELECT COUNT(*) FROM device_ports WHERE device_id = {$dev}")->fetchColumn(), 'an unscanned host keeps its ports');
+        Assert::status(409, $ctx->api('POST', '/agent/v1/jobs/' . $job . '/results', $config['token'], ['status' => 'done', 'hosts' => []]), 'a second upload is not processed twice');
+        // The next scheduled run resumes with the host it didn't reach.
+        App::agentService()->scheduleDue();
+        $resume = $ctx->db->query("SELECT kind, targets FROM agent_jobs WHERE site_id = {$site} AND status = 'queued' ORDER BY id DESC LIMIT 1")->fetch();
+        Assert::same(['full', '10.90.0.10/32'], [$resume['kind'] ?? null, $resume['targets'] ?? null], 'resume job');
+        // Scheduled jobs start only inside the window; a running scheduled job is stopped when it closes.
+        $h = (int) gmdate('G');
+        $ctx->db->exec("UPDATE clients SET scan_window_start = '" . sprintf('%02d:00:00', ($h + 2) % 24) . "', scan_window_end = '" . sprintf('%02d:00:00', ($h + 3) % 24) . "' WHERE id = {$cid}");
+        $poll = json_decode($ctx->api('POST', '/agent/v1/poll', $config['token'], ['running' => []])->body, true);
+        Assert::same([], $poll['jobs'], 'scheduled job waits for the window');
+        $sched = (int) $ctx->db->query("SELECT id FROM agent_jobs WHERE site_id = {$site} AND status = 'queued' ORDER BY id DESC LIMIT 1")->fetchColumn();
+        $ctx->db->exec("UPDATE agent_jobs SET status = 'sent', sent_at = UTC_TIMESTAMP(), expires_at = UTC_TIMESTAMP() + INTERVAL 1 HOUR WHERE id = {$sched}");
+        $poll = json_decode($ctx->api('POST', '/agent/v1/poll', $config['token'], ['running' => [$sched]])->body, true);
+        Assert::true(in_array($sched, $poll['stop'], true), 'window closed: stop');
+        $ctx->db->exec("UPDATE clients SET scan_window_start = '00:00:00', scan_window_end = '23:59:00' WHERE id = {$cid}");
+        $ctx->db->exec("UPDATE agent_jobs SET status = 'cancelled' WHERE id = {$sched}");
+        // A running job's lease is renewed while the agent checks in about it.
+        $run = App::agents()->queueJob($agentId, $cid, $site, $auth, 'light', 'manual', null, [], 12);
+        App::agents()->markSent($run);
+        $ctx->db->exec("UPDATE agent_jobs SET expires_at = UTC_TIMESTAMP() + INTERVAL 1 MINUTE WHERE id = {$run}");
+        $ctx->api('POST', '/agent/v1/poll', $config['token'], ['running' => [$run]]);
+        Assert::true((int) $ctx->db->query("SELECT TIMESTAMPDIFF(MINUTE, UTC_TIMESTAMP(), expires_at) FROM agent_jobs WHERE id = {$run}")->fetchColumn() >= 55, 'lease extended');
+        // Revoked authorisation: results are ignored.
+        $ctx->db->exec("UPDATE internal_authorisations SET revoked_at = UTC_TIMESTAMP() WHERE id = {$auth}");
+        $r = json_decode($ctx->api('POST', '/agent/v1/jobs/' . $run . '/results', $config['token'], ['status' => 'done', 'hosts' => [['ip' => '10.90.0.77']]])->body, true);
+        Assert::same('cancelled', $r['status'] ?? null);
+        Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE source_id = '{$site}:10.90.0.77'")->fetchColumn(), 'nothing stored after revocation');
+        $ctx->db->exec("UPDATE internal_authorisations SET revoked_at = NULL WHERE id = {$auth}");
     },
     'kill switch and revocation stop the agent' => function (TestContext $ctx) use ($setup, $agentDir, $runAgent): void {
         [$cid, $site] = $setup($ctx);
@@ -182,6 +241,7 @@ return [
         $tech->submit('/clients/' . $cid, '/clients/' . $cid . '/sites/' . $site . '/pause', []);
         $poll = json_decode($ctx->api('POST', '/agent/v1/poll', $config['token'], ['running' => [12345]])->body, true);
         Assert::true($poll['paused'] === true && in_array(12345, $poll['stop'], true), 'paused: running jobs told to stop');
+        Assert::same(0, App::agents()->openJobs($site), 'pause cancels queued jobs, so resume is not blocked');
         Assert::status(403, $tech->submit('/clients/' . $cid, '/clients/' . $cid . '/sites/' . $site . '/resume', []), 'only admins resume');
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $admin->submit('/clients/' . $cid, '/clients/' . $cid . '/sites/' . $site . '/resume', []);

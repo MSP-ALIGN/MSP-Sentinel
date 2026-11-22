@@ -13,10 +13,11 @@ use Sentinel\Agent\Signer;
  * the server sends with a job.
  *
  * A job runs only if ALL of these hold:
- * - the job is signed by the pinned key, is an agent job for THIS agent,
- *   was not run before (no replays) and has not expired;
+ * - the job is signed by the pinned key, is an agent job for THIS agent and
+ *   for the site and client it was enrolled for, was not run before (no
+ *   replays) and has not expired;
  * - it carries an internal authorisation, also signed by the pinned key, for
- *   the job's site, valid today in the client's time zone;
+ *   that same site and client, valid today in the client's time zone;
  * - every target is a private network inside the authorisation's ranges, and
  *   the ports are plain port numbers.
  *
@@ -26,8 +27,12 @@ final class JobVerifier
 {
     public const MAX_PORTS = 1000;
 
-    /** @param string $publicKey Pinned server public key (base64). */
-    public function __construct(private readonly string $publicKey, private readonly int $agentId)
+    /**
+     * @param string $publicKey Pinned server public key (base64).
+     * @param int    $siteId    The site and client this agent was enrolled for (pinned at enrolment): jobs for
+     * @param int    $clientId  any other site or client are refused, whatever the server sends.
+     */
+    public function __construct(private readonly string $publicKey, private readonly int $agentId, private readonly int $siteId, private readonly int $clientId)
     {
     }
 
@@ -49,6 +54,9 @@ final class JobVerifier
         }
         if (($job['agent_id'] ?? null) !== $this->agentId) {
             return 'job is for another agent';
+        }
+        if (($job['site_id'] ?? null) !== $this->siteId || ($job['client_id'] ?? null) !== $this->clientId) {
+            return 'job is for another site or client';
         }
         $jobId = $job['job_id'] ?? null;
         if (!is_int($jobId) || $jobId < 1) {
@@ -73,7 +81,7 @@ final class JobVerifier
             return 'authorisation not signed by the server';
         }
         $a = json_decode($auth['payload'], true);
-        if (!is_array($a) || ($a['type'] ?? null) !== 'internal_authorisation' || ($a['v'] ?? null) !== 1 || ($a['site_id'] ?? null) !== ($job['site_id'] ?? false)) {
+        if (!is_array($a) || ($a['type'] ?? null) !== 'internal_authorisation' || ($a['v'] ?? null) !== 1 || ($a['site_id'] ?? null) !== $this->siteId || ($a['client_id'] ?? null) !== $this->clientId) {
             return 'authorisation is not for this site';
         }
         try {

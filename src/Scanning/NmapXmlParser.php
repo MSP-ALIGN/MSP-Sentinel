@@ -22,27 +22,26 @@ final class NmapXmlParser
 
     /**
      * Hosts that are up in a discovery sweep (nmap -sn), with the MAC address when nmap reports one.
+     * Output cut short (a sweep stopped, timed out or too large) still gives the hosts in its complete
+     * <host> elements: each one is read on its own.
      *
      * @return list<array{ip:string, mac:string}>
-     * @throws \RuntimeException when the output is not usable nmap XML.
+     * @throws \RuntimeException when there is no usable output at all.
      */
-    public static function parseDiscovery(string $xml, int $max = 70000): array
+    public static function parseDiscovery(string $xml, int $max = 200000): array
     {
-        if ($xml === '' || strlen($xml) > self::MAX_BYTES * 20) {
+        if ($xml === '' || strlen($xml) > 60_000_000 || !str_contains($xml, '<nmaprun')) {
             throw new \RuntimeException('nmap produced no usable output.');
         }
+        preg_match_all('#<host[\s>].*?</host>#s', $xml, $m);
+        $out = [];
         $previous = libxml_use_internal_errors(true);
         try {
-            $doc = simplexml_load_string($xml, \SimpleXMLElement::class, LIBXML_NONET | LIBXML_NOCDATA);
-        } finally {
-            libxml_clear_errors();
-            libxml_use_internal_errors($previous);
-        }
-        if ($doc === false || $doc->getName() !== 'nmaprun') {
-            throw new \RuntimeException('nmap output is not valid XML.');
-        }
-        $out = [];
-        foreach ($doc->host as $host) {
+            foreach ($m[0] as $block) {
+                $host = simplexml_load_string($block, \SimpleXMLElement::class, LIBXML_NONET | LIBXML_NOCDATA);
+                if ($host === false) {
+                    continue;
+                }
             if ((string) ($host->status['state'] ?? '') !== 'up') {
                 continue;
             }
@@ -62,6 +61,10 @@ final class NmapXmlParser
             if (count($out) >= $max) {
                 break;
             }
+            }
+        } finally {
+            libxml_clear_errors();
+            libxml_use_internal_errors($previous);
         }
         return array_values($out);
     }

@@ -166,7 +166,7 @@ final class AgentRepository
         if (!preg_match('/^Bearer (sna_([0-9a-f]{12})_[A-Za-z0-9_-]{43})$/', trim($authorization), $m)) {
             return null;
         }
-        $stmt = $this->db->prepare("SELECT a.*, c.is_archived, c.scanning_paused AS client_paused, c.timezone, s.scanning_paused AS site_paused, s.name AS site_name
+        $stmt = $this->db->prepare("SELECT a.*, c.is_archived, c.scanning_paused AS client_paused, c.timezone, c.scan_window_start, c.scan_window_end, s.scanning_paused AS site_paused, s.name AS site_name
                                     FROM agents a JOIN clients c ON c.id = a.client_id JOIN sites s ON s.id = a.site_id WHERE a.token_prefix = :p AND a.status = 'active'");
         $stmt->execute(['p' => $m[2]]);
         $agent = $stmt->fetch();
@@ -195,6 +195,14 @@ final class AgentRepository
         return $stmt->fetchAll();
     }
 
+    /** Pause a site: queued agent jobs are cancelled, running ones are told to stop at the next check-in. */
+    public function pauseSite(int $siteId): void
+    {
+        $this->db->prepare('UPDATE sites SET scanning_paused = 1, updated_at = UTC_TIMESTAMP() WHERE id = :s')->execute(['s' => $siteId]);
+        $this->db->prepare("UPDATE agent_jobs SET status = 'cancelled', cancel_requested = 1, finished_at = UTC_TIMESTAMP() WHERE site_id = :s AND status = 'queued'")->execute(['s' => $siteId]);
+        $this->db->prepare("UPDATE agent_jobs SET cancel_requested = 1 WHERE site_id = :s AND status = 'sent'")->execute(['s' => $siteId]);
+    }
+
     /** Revoke an agent: its token stops working and its open jobs are cancelled. */
     public function revokeAgent(int $agentId, int $userId): void
     {
@@ -202,31 +210,70 @@ final class AgentRepository
         $this->db->prepare("UPDATE agent_jobs SET status = 'cancelled', finished_at = UTC_TIMESTAMP() WHERE agent_id = :id AND status IN ('queued','sent')")->execute(['id' => $agentId]);
     }
 
+    /** How long a handed-out job stays alive without the agent checking in about it, and its longest total run. */
+    public const LEASE_MINUTES = 60;
+    public const MAX_RUN_HOURS = 48;
+
     /**
      * Queue a job for an agent.
      *
-     * @param list<int> $ports
+     * @param list<int>         $ports
+     * @param list<string>|null $targets Specific hosts or networks (resuming an unfinished scan), inside the authorisation;
+     *                                   null scans the authorisation's networks.
      */
-    public function queueJob(int $agentId, int $clientId, int $siteId, int $authorisationId, string $kind, string $trigger, ?int $userId, array $ports, int $hours): int
+    public function queueJob(int $agentId, int $clientId, int $siteId, int $authorisationId, string $kind, string $trigger, ?int $userId, array $ports, int $hours, ?array $targets = null): int
     {
-        $this->db->prepare("INSERT INTO agent_jobs (agent_id, client_id, site_id, authorisation_id, kind, trigger_type, requested_by, status, ports, created_at, expires_at)
-                            VALUES (:a, :c, :s, :auth, :k, :t, :u, 'queued', :p, UTC_TIMESTAMP(), UTC_TIMESTAMP() + INTERVAL :h HOUR)")
+        $this->db->prepare("INSERT INTO agent_jobs (agent_id, client_id, site_id, authorisation_id, kind, trigger_type, requested_by, status, ports, targets, created_at, expires_at)
+                            VALUES (:a, :c, :s, :auth, :k, :t, :u, 'queued', :p, :tg, UTC_TIMESTAMP(), UTC_TIMESTAMP() + INTERVAL :h HOUR)")
             ->execute(['a' => $agentId, 'c' => $clientId, 's' => $siteId, 'auth' => $authorisationId, 'k' => $kind === 'light' ? 'light' : 'full',
-                       't' => $trigger === 'manual' ? 'manual' : 'scheduled', 'u' => $userId, 'p' => implode(',', array_map('intval', $ports)), 'h' => $hours]);
+                       't' => $trigger === 'manual' ? 'manual' : 'scheduled', 'u' => $userId, 'p' => implode(',', array_map('intval', $ports)),
+                       'tg' => $targets === null ? null : implode("\n", $targets), 'h' => $hours]);
         return (int) $this->db->lastInsertId();
     }
 
     /**
-     * Jobs an agent should run now: queued, or sent but not finished (the agent may have restarted), not expired.
+     * Queued jobs an agent should start now (handed-out jobs are never sent again: the agent refuses replays anyway).
+     * Queued jobs past their expiry, and running jobs whose lease ran out (agent gone), are marked expired first.
      *
      * @return list<array<string,mixed>>
      */
     public function jobsFor(int $agentId): array
     {
         $this->db->exec("UPDATE agent_jobs SET status = 'expired', finished_at = UTC_TIMESTAMP() WHERE status IN ('queued','sent') AND expires_at < UTC_TIMESTAMP()");
-        $stmt = $this->db->prepare("SELECT * FROM agent_jobs WHERE agent_id = :a AND status IN ('queued','sent') AND cancel_requested = 0 ORDER BY id LIMIT 3");
+        $stmt = $this->db->prepare("SELECT * FROM agent_jobs WHERE agent_id = :a AND status = 'queued' AND cancel_requested = 0 ORDER BY id LIMIT 3");
         $stmt->execute(['a' => $agentId]);
         return $stmt->fetchAll();
+    }
+
+    /**
+     * The agent is still working on these jobs: extend their lease (at most MAX_RUN_HOURS after hand-out).
+     *
+     * @param list<int> $jobIds
+     */
+    public function extendLease(int $agentId, array $jobIds): void
+    {
+        $ids = array_values(array_filter(array_map('intval', $jobIds), static fn (int $i): bool => $i > 0));
+        if ($ids === []) {
+            return;
+        }
+        $this->db->prepare('UPDATE agent_jobs SET expires_at = LEAST(sent_at + INTERVAL ' . self::MAX_RUN_HOURS . ' HOUR, UTC_TIMESTAMP() + INTERVAL ' . self::LEASE_MINUTES . " MINUTE)
+                            WHERE agent_id = ? AND status = 'sent' AND id IN (" . implode(',', $ids) . ')')->execute([$agentId]);
+    }
+
+    /** Claim a job's results for ingestion (only once, so two uploads can't both be processed). */
+    public function claimIngest(int $jobId): bool
+    {
+        $stmt = $this->db->prepare("UPDATE agent_jobs SET status = 'ingesting' WHERE id = :id AND status IN ('queued','sent')");
+        $stmt->execute(['id' => $jobId]);
+        return $stmt->rowCount() === 1;
+    }
+
+    /** Open (queued, running or being ingested, not cancelled) agent jobs of a site. */
+    public function openJobs(int $siteId): int
+    {
+        $stmt = $this->db->prepare("SELECT COUNT(*) FROM agent_jobs WHERE site_id = :s AND status IN ('queued','sent','ingesting') AND cancel_requested = 0");
+        $stmt->execute(['s' => $siteId]);
+        return (int) $stmt->fetchColumn();
     }
 
     /**
@@ -244,7 +291,9 @@ final class AgentRepository
     /** Mark a job as handed to its agent. */
     public function markSent(int $jobId): void
     {
-        $this->db->prepare("UPDATE agent_jobs SET status = 'sent', sent_at = COALESCE(sent_at, UTC_TIMESTAMP()) WHERE id = :id AND status IN ('queued','sent')")->execute(['id' => $jobId]);
+        // From now on the job lives on a lease the agent renews while it works (see extendLease).
+        $this->db->prepare("UPDATE agent_jobs SET status = 'sent', sent_at = UTC_TIMESTAMP(), expires_at = UTC_TIMESTAMP() + INTERVAL " . self::LEASE_MINUTES . " MINUTE
+                            WHERE id = :id AND status = 'queued'")->execute(['id' => $jobId]);
     }
 
     /**
@@ -267,7 +316,7 @@ final class AgentRepository
      */
     public function finishJob(int $jobId, string $status, array $summary): bool
     {
-        $stmt = $this->db->prepare("UPDATE agent_jobs SET status = :st, finished_at = UTC_TIMESTAMP(), summary = :sum WHERE id = :id AND status IN ('queued','sent')");
+        $stmt = $this->db->prepare("UPDATE agent_jobs SET status = :st, finished_at = UTC_TIMESTAMP(), summary = :sum WHERE id = :id AND status IN ('queued','sent','ingesting')");
         $stmt->execute(['st' => $status, 'sum' => json_encode($summary, JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE), 'id' => $jobId]);
         return $stmt->rowCount() === 1;
     }

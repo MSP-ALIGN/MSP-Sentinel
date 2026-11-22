@@ -63,6 +63,7 @@ final class Runner
      */
     public function pollOnce(): int
     {
+        $this->sendPending();
         $res = $this->http->post('/agent/v1/poll', ['hostname' => (string) gethostname(), 'version' => self::version(), 'running' => []]);
         if ($res['status'] === 401) {
             ($this->log)('Sentinel no longer accepts this agent (revoked?). Stopping.');
@@ -82,18 +83,45 @@ final class Runner
                 continue;
             }
             $this->state->markDone($job['job_id']); // before running: a crash never leads to running it twice
-            $results = $this->run($job);
-            $up = $this->http->post('/agent/v1/jobs/' . $job['job_id'] . '/results', $results, 300);
-            ($this->log)('Job ' . $job['job_id'] . ' ' . $results['status'] . ': ' . count($results['hosts']) . ' device(s); upload HTTP ' . $up['status'] . '.');
+            try {
+                $results = $this->run($job);
+            } catch (\Throwable $ex) {
+                $results = ['status' => 'failed', 'messages' => ['The agent could not run the job: ' . mb_substr($ex->getMessage(), 0, 200)], 'hosts' => [], 'unscanned' => []];
+            }
+            // Kept on disk until Sentinel accepts it, so a network problem never loses a scan.
+            $this->state->savePending($job['job_id'], $results);
+            ($this->log)('Job ' . $job['job_id'] . ' ' . $results['status'] . ': ' . count($results['hosts']) . ' device(s).');
+            $this->sendPending();
         }
         return max(30, min(600, (int) ($res['data']['poll_seconds'] ?? 60)));
+    }
+
+    /** Send finished results that Sentinel hasn't accepted yet (2xx accepted; 404/409: it no longer wants them). */
+    private function sendPending(): void
+    {
+        foreach ($this->state->pending() as $jobId => $results) {
+            try {
+                $up = $this->http->post('/agent/v1/jobs/' . $jobId . '/results', $results, 600);
+            } catch (\Throwable $ex) {
+                ($this->log)('Upload of job ' . $jobId . ' failed (will retry): ' . mb_substr($ex->getMessage(), 0, 200));
+                return;
+            }
+            if (($up['status'] >= 200 && $up['status'] < 300) || in_array($up['status'], [404, 409], true)) {
+                $this->state->clearPending($jobId);
+                ($this->log)('Results of job ' . $jobId . ' sent (HTTP ' . $up['status'] . ').');
+            } else {
+                ($this->log)('Upload of job ' . $jobId . ' refused (HTTP ' . $up['status'] . '); will retry.');
+                return;
+            }
+        }
     }
 
     /**
      * Run one verified job.
      *
      * @param array{job_id:int, kind:string, targets:list<string>, ports:list<int>, ranges:list<string>} $job
-     * @return array{status:string, messages:list<string>, hosts:list<array<string,mixed>>}
+     * @return array{status:string, messages:list<string>, hosts:list<array<string,mixed>>, unscanned:list<string>}
+     *         Hosts carry "scanned": true only when their port scan finished; unscanned lists hosts found but not scanned.
      */
     public function run(array $job): array
     {
@@ -111,14 +139,15 @@ final class Runner
                 break;
             }
             $r = $this->nmap->discover($cidrs, $shouldStop);
-            if ($r['stopped']) {
-                break;
+            if ($r['stopped'] || $r['timed_out'] || $r['overflow']) {
+                // Use what the sweep found so far (complete host entries only), but the job is not complete.
+                $messages[] = $r['stopped'] ? 'Discovery stopped.' : ($r['timed_out'] ? 'Discovery took too long and was stopped.' : 'Discovery output too large; stopped.');
             }
             try {
                 foreach (NmapXmlParser::parseDiscovery($r['xml'], self::MAX_HOSTS) as $h) {
                     // Never trust the scanner's output either: only addresses inside the signed ranges.
                     if (InternalRanges::allWithin([$h['ip']], $job['ranges']) && InternalRanges::allWithin([$h['ip']], $job['targets'])) {
-                        $found[$h['ip']] = ['ip' => $h['ip'], 'mac' => $h['mac'], 'hostname' => '', 'ports' => []];
+                        $found[$h['ip']] = ['ip' => $h['ip'], 'mac' => $h['mac'], 'hostname' => '', 'scanned' => false, 'ports' => []];
                     }
                 }
             } catch (\RuntimeException $ex) {
@@ -169,10 +198,18 @@ final class Runner
                     }
                     $found[$ip]['ports'][] = $port;
                 }
+                $found[$ip]['scanned'] = true;
             }
         }
-        $status = $this->stopNow ? 'cancelled' : ($complete ? 'done' : 'partial');
-        return ['status' => $status, 'messages' => array_slice($messages, 0, 20), 'hosts' => array_values($found)];
+        $unscanned = [];
+        foreach ($found as $ip => $h) {
+            if ($job['kind'] === 'full' && $h['scanned'] !== true) {
+                $unscanned[] = (string) $ip;
+                unset($found[$ip]['ports']); // nothing known about its ports this time: Sentinel keeps what it had
+            }
+        }
+        $status = $this->stopNow ? ($unscanned === [] && $complete ? 'done' : 'partial') : ($complete ? 'done' : 'partial');
+        return ['status' => $status, 'messages' => array_slice($messages, 0, 20), 'hosts' => array_values($found), 'unscanned' => $unscanned];
     }
 
     /** Check in every 30 seconds while a job runs; true when Sentinel says this job must stop. */

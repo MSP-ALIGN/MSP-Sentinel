@@ -27,7 +27,7 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
             <?php endforeach; ?>
             <div class="col-12"><label class="form-label" for="ranges"><?= e(__('Internal networks (one per line)')) ?></label>
                 <textarea class="form-control font-monospace<?= $invalid('ranges') ?>" id="ranges" name="ranges" rows="5" placeholder="10.20.0.0/16&#10;192.168.1.0/24&#10;# comments are allowed"><?= e($values['ranges']) ?></textarea>
-                <div class="form-text"><?= e(__('Private addresses only (10.x, 172.16-31.x, 192.168.x, 100.64-127.x, fc00::/7). Each network at most a /16; at most four /16 in total.')) ?></div>
+                <div class="form-text"><?= e(__('Private addresses only (10.x, 172.16-31.x, 192.168.x, fc00::/7). Each network at most a /16; at most four /16 in total.')) ?></div>
                 <?php if (!empty($errors['ranges'])): ?><div class="invalid-feedback d-block text-pre-line"><?= e($errors['ranges']) ?></div><?php endif; ?></div>
             <div class="col-md-6"><label class="form-label" for="document_ref"><?= e(__('Document reference (optional)')) ?></label>
                 <input class="form-control<?= $invalid('document_ref') ?>" id="document_ref" name="document_ref" value="<?= e($values['document_ref']) ?>" maxlength="190">

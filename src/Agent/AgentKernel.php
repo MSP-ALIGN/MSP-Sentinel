@@ -80,8 +80,9 @@ final class AgentKernel
             return ApiKernel::error(403, 'The enrolment code is unknown, already used or expired. Create a new one in Sentinel.');
         }
         App::audit()->log('agent.enrolled', null, null, 'agent', $result['agent_id'], ['client_id' => $result['client_id'], 'site_id' => $result['site_id']], $request->ip());
-        return ApiKernel::json(['agent_id' => $result['agent_id'], 'token' => $result['token'], 'server_public_key' => App::agentSigner()->publicKey(),
-                                'poll_seconds' => self::POLL_SECONDS], 201);
+        // The agent pins the key, its site and its client: it refuses jobs for any other site or client.
+        return ApiKernel::json(['agent_id' => $result['agent_id'], 'site_id' => $result['site_id'], 'client_id' => $result['client_id'], 'token' => $result['token'],
+                                'server_public_key' => App::agentSigner()->publicKey(), 'poll_seconds' => self::POLL_SECONDS], 201);
     }
 
     /**
@@ -94,17 +95,23 @@ final class AgentKernel
         $body = self::body(65536) ?? [];
         App::agents()->touch((int) $agent['id'], $request->ip(), self::short($body['hostname'] ?? $agent['hostname'], 255), self::short($body['version'] ?? $agent['version'], 20));
         $paused = (int) $agent['is_archived'] === 1 || (int) $agent['client_paused'] === 1 || (int) $agent['site_paused'] === 1 || App::scope()->globallyPaused();
+        $running = array_values(array_filter((array) ($body['running'] ?? []), static fn ($id): bool => is_int($id) && $id > 0));
         $stop = App::agents()->jobsToStop((int) $agent['id']);
         $jobs = [];
-        if ($paused) {
-            // Kill switch: every running job of this agent stops.
-            foreach ((array) ($body['running'] ?? []) as $id) {
-                if (is_int($id) && $id > 0) {
-                    $stop[] = $id;
-                }
+        foreach ($running as $id) {
+            $job = App::agents()->job((int) $agent['id'], $id);
+            // Kill switch, or a scheduled scan whose window closed: stop (it resumes in the next window).
+            if ($paused || $job === null || !AgentService::inWindow($job, $agent)) {
+                $stop[] = $id;
             }
-        } else {
+        }
+        // Still working on the rest: keep them alive.
+        App::agents()->extendLease((int) $agent['id'], array_values(array_diff($running, $stop)));
+        if (!$paused) {
             foreach (App::agents()->jobsFor((int) $agent['id']) as $job) {
+                if (!AgentService::inWindow($job, $agent)) {
+                    continue; // scheduled jobs start only inside the scan window
+                }
                 $signed = App::agentService()->signedJob($job, $agent);
                 if ($signed === null) {
                     App::agents()->finishJob((int) $job['id'], 'cancelled', ['messages' => [__('Cancelled: the site has no valid internal authorisation any more.')]]);
@@ -128,14 +135,21 @@ final class AgentKernel
         if ($job === null) {
             return ApiKernel::error(404, 'Not found.');
         }
-        if (!in_array($job['status'], ['queued', 'sent'], true)) {
-            return ApiKernel::error(409, 'This job is already finished, cancelled or expired.');
-        }
         $body = self::body(self::MAX_RESULTS);
         if ($body === null) {
             return ApiKernel::error(400, 'Send the results as a JSON object (at most 8 MB).');
         }
-        $stats = App::agentService()->ingest($job, $agent, $body);
+        // Claim the job first: a second upload of the same results (a retry) is answered 409 and not processed twice.
+        if (!App::agents()->claimIngest($jobId)) {
+            return ApiKernel::error(409, 'This job is already finished, cancelled or expired.');
+        }
+        set_time_limit(900);
+        try {
+            $stats = App::agentService()->ingest($job, $agent, $body);
+        } catch (\Throwable $ex) {
+            App::agents()->finishJob($jobId, 'failed', ['messages' => [__('The results could not be saved. It has been logged for the administrator.')]]);
+            throw $ex;
+        }
         return ApiKernel::json(['ok' => true] + $stats);
     }
 

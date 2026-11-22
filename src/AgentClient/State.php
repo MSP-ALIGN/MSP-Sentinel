@@ -6,8 +6,9 @@ namespace Sentinel\AgentClient;
 
 /**
  * The agent's small local state: the IDs of jobs it already ran (so a job
- * can never be replayed). Stored as JSON, written atomically, readable only
- * by the agent's user.
+ * can never be replayed), and finished results not yet accepted by Sentinel
+ * (retried at each check-in). Stored as JSON next to the state file, written
+ * atomically, readable only by the agent's user.
  */
 final class State
 {
@@ -33,5 +34,51 @@ final class State
         file_put_contents($tmp, json_encode(['done' => $done]));
         chmod($tmp, 0600);
         rename($tmp, $this->file);
+    }
+
+    /**
+     * Keep a job's results until Sentinel has accepted them.
+     *
+     * @param array<string,mixed> $results
+     */
+    public function savePending(int $jobId, array $results): void
+    {
+        $file = $this->pendingFile($jobId);
+        file_put_contents($file . '.tmp', json_encode($results, JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE));
+        chmod($file . '.tmp', 0600);
+        rename($file . '.tmp', $file);
+    }
+
+    /**
+     * Results waiting to be sent, oldest job first.
+     *
+     * @return array<int,array<string,mixed>> job ID => results
+     */
+    public function pending(): array
+    {
+        $out = [];
+        foreach (glob(dirname($this->file) . '/pending-*.json') ?: [] as $f) {
+            if (preg_match('/pending-(\d{1,10})\.json$/', $f, $m)) {
+                $data = json_decode((string) file_get_contents($f), true);
+                if (is_array($data)) {
+                    $out[(int) $m[1]] = $data;
+                } else {
+                    @unlink($f);
+                }
+            }
+        }
+        ksort($out);
+        return $out;
+    }
+
+    /** Sentinel accepted (or no longer wants) a job's results. */
+    public function clearPending(int $jobId): void
+    {
+        @unlink($this->pendingFile($jobId));
+    }
+
+    private function pendingFile(int $jobId): string
+    {
+        return dirname($this->file) . '/pending-' . $jobId . '.json';
     }
 }

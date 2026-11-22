@@ -16,11 +16,11 @@ use Sentinel\Tests\TestContext;
 
 return [
     'internal ranges: private only, limited size, canonical' => function (TestContext $ctx): void {
-        $r = InternalRanges::parseLines("# office\n10.20.0.0/16\n192.168.1.5\nfd12:3456::/112\n172.16.4.0/24\n100.64.1.0/24");
-        Assert::same(['10.20.0.0/16', '192.168.1.5/32', 'fd12:3456::/112', '172.16.4.0/24', '100.64.1.0/24'], $r['ranges']);
+        $r = InternalRanges::parseLines("# office\n10.20.0.0/16\n192.168.1.5\nfd12:3456::/112\n172.16.4.0/24");
+        Assert::same(['10.20.0.0/16', '192.168.1.5/32', 'fd12:3456::/112', '172.16.4.0/24'], $r['ranges']);
         Assert::same([], $r['errors']);
         foreach (['8.8.8.8' => 'not a private', '10.0.0.0/8' => 'too large', '172.32.0.0/16' => 'not a private', '10.1.2.3/24' => 'host bits', '2001:db8::/112' => 'not a private',
-                  'fd00::/64' => 'too large', '10.1.0.0/33' => 'too long', 'example.com' => 'not an IP'] as $in => $why) {
+                  'fd00::/64' => 'too large', '100.64.1.0/24' => 'not a private', '10.1.0.0/33' => 'too long', 'example.com' => 'not an IP'] as $in => $why) {
             $p = InternalRanges::parse($in);
             Assert::true(isset($p['error']) && str_contains($p['error'], $why), $in . ': ' . json_encode($p));
         }
@@ -56,5 +56,23 @@ return [
         $hosts = NmapXmlParser::parseDiscovery('<?xml version="1.0"?><nmaprun><host><status state="up"/><address addr="10.0.0.5" addrtype="ipv4"/><address addr="AA:BB:CC:00:11:22" addrtype="mac"/></host>'
             . '<host><status state="down"/><address addr="10.0.0.6" addrtype="ipv4"/></host></nmaprun>');
         Assert::same([['ip' => '10.0.0.5', 'mac' => 'aa:bb:cc:00:11:22']], $hosts, 'only hosts that are up');
+    },
+    'agent state: job history and results kept until accepted' => function (TestContext $ctx): void {
+        $dir = sys_get_temp_dir() . '/sentinel-agent-state-' . bin2hex(random_bytes(4));
+        mkdir($dir, 0700);
+        $st = new \Sentinel\AgentClient\State($dir . '/state.json');
+        $st->markDone(7);
+        $st->savePending(7, ['status' => 'done', 'hosts' => []]);
+        Assert::same([7], $st->doneIds());
+        Assert::same([7 => ['status' => 'done', 'hosts' => []]], $st->pending());
+        Assert::same('600', substr(sprintf('%o', fileperms($dir . '/pending-7.json')), -3), 'readable by the agent only');
+        $st->clearPending(7);
+        Assert::same([], $st->pending());
+        array_map('unlink', glob($dir . '/*') ?: []);
+        rmdir($dir);
+    },
+    'discovery output cut short still gives the complete host entries' => function (TestContext $ctx): void {
+        $xml = '<?xml version="1.0"?><nmaprun><host><status state="up"/><address addr="10.0.0.5" addrtype="ipv4"/></host><host><status state="up"/><address addr="10.0.0.6"';
+        Assert::same([['ip' => '10.0.0.5', 'mac' => '']], NmapXmlParser::parseDiscovery($xml));
     },
 ];
