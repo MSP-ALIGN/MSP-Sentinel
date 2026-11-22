@@ -88,6 +88,10 @@ is kept). Remove: `sudo ./install/agent-install.sh --uninstall`, and revoke the 
     answering "public"; a login page served over plain HTTP.
 
   How: SMB offers only the old SMBv1 dialect, then reads whether signing is required in a normal negotiation (no
-  session, no login). RDP asks for TLS without NLA and reads the server's answer (no login). SNMP sends one SNMPv2c
-  read of the system description with "public" and "private" (UDP 161): this is trying a well-known default
-  credential, read only. A check that can't decide is never a finding.
+  session, no login). RDP asks for TLS without NLA and reads the server's answer (no login). SNMP sends one read of
+  the system description with "public" and "private" (SNMPv2c, and SNMPv1 if there was no answer) to UDP 161, which
+  is listed in the signed job: this is trying a well-known default credential, read only. Telnet and FTP are judged
+  by the service nmap identifies, on any port.
+
+  A check that can't decide is never a finding, and it doesn't erase an earlier answer either: a device that was
+  briefly unreachable keeps its findings until a check answers again.

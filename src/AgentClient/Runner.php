@@ -124,7 +124,7 @@ final class Runner
     /**
      * Run one verified job.
      *
-     * @param array{job_id:int, kind:string, targets:list<string>, ports:list<int>, ranges:list<string>} $job
+     * @param array{job_id:int, kind:string, targets:list<string>, ports:list<int>, udp_ports?:list<int>, ranges:list<string>} $job
      * @return array{status:string, messages:list<string>, hosts:list<array<string,mixed>>, unscanned:list<string>}
      *         Hosts carry "scanned": true only when their port scan finished; unscanned lists hosts found but not scanned.
      */
@@ -213,8 +213,8 @@ final class Runner
                     }
                     $found[$ip]['ports'][] = $port;
                 }
-                if ($this->probes !== null && !$shouldStop()) {
-                    $found[$ip]['snmp'] = $this->probes->snmp((string) $ip); // UDP, not part of the TCP port scan
+                if ($this->probes !== null && in_array(161, $job['udp_ports'] ?? [], true) && !$shouldStop()) {
+                    $found[$ip]['snmp'] = $this->probes->snmp((string) $ip); // UDP 161, listed in the signed job
                 }
                 $found[$ip]['scanned'] = true;
             }

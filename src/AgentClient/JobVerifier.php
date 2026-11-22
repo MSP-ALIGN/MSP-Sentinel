@@ -40,7 +40,7 @@ final class JobVerifier
      * Check a signed job.
      *
      * @param list<int> $doneIds Jobs this agent already ran.
-     * @return array{job_id:int, kind:string, targets:list<string>, ports:list<int>, ranges:list<string>}|string The job, or why it was refused.
+     * @return array{job_id:int, kind:string, targets:list<string>, ports:list<int>, udp_ports:list<int>, ranges:list<string>}|string The job, or why it was refused.
      */
     public function verify(string $payload, string $signature, array $doneIds, ?int $now = null): array|string
     {
@@ -121,6 +121,12 @@ final class JobVerifier
         if ($job['kind'] === 'full' && $ports === []) {
             return 'full scan without ports';
         }
-        return ['job_id' => $jobId, 'kind' => (string) $job['kind'], 'targets' => $targets, 'ports' => array_values($ports), 'ranges' => $ranges];
+        $udp = (array) ($job['udp_ports'] ?? []);
+        foreach ($udp as $p) {
+            if (!is_int($p) || $p < 1 || $p > 65535) {
+                return 'invalid UDP port';
+            }
+        }
+        return ['job_id' => $jobId, 'kind' => (string) $job['kind'], 'targets' => $targets, 'ports' => array_values($ports), 'udp_ports' => array_values($udp), 'ranges' => $ranges];
     }
 }

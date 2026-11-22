@@ -82,9 +82,34 @@ return [
         Assert::true(\Sentinel\Scanning\ProtocolProbes::snmpAnswered($resp, 1234), 'answer accepted');
         Assert::true(!\Sentinel\Scanning\ProtocolProbes::snmpAnswered($resp, 999), 'other request id');
         Assert::true(!\Sentinel\Scanning\ProtocolProbes::snmpAnswered("\x30\x02\x02", 1234), 'garbage');
+        $noSuch = hex2bin('3028020101040770726976617465a21a020204d2020102020101300e300c06082b060102010101000500');
+        Assert::true(\Sentinel\Scanning\ProtocolProbes::snmpAnswered($noSuch, 1234), 'an error answer (noSuchName) still proves the community works');
+        Assert::same('020100', substr(bin2hex(\Sentinel\Scanning\ProtocolProbes::snmpGet('public', 1, 0)), 4, 6), 'version 0');
+        // SMB and RDP answers, parsed from bytes.
+        $P = \Sentinel\Scanning\ProtocolProbes::class;
+        $smb1 = static fn (string $flags, int $words, int $dialect, int $status = 0): string => "\x00\x00\x00\x30" . "\xffSMB\x72" . pack('V', $status) . $flags . "\x01\x48" . str_repeat("\x00", 12) . "\xff\xff\x00\x00\x00\x00\x00\x00" . chr($words) . pack('v', $dialect) . str_repeat("\x00", 8);
+        Assert::same(true, $P::parseSmb1($smb1("\x98", 17, 0)), 'SMBv1 accepted');
+        Assert::same(false, $P::parseSmb1($smb1("\x98", 1, 0xFFFF)), 'no dialect accepted');
+        Assert::same(null, $P::parseSmb1($smb1("\x98", 0, 0)), 'WordCount 0: not a dialect answer');
+        Assert::same(null, $P::parseSmb1($smb1("\x18", 17, 0)), 'not a reply');
+        Assert::same(false, $P::parseSmb1("\x00\x00\x00\x40\xfeSMB" . str_repeat("\x00", 60)), 'answered with SMB2');
+        $smb2 = static fn (int $status, int $command, int $size, int $mode): string => "\x00\x00\x00\x80" . "\xfeSMB" . pack('v', 64) . pack('v', 0) . pack('V', $status) . pack('v', $command) . str_repeat("\x00", 50) . pack('v', $size) . pack('v', $mode) . str_repeat("\x00", 60);
+        Assert::same(true, $P::parseSmb2($smb2(0, 0, 65, 3)), 'signing required');
+        Assert::same(false, $P::parseSmb2($smb2(0, 0, 65, 1)), 'signing optional');
+        Assert::same(null, $P::parseSmb2($smb2(0xC00000BB, 0, 9, 0)), 'dialects refused: unknown, never "not required"');
+        Assert::same(null, $P::parseSmb2($smb2(0, 1, 65, 1)), 'not a NEGOTIATE answer');
+        $rdp = static fn (int $type, int $value): string => "\x03\x00\x00\x13\x0e\xd0\x00\x00\x12\x34\x00" . chr($type) . "\x00\x08\x00" . pack('V', $value);
+        Assert::same(false, $P::parseRdp($rdp(2, 1)), 'TLS without NLA');
+        Assert::same(true, $P::parseRdp($rdp(3, 5)), 'NLA required');
+        Assert::same(false, $P::parseRdp($rdp(3, 2)), 'Standard RDP Security only');
+        Assert::same(null, $P::parseRdp($rdp(3, 6)), 'TLS with client certificates: not judged');
+        Assert::same(null, $P::parseRdp(substr($rdp(2, 1), 0, 11)), 'cut short');
+        Assert::same(false, $P::parseRdp("\x03\x00\x00\x0b\x06\xd0\x00\x00\x12\x34\x00"), 'complete confirm without negotiation');
         $issues = static fn (array $ports, array $dev = []): array => array_column(\Sentinel\Agent\ProtocolRules::issues(['checks' => json_encode($dev)], $ports), 'severity', 'code');
-        Assert::same([], $issues([['port' => 445, 'checks' => '{"smb1":null,"signing_required":null}', 'web' => null]]), 'unknown is never a finding');
-        Assert::same(['smb1' => 'fail', 'smb_signing' => 'warn'], $issues([['port' => 445, 'checks' => '{"smb1":true,"signing_required":false}', 'web' => null], ['port' => 139, 'checks' => '{"smb1":true}', 'web' => null]]), 'one finding per code');
+        Assert::same([], $issues([['port' => 445, 'service' => 'microsoft-ds', 'checks' => '{"smb1":null,"signing_required":null}', 'web' => null]]), 'unknown is never a finding');
+        Assert::same(['smb1' => 'fail', 'smb_signing' => 'warn'], $issues([['port' => 445, 'service' => 'microsoft-ds', 'checks' => '{"smb1":true,"signing_required":false}', 'web' => null], ['port' => 139, 'service' => 'netbios-ssn', 'checks' => '{"smb1":true}', 'web' => null]]), 'one finding per code');
+        Assert::same([], $issues([['port' => 23, 'service' => 'tcpwrapped', 'checks' => null, 'web' => null]]), 'port 23 without Telnet is not Telnet');
+        Assert::same(['telnet' => 'fail'], $issues([['port' => 2323, 'service' => 'telnet', 'checks' => null, 'web' => null]]), 'Telnet on another port');
         Assert::same(['snmp_public' => 'warn'], $issues([], ['snmp_public' => true, 'snmp_private' => false]));
     },
 ];

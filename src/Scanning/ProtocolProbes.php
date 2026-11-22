@@ -13,9 +13,11 @@ namespace Sentinel\Scanning;
  *   is REQUIRED. No session, no login.
  * - RDP (3389/tcp): asks for TLS without Network Level Authentication and
  *   reads whether the server agrees (no NLA) or insists on NLA. No login.
- * - SNMP (161/udp): one SNMPv2c read of the system description with the
- *   well-known default communities "public" and "private". This is trying a
- *   default credential (read only); the owner chose to include it.
+ * - SNMP (161/udp, listed in the signed job): one read of the system
+ *   description with the well-known default communities "public" and
+ *   "private" (SNMPv2c, and SNMPv1 if there was no answer). This is trying a
+ *   default credential (read only); the owner chose to include it. Replies
+ *   must come from the probed address (connected UDP socket).
  *
  * Every check is one short exchange with a small timeout and a read limit.
  * Answers are untrusted binary data, only parsed at fixed offsets. "null"
@@ -53,19 +55,39 @@ final class ProtocolProbes
     {
         // TPKT + X.224 Connection Request + RDP_NEG_REQ asking for TLS only (not CredSSP/NLA).
         $req = "\x03\x00\x00\x13" . "\x0e\xe0\x00\x00\x00\x00\x00" . "\x01\x00\x08\x00" . pack('V', 1);
-        $res = $this->exchange($ip, $port, $req);
-        if ($res === null || strlen($res) < 11 || $res[0] !== "\x03" || (ord($res[5]) & 0xF0) !== 0xD0) {
-            return ['nla_required' => null];
+        $r = $this->exchange($ip, $port, $req);
+        return ['nla_required' => $r['data'] === '' ? null : self::parseRdp($r['data'])];
+    }
+
+    /**
+     * Read an X.224 Connection Confirm ([MS-RDPBCGR] 2.2.1.2) answering a TLS-only request.
+     * true: the server insists on NLA (failure code 5, HYBRID_REQUIRED_BY_SERVER); false: it accepted TLS without
+     * NLA (RDP_NEG_RSP), refused TLS because it only does old RDP security (code 2), or sent no negotiation data at
+     * all; null: anything else (truncated, other codes such as 6, which is TLS with client certificates).
+     */
+    public static function parseRdp(string $res): ?bool
+    {
+        if (strlen($res) < 11 || $res[0] !== "\x03" || (ord($res[5]) & 0xF0) !== 0xD0) {
+            return null;
         }
-        if (strlen($res) < 19) {
-            return ['nla_required' => false]; // no negotiation at all: only old RDP security, certainly no NLA
+        $total = unpack('n', substr($res, 2, 2))[1];
+        if (strlen($res) < $total) {
+            return null; // cut short: can't tell
+        }
+        $li = ord($res[4]);
+        if ($li === 6) {
+            return false; // a complete confirm without negotiation data: only old RDP security, certainly no NLA
+        }
+        if ($li < 14 || $total < 19) {
+            return null;
         }
         $type = ord($res[11]);
         $value = unpack('V', substr($res, 15, 4))[1];
         return match (true) {
-            $type === 0x02 => ['nla_required' => false],                  // RDP_NEG_RSP: it accepted TLS without NLA
-            $type === 0x03 && in_array($value, [5, 6], true) => ['nla_required' => true], // HYBRID_REQUIRED_BY_SERVER (or with Early User Auth)
-            default => ['nla_required' => null],
+            $type === 0x02 => false,                  // RDP_NEG_RSP: TLS accepted without NLA
+            $type === 0x03 && $value === 5 => true,   // HYBRID_REQUIRED_BY_SERVER
+            $type === 0x03 && $value === 2 => false,  // SSL_NOT_ALLOWED_BY_SERVER: Standard RDP Security only
+            default => null,
         };
     }
 
@@ -79,13 +101,19 @@ final class ProtocolProbes
         $out = ['public' => false, 'private' => false];
         $checked = false;
         foreach (['public', 'private'] as $community) {
-            $id = random_int(1, 0x7FFFFFFF);
-            $answer = $this->udp($ip, $port, self::snmpGet($community, $id));
-            if ($answer === false) {
-                continue; // couldn't send (e.g. no route): unknown
+            // SNMPv2c first; old v1-only agents (printers, UPSes) ignore v2c, so v1 when there was no answer.
+            foreach ([1, 0] as $version) {
+                $id = random_int(1, 0x7FFFFFFF);
+                $answer = $this->udp($ip, $port, self::snmpGet($community, $id, $version));
+                if ($answer === false) {
+                    continue 2; // couldn't send: unknown for this community
+                }
+                $checked = true;
+                if ($answer !== '' && self::snmpAnswered($answer, $id)) {
+                    $out[$community] = true;
+                    break;
+                }
             }
-            $checked = true;
-            $out[$community] = $answer !== '' && self::snmpAnswered($answer, $id);
         }
         return $checked ? $out : null;
     }
@@ -95,16 +123,33 @@ final class ProtocolProbes
     {
         $smb = "\xffSMB" . "\x72" . "\x00\x00\x00\x00" . "\x18" . "\x01\x48" . str_repeat("\x00", 12) . "\xff\xff" . "\x00\x00" . "\x00\x00" . "\x00\x00"
             . "\x00" . pack('v', 12) . "\x02NT LM 0.12\x00";
-        $res = $this->exchange($ip, $port, "\x00" . substr(pack('N', strlen($smb)), 1) . $smb);
-        if ($res === null) {
-            return false; // a server with SMBv1 off simply closes the connection
+        $r = $this->exchange($ip, $port, "\x00" . substr(pack('N', strlen($smb)), 1) . $smb);
+        if ($r['data'] === '') {
+            // Connected, then closed without a word: what a server with SMBv1 turned off does. No connection or
+            // no answer at all: unknown.
+            return $r['state'] === 'closed' ? false : null;
         }
-        if (strlen($res) >= 39 && substr($res, 4, 4) === "\xffSMB" && $res[8] === "\x72") {
-            $status = unpack('V', substr($res, 9, 4))[1];
-            $dialect = unpack('v', substr($res, 37, 2))[1];
-            return $status === 0 && $dialect !== 0xFFFF;
+        return self::parseSmb1($r['data']);
+    }
+
+    /**
+     * Read an answer to the SMBv1-only negotiate ([MS-SMB] 2.2.4.5.2): true if it accepted the dialect, false if it
+     * answered with SMB2 or refused every dialect, null if the answer isn't a proper negotiate response.
+     */
+    public static function parseSmb1(string $res): ?bool
+    {
+        if (strlen($res) >= 8 && substr($res, 4, 4) === "\xfeSMB") {
+            return false;
         }
-        return substr($res, 4, 4) === "\xfeSMB" ? false : null;
+        if (strlen($res) < 39 || substr($res, 4, 4) !== "\xffSMB" || $res[8] !== "\x72" || (ord($res[13]) & 0x80) === 0) {
+            return null; // not a negotiate response (the reply flag must be set)
+        }
+        $status = unpack('V', substr($res, 9, 4))[1];
+        $words = ord($res[36]);
+        if ($status !== 0 || $words < 1) {
+            return null;
+        }
+        return unpack('v', substr($res, 37, 2))[1] !== 0xFFFF; // DialectIndex 0xFFFF: no dialect accepted
     }
 
     /** SMB2: negotiate dialects 2.0.2 to 3.0.2 and read whether signing is required. */
@@ -118,40 +163,53 @@ final class ProtocolProbes
             $body .= pack('v', $d);
         }
         $msg = $header . $body;
-        $res = $this->exchange($ip, $port, "\x00" . substr(pack('N', strlen($msg)), 1) . $msg);
-        if ($res === null || strlen($res) < 4 + 64 + 4 || substr($res, 4, 4) !== "\xfeSMB") {
-            return null;
-        }
-        if (unpack('V', substr($res, 12, 4))[1] !== 0) {
-            return null; // the server refused these dialects: can't tell
-        }
-        $securityMode = unpack('v', substr($res, 4 + 64 + 2, 2))[1];
-        return ($securityMode & 0x0002) === 0x0002;
+        $r = $this->exchange($ip, $port, "\x00" . substr(pack('N', strlen($msg)), 1) . $msg);
+        return $r['data'] === '' ? null : self::parseSmb2($r['data']);
     }
 
-    /** One TCP request/answer, or null (no connection or no answer). */
-    private function exchange(string $ip, int $port, string $request): ?string
+    /**
+     * Read an SMB2 NEGOTIATE response ([MS-SMB2] 2.2.4): true if signing is required, false if not, null if the
+     * server refused the dialects or the answer isn't a proper negotiate response.
+     */
+    public static function parseSmb2(string $res): ?bool
+    {
+        if (strlen($res) < 4 + 64 + 4 || substr($res, 4, 4) !== "\xfeSMB") {
+            return null;
+        }
+        if (unpack('V', substr($res, 12, 4))[1] !== 0 || unpack('v', substr($res, 16, 2))[1] !== 0 || unpack('v', substr($res, 68, 2))[1] !== 65) {
+            return null; // an error, not a NEGOTIATE answer, or the wrong structure
+        }
+        return (unpack('v', substr($res, 70, 2))[1] & 0x0002) === 0x0002;
+    }
+
+    /**
+     * One TCP request and its answer.
+     *
+     * @return array{data:string, state:string} state: 'answered', 'closed' (connected, then closed or reset by the
+     *         peer without data), or 'failed' (no connection, or no answer in time).
+     */
+    private function exchange(string $ip, int $port, string $request): array
     {
         try {
             [$host, $realPort] = $this->connector->endpoint($ip, $port);
         } catch (\RuntimeException) {
-            return null;
+            return ['data' => '', 'state' => 'failed'];
         }
         $fp = @stream_socket_client('tcp://' . Connector::hostPort($host, $realPort), $errno, $errstr, self::TIMEOUT);
         if ($fp === false) {
-            return null;
+            return ['data' => '', 'state' => 'failed'];
         }
         stream_set_timeout($fp, (int) self::TIMEOUT);
-        fwrite($fp, $request);
+        @fwrite($fp, $request);
         $data = '';
+        $state = 'failed';
         $deadline = microtime(true) + self::TIMEOUT;
         while (strlen($data) < self::MAX_READ && microtime(true) < $deadline) {
-            $chunk = fread($fp, self::MAX_READ - strlen($data));
+            $chunk = @fread($fp, self::MAX_READ - strlen($data));
             if ($chunk === false || $chunk === '') {
-                if (feof($fp) || stream_get_meta_data($fp)['timed_out']) {
-                    break;
-                }
-                continue;
+                // Blocking socket: an empty read is the end (closed or reset) or a timeout. Never spin.
+                $state = stream_get_meta_data($fp)['timed_out'] ? 'failed' : 'closed';
+                break;
             }
             $data .= $chunk;
             // A complete NetBIOS/TPKT frame is enough.
@@ -163,7 +221,7 @@ final class ProtocolProbes
             }
         }
         fclose($fp);
-        return $data === '' ? null : $data;
+        return ['data' => $data, 'state' => $data !== '' ? 'answered' : $state];
     }
 
     /** One UDP request; the answer ('' if none in time), or false if it couldn't be sent. */
@@ -178,7 +236,7 @@ final class ProtocolProbes
         if ($fp === false) {
             return false;
         }
-        stream_set_timeout($fp, 2);
+        stream_set_timeout($fp, 1);
         if (@fwrite($fp, $request) === false) {
             fclose($fp);
             return false;
@@ -188,8 +246,8 @@ final class ProtocolProbes
         return $answer;
     }
 
-    /** SNMPv2c GetRequest for sysDescr.0 (1.3.6.1.2.1.1.1.0). */
-    public static function snmpGet(string $community, int $requestId): string
+    /** SNMP GetRequest for sysDescr.0 (1.3.6.1.2.1.1.1.0); version 1 = SNMPv2c, 0 = SNMPv1. */
+    public static function snmpGet(string $community, int $requestId, int $version = 1): string
     {
         $tlv = static fn (int $tag, string $v): string => chr($tag) . self::berLength(strlen($v)) . $v;
         $int = static function (int $n) use ($tlv): string {
@@ -205,10 +263,14 @@ final class ProtocolProbes
         };
         $varbind = $tlv(0x30, $tlv(0x30, $tlv(0x06, "\x2b\x06\x01\x02\x01\x01\x01\x00") . "\x05\x00"));
         $pdu = $tlv(0xA0, $int($requestId) . $int(0) . $int(0) . $varbind);
-        return $tlv(0x30, $int(1) . $tlv(0x04, $community) . $pdu);
+        return $tlv(0x30, $int($version === 0 ? 0 : 1) . $tlv(0x04, $community) . $pdu);
     }
 
-    /** True if the answer is an SNMP GetResponse to this request without an error. */
+    /**
+     * True if the answer is an SNMP GetResponse to this request. Any error status counts too (for example
+     * noSuchName): agents silently drop requests with a wrong community (RFC 3416/3584), so any matching
+     * response proves the community was accepted.
+     */
     public static function snmpAnswered(string $answer, int $requestId): bool
     {
         // Walk the BER structure at fixed positions: SEQUENCE { version, community, GetResponse { id, error-status, ... } }.
@@ -258,7 +320,7 @@ final class ProtocolProbes
             }
             $values[] = $v;
         }
-        return $values[0] === $requestId && $values[1] === 0;
+        return $values[0] === $requestId;
     }
 
     /** BER length octets. */

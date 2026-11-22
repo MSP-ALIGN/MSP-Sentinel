@@ -163,6 +163,8 @@ final class AgentService
         return $this->signer->sign([
             'v' => 1, 'type' => 'agent_job', 'job_id' => (int) $job['id'], 'agent_id' => (int) $agent['id'], 'site_id' => (int) $job['site_id'], 'client_id' => (int) $job['client_id'],
             'kind' => (string) $job['kind'], 'ports' => $ports, 'targets' => $targets,
+            // UDP ports the agent may send to (full scans: SNMP's read of the default communities).
+            'udp_ports' => $job['kind'] === 'full' ? [161] : [],
             'issued_at' => gmdate('Y-m-d\TH:i:s\Z'), 'expires_at' => str_replace(' ', 'T', (string) $job['expires_at']) . 'Z',
             'authorisation' => ['payload' => (string) $auth['signed_payload'], 'signature' => (string) $auth['signature']],
         ]);
@@ -216,8 +218,11 @@ final class AgentService
                     }
                     if ($scanned) {
                         $this->savePorts($deviceId, $h['ports']); // only a finished host scan replaces what was known
-                        $snmp = is_array($h['snmp'] ?? null) ? ['snmp_public' => $h['snmp']['public'] ?? null, 'snmp_private' => $h['snmp']['private'] ?? null] : null;
-                        $this->db->prepare('UPDATE devices SET checks = :c WHERE id = :id')->execute(['c' => self::checks($snmp, ['snmp_public', 'snmp_private']), 'id' => $deviceId]);
+                        $snmp = is_array($h['snmp'] ?? null) ? ['snmp_public' => $h['snmp']['public'] ?? null, 'snmp_private' => $h['snmp']['private'] ?? null] : [];
+                        $prev = $this->db->prepare('SELECT checks FROM devices WHERE id = :id');
+                        $prev->execute(['id' => $deviceId]);
+                        // An undecided (or skipped) check keeps the earlier answer: no answer is not evidence of a fix.
+                        $this->db->prepare('UPDATE devices SET checks = :c WHERE id = :id')->execute(['c' => self::checks($snmp, ['snmp_public', 'snmp_private'], (string) $prev->fetchColumn()), 'id' => $deviceId]);
                     }
                     $stats['accepted']++;
                 }
@@ -329,6 +334,9 @@ final class AgentService
         );
         $keep = [];
         $software = [];
+        $prevStmt = $this->db->prepare('SELECT port, checks FROM device_ports WHERE device_id = :d');
+        $prevStmt->execute(['d' => $deviceId]);
+        $previous = $prevStmt->fetchAll(PDO::FETCH_KEY_PAIR);
         foreach (array_slice(array_values(array_filter($ports, 'is_array')), 0, self::MAX_PORTS_PER_HOST) as $p) {
             $port = (int) ($p['port'] ?? 0);
             if ($port < 1 || $port > 65535 || isset($keep[$port])) {
@@ -338,7 +346,7 @@ final class AgentService
             $version = InventoryRepository::clean($p['version'] ?? '', 80);
             $extra = InventoryRepository::clean($p['extra'] ?? '', 200);
             $up->execute(['d' => $deviceId, 'p' => $port, 's' => InventoryRepository::clean($p['service'] ?? '', 60), 'pr' => $product, 'v' => $version, 'x' => $extra,
-                          'tls' => self::tls($p['tls'] ?? null), 'web' => self::web($p['web'] ?? null), 'chk' => self::checks($p['checks'] ?? null, ['smb1', 'signing_required', 'nla_required'])]);
+                          'tls' => self::tls($p['tls'] ?? null), 'web' => self::web($p['web'] ?? null), 'chk' => self::checks($p['checks'] ?? null, ['smb1', 'signing_required', 'nla_required'], (string) ($previous[$port] ?? ''))]);
             $keep[$port] = true;
             $cpe = \Sentinel\Vulns\Cpe::parse(is_string($p['cpe'] ?? null) ? $p['cpe'] : '');
             if ($cpe !== null && $cpe['part'] === 'a') {
@@ -429,20 +437,21 @@ final class AgentService
     }
 
     /**
-     * Protocol check results from agent data: only the given keys, each true, false or null (JSON), or null.
+     * Protocol check results from agent data: only the given keys, each true, false or null (JSON). Where the new
+     * result is undecided (null or missing), the previous answer is kept.
      *
      * @param list<string> $keys
      */
-    private static function checks(mixed $c, array $keys): ?string
+    private static function checks(mixed $c, array $keys, string $previous = ''): ?string
     {
-        if (!is_array($c)) {
-            return null;
-        }
+        $prev = json_decode($previous, true);
+        $prev = is_array($prev) ? $prev : [];
+        $c = is_array($c) ? $c : [];
         $out = [];
         foreach ($keys as $k) {
-            $out[$k] = is_bool($c[$k] ?? null) ? $c[$k] : null;
+            $out[$k] = is_bool($c[$k] ?? null) ? $c[$k] : (is_bool($prev[$k] ?? null) ? $prev[$k] : null);
         }
-        return json_encode($out);
+        return array_filter($out, 'is_bool') === [] ? null : json_encode($out);
     }
 
     /** Web page summary from agent data: status, title and category only (JSON), or null. */

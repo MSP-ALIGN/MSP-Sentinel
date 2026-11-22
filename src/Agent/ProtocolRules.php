@@ -42,11 +42,13 @@ final class ProtocolRules
             if (($checks['nla_required'] ?? null) === false) {
                 $out[] = ['code' => 'rdp_no_nla', 'severity' => 'warn', 'text' => __('Remote Desktop without Network Level Authentication'), 'detail' => __('Port {p}/tcp shows the Windows login screen before anyone has signed in.', ['p' => $port])];
             }
-            if ($port === 23) {
-                $out[] = ['code' => 'telnet', 'severity' => 'fail', 'text' => __('Telnet is open (passwords sent in clear text)'), 'detail' => ''];
+            // By the service nmap identified (on any port), not by the port number alone.
+            $service = strtolower((string) ($p['service'] ?? ''));
+            if ($service === 'telnet') {
+                $out[] = ['code' => 'telnet', 'severity' => 'fail', 'text' => __('Telnet is open (passwords sent in clear text)'), 'detail' => __('Port {p}/tcp.', ['p' => $port])];
             }
-            if ($port === 21) {
-                $out[] = ['code' => 'ftp', 'severity' => 'warn', 'text' => __('FTP is open (passwords and files sent in clear text)'), 'detail' => ''];
+            if ($service === 'ftp') {
+                $out[] = ['code' => 'ftp', 'severity' => 'warn', 'text' => __('FTP is open (unencrypted unless the server requires TLS)'), 'detail' => __('Port {p}/tcp.', ['p' => $port])];
             }
             if (($web['login_over_http'] ?? false) === true) {
                 $out[] = ['code' => 'http_login', 'severity' => 'warn', 'text' => __('Login page over plain HTTP'), 'detail' => __('Port {p}/tcp: "{title}".', ['p' => $port, 'title' => (string) ($web['title'] ?? '')])];

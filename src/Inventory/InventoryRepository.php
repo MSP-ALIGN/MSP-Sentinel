@@ -330,7 +330,7 @@ final class InventoryRepository
             $devices[(int) $d['id']] = $d;
         }
         if ($devices !== []) {
-            foreach ($this->db->query('SELECT device_id, port, web, checks FROM device_ports WHERE device_id IN (' . implode(',', array_keys($devices)) . ')')->fetchAll() as $p) {
+            foreach ($this->db->query('SELECT device_id, port, service, web, checks FROM device_ports WHERE device_id IN (' . implode(',', array_keys($devices)) . ')')->fetchAll() as $p) {
                 $devices[(int) $p['device_id']]['ports'][] = $p;
             }
         }

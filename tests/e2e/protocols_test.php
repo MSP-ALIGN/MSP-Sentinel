@@ -57,6 +57,15 @@ return [
         Assert::same('{"smb1":false,"signing_required":true,"nla_required":null}', (string) $ctx->db->query("SELECT checks FROM device_ports WHERE device_id = {$dev} AND port = 445")->fetchColumn());
         $page = $admin->get('/clients/' . $cid . '/devices/' . (int) $ctx->db->query("SELECT id FROM devices WHERE source_id = '{$site}:10.92.0.40'")->fetchColumn())->body;
         Assert::contains('SMBv1 is enabled', $page);
+        // A later scan where the SMB check couldn't decide keeps the earlier answer (and the finding).
+        $job = App::agents()->queueJob((int) $c['agent_id'], $cid, $site, (int) $ctx->db->query("SELECT id FROM internal_authorisations WHERE site_id = {$site}")->fetchColumn(), 'full', 'manual', null, [445], 12);
+        $ctx->api('POST', '/agent/v1/poll', $c['token'], ['running' => []]);
+        $ctx->api('POST', '/agent/v1/jobs/' . $job . '/results', $c['token'], ['status' => 'done', 'hosts' => [
+            ['ip' => '10.92.0.40', 'scanned' => true, 'snmp' => null, 'ports' => [['port' => 445, 'service' => 'microsoft-ds', 'checks' => ['smb1' => null, 'signing_required' => null]],
+             ['port' => 21, 'service' => 'ftp'], ['port' => 23, 'service' => 'telnet'], ['port' => 80, 'service' => 'http', 'web' => ['ok' => true, 'status' => 200, 'title' => 'x', 'scheme' => 'http', 'login_over_http' => true]],
+             ['port' => 3389, 'service' => 'ms-wbt-server', 'checks' => ['nla_required' => false]]]]]]);
+        Assert::same('open', (string) $ctx->db->query("SELECT status FROM findings WHERE client_id = {$cid} AND finding_key = '{$bad}smb1'")->fetchColumn(), 'undecided does not resolve SMBv1');
+        Assert::same('open', (string) $ctx->db->query("SELECT status FROM findings WHERE client_id = {$cid} AND finding_key = '{$bad}snmp_private'")->fetchColumn(), 'skipped SNMP keeps its answer');
         $rid = App::reportService()->generate(App::clients()->find($cid), 'technical', gmdate('Y-m-d'), gmdate('Y-m-d'), null, 'Test');
         Assert::contains('Turn off SMBv1', (string) $ctx->db->query("SELECT html FROM reports WHERE id = {$rid}")->fetchColumn(), 'plain-English fix in reports');
     },
