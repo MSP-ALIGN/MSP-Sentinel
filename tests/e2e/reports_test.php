@@ -88,7 +88,7 @@ return [
         Assert::contains('&lt;script&gt;', $doc->body);
         Assert::notContains('OTHER-CLIENT-ONLY', $doc->body, 'no other client data');
         Assert::notContains('198.51.100.77', $doc->body);
-        Assert::contains('<svg class="chart"', $doc->body, 'trend chart');
+        Assert::contains('The trend chart appears once', $doc->body, 'no chart before a full month is recorded');
 
         // Frozen: later changes don't alter it; the stored hash matches what is served.
         $ctx->db->exec("UPDATE findings SET title = 'Changed later' WHERE client_id = {$cid} AND finding_key = 'port:203.0.113.160:3389'");

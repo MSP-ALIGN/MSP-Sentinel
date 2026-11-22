@@ -136,6 +136,32 @@ await shot(page, '23-findings');
 await page.click('table a[href*="/findings/"]');
 await page.waitForURL(/\/findings\/\d+$/);
 await shot(page, '24-finding-detail');
+// Reports: branding (made-up MSP), then both reports for the demo client.
+await page.goto(`${base}/admin/settings`);
+await page.fill('#brand_name', 'Example MSP Ltd');
+await page.fill('#brand_footer', 'Example MSP Ltd · support@msp.example · 555-0100');
+await page.click('#branding button[type=submit]');
+await page.waitForURL(/\/admin\/settings/);
+await page.locator('#branding').screenshot({ path: `${out}28-report-branding.png` });
+await page.goto(clientUrl);
+await page.click('#reports form[action$="/reports"] button[type=submit]');
+await page.waitForURL(/\/reports/);
+await shot(page, '29-reports');
+await page.goto(clientUrl);
+await page.locator('#reports').screenshot({ path: `${out}30-client-reports.png` });
+await page.goto(`${base}/reports`);
+await page.click('table a[href*="/reports/"]');
+await page.waitForURL(/\/reports\/\d+$/);
+await shot(page, '31-report-detail');
+for (const [kind, name] of [['technical', '33-report-technical'], ['executive', '32-report-executive']]) {
+  await page.goto(`${base}/reports`);
+  const href = await page.locator(`table tr:has-text("${kind === 'executive' ? 'Executive summary' : 'Technical findings'}") a[href$="/view"]`).first().getAttribute('href');
+  await page.goto(new URL(href, base).href);
+  await shot(page, name);
+  await page.emulateMedia({ media: 'print' });
+  await page.pdf({ path: `${out}${name}.pdf`, format: 'A4', printBackground: true });
+  await page.emulateMedia({ media: 'screen' });
+}
 await page.goto(`${base}/clients`);
 await shot(page, '17-clients');
 await page.goto(`${base}/`);
