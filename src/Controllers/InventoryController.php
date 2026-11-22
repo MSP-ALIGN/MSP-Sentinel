@@ -32,6 +32,10 @@ final class InventoryController extends Controller
     public function linkForm(Request $request, array $params): Response
     {
         $client = $this->client($params);
+        if ((int) $client['is_archived'] === 1) {
+            Session::flash('warning', __('This client is archived. Restore it before linking it.'));
+            return Response::redirect('/clients/' . (int) $client['id']);
+        }
         [$name, $source] = $this->source($request->query('source'));
         $orgs = [];
         $error = '';
@@ -51,6 +55,10 @@ final class InventoryController extends Controller
     public function link(Request $request, array $params): Response
     {
         $client = $this->client($params);
+        if ((int) $client['is_archived'] === 1) {
+            Session::flash('warning', __('This client is archived. Restore it before linking it.'));
+            return Response::redirect('/clients/' . (int) $client['id']);
+        }
         [$name, $source] = $this->source($request->input('source'));
         $orgId = $request->input('org_id');
         try {
@@ -86,15 +94,10 @@ final class InventoryController extends Controller
         $client = $this->client($params);
         [$name] = $this->source($request->input('source'));
         if (App::inventory()->link((int) $client['id'], $name) !== null) {
-            App::inventory()->unlink((int) $client['id'], $name);
-            try {
-                App::findingsEngine()->refreshClient((int) $client['id']);
-            } catch (\Throwable $ex) {
-                error_log('[msp-sentinel] findings refresh after unlink failed: ' . $ex->getMessage());
-            }
+            App::inventorySync()->unlink((int) $client['id'], $name, (int) $this->user()['id']);
             $this->audit($request, 'inventory.unlinked', 'client', (int) $client['id'], ['source' => $name]);
         }
-        Session::flash('success', __('Unlinked. Its devices are no longer shown and their findings were resolved.'));
+        Session::flash('success', __('Unlinked. Its devices are no longer shown and their findings were closed (noted as unlinked, not as fixed).'));
         return Response::redirect('/clients/' . (int) $client['id'] . '#devices');
     }
 
@@ -103,7 +106,9 @@ final class InventoryController extends Controller
     {
         $client = $this->client($params);
         [$name] = $this->source($request->input('source'));
-        if (App::inventory()->link((int) $client['id'], $name) === null) {
+        if ((int) $client['is_archived'] === 1) {
+            Session::flash('warning', __('This client is archived.'));
+        } elseif (App::inventory()->link((int) $client['id'], $name) === null) {
             Session::flash('warning', __('This client is not linked yet.'));
         } else {
             App::db()->prepare('UPDATE source_links SET last_sync_at = NULL WHERE client_id = :c AND source = :s')->execute(['c' => (int) $client['id'], 's' => $name]);

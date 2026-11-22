@@ -159,7 +159,8 @@ final class VulnMatcher
             }
             if ($result === null) {
                 $stats['pending']++;
-                continue; // the software row is per version, so earlier matches can only be for this same version
+                $store->markPending($clientId, $cpe); // the device's findings wait for this data instead of resolving
+                continue;
             }
             $store->setMatchesForCpe($clientId, $cpe, $result['matches'], $result['query']);
             $stats['matches'] += count($result['matches']);

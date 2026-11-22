@@ -46,6 +46,10 @@ final class Router
         }
         // Every {name} parameter (e.g. {id}, {device}) matches a positive whole number only.
         $regex = '#^' . preg_replace('/\\\\\{([a-z]{1,20})\\\\\}/', '(?P<$1>[1-9][0-9]{0,18})', preg_quote($pattern, '#')) . '$#';
+        // A parameter name the pattern above doesn't accept, or a repeated name, would make the route silently unreachable.
+        if (str_contains($regex, '\\{') || @preg_match($regex, '') === false) {
+            throw new \InvalidArgumentException('Invalid route pattern: ' . $pattern);
+        }
         $this->routes[] = ['method' => strtoupper($method), 'regex' => $regex, 'handler' => $handler, 'opts' => $opts];
     }
 

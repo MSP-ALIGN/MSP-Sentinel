@@ -86,6 +86,7 @@ final class FindingsEngine
         // Vulnerability findings of services still waiting for NVD data are left alone:
         // missing data is not evidence that a problem was fixed.
         $awaiting = $this->vulns->servicesAwaitingData($clientId);
+        $awaitingDevices = $this->inventory?->devicesAwaitingData($clientId) ?? [];
         $stats = ['opened' => 0, 'reopened' => 0, 'resolved' => 0, 'current' => count($current), 'opened_ids' => [], 'reopened_ids' => [], 'resolved_ids' => [], 'escalated_ids' => []];
         $this->db->beginTransaction();
         try {
@@ -162,6 +163,10 @@ final class FindingsEngine
                 }
                 if ($row['finding_type'] === 'vuln' && isset($awaiting[$row['target']])) {
                     continue; // new version, data not there yet: decide when it is
+                }
+                if ($row['finding_type'] === 'vuln' && $row['device_id'] !== null && isset($awaitingDevices[(int) $row['device_id']])
+                    && str_starts_with((string) $row['finding_key'], 'devvuln:')) {
+                    continue; // installed software was updated and its new version has no data yet
                 }
                 $resolve->execute(['id' => $row['id']]);
                 $this->event((int) $row['id'], 'resolved', null, __('No longer seen by the latest checks.'));
@@ -356,18 +361,38 @@ final class FindingsEngine
                     ]);
                 }
             }
+            // One finding per device and program (not per CVE): it lists the CVEs and takes the grade of the worst one,
+            // so a few months of browser updates can't turn into thousands of findings.
+            $groups = [];
             foreach ($this->inventory->softwareVulns($clientId) as $v) {
                 $sev = ExposureRules::vulnSeverity(['confidence' => $v['confidence'], 'in_kev' => $v['in_kev'], 'cvss_score' => $v['cvss_score'], 'cvss_severity' => $v['cvss_severity']]);
                 if ($sev === 'info') {
                     continue;
                 }
-                $kev = (int) $v['in_kev'] === 1;
-                $add("devvuln:{$v['source']}:{$v['source_id']}:{$v['product']}:{$v['cve_id']}", [
-                    'type' => 'vuln', 'severity' => $sev,
-                    'title' => ($kev ? __('Known exploited: ') : '') . $v['cve_id'] . ' ' . __('in {component}', ['component' => trim($v['product'] . ' ' . $v['version'])])
-                        . ' (' . ($v['cvss_score'] ?? '?') . ' ' . ucfirst(strtolower((string) $v['cvss_severity'])) . ')',
-                    'detail' => trim(($v['confidence'] === 'confirmed' ? __('confirmed for the installed version') : __('product found, version unknown')) . '. ' . mb_strimwidth((string) $v['summary'], 0, 600, '…')),
-                    'target' => (string) $v['device_name'], 'evidence' => $v['confidence'] . '|' . $v['product'] . ' ' . $v['version'], 'cve_id' => (string) $v['cve_id'],
+                $g = &$groups[$v['source'] . ':' . $v['source_id'] . ':' . $v['product']];
+                $g ??= ['v' => $v, 'sev' => 'warn', 'cves' => [], 'kev' => 0, 'worst' => $v];
+                $g['cves'][$v['cve_id']] = true;
+                $g['sev'] = $sev === 'fail' ? 'fail' : $g['sev'];
+                $g['kev'] += (int) $v['in_kev'];
+                $rank = static fn (array $x): array => [(int) $x['in_kev'], (float) ($x['cvss_score'] ?? 0)];
+                if ($rank($v) > $rank($g['worst'])) {
+                    $g['worst'] = $v;
+                }
+                unset($g);
+            }
+            foreach ($groups as $key => $g) {
+                $v = $g['v'];
+                $w = $g['worst'];
+                $cves = array_keys($g['cves']);
+                sort($cves);
+                $n = count($cves);
+                $add("devvuln:{$key}", [
+                    'type' => 'vuln', 'severity' => $g['sev'],
+                    'title' => ($g['kev'] > 0 ? __('Known exploited: ') : '') . __('{component}: {n} known CVE(s)', ['n' => $n, 'component' => trim($v['product'] . ' ' . $v['version'])])
+                        . ' ' . __('(worst: {cve}, {score} {sev})', ['cve' => $w['cve_id'], 'score' => $w['cvss_score'] ?? '?', 'sev' => ucfirst(strtolower((string) $w['cvss_severity']))]),
+                    'detail' => trim(match ($v['confidence']) { 'confirmed' => __('confirmed for the installed version'), 'distro' => __('distribution build, the fix may be backported'), default => __('product found, version unknown') }
+                        . '. ' . __('CVEs: {list}', ['list' => implode(', ', array_slice($cves, 0, 30)) . ($n > 30 ? ' …' : '')]) . ' ' . __('Update {product} to the latest version.', ['product' => $v['product']])),
+                    'target' => (string) $v['device_name'], 'evidence' => $v['confidence'] . '|' . $v['product'] . ' ' . $v['version'], 'cve_id' => (string) $w['cve_id'],
                     'source' => (string) $v['source'], 'device_id' => (int) $v['device_id'],
                 ]);
             }

@@ -28,6 +28,8 @@ final class OsLifecycle
     private const WIN10_ENTERPRISE = [10240 => '2017-05-09', 10586 => '2017-10-10', 14393 => '2019-04-09', 15063 => '2019-10-08', 16299 => '2020-10-13',
         17134 => '2021-05-11', 17763 => '2021-05-11', 18362 => '2020-12-08', 18363 => '2022-05-10', 19041 => '2021-12-14', 19042 => '2023-05-09',
         19043 => '2022-12-13', 19044 => '2024-06-11', 19045 => '2025-10-14'];
+    /** Windows 10 IoT Enterprise LTSC (longer than the normal LTSC for 2021). */
+    private const WIN10_IOT_LTSC = [17763 => '2029-01-09', 19044 => '2032-01-13'];
     /** Windows 10 Enterprise LTSB/LTSC. */
     private const WIN10_LTSC = [10240 => '2025-10-14', 14393 => '2026-10-13', 17763 => '2029-01-09', 19044 => '2027-01-12'];
     /** Windows 11 Home/Pro. */
@@ -55,11 +57,18 @@ final class OsLifecycle
         $table = match (true) {
             stripos($osName, 'server') !== false => self::SERVER,
             $b < 10000 => self::LEGACY,
+            preg_match('/\bIoT\b/i', $osName) === 1 && preg_match('/\bLTS[BC]\b/i', $osName) === 1 => self::WIN10_IOT_LTSC,
             preg_match('/\bLTS[BC]\b/i', $osName) === 1 => self::WIN10_LTSC,
-            $b >= 22000 => preg_match('/\b(Enterprise|Education)\b/i', $osName) === 1 ? self::WIN11_ENTERPRISE : self::WIN11,
-            default => preg_match('/\b(Enterprise|Education)\b/i', $osName) === 1 ? self::WIN10_ENTERPRISE : self::WIN10,
+            $b >= 22000 => self::enterprise($osName) ? self::WIN11_ENTERPRISE : self::WIN11,
+            default => self::enterprise($osName) ? self::WIN10_ENTERPRISE : self::WIN10,
         };
         return $table[$b] ?? null;
+    }
+
+    /** Enterprise or Education edition ("Pro Education" and "Pro for Workstations" follow the Home/Pro dates). */
+    private static function enterprise(string $osName): bool
+    {
+        return preg_match('/\b(Enterprise|Education)\b/i', $osName) === 1 && preg_match('/\bPro\b/i', $osName) !== 1;
     }
 
     /** The Windows build number ("19045", "10.0.19045", "10.0.19045.3803"), or null. */

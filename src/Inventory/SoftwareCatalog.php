@@ -50,8 +50,15 @@ final class SoftwareCatalog
         'Python' => ['Python \\d+\\.\\d+(?:\\.\\d+)?', 'cpe:/a:python:python'],
     ];
 
-    /** What may follow a product name: versions, bracketed notes like "(x64 en-US)", x64/x86, a language code. */
-    private const SUFFIX = '(?:\\s+(?:\\d[\\d.]*|\\([^)]{0,40}\\)|x64|x86|[a-z]{2}(?:-[a-z]{2})?))*';
+    /**
+     * What may follow a product name: a version (at most 3 digits before the first dot, so a year such as
+     * "Adobe Acrobat 2020", a different product line, never matches), bracketed notes like "(x64 en-US)",
+     * x64/x86, or a language code in the "en-US" form.
+     */
+    private const SUFFIX = '(?:\\s+(?:\\d{1,3}(?:\\.\\d+)*|\\([^)]{0,40}\\)|x64|x86|(?-i:[a-z]{2}-[A-Z]{2})))*';
+
+    /** Products whose installers pad versions with ".0" (e.g. "0.80.0.0"), normalised to NVD's form ("0.80"). */
+    private const PADDED = ['PuTTY', '7-Zip', 'WinRAR', 'KeePass'];
 
 
     /**
@@ -71,7 +78,21 @@ final class SoftwareCatalog
                 continue;
             }
             $v = self::version($version !== '' ? $version : $name);
-            return $v === null ? null : ['product' => $label, 'cpe' => $cpe . ':' . $v];
+            if ($v === null) {
+                return null;
+            }
+            if ($label === 'Python') {
+                // Windows reports "3.12.1150.0" (micro × 1000 + release level); only a full x.y.z version is trusted.
+                if (preg_match('/^(\d+)\.(\d+)\.(\d+)\.\d+$/', $v, $m) && (int) $m[3] >= 1000) {
+                    $v = $m[1] . '.' . $m[2] . '.' . intdiv((int) $m[3], 1000);
+                } elseif (preg_match('/^\d+\.\d+\.\d+$/', $v) !== 1) {
+                    return null;
+                }
+            }
+            if (in_array($label, self::PADDED, true)) {
+                $v = (string) preg_replace('/^(\d+\.\d+?)(?:\.0+)+$/', '$1', $v);
+            }
+            return ['product' => $label, 'cpe' => $cpe . ':' . $v];
         }
         return null;
     }

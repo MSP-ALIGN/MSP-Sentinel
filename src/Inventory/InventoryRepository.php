@@ -21,8 +21,12 @@ use PDO;
 final class InventoryRepository
 {
     public const MAX_DEVICES = 5000;
-    public const MAX_SOFTWARE = 2000;
+    public const MAX_SOFTWARE = 1000;
     public const MAX_PATCHES = 500;
+    /** Most program rows in one snapshot; beyond this the snapshot is saved as partial. */
+    public const MAX_SOFTWARE_TOTAL = 200000;
+    /** A complete snapshot that drops more than half of at least this many devices is treated as partial. */
+    public const SHRINK_MIN_DEVICES = 4;
 
     /** Works on the given connection. */
     public function __construct(private readonly PDO $db)
@@ -33,15 +37,34 @@ final class InventoryRepository
      * Save one client's snapshot from a source.
      *
      * @param array{devices:list<array<string,mixed>>, complete:bool} $snapshot
-     * @return array{devices:int, removed:int, software:int, patches:int}
+     * A "complete" snapshot that is empty, or drops more than half of the client's devices, is treated as
+     * partial (nothing is removed): that usually means the source lost access, not that the devices are gone.
+     *
+     * @return array{devices:int, removed:int, software:int, patches:int, complete:bool, warning:string, linked:bool}
      */
     public function saveSnapshot(int $clientId, string $source, array $snapshot): array
     {
-        $stats = ['devices' => 0, 'removed' => 0, 'software' => 0, 'patches' => 0];
+        $stats = ['devices' => 0, 'removed' => 0, 'software' => 0, 'patches' => 0, 'complete' => false, 'warning' => '', 'linked' => true];
         $devices = array_slice(array_values(array_filter((array) $snapshot['devices'], 'is_array')), 0, self::MAX_DEVICES);
         $complete = ($snapshot['complete'] ?? false) === true && count((array) $snapshot['devices']) <= self::MAX_DEVICES;
         $this->db->beginTransaction();
         try {
+            // The link must still exist (an admin may have unlinked while the source was being read).
+            $link = $this->db->prepare('SELECT id FROM source_links WHERE client_id = :c AND source = :s FOR UPDATE');
+            $link->execute(['c' => $clientId, 's' => $source]);
+            if ($link->fetchColumn() === false) {
+                $this->db->rollBack();
+                $stats['linked'] = false;
+                return $stats;
+            }
+            $activeStmt = $this->db->prepare('SELECT COUNT(*) FROM devices WHERE client_id = :c AND source = :s AND removed_at IS NULL');
+            $activeStmt->execute(['c' => $clientId, 's' => $source]);
+            $active = (int) $activeStmt->fetchColumn();
+            if ($complete && $active > 0 && (count($devices) === 0 || ($active >= self::SHRINK_MIN_DEVICES && count($devices) < $active / 2))) {
+                $complete = false;
+                $stats['warning'] = __('The source reported far fewer devices than before ({n} of {m}); nothing was removed. Check the source\'s access to this organisation.', ['n' => count($devices), 'm' => $active]);
+            }
+            $softwareLeft = self::MAX_SOFTWARE_TOTAL;
             $upDevice = $this->db->prepare(
                 'INSERT INTO devices (client_id, source, source_id, name, dns_name, device_class, os_name, os_build, os_release, ip_addresses, last_contact,
                                       av_product, av_state, av_definitions, encryption, first_seen, last_seen, removed_at)
@@ -54,18 +77,24 @@ final class InventoryRepository
             $find = $this->db->prepare('SELECT id FROM devices WHERE source = :s AND source_id = :sid');
             $seen = [];
             foreach ($devices as $d) {
-                $sid = self::clean((string) ($d['source_id'] ?? ''), 64);
+                $sid = self::clean(($d['source_id'] ?? ''), 64);
                 if ($sid === '' || isset($seen[$sid])) {
                     continue;
                 }
                 $lc = is_int($d['last_contact'] ?? null) && $d['last_contact'] > 0 && $d['last_contact'] < time() + 86400 ? gmdate('Y-m-d H:i:s', $d['last_contact']) : null;
-                $ips = array_slice(array_values(array_filter(array_map('strval', (array) ($d['ip_addresses'] ?? [])), static fn (string $ip): bool => filter_var($ip, FILTER_VALIDATE_IP) !== false)), 0, 20);
+                // Whole addresses only, as many as fit the column.
+                $ips = [];
+                foreach ((array) ($d['ip_addresses'] ?? []) as $ip) {
+                    if (is_string($ip) && filter_var($ip, FILTER_VALIDATE_IP) !== false && strlen(implode(',', [...$ips, $ip])) <= 500) {
+                        $ips[] = $ip;
+                    }
+                }
                 $upDevice->execute([
-                    'c' => $clientId, 's' => $source, 'sid' => $sid, 'n' => self::clean((string) ($d['name'] ?? ''), 255), 'dns' => self::clean((string) ($d['dns_name'] ?? ''), 255),
+                    'c' => $clientId, 's' => $source, 'sid' => $sid, 'n' => self::clean(($d['name'] ?? ''), 255), 'dns' => self::clean(($d['dns_name'] ?? ''), 255),
                     'cls' => in_array($d['device_class'] ?? '', ['workstation', 'server'], true) ? $d['device_class'] : 'other',
-                    'os' => self::clean((string) ($d['os_name'] ?? ''), 255), 'b' => self::clean((string) ($d['os_build'] ?? ''), 64), 'r' => self::clean((string) ($d['os_release'] ?? ''), 64),
-                    'ip' => mb_substr(implode(',', $ips), 0, 500), 'lc' => $lc,
-                    'avp' => self::clean((string) ($d['av_product'] ?? ''), 200), 'avs' => in_array($d['av_state'] ?? '', ['on', 'off', 'missing'], true) ? $d['av_state'] : '',
+                    'os' => self::clean(($d['os_name'] ?? ''), 255), 'b' => self::clean(($d['os_build'] ?? ''), 64), 'r' => self::clean(($d['os_release'] ?? ''), 64),
+                    'ip' => implode(',', $ips), 'lc' => $lc,
+                    'avp' => self::clean(($d['av_product'] ?? ''), 200), 'avs' => in_array($d['av_state'] ?? '', ['on', 'off', 'missing'], true) ? $d['av_state'] : '',
                     'avd' => in_array($d['av_definitions'] ?? '', ['current', 'outdated'], true) ? $d['av_definitions'] : '',
                     'enc' => in_array($d['encryption'] ?? '', ['on', 'off'], true) ? $d['encryption'] : '',
                 ]);
@@ -73,7 +102,13 @@ final class InventoryRepository
                 $deviceId = (int) $find->fetchColumn();
                 $seen[$sid] = $deviceId;
                 $stats['devices']++;
-                $stats['software'] += $this->saveSoftware($deviceId, (array) ($d['software'] ?? []));
+                $sw = array_slice((array) ($d['software'] ?? []), 0, max(0, min(self::MAX_SOFTWARE, $softwareLeft)));
+                if (count((array) ($d['software'] ?? [])) > count($sw) && $softwareLeft < self::MAX_SOFTWARE) {
+                    $complete = false; // too much data in total: keep it partial rather than drop programs silently
+                }
+                $saved = $this->saveSoftware($deviceId, $sw);
+                $softwareLeft -= $saved;
+                $stats['software'] += $saved;
                 $stats['patches'] += $this->savePatches($deviceId, (array) ($d['patches'] ?? []));
             }
             // Gone from a complete snapshot: removed (kept for history; their findings resolve).
@@ -87,6 +122,7 @@ final class InventoryRepository
                 $stmt->execute($params);
                 $stats['removed'] = $stmt->rowCount();
             }
+            $stats['complete'] = $complete;
             $this->db->commit();
         } catch (\Throwable $ex) {
             $this->db->rollBack();
@@ -102,24 +138,30 @@ final class InventoryRepository
      */
     private function saveSoftware(int $deviceId, array $software): int
     {
+        // Keyed by a hash of the exact name and version; a changed catalogue identification re-queues matching.
         $up = $this->db->prepare(
-            'INSERT INTO device_software (device_id, name, publisher, version, product, cpe, first_seen, last_seen)
-             VALUES (:d, :n, :p, :v, :pr, :cpe, UTC_TIMESTAMP(), UTC_TIMESTAMP())
-             ON DUPLICATE KEY UPDATE publisher = VALUES(publisher), product = VALUES(product), cpe = VALUES(cpe), last_seen = UTC_TIMESTAMP(), id = LAST_INSERT_ID(id)'
+            'INSERT INTO device_software (device_id, name, publisher, version, product, cpe, name_hash, match_pending, first_seen, last_seen)
+             VALUES (:d, :n, :p, :v, :pr, :cpe, :h, :pend, UTC_TIMESTAMP(), UTC_TIMESTAMP())
+             ON DUPLICATE KEY UPDATE publisher = VALUES(publisher), product = VALUES(product),
+                match_pending = IF(cpe <> VALUES(cpe), VALUES(match_pending), match_pending), cpe = VALUES(cpe), last_seen = UTC_TIMESTAMP(), id = LAST_INSERT_ID(id)'
         );
         $keep = [];
         foreach (array_slice(array_values(array_filter($software, 'is_array')), 0, self::MAX_SOFTWARE) as $s) {
-            $name = self::clean((string) ($s['name'] ?? ''), 255);
+            $name = self::clean(($s['name'] ?? ''), 255);
             if ($name === '') {
                 continue;
             }
-            $version = self::clean((string) ($s['version'] ?? ''), 100);
+            $version = self::clean(($s['version'] ?? ''), 100);
             $id = SoftwareCatalog::identify($name, $version);
-            $up->execute(['d' => $deviceId, 'n' => $name, 'p' => self::clean((string) ($s['publisher'] ?? ''), 255), 'v' => $version,
-                          'pr' => $id['product'] ?? '', 'cpe' => $id['cpe'] ?? '']);
+            $up->execute(['d' => $deviceId, 'n' => $name, 'p' => self::clean(($s['publisher'] ?? ''), 255), 'v' => $version,
+                          'pr' => $id['product'] ?? '', 'cpe' => $id['cpe'] ?? '', 'h' => hash('sha256', $name . "\0" . $version), 'pend' => isset($id['cpe']) ? 1 : 0]);
             $keep[] = (int) $this->db->lastInsertId();
         }
+        // Earlier versions are gone, but their matches are kept on the device until the new version has data
+        // (see devicesAwaitingData), so findings don't resolve just because an update landed before NVD data did.
         $this->db->prepare('DELETE FROM device_software WHERE device_id = ?' . ($keep === [] ? '' : ' AND id NOT IN (' . implode(',', $keep) . ')'))->execute([$deviceId]);
+        // A program no longer identified by the catalogue keeps no matches.
+        $this->db->prepare("DELETE sv FROM software_vulns sv JOIN device_software s ON s.id = sv.software_id WHERE s.device_id = ? AND s.cpe = ''")->execute([$deviceId]);
         return count($keep);
     }
 
@@ -138,15 +180,15 @@ final class InventoryRepository
         );
         $keep = [];
         foreach (array_slice(array_values(array_filter($patches, 'is_array')), 0, self::MAX_PATCHES) as $p) {
-            $pid = self::clean((string) ($p['patch_id'] ?? ''), 100);
+            $pid = self::clean(($p['patch_id'] ?? ''), 100);
             $status = in_array($p['status'] ?? '', ['pending', 'failed'], true) ? $p['status'] : null;
             if ($pid === '' || $status === null) {
                 continue;
             }
             $det = is_int($p['detected_at'] ?? null) && $p['detected_at'] > 0 && $p['detected_at'] < time() + 86400 ? gmdate('Y-m-d H:i:s', $p['detected_at']) : null;
             $kb = preg_match('/^KB\d{6,8}$/i', (string) ($p['kb'] ?? '')) === 1 ? strtoupper((string) $p['kb']) : '';
-            $up->execute(['d' => $deviceId, 'pid' => $pid, 'n' => self::clean((string) ($p['name'] ?? ''), 300), 'kb' => $kb,
-                          'sev' => strtolower(self::clean((string) ($p['severity'] ?? ''), 20)), 'st' => $status, 'det' => $det]);
+            $up->execute(['d' => $deviceId, 'pid' => $pid, 'n' => self::clean(($p['name'] ?? ''), 300), 'kb' => $kb,
+                          'sev' => strtolower(self::clean(($p['severity'] ?? ''), 20)), 'st' => $status, 'det' => $det]);
             $keep[] = (int) $this->db->lastInsertId();
         }
         $this->db->prepare('DELETE FROM device_patches WHERE device_id = ?' . ($keep === [] ? '' : ' AND id NOT IN (' . implode(',', $keep) . ')'))->execute([$deviceId]);
@@ -228,6 +270,26 @@ final class InventoryRepository
     }
 
     /**
+     * Devices of a client with installed software still waiting for vulnerability data. Their software
+     * vulnerability findings must not resolve yet: missing data is not evidence of a fix.
+     *
+     * @return array<int,true> device IDs
+     */
+    public function devicesAwaitingData(int $clientId): array
+    {
+        $stmt = $this->db->prepare("SELECT DISTINCT s.device_id FROM device_software s JOIN devices d ON d.id = s.device_id WHERE d.client_id = :c AND d.removed_at IS NULL AND s.cpe <> '' AND s.match_pending = 1");
+        $stmt->execute(['c' => $clientId]);
+        return array_fill_keys(array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN)), true);
+    }
+
+    /** Mark every installed copy of one CPE as still waiting for vulnerability data (for one client or all). */
+    public function markPending(?int $clientId, string $cpe): void
+    {
+        $scope = $clientId !== null ? ' AND d.client_id = ' . (int) $clientId : '';
+        $this->db->prepare("UPDATE device_software s JOIN devices d ON d.id = s.device_id SET s.match_pending = 1 WHERE s.cpe = :cpe{$scope}")->execute(['cpe' => $cpe]);
+    }
+
+    /**
      * Distinct catalogue CPEs installed on current devices (for one client or all), for matching.
      *
      * @return list<string>
@@ -257,6 +319,10 @@ final class InventoryRepository
             foreach ($matches as $cve => $conf) {
                 $ins->execute(['v' => $cve, 'conf' => $conf === 'confirmed' ? 'confirmed' : 'possible', 'q' => $query, 'cpe' => $cpe]);
             }
+            // Distribution builds (agent-reported services) may carry backported fixes: never "confirmed".
+            $this->db->prepare("UPDATE software_vulns sv JOIN device_software s ON s.id = sv.software_id JOIN devices d ON d.id = s.device_id
+                                SET sv.confidence = 'distro' WHERE s.cpe = :cpe AND s.distro = 1 AND sv.confidence = 'confirmed'{$scope}")->execute(['cpe' => $cpe]);
+            $this->db->prepare("UPDATE device_software s JOIN devices d ON d.id = s.device_id SET s.match_pending = 0 WHERE s.cpe = :cpe{$scope}")->execute(['cpe' => $cpe]);
             $this->db->commit();
         } catch (\Throwable $ex) {
             $this->db->rollBack();
@@ -327,13 +393,17 @@ final class InventoryRepository
             ->execute(['st' => $status, 'm' => mb_substr($message, 0, 500), 'c' => $clientId, 's' => $source]);
     }
 
-    /** Text from a source, without control characters, shortened. */
-    public static function clean(string $value, int $max): string
+    /**
+     * Text from a source: valid UTF-8 (bad bytes replaced), without control characters (C0, C1) or invisible
+     * direction and zero-width characters that could disguise a name on screen, shortened. Non-text values give ''.
+     */
+    public static function clean(mixed $value, int $max): string
     {
-        $value = (string) preg_replace('/[\x00-\x1F\x7F]+/u', ' ', $value);
-        if (!mb_check_encoding($value, 'UTF-8')) {
-            $value = mb_convert_encoding($value, 'UTF-8', 'UTF-8');
+        if (!is_scalar($value)) {
+            return '';
         }
+        $value = mb_scrub((string) $value, 'UTF-8');
+        $value = (string) preg_replace('/[\x{0000}-\x{001F}\x{007F}-\x{009F}\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2066}-\x{2069}\x{FEFF}]+/u', ' ', $value);
         return trim(mb_substr(trim($value), 0, $max));
     }
 }

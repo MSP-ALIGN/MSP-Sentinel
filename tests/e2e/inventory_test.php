@@ -101,9 +101,21 @@ return [
         Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM findings WHERE client_id = {$cid} AND finding_key LIKE 'dev:ninjaone:5003:%'")->fetchColumn(), 'healthy device: nothing');
         // Software CVE (made-up NVD data for this Chrome version).
         $ctx->cli('bin/feeds.php');
-        $v = $finding($ctx, $cid, "devvuln:ninjaone:{$ws}:Google Chrome:CVE-2099-0301");
+        $v = $finding($ctx, $cid, "devvuln:ninjaone:{$ws}:Google Chrome");
         Assert::true($v !== null && $v['severity'] === 'fail' && $v['finding_type'] === 'vuln' && $v['source'] === 'ninjaone', 'critical confirmed CVE in installed software');
-        Assert::contains('in Google Chrome 120.0.6099.130', (string) $v['title']);
+        Assert::contains('Google Chrome 120.0.6099.130: 1 known CVE(s)', (string) $v['title']);
+        Assert::contains('CVE-2099-0301', (string) $v['detail']);
+        // Chrome updates before NVD has data for the new version: the finding waits instead of resolving.
+        $data = json_decode((string) file_get_contents(dirname($ctx->configPath) . '/inventory.json'), true);
+        $data['snapshots']['org-101']['devices'][0]['software'][0]['version'] = '120.0.6099.199';
+        file_put_contents(dirname($ctx->configPath) . '/inventory.json', json_encode($data));
+        App::vulns()->setNvdBlockedUntil(time() + 3600); // NVD not reachable: the new version's data stays pending
+        App::inventorySync()->syncClient($cid, 'ninjaone');
+        App::vulns()->setNvdBlockedUntil(0);
+        Assert::same('open', $finding($ctx, $cid, "devvuln:ninjaone:{$ws}:Google Chrome")['status'] ?? null, 'not resolved while data for the new version is pending');
+        $data['snapshots']['org-101']['devices'][0]['software'][0]['version'] = '120.0.6099.130';
+        file_put_contents(dirname($ctx->configPath) . '/inventory.json', json_encode($data));
+        App::inventorySync()->syncClient($cid, 'ninjaone');
         Assert::true((int) $v['device_id'] > 0, 'linked to the device');
     },
     'pages: client card, device page, findings filter, report guidance; data is escaped' => function (TestContext $ctx) use ($setup): void {
@@ -150,6 +162,15 @@ return [
         file_put_contents(dirname($ctx->configPath) . '/inventory.json', json_encode($data));
         App::inventorySync()->syncClient($cid, 'ninjaone');
         Assert::same('resolved', $finding($ctx, $cid, 'dev:ninjaone:5001:patches_missing')['status'] ?? null);
+        // An empty "complete" answer (lost access) removes nothing.
+        $saved = $data;
+        $data['snapshots']['org-101']['devices'] = [];
+        file_put_contents(dirname($ctx->configPath) . '/inventory.json', json_encode($data));
+        $r = App::inventorySync()->syncClient($cid, 'ninjaone');
+        Assert::contains('far fewer devices', $r['message']);
+        Assert::same(2, (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE client_id = {$cid} AND removed_at IS NULL")->fetchColumn(), 'nothing removed');
+        $data = $saved;
+        file_put_contents(dirname($ctx->configPath) . '/inventory.json', json_encode($data));
         // A failing source: shown on the client, nothing changes.
         $before = (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE client_id = {$cid} AND removed_at IS NULL")->fetchColumn();
         $ctx->db->exec("UPDATE source_links SET org_id = 'org-fail' WHERE client_id = {$cid}");
@@ -166,6 +187,12 @@ return [
         $ctx->login('admin', 'Admin-Pass-0001!')->submit('/clients/' . $cid, '/clients/' . $cid . '/inventory/unlink', ['source' => 'ninjaone']);
         Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE client_id = {$cid} AND removed_at IS NULL")->fetchColumn());
         Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM findings WHERE client_id = {$cid} AND source = 'ninjaone' AND status = 'open'")->fetchColumn(), 'findings resolved');
+        Assert::contains('not a confirmed fix', (string) $ctx->db->query("SELECT note FROM finding_events e JOIN findings f ON f.id = e.finding_id WHERE f.client_id = {$cid} AND e.event = 'resolved' ORDER BY e.id DESC LIMIT 1")->fetchColumn());
+        // Archived clients can't be linked.
+        $ctx->db->exec("UPDATE clients SET is_archived = 1 WHERE id = {$cid}");
+        $ctx->login('admin', 'Admin-Pass-0001!')->submit('/clients/' . $cid, '/clients/' . $cid . '/inventory/link', ['source' => 'ninjaone', 'org_id' => 'org-101']);
+        Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM source_links WHERE client_id = {$cid}")->fetchColumn(), 'archived: not linked');
+        $ctx->db->exec("UPDATE clients SET is_archived = 0 WHERE id = {$cid}");
         $write($ctx);
     },
 ];

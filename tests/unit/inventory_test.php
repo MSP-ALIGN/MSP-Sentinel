@@ -21,7 +21,12 @@ return [
         Assert::same('cpe:/a:mozilla:firefox_esr:115.6.0', SoftwareCatalog::identify('Mozilla Firefox 115.6.0 ESR (x64 en-US)', '115.6.0')['cpe'] ?? null, 'ESR is its own product');
         Assert::same('cpe:/a:7-zip:7-zip:23.01', SoftwareCatalog::identify('7-Zip 23.01 (x64)', '')['cpe'] ?? null, 'version from the name');
         Assert::same('cpe:/a:notepad-plus-plus:notepad++:8.6.2', SoftwareCatalog::identify('Notepad++ (64-bit x64)', '8.6.2')['cpe'] ?? null);
-        foreach ([['Google Chrome Helper', '1.0'], ['Not Google Chrome', '120.0'], ['Microsoft Office Professional Plus 2019', '16.0.10827.20181'], ['Google Chrome', 'latest'], ['Example App', '1.0']] as [$n, $v]) {
+        Assert::same('cpe:/a:python:python:3.12.1', SoftwareCatalog::identify('Python 3.12.1 (64-bit)', '3.12.1150.0')['cpe'] ?? null, 'Windows Python version decoded');
+        Assert::same(null, SoftwareCatalog::identify('Python 3.12 (64-bit)', ''), 'no full Python version: not guessed');
+        Assert::same('cpe:/a:putty:putty:0.80', SoftwareCatalog::identify('PuTTY release 0.80 (64-bit)', '0.80.0.0')['cpe'] ?? null, 'padding removed');
+        Assert::same('cpe:/a:7-zip:7-zip:23.01', SoftwareCatalog::identify('7-Zip 23.01 (x64 edition)', '23.01.00.0')['cpe'] ?? null);
+        foreach ([['Google Chrome Helper', '1.0'], ['Not Google Chrome', '120.0'], ['Microsoft Office Professional Plus 2019', '16.0.10827.20181'], ['Google Chrome', 'latest'], ['Example App', '1.0'],
+                  ['Adobe Acrobat 2020', '20.005.30636'], ['Adobe Acrobat Reader 2017', '17.011.30204'], ['Microsoft Edge My', '120.0'], ['TeamViewer QS', '15.1']] as [$n, $v]) {
             Assert::same(null, SoftwareCatalog::identify($n, $v), 'not matched: ' . $n . ' ' . $v);
         }
         Assert::true(SoftwareCatalog::known('WinSCP 6.1.2') && !SoftwareCatalog::known('Example App'), 'catalogue membership');
@@ -35,6 +40,8 @@ return [
         Assert::same('2023-01-10', OsLifecycle::endOfSupport('Windows 8.1 Pro', '9600'), 'same build, client table');
         Assert::same('2029-01-09', OsLifecycle::endOfSupport('Windows Server 2019 Datacenter', '17763'));
         Assert::same(null, OsLifecycle::endOfSupport('macOS Sonoma', '23.2'), 'not judged');
+        Assert::same('2032-01-13', OsLifecycle::endOfSupport('Windows 10 IoT Enterprise LTSC 2021', '19044'), 'IoT LTSC lasts longer');
+        Assert::same('2023-06-13', OsLifecycle::endOfSupport('Windows 10 Pro Education', '19044'), 'Pro Education follows Home/Pro');
         Assert::same(null, OsLifecycle::endOfSupport('Windows 11 Pro', '99999'), 'unknown build: not judged');
     },
     'device grading' => function (TestContext $ctx): void {
@@ -54,5 +61,23 @@ return [
                     ['status' => 'pending', 'severity' => 'optional', 'detected_at' => '2027-01-01 00:00:00', 'kb' => 'KB3', 'name' => 'c']];
         Assert::same(['patches_missing' => 'warn'], $codes($base, $patches), 'only security updates older than 30 days');
         Assert::same('patch', DeviceRules::type('patches_failed'));
+    },
+    'source text is cleaned: bad bytes, controls, invisible characters, non-text' => function (TestContext $ctx): void {
+        $clean = [\Sentinel\Inventory\InventoryRepository::class, 'clean'];
+        Assert::same('Bad ? byte', str_replace("\u{FFFD}", '?', $clean("Bad \xC3 byte", 50)), 'invalid UTF-8 kept, bad byte replaced');
+        Assert::same('evil exe', $clean("evil\u{202E}exe", 50), 'direction override removed');
+        Assert::same('a b', $clean("a\x07\u{0085}b", 50), 'C0 and C1 controls removed');
+        Assert::same('', $clean(['array'], 50), 'non-text value');
+    },
+    'routes reject parameter names that could never match' => function (TestContext $ctx): void {
+        $router = new \Sentinel\Core\Router();
+        $router->add('GET', '/clients/{id}/devices/{device}', [\stdClass::class, 'x']);
+        $threw = false;
+        try {
+            $router->add('GET', '/x/{deviceId}', [\stdClass::class, 'x']);
+        } catch (\InvalidArgumentException) {
+            $threw = true;
+        }
+        Assert::true($threw, 'unknown parameter form refused');
     },
 ];

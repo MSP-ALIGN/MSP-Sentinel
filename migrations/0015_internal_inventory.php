@@ -14,6 +14,9 @@ declare(strict_types=1);
  * Idempotent: CREATE TABLE IF NOT EXISTS, addColumnIfMissing, and enum
  * changes only when a value is missing. Safe to run twice.
  *
+ * Programs are keyed by a SHA-256 of their exact name and version (case and
+ * accents matter), and source IDs compare byte for byte.
+ *
  * Security notes: inventory data is untrusted text from the source and is
  * stored short. Nothing here can make Sentinel touch a device: inventory is
  * read from the source's API only.
@@ -31,7 +34,7 @@ return [
             id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
             client_id INT UNSIGNED NOT NULL,
             source VARCHAR(20) NOT NULL,
-            org_id VARCHAR(64) NOT NULL,
+            org_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
             org_name VARCHAR(200) NOT NULL DEFAULT '',
             linked_by INT UNSIGNED NULL,
             linked_at DATETIME NOT NULL,
@@ -47,7 +50,7 @@ return [
             id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
             client_id INT UNSIGNED NOT NULL,
             source VARCHAR(20) NOT NULL,
-            source_id VARCHAR(64) NOT NULL,
+            source_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
             name VARCHAR(255) NOT NULL DEFAULT '',
             dns_name VARCHAR(255) NOT NULL DEFAULT '',
             device_class VARCHAR(40) NOT NULL DEFAULT '',
@@ -76,9 +79,11 @@ return [
             version VARCHAR(100) NOT NULL DEFAULT '',
             product VARCHAR(80) NOT NULL DEFAULT '',
             cpe VARCHAR(255) NOT NULL DEFAULT '',
+            name_hash CHAR(64) NOT NULL,
+            match_pending TINYINT(1) NOT NULL DEFAULT 0,
             first_seen DATETIME NOT NULL,
             last_seen DATETIME NOT NULL,
-            UNIQUE KEY uq_device_software (device_id, name(150), version(50)),
+            UNIQUE KEY uq_device_software (device_id, name_hash),
             KEY idx_software_cpe (cpe(100)),
             CONSTRAINT fk_software_device FOREIGN KEY (device_id) REFERENCES devices (id) ON DELETE CASCADE
         ) {$opts}");
