@@ -41,6 +41,28 @@ return [
         [, $text] = $ctx->cli('bin/doctor.php');
         Assert::contains('[ OK ] Database migrations', $text);
     },
+    'development builds are marked on every page; release installs are not' => function (TestContext $ctx): void {
+        $file = dirname(__DIR__, 2) . '/BUILD';
+        Assert::true(!file_exists($file), 'no BUILD file left in the working tree');
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        Assert::notContains('Development build', $admin->get('/admin/system')->body, 'release or manual install: no badge');
+        try {
+            file_put_contents($file, "branch=develop\ncommit=0123456789abcdef0123456789abcdef01234567\n");
+            $page = $admin->get('/admin/system')->body;
+            Assert::contains('Development build', $page);
+            Assert::contains('branch develop, commit 0123456789ab', $page);
+            Assert::contains('Development build', $admin->get('/')->body, 'badge on every page');
+            file_put_contents($file, "branch=main\ncommit=0123456789abcdef0123456789abcdef01234567\n");
+            $page = $admin->get('/admin/system')->body;
+            Assert::contains('branch main, commit 0123456789ab', $page);
+            Assert::notContains('Development build', $page, 'main is production');
+            file_put_contents($file, "branch=<script>x</script>\ncommit=nothex\n");
+            $page = $admin->get('/admin/system')->body;
+            Assert::true(!str_contains($page, '<script>x') && !str_contains($page, 'Development build'), 'a malformed BUILD file is ignored');
+        } finally {
+            @unlink($file);
+        }
+    },
     'update check: reads only a version number; can be turned off' => function (TestContext $ctx): void {
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $admin->submit('/admin/system', '/admin/system/updates', ['action' => 'check']);

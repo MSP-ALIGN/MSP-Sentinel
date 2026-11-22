@@ -2,6 +2,16 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.10.0 (2026-11-22): development servers
+
+- **One-line install for a development server** that follows the `develop` branch, so changes can be tried before
+  they reach production:
+  `curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/develop/install-dev.sh | sudo -E bash`.
+  `sudo msp-sentinel-update` keeps it on `develop`.
+- Development servers show a **Development build** badge on every page. Administration → System shows the branch
+  and commit of every install made with the one-line installer.
+- See "Development server" in [docs/install.md](docs/install.md).
+
 ### 1.9.0 (2026-11-22): guided install
 
 - The one-line install is now a **seven-step guided install** with a summary to confirm before anything changes:

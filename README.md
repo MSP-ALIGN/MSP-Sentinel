@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.9.0](https://img.shields.io/badge/version-1.9.0-ff5a1f?style=flat-square)
+![Version 1.10.0](https://img.shields.io/badge/version-1.10.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -107,6 +107,13 @@ A guided install walks you through seven steps and shows a summary before it cha
 It then sets up Nginx, PHP-FPM 8.4, MariaDB, the database, a fresh app key, cron jobs, HTTPS and log rotation. Upgrade later with
 `sudo msp-sentinel-update`. The step-by-step guide, unattended installs and signed release archives: see [docs/install.md](docs/install.md).
 
+A development server that follows the `develop` branch, to try changes before production (marked
+**Development build** in the web interface):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/develop/install-dev.sh | sudo -E bash
+```
+
 For an on-premises agent at a client site (asks for the Sentinel address and the one-time code):
 
 ```sh
@@ -142,6 +149,16 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
 
 ## What's new
 
+### 1.10.0 (2026-11-22): development servers
+
+- **One-line install for a development server** that follows the `develop` branch, so changes can be tried before
+  they reach production:
+  `curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/develop/install-dev.sh | sudo -E bash`.
+  `sudo msp-sentinel-update` keeps it on `develop`.
+- Development servers show a **Development build** badge on every page. Administration → System shows the branch
+  and commit of every install made with the one-line installer.
+- See "Development server" in [docs/install.md](docs/install.md).
+
 ### 1.9.0 (2026-11-22): guided install
 
 - The one-line install is now a **seven-step guided install** with a summary to confirm before anything changes:
@@ -155,6 +172,9 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
   options: `--tls`, `--proxy-ip`, `--no-firewall`, `--no-fail2ban`, `--no-auto-updates`.
 - Step-by-step guide in [docs/install.md](docs/install.md).
 
+<details>
+<summary><b>Earlier releases (1.8.0 to 1.0.0)</b></summary>
+
 ### 1.8.0 (2026-11-22): one-line install on Debian 13
 
 - **One-line install** on a fresh Debian 13 VM:
@@ -165,9 +185,6 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
 - **Debian 13** is now the recommended system (it ships PHP 8.4, so no extra package source is needed). Debian 12 and
   Ubuntu 24.04 still work.
 - The installers ask their questions on the terminal, so they also work when piped from `curl`.
-
-<details>
-<summary><b>Earlier releases (1.7.0 to 1.0.0)</b></summary>
 
 ### 1.7.0 (2026-11-22): risky internal protocols
 

@@ -1,7 +1,7 @@
 <?php
 /**
  * System page (admins): health checks, version/updates, data retention.
- * Expects: $checks, $version, $newer, $updateEnabled, $checkedAt, $retention, $retentionLast, $sourceUrl.
+ * Expects: $checks, $version, $build (null or branch/commit/development), $newer, $updateEnabled, $checkedAt, $retention, $retentionLast, $sourceUrl.
  * Every value is escaped. Status is shown with an icon and a word, not colour alone.
  */
 use Sentinel\Core\Csrf;
@@ -31,7 +31,10 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
 <div class="card mb-3" id="updates">
     <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Version and updates')) ?></h2></div>
     <div class="card-body small">
-        <p class="mb-2"><?= e(__('Installed: {v}', ['v' => $version])) ?></p>
+        <p class="mb-2"><?= e(__('Installed: {v}', ['v' => $version])) ?><?php if ($build !== null): ?> · <?= e(__('branch {b}, commit {c}', ['b' => $build['branch'], 'c' => $build['commit']])) ?><?php endif; ?></p>
+        <?php if ($build !== null && $build['development']): ?>
+        <div class="alert alert-warning py-2"><?= e(__('Development build: this server follows the {b} branch, so it gets changes before they are released. Use it to test, not for client work. sudo msp-sentinel-update fetches the newest {b}.', ['b' => $build['branch']])) ?></div>
+        <?php endif; ?>
         <?php if ($newer !== null): ?>
         <div class="alert alert-info py-2"><?= e(__('Version {v} is available.', ['v' => $newer])) ?> <a href="<?= e(rtrim($sourceUrl, '/') . '/releases') ?>" rel="noopener noreferrer" target="_blank"><?= e(__('Release notes')) ?></a></div>
         <?php endif; ?>

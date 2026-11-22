@@ -71,6 +71,36 @@ passphrase means the backups cannot be restored. You can set or change it later:
 When it finishes, open `https://<host name>`, sign in, set up two-factor authentication, and copy
 `/opt/msp-sentinel/config/config.php` somewhere safe: its `app_key` is needed to restore a backup.
 
+### Development server (follows `develop`)
+
+To try changes before they reach production, run a separate development server that follows the `develop` branch:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/develop/install-dev.sh | sudo -E bash
+```
+
+It is the same guided install. The difference is where the code comes from:
+
+| | Production | Development |
+|---|---|---|
+| Command | `.../main/install.sh` | `.../develop/install-dev.sh` |
+| Follows | `main` (merged, released changes) | `develop` (newest changes, before they are released) |
+| `sudo msp-sentinel-update` | fetches the newest `main` | fetches the newest `develop` |
+| Web interface | no marker | a yellow **Development build** badge on every page; the branch and commit under Administration → System |
+
+A suggested flow: changes land on `develop`, run `sudo msp-sentinel-update` on the development server and test them,
+then merge `develop` into `main` and update production.
+
+Keep the two apart:
+- Use a separate server or VM and a separate host name, for example `sentinel-dev.msp.example`.
+- Use made-up test clients, or only addresses you would scan from production too: the same written authorisation
+  rules apply.
+- A development server has its own database and app key. Don't restore a production backup onto it unless you mean
+  to copy client data there.
+
+`SENTINEL_BRANCH` picks another branch, for example a feature branch to test before it is merged. An on-premises agent
+can follow `develop` the same way: `curl ... | sudo -E SENTINEL_BRANCH=develop bash` with `.../develop/install-agent.sh`.
+
 ### Unattended install
 
 For cloud-init or scripts, give the answers as environment variables; any step with a variable set is not asked:
@@ -92,7 +122,7 @@ curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install
 | `SENTINEL_AUTO_UPDATES` | `y` (default) or `n` |
 | `SENTINEL_BACKUP_PASSPHRASE` | Backup encryption passphrase, at least 12 characters (empty: unencrypted) |
 | `SENTINEL_ADMIN_USER`, `SENTINEL_ADMIN_NAME`, `SENTINEL_ADMIN_EMAIL` | First admin; without a terminal a random password is printed once |
-| `SENTINEL_BRANCH` | Branch to install and update from (default `main`; `develop` for a test server, then use `.../develop/install.sh` in the URL) |
+| `SENTINEL_BRANCH` | Branch to install and update from (default `main`; `install-dev.sh` defaults to `develop`) |
 | `SENTINEL_REPO` | `owner/name` of a fork |
 | `SENTINEL_FORCE=1` | Skip the operating system check |
 | `SENTINEL_DRY_RUN=1` | Show every step without changing anything |

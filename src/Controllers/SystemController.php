@@ -28,6 +28,7 @@ final class SystemController extends Controller
         return $this->page('admin/system', __('System'), [
             'checks' => App::health()->run(),
             'version' => App::version(),
+            'build' => App::build(),
             'newer' => App::updates()->newer(),
             'updateEnabled' => $s->get('update_check_enabled') === '1',
             'checkedAt' => $s->get('update_checked_at'),

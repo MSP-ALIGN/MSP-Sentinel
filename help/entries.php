@@ -143,6 +143,7 @@ return [
                 'Data retention: choose how many months to keep finished scan history, resolved findings and reports. 0 keeps them forever. Older data is removed once a day and the counts are written to the audit log. The audit log itself is always kept.',
                 'Backups are made on the server with bin/backup.php (daily, if Sentinel was installed with the installer). They contain all client data and the app key, so encrypt any copy that leaves the server. See docs/backup.md.',
                 'Installing: the one-line install asks seven questions step by step (host name; HTTPS with Let\'s Encrypt, self-signed or behind a reverse proxy; firewall; fail2ban; automatic security updates; backup encryption passphrase; first admin) and shows a summary before it changes anything. Behind a reverse proxy, Sentinel only accepts plain HTTP from the proxy\'s address and trusts its X-Forwarded-For and X-Forwarded-Proto headers. See docs/install.md.',
+                'Development server: install-dev.sh installs a separate server that follows the develop branch, so changes can be tested before they reach production. It shows a yellow Development build badge on every page, and sudo msp-sentinel-update keeps it on develop. Use a separate host name and made-up test clients.',
             ],
         ],
         [
@@ -194,6 +195,14 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.10.0',
+            'date' => '2026-11-22',
+            'items' => [
+                'One-line install for a development server that follows the develop branch (install-dev.sh), to try changes before production.',
+                'Development servers show a Development build badge on every page; Administration, System shows the branch and commit.',
+            ],
+        ],
         [
             'version' => '1.9.0',
             'date' => '2026-11-22',

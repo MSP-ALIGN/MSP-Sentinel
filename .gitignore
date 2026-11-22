@@ -6,3 +6,5 @@
 /tests/output/
 /node_modules/
 .DS_Store
+# Written by the one-line installer and msp-sentinel-update (branch and commit of this install)
+/BUILD

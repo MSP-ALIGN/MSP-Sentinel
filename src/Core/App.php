@@ -71,6 +71,8 @@ final class App
     private static ?Audit $audit = null;
     private static ?Crypto $crypto = null;
     private static ?string $version = null;
+    /** @var array{branch:string,commit:string}|false|null */
+    private static array|false|null $build = null;
 
     /** Load configuration (and nothing else). Safe for CLI tools. */
     public static function boot(?Config $config = null): void
@@ -406,6 +408,29 @@ final class App
     public static function version(): string
     {
         return self::$version ??= trim((string) @file_get_contents(SENTINEL_ROOT . '/VERSION')) ?: 'unknown';
+    }
+
+    /**
+     * Where this install's code came from, from the BUILD file the one-line installer and msp-sentinel-update
+     * write (branch and commit). Null for release archives and manual installs, which have no BUILD file.
+     *
+     * Untrusted: the file is root-owned, but it is still parsed strictly (branch-name and hex-commit patterns)
+     * and anything else is ignored; views escape the values as always.
+     *
+     * @return array{branch:string,commit:string,development:bool}|null
+     */
+    public static function build(): ?array
+    {
+        if (self::$build === null) {
+            self::$build = false;
+            $raw = @file_get_contents(SENTINEL_ROOT . '/BUILD', false, null, 0, 1024);
+            if (is_string($raw)
+                && preg_match('/^branch=([A-Za-z0-9][A-Za-z0-9._\/-]{0,59})$/m', $raw, $b) === 1 && !str_contains($b[1], '..')
+                && preg_match('/^commit=([0-9a-f]{7,40})$/m', $raw, $c) === 1) {
+                self::$build = ['branch' => $b[1], 'commit' => substr($c[1], 0, 12)];
+            }
+        }
+        return self::$build === false ? null : self::$build + ['development' => self::$build['branch'] !== 'main'];
     }
 
     /** Product name for the UI (white-label setting). Falls back to the default if the database is unavailable. */

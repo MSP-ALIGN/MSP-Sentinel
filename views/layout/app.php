@@ -65,6 +65,9 @@ try {
                     <a class="nav-link" data-lte-toggle="sidebar" href="#" role="button" aria-label="<?= e(__('Toggle menu')) ?>"><i class="bi bi-list" aria-hidden="true"></i></a>
                 </li>
             </ul>
+            <?php $build = App::build(); if ($build !== null && $build['development']): ?>
+            <span class="badge text-bg-warning ms-2" title="<?= e(__('Installed from the {b} branch at commit {c}: newest changes, not a release. Use it for testing, not for production.', ['b' => $build['branch'], 'c' => $build['commit']])) ?>"><i class="bi bi-cone-striped" aria-hidden="true"></i> <?= e(__('Development build')) ?> · <?= e($build['branch']) ?></span>
+            <?php endif; ?>
             <ul class="navbar-nav ms-auto">
                 <?php if ($currentUser !== null): ?>
                 <?php
@@ -163,7 +166,7 @@ try {
         <div class="float-end d-none d-sm-inline">
             <a href="<?= e($sourceUrl) ?>" rel="noopener noreferrer" target="_blank"><?= e(__('Source code')) ?></a> · AGPL-3.0
         </div>
-        <?= e($product) ?> <?= e(__('version')) ?> <?= e(App::version()) ?>
+        <?= e($product) ?> <?= e(__('version')) ?> <?= e(App::version()) ?><?php $build = App::build(); if ($build !== null && $build['development']): ?> (<?= e($build['branch']) ?> @ <?= e($build['commit']) ?>)<?php endif; ?>
     </footer>
 </div>
 <script src="<?= e(asset('vendor/bootstrap/bootstrap.bundle.min.js')) ?>"></script>

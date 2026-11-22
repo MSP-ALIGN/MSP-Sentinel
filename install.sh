@@ -6,7 +6,10 @@
 #  Fresh install, on a new Debian 13 VM (a minimal Debian may need `apt install -y curl sudo` first, as root):
 #    curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install.sh | sudo -E bash
 #
-#  Upgrade an existing install:
+#  Development server (follows the develop branch: newest changes, before they reach main and a release):
+#    curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/develop/install-dev.sh | sudo -E bash
+#
+#  Upgrade an existing install (stays on the branch it was installed from):
 #    sudo msp-sentinel-update
 #
 #  With a terminal it runs a 7-step wizard (host name, HTTPS, firewall, SSH protection, security updates,
@@ -86,6 +89,13 @@ else
   else
     run git clone --depth 1 --branch "$BRANCH" "https://github.com/$REPO.git" "$SRC_DIR"
   fi
+  # Build stamp (copied into the app): the web interface shows the branch and commit, and marks non-main
+  # installs as development builds so nobody mistakes a test server for production.
+  if [ "$DRY" = 1 ]; then echo "  [dry-run] write $SRC_DIR/BUILD (branch $BRANCH)"
+  else printf 'branch=%s\ncommit=%s\n' "$BRANCH" "$(git -C "$SRC_DIR" rev-parse HEAD)" > "$SRC_DIR/BUILD"; fi
+fi
+if [ "$BRANCH" != main ]; then
+  printf '%sDevelopment build:%s branch %s gets changes before they are released. Use it for a test server, not for client work.\n' "$c_err" "$c_0" "$BRANCH"
 fi
 
 install_update_command() {
@@ -104,6 +114,7 @@ set -Eeuo pipefail
 [[ "$SENTINEL_BRANCH" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]{0,59}$ && "$SENTINEL_BRANCH" != *..* ]] || { echo "Bad branch in update.env" >&2; exit 1; }
 git -C /opt/msp-sentinel-src fetch --depth 1 origin "$SENTINEL_BRANCH"
 git -C /opt/msp-sentinel-src reset --hard FETCH_HEAD
+printf 'branch=%s\ncommit=%s\n' "$SENTINEL_BRANCH" "$(git -C /opt/msp-sentinel-src rev-parse HEAD)" > /opt/msp-sentinel-src/BUILD
 exec bash /opt/msp-sentinel-src/install/install.sh --upgrade
 UPD
   chmod 0755 /usr/local/sbin/msp-sentinel-update
@@ -225,9 +236,9 @@ if have_tty; then
   printf '      Firewall (ufw):     %s\n      fail2ban (SSH):     %s\n      Security updates:   %s\n' "$(yn "$SENTINEL_FIREWALL")" "$(yn "$SENTINEL_FAIL2BAN")" "$(yn "$SENTINEL_AUTO_UPDATES")"
   printf '      Backups encrypted:  %s\n' "$( [ -n "${SENTINEL_BACKUP_PASSPHRASE:-}" ] && echo yes || echo no )"
   printf '      First admin:        %s (%s, %s)\n' "${SENTINEL_ADMIN_USER:-later}" "${SENTINEL_ADMIN_NAME:-}" "${SENTINEL_ADMIN_EMAIL:-}"
-  printf '      Source:             %s, branch %s\n' "$REPO" "$BRANCH"
+  printf '      Source:             %s, branch %s%s\n' "$REPO" "$BRANCH" "$( [ "$BRANCH" != main ] && echo ' (DEVELOPMENT BUILD: for testing)' )"
   read -r -p "      Install with these settings? [y/N]: " go </dev/tty
-  case "${go,,}" in y|yes) ;; *) die "Nothing was changed." ;; esac
+  case "${go,,}" in y|yes) ;; *) die "Sentinel was not installed." ;; esac
 fi
 
 args=(--domain "$SENTINEL_DOMAIN" --tls "$SENTINEL_TLS")

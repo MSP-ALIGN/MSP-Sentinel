@@ -79,7 +79,17 @@ return [
             exec($env . $vars . ' bash ' . escapeshellarg($root . '/install.sh') . ' </dev/null 2>&1', $l, $c);
             Assert::true($c !== 0, $why);
         }
-        foreach (['install.sh', 'install-agent.sh'] as $f) {
+        // Development server: the same wizard, following develop, marked as a development build.
+        exec($env . 'SENTINEL_DOMAIN=dev.msp.example bash ' . escapeshellarg($root . '/install-dev.sh') . ' </dev/null 2>&1', $l5, $rc5);
+        $dev = implode("\n", $l5);
+        Assert::same(0, $rc5, $dev);
+        foreach (['branch develop', 'Development build', 'follows MSP-ALIGN/MSP-Sentinel, branch develop', 'https://dev.msp.example'] as $step) {
+            Assert::contains($step, $dev);
+        }
+        Assert::notContains('Development build', implode("\n", $lines), 'main installs are not marked');
+        exec($env . 'SENTINEL_BRANCH="x;rm" bash ' . escapeshellarg($root . '/install-dev.sh') . ' </dev/null 2>&1', $l6, $rc6);
+        Assert::true($rc6 !== 0, 'bad branch refused before any download');
+        foreach (['install.sh', 'install-agent.sh', 'install-dev.sh'] as $f) {
             exec('bash -n ' . escapeshellarg($root . '/' . $f) . ' 2>&1', $l, $c);
             Assert::same(0, $c, $f . ' syntax');
         }
