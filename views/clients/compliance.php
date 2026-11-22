@@ -68,7 +68,8 @@ $statusBadge = ['met' => ['success', __('Met')], 'partial' => ['warning', __('Pa
                 <h3 class="h6 mb-0"><?= e($f['framework']) ?></h3>
                 <span class="badge text-bg-light border"><?= e(__('MSP Align score {p}%', ['p' => $f['score']])) ?></span>
                 <?php if ($f['issues'] > 0): ?><span class="badge text-bg-danger"><?= e(__('{n} control(s) with open problems', ['n' => $f['issues']])) ?></span><?php endif; ?>
-                <?php if ($f['url'] !== '' && preg_match('#^https?://#', $f['url']) === 1): ?>
+                <?php $alignBase = rtrim(\Sentinel\Core\App::settings()->get('mspalign_url'), '/') . '/'; // only links into the configured MSP Align ?>
+                <?php if ($f['url'] !== '' && preg_match('#^https?://#', $f['url']) === 1 && str_starts_with($f['url'], $alignBase)): ?>
                 <a class="small ms-auto" href="<?= e($f['url']) ?>" rel="noopener noreferrer" target="_blank"><?= e(__('Open in MSP Align')) ?> <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></a>
                 <?php endif; ?>
             </div>

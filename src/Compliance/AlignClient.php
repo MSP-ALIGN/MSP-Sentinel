@@ -29,6 +29,10 @@ final class AlignClient
     private const PER_PAGE = 200;
     private const MAX_PAGES = 100;
     private const MAX_BYTES = 16777216;
+    /** All answers of one AlignClient together may be at most this big. */
+    private const MAX_TOTAL_BYTES = 33554432;
+
+    private int $totalBytes = 0;
 
     /** @param bool $allowHttp Test suite only. */
     public function __construct(private readonly string $baseUrl, private readonly string $apiKey, private readonly bool $allowHttp = false)
@@ -69,7 +73,7 @@ final class AlignClient
     public function clients(): array
     {
         return array_values(array_filter(array_map(static fn ($c): ?array => is_array($c) && is_int($c['id'] ?? null)
-            ? ['id' => $c['id'], 'name' => self::str($c['name'] ?? '')] : null, $this->all('/api/v1/clients'))));
+            ? ['id' => $c['id'], 'name' => self::str($c['name'] ?? '')] : null, $this->all('/api/v1/clients', ['include_excluded' => 'true']))));
     }
 
     /** @return list<array{framework_id:int, framework:string, slug:string, score:int, url:string}> */
@@ -96,13 +100,14 @@ final class AlignClient
     /**
      * Every page of a list.
      *
+     * @param array<string,string> $query
      * @return list<mixed>
      */
-    private function all(string $path): array
+    private function all(string $path, array $query = []): array
     {
         $out = [];
         for ($page = 1; $page <= self::MAX_PAGES; $page++) {
-            $res = $this->get($path, ['page' => $page, 'per_page' => self::PER_PAGE]);
+            $res = $this->get($path, $query + ['page' => $page, 'per_page' => self::PER_PAGE]);
             if (!is_array($res['data'] ?? null) || !array_is_list($res['data'])) {
                 throw new AlignException('MSP Align returned an unexpected list for ' . $path . '.');
             }
@@ -132,7 +137,7 @@ final class AlignClient
             CURLOPT_HTTPHEADER => ['Accept: application/json', 'Authorization: Bearer ' . $this->apiKey],
             CURLOPT_FOLLOWLOCATION => false,
             CURLOPT_CONNECTTIMEOUT => 10,
-            CURLOPT_TIMEOUT => 20,
+            CURLOPT_TIMEOUT => 10,
             CURLOPT_PROTOCOLS => $this->allowHttp ? (CURLPROTO_HTTP | CURLPROTO_HTTPS) : CURLPROTO_HTTPS,
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
@@ -149,13 +154,17 @@ final class AlignClient
         if ($ok === false) {
             throw new AlignException('Could not reach MSP Align: ' . mb_substr($err, 0, 200));
         }
+        $this->totalBytes += strlen($body);
+        if ($this->totalBytes > self::MAX_TOTAL_BYTES) {
+            throw new AlignException('MSP Align returned more data than Sentinel reads in one go.');
+        }
         $data = json_decode($body, true);
         if ($status !== 200 || !is_array($data)) {
             $msg = is_array($data) && is_array($data['error'] ?? null) && is_string($data['error']['message'] ?? null) ? mb_substr((string) preg_replace('/[^\P{C}]/u', '', $data['error']['message']), 0, 200) : '';
             throw new AlignException(match ($status) {
                 401 => 'MSP Align refused the API key (wrong, expired, or its admin was deactivated).',
                 403 => 'The MSP Align API key is missing a permission (it needs clients:read and compliance:read), or the client is outside the key.',
-                404 => 'MSP Align answered "not found" for ' . $path . ' (is the API turned on, and is the framework still assigned?).',
+                404 => 'MSP Align answered "not found" for ' . $path . ' (is the API turned on, is the client still active there, and is the framework still assigned?).',
                 429 => 'MSP Align asked Sentinel to slow down. Try again in a minute.',
                 default => 'MSP Align answered HTTP ' . $status . ($msg !== '' ? ': ' . $msg : '') . '.',
             });

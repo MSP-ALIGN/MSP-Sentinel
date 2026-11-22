@@ -75,6 +75,14 @@ final class ComplianceController extends Controller
     public function refresh(Request $request, array $params): Response
     {
         $client = $this->client($params);
+        // At most once a minute per client, so repeated clicks can't use up the MSP Align key's rate limit.
+        $last = App::db()->prepare('SELECT GREATEST(fetched_at, COALESCE(attempted_at, fetched_at)) FROM align_cache WHERE client_id = :c');
+        $last->execute(['c' => (int) $client['id']]);
+        $at = $last->fetchColumn();
+        if (is_string($at) && strtotime($at . ' UTC') > time() - 60) {
+            Session::flash('info', __('Read from MSP Align less than a minute ago. Try again in a minute.'));
+            return Response::redirect('/clients/' . (int) $client['id'] . '/compliance');
+        }
         $data = (new \Sentinel\Compliance\AlignCompliance(App::db(), App::align()))->forClient($client, true);
         Session::flash($data['error'] === '' ? 'success' : 'danger', $data['error'] === '' ? __('Compliance read again from MSP Align.') : $data['error']);
         return Response::redirect('/clients/' . (int) $client['id'] . '/compliance');

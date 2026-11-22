@@ -120,13 +120,22 @@ final class ClientController extends Controller
                              'compliance' => fn () => (int) ($client['align_client_id'] ?? 0) > 0 ? (new \Sentinel\Compliance\AlignCompliance(App::db(), App::align()))->forClient($client) : null,
                              'alignClients' => function () use ($client): array {
                                  // Choices for linking (admins, unlinked clients only); the exact-name match first.
-                                 if ((int) ($client['align_client_id'] ?? 0) > 0 || App::align() === null) {
+                                 // Only when an admin could link this client: nobody else needs the list.
+                                 if ((int) ($client['align_client_id'] ?? 0) > 0 || App::align() === null || (int) $client['is_archived'] === 1
+                                     || (int) ($client['is_demo'] ?? 0) === 1 || !\Sentinel\Auth\Role::atLeast((string) ($this->user()['role'] ?? ''), \Sentinel\Auth\Role::ADMIN)) {
                                      return ['list' => [], 'error' => ''];
                                  }
-                                 try {
-                                     $list = App::align()->clients();
-                                 } catch (\Sentinel\Compliance\AlignException $ex) {
-                                     return ['list' => [], 'error' => $ex->getMessage()];
+                                 $s = App::settings();
+                                 $cached = json_decode($s->fresh('mspalign_clients_cache'), true);
+                                 if (is_array($cached) && is_array($cached['list'] ?? null) && (int) ($cached['at'] ?? 0) > time() - 600) {
+                                     $list = $cached['list']; // the list for linking is read at most every 10 minutes
+                                 } else {
+                                     try {
+                                         $list = App::align()->clients();
+                                         $s->set('mspalign_clients_cache', (string) json_encode(['at' => time(), 'list' => $list]));
+                                     } catch (\Sentinel\Compliance\AlignException $ex) {
+                                         return ['list' => [], 'error' => $ex->getMessage()];
+                                     }
                                  }
                                  usort($list, static fn (array $a, array $b): int => [strcasecmp($a['name'], (string) $client['name']) !== 0, $a['name']] <=> [strcasecmp($b['name'], (string) $client['name']) !== 0, $b['name']]);
                                  return ['list' => $list, 'error' => ''];

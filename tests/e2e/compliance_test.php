@@ -90,13 +90,18 @@ return [
         Assert::contains('Not met', $row($page, '3.11'), 'MSP Align\'s own status is shown as it is');
         Assert::contains('1 other control(s) are about things Sentinel doesn', $page, 'awareness training counted, not listed');
         Assert::notContains('<script>x', $page, 'escaped');
-        Assert::contains('href="https://align.msp.example/clients/501/compliance/7"', $page);
+        Assert::contains('/align/clients/501/compliance/7"', $page, 'link into the configured MSP Align');
+        Assert::contains('Not checked yet', $row($page, '6.4'), 'an external scan never vouches for MFA');
 
         // Read once an hour: a second view doesn't ask MSP Align again; "Read again" does.
         $count = static fn (): int => substr_count(str_replace('\\/', '/', (string) @file_get_contents($ctx->feedsLog)), '/align/api/v1/clients/501/compliance/7/controls');
         $before = $count();
         $ctx->clientSection($admin, $cid, 'compliance');
         Assert::same($before, $count(), 'cached');
+        $tech->submit('/clients/' . $cid . '/compliance', '/clients/' . $cid . '/compliance/refresh', []);
+        Assert::same($before, $count(), 'at most once a minute');
+        Assert::contains('less than a minute ago', $ctx->clientSection($tech, $cid, 'compliance'));
+        $ctx->db->exec("UPDATE align_cache SET fetched_at = UTC_TIMESTAMP() - INTERVAL 5 MINUTE, attempted_at = UTC_TIMESTAMP() - INTERVAL 5 MINUTE WHERE client_id = {$cid}");
         $tech->submit('/clients/' . $cid . '/compliance', '/clients/' . $cid . '/compliance/refresh', []);
         Assert::same($before + 1, $count(), 'read again on request (technicians may)');
         // Nothing was ever written to MSP Align.

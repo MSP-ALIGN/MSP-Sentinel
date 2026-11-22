@@ -83,7 +83,7 @@ $n = $ninja;
         <details class="small mb-3">
             <summary><?= e(__('How to create the API key in MSP Align')) ?></summary>
             <ol class="mt-2 mb-0">
-                <li><?= e(__('In MSP Align, go to Administration, API. Turn the API on if it is off.')) ?></li>
+                <li><?= e(__('In MSP Align, go to Settings, API. Turn the API on if it is off.')) ?></li>
                 <li><?= e(__('Create a key named MSP Sentinel with the permissions clients:read and compliance:read only. You can limit it to some clients.')) ?></li>
                 <li><?= e(__('Copy the key (it starts with msa_) into the form below. MSP Align shows it only once.')) ?></li>
             </ol>

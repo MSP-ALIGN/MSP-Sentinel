@@ -16,8 +16,9 @@ use PDO;
  *
  * Honest by design, per control:
  * - "issues": open Sentinel findings in an area the control is about (listed, worst first);
- * - "clear": Sentinel checked that area for this client and has no open problem there. That is not proof the control
- *   is met (Sentinel sees only part of it), and the page says so;
+ * - "clear": Sentinel recently checked that area for this client (checkedAreas: only what a check genuinely assesses)
+ *   and has no open problem there. That is not proof the control is met (Sentinel sees only part of it), and the page
+ *   says so;
  * - "not_checked": the control is in an area Sentinel covers, but it hasn't checked it for this client yet (for
  *   example no devices from NinjaOne, or no scan yet);
  * Controls outside Sentinel's areas (policies, training, physical security...) are counted, not listed.
@@ -30,6 +31,12 @@ final class AlignCompliance
 {
     /** Cached answers are reused for this long. */
     private const CACHE_SECONDS = 3600;
+    /** After a failed read, MSP Align isn't asked again (on page views) for this long. */
+    private const RETRY_SECONDS = 600;
+    /** One read of a client's compliance may take at most this long in total. */
+    private const BUDGET_SECONDS = 25;
+    /** "Checked" only counts recent evidence. */
+    private const RECENT_DAYS = 30;
 
     /**
      * Crosswalk tags per kind of finding: by finding-key prefix, and where it matters by the finding's code.
@@ -47,7 +54,7 @@ final class AlignCompliance
         'webvuln' => ['*' => ['vuln_scan', 'vuln_remediation', 'vuln_patch_apps']],
         'email' => ['*' => ['email_auth']],
         'dev' => ['os_unsupported' => ['ep_lifecycle'], 'av_missing' => ['ep_malware', 'ep_edr'], 'av_off' => ['ep_malware', 'ep_edr'], 'av_outdated' => ['ep_malware'],
-                  'encryption_off' => ['ep_encryption', 'data_encrypt_rest'], 'patches_missing' => ['vuln_patch_os', 'vuln_remediation'],
+                  'encryption_off' => ['ep_encryption', 'data_encrypt_rest'], 'encryption_off_server' => ['ep_encryption', 'data_encrypt_rest'], 'patches_missing' => ['vuln_patch_os', 'vuln_remediation'],
                   'patches_failed' => ['vuln_patch_os', 'vuln_remediation'], '*' => []],
         'devvuln' => ['*' => ['vuln_patch_apps', 'vuln_remediation']],
         'proto' => ['rdp_no_nla' => ['net_remote_access', 'cfg_baseline'], 'http_login' => ['net_encrypt_transit'], '*' => ['cfg_ports_services', 'cfg_baseline']],
@@ -87,9 +94,6 @@ final class AlignCompliance
         }
         $code = (string) end($parts);
         $tags = self::TAGS[$kind][$code] ?? self::TAGS[$kind]['*'] ?? [];
-        if ($kind === 'web' && isset($parts[3])) {
-            $tags = self::TAGS['web'][$parts[3]] ?? self::TAGS['web']['*'];
-        }
         if ($kind === 'port' && in_array((int) $code, self::REMOTE_PORTS, true)) {
             $tags[] = 'net_remote_access';
         }
@@ -110,22 +114,34 @@ final class AlignCompliance
         $error = '';
         $data = $cached['data'] ?? null;
         $stale = $cached === null || $refresh || strtotime($cached['fetched_at'] . ' UTC') < time() - self::CACHE_SECONDS;
-        if ($stale && $this->align !== null && $alignId > 0) {
+        // A recent failed attempt: show what we have instead of waiting on MSP Align again (unless asked to).
+        $recentAttempt = !$refresh && $cached !== null && $cached['attempted_at'] !== '' && strtotime($cached['attempted_at'] . ' UTC') > time() - self::RETRY_SECONDS;
+        if ($stale && !$recentAttempt && $this->align !== null && $alignId > 0) {
+            $this->db->prepare("INSERT INTO align_cache (client_id, fetched_at, data, attempted_at) VALUES (:c, '2000-01-01 00:00:00', '{}', UTC_TIMESTAMP())
+                                ON DUPLICATE KEY UPDATE attempted_at = VALUES(attempted_at)")->execute(['c' => $cid]);
             try {
+                $started = microtime(true);
                 $frameworks = [];
                 foreach ($this->align->assessments($alignId) as $a) {
+                    if (microtime(true) - $started > self::BUDGET_SECONDS) {
+                        throw new AlignException(__('Reading from MSP Align took too long; try Read again later.'));
+                    }
                     $frameworks[] = $a + ['controls' => $this->align->controls($alignId, $a['framework_id'])];
                 }
+                $json = json_encode(['frameworks' => $frameworks], JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+                if ($json === false || strlen($json) > 15000000) {
+                    throw new AlignException(__('MSP Align returned more compliance data than Sentinel stores for one client.'));
+                }
                 $data = ['frameworks' => $frameworks];
-                $this->db->prepare('INSERT INTO align_cache (client_id, fetched_at, data) VALUES (:c, UTC_TIMESTAMP(), :d)
-                                    ON DUPLICATE KEY UPDATE fetched_at = VALUES(fetched_at), data = VALUES(data)')
-                    ->execute(['c' => $cid, 'd' => json_encode($data, JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE)]);
+                $this->db->prepare('UPDATE align_cache SET fetched_at = UTC_TIMESTAMP(), data = :d WHERE client_id = :c')->execute(['c' => $cid, 'd' => $json]);
                 $cached = $this->cached($cid);
             } catch (AlignException $ex) {
                 $error = $ex->getMessage();
             }
         } elseif ($stale && $this->align === null) {
             $error = __('MSP Align is not connected (Administration, Integrations).');
+        } elseif ($stale && $recentAttempt) {
+            $error = __('MSP Align could not be read a few minutes ago; Sentinel tries again in a while (or use Read again).');
         }
         $checked = $this->checkedAreas($cid);
         $findings = $this->openFindings($cid);
@@ -150,36 +166,59 @@ final class AlignCompliance
                       'url' => (string) ($f['url'] ?? ''), 'controls' => $rows, 'outside' => $outside,
                       'issues' => count(array_filter($rows, static fn ($r) => $r['sentinel'] === 'issues'))];
         }
-        return ['frameworks' => $out, 'fetched_at' => (string) ($cached['fetched_at'] ?? ''), 'error' => $error, 'checked' => $checked];
+        $fetched = (string) ($cached['fetched_at'] ?? '');
+        return ['frameworks' => $out, 'fetched_at' => str_starts_with($fetched, '2000-') ? '' : $fetched, 'error' => $error, 'checked' => $checked];
     }
 
     /**
-     * What Sentinel has actually checked for this client, by tag (with a short description of how).
+     * What Sentinel has actually checked for this client, by tag, with a short note of how and when. Only tags a
+     * check genuinely assesses, and only recent evidence: an external scan sees the internet-facing side (open ports,
+     * exposed admin pages, certificates), not MFA, internal patching or hardening, so those tags are never "checked"
+     * by it; they can still show open problems from findings.
      *
      * @return array<string,string>
      */
     public function checkedAreas(int $clientId): array
     {
-        $q = fn (string $sql): int => (int) $this->db->query(str_replace(':c', (string) $clientId, $sql))->fetchColumn();
+        $one = function (string $sql) use ($clientId): array {
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute(['c' => $clientId, 'd' => self::RECENT_DAYS]);
+            return $stmt->fetch() ?: [];
+        };
         $areas = [];
-        if ($q("SELECT COUNT(*) FROM scan_jobs WHERE client_id = :c AND job_type = 'ports' AND status IN ('done','partial')") > 0) {
-            foreach (['cfg_ports_services', 'net_firewall', 'net_remote_access', 'iam_mfa_remote', 'net_encrypt_transit', 'vuln_scan', 'vuln_remediation', 'cfg_baseline'] as $t) {
-                $areas[$t] = __('external scan');
+        $add = static function (array $tags, string $label) use (&$areas): void {
+            foreach ($tags as $t) {
+                $areas[$t] = isset($areas[$t]) ? $areas[$t] . '; ' . $label : $label;
             }
-            $areas['vuln_patch_apps'] = __('external scan');
+        };
+        $scan = $one("SELECT MAX(finished_at) AS at FROM scan_jobs WHERE client_id = :c AND job_type = 'ports' AND status = 'done' AND finished_at > UTC_TIMESTAMP() - INTERVAL :d DAY");
+        if (($scan['at'] ?? null) !== null) {
+            $add(['cfg_ports_services', 'net_firewall', 'net_encrypt_transit', 'vuln_scan'],
+                __('external scan of internet-facing services, {d}', ['d' => substr((string) $scan['at'], 0, 10)]));
         }
-        if ($q('SELECT COUNT(*) FROM email_checks WHERE client_id = :c') > 0) {
-            $areas['email_auth'] = __('email records (SPF, DMARC)');
+        $mail = $one('SELECT MAX(checked_at) AS at FROM email_checks WHERE client_id = :c AND checked_at > UTC_TIMESTAMP() - INTERVAL :d DAY');
+        if (($mail['at'] ?? null) !== null) {
+            $add(['email_auth'], __('email records (SPF, DMARC), {d}', ['d' => substr((string) $mail['at'], 0, 10)]));
         }
-        if ($q("SELECT COUNT(*) FROM devices WHERE client_id = :c AND removed_at IS NULL AND source <> 'agent'") > 0) {
-            foreach (['ep_lifecycle', 'ep_malware', 'ep_edr', 'ep_encryption', 'data_encrypt_rest', 'vuln_patch_os', 'vuln_patch_apps', 'vuln_remediation'] as $t) {
-                $areas[$t] = __('device inventory (NinjaOne)');
+        // Device inventory: only areas every current device reports on (an unknown value is not "fine").
+        $dev = $one("SELECT COUNT(*) AS n, MAX(last_seen) AS at, SUM(os_name = '') AS no_os, SUM(av_state = '') AS no_av, SUM(encryption = '') AS no_enc
+                     FROM devices WHERE client_id = :c AND removed_at IS NULL AND source <> 'agent' AND last_seen > UTC_TIMESTAMP() - INTERVAL :d DAY");
+        if ((int) ($dev['n'] ?? 0) > 0) {
+            $label = __('device inventory from NinjaOne ({n} devices), {d}', ['n' => (int) $dev['n'], 'd' => substr((string) $dev['at'], 0, 10)]);
+            $add(['vuln_patch_os', 'vuln_patch_apps'], $label);
+            if ((int) $dev['no_os'] === 0) {
+                $add(['ep_lifecycle'], $label);
+            }
+            if ((int) $dev['no_av'] === 0) {
+                $add(['ep_malware'], $label);
+            }
+            if ((int) $dev['no_enc'] === 0) {
+                $add(['ep_encryption', 'data_encrypt_rest'], $label);
             }
         }
-        if ($q("SELECT COUNT(*) FROM devices WHERE client_id = :c AND removed_at IS NULL AND source = 'agent' AND last_full_seen IS NOT NULL") > 0) {
-            foreach (['cfg_ports_services', 'cfg_baseline', 'net_remote_access', 'net_encrypt_transit'] as $t) {
-                $areas[$t] = isset($areas[$t]) ? $areas[$t] . ', ' . __('internal scan') : __('internal scan');
-            }
+        $agent = $one("SELECT MAX(last_full_seen) AS at FROM devices WHERE client_id = :c AND removed_at IS NULL AND source = 'agent' AND last_full_seen > UTC_TIMESTAMP() - INTERVAL :d DAY");
+        if (($agent['at'] ?? null) !== null) {
+            $add(['cfg_ports_services', 'net_encrypt_transit'], __('internal scan, {d}', ['d' => substr((string) $agent['at'], 0, 10)]));
         }
         return $areas;
     }
@@ -199,16 +238,16 @@ final class AlignCompliance
         return $out;
     }
 
-    /** @return array{fetched_at:string, data:array<mixed>}|null */
+    /** @return array{fetched_at:string, data:array<mixed>, attempted_at:string}|null */
     private function cached(int $clientId): ?array
     {
-        $stmt = $this->db->prepare('SELECT fetched_at, data FROM align_cache WHERE client_id = :c');
+        $stmt = $this->db->prepare('SELECT fetched_at, data, attempted_at FROM align_cache WHERE client_id = :c');
         $stmt->execute(['c' => $clientId]);
         $row = $stmt->fetch();
         if ($row === false) {
             return null;
         }
         $data = json_decode((string) $row['data'], true);
-        return ['fetched_at' => (string) $row['fetched_at'], 'data' => is_array($data) ? $data : []];
+        return ['fetched_at' => (string) $row['fetched_at'], 'data' => is_array($data) ? $data : [], 'attempted_at' => (string) ($row['attempted_at'] ?? '')];
     }
 }

@@ -79,6 +79,7 @@ final class Settings
         'mspalign_api_key' => '',
         'mspalign_tested_at' => '',
         'mspalign_test_result' => '',
+        'mspalign_clients_cache' => '',
         // Git-based installs: commits the followed branch is ahead of the installed commit, its newest commit, and
         // the installed commit the answer is for (so an answer for an older commit is never shown after updating).
         'update_branch_behind' => '',

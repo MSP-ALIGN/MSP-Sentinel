@@ -155,7 +155,7 @@ final class IntegrationsController extends Controller
             $changed['mspalign_api_key'] = 'cleared';
         } elseif ($apiKey !== '') {
             if (!AlignClient::validKey($apiKey)) {
-                Session::flash('danger', __('That is not an MSP Align API key (they look like msa_xxxxxxxx_...). Create one in MSP Align under Administration, API.'));
+                Session::flash('danger', __('That is not an MSP Align API key (they look like msa_xxxxxxxx_...). Create one in MSP Align under Settings, API.'));
                 return $back;
             }
             $s->setSecret('mspalign_api_key', $apiKey);
@@ -164,6 +164,7 @@ final class IntegrationsController extends Controller
         if ($changed !== []) {
             $s->set('mspalign_test_result', '');
             App::db()->exec('DELETE FROM align_cache'); // another address or key: read everything again
+            $s->set('mspalign_clients_cache', '');
             $this->audit($request, 'settings.mspalign_updated', null, null, ['changed' => $changed]);
         }
         Session::flash('success', __('MSP Align settings saved.'));

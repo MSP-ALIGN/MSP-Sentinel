@@ -39,7 +39,7 @@ if ($auth === $noScope) {
 }
 if ($sub === '/api/v1/clients/501/compliance') {
     $page([['client_id' => 501, 'framework_id' => 7, 'framework' => 'CIS Controls v8 IG1 (example)', 'slug' => 'cis-v8-ig1', 'score' => ['percent' => 42],
-            'url' => 'https://align.msp.example/clients/501/compliance/7']]);
+            'url' => 'http://' . $_SERVER['HTTP_HOST'] . '/align/clients/501/compliance/7']]);
 }
 if ($sub === '/api/v1/clients/501/compliance/7/controls') {
     $page([
@@ -47,6 +47,7 @@ if ($sub === '/api/v1/clients/501/compliance/7/controls') {
         ['id' => 72, 'ref' => '9.5', 'section' => 'Email', 'title' => 'Implement DMARC', 'crosswalk_tags' => ['email_auth'], 'status' => 'not_assessed'],
         ['id' => 73, 'ref' => '10.1', 'section' => 'Malware defenses', 'title' => 'Deploy anti-malware', 'crosswalk_tags' => ['ep_malware', 'ep_edr'], 'status' => 'partial'],
         ['id' => 74, 'ref' => '14.1', 'section' => 'Awareness', 'title' => 'Security awareness programme', 'crosswalk_tags' => ['awareness_training'], 'status' => 'met'],
+        ['id' => 76, 'ref' => '6.4', 'section' => 'Access control', 'title' => 'MFA for remote network access', 'crosswalk_tags' => ['iam_mfa_remote'], 'status' => 'met'],
         ['id' => 75, 'ref' => '3.11', 'section' => 'Data protection', 'title' => 'Encrypt data in transit <script>x</script>', 'crosswalk_tags' => ['net_encrypt_transit'], 'status' => 'not_met'],
     ]);
 }
