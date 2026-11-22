@@ -4,7 +4,7 @@ Self-hosted security monitoring for MSPs (managed service providers). Sentinel *
 exposure and vulnerabilities across your clients, monitors them and alerts on them. Its companion product,
 MSP Align, plans, reports and proves, using Sentinel's findings.
 
-> **Status: 1.2.0 (stable).** External exposure monitoring for MSPs: the "authorised to scan"
+> **Status: 1.3.0 (stable).** External exposure monitoring for MSPs: the "authorised to scan"
 > register, passive discovery, gentle port scanning, certificate and admin-page checks, vulnerability matching
 > (NVD, CISA KEV, EPSS), findings with triage, alerts, branded reports, an API, and an installer. See
 > [`docs/ROADMAP.md`](docs/ROADMAP.md) for what comes next (internal agent, pen testing).
@@ -12,6 +12,14 @@ MSP Align, plans, reports and proves, using Sentinel's findings.
 Sentinel is free software under the [GNU AGPL-3.0](LICENSE). Each MSP runs its own copy and owns its data.
 
 ## What's new
+
+### 1.3.0 (2026-11-22): Administration as its own section
+
+- The left menu now holds only day-to-day work: Dashboard, Clients, Findings, Reports and Help.
+- **Administration** moved to the user drop-down (top right) for admins: Overview, Users, Settings, API, System and
+  Audit log. Admin pages have their own left menu, clearly marked, with a "Back to Sentinel" link.
+- A new **Administration overview** shows each area with its key status: active users, email and webhook,
+  API tokens and events, system health and updates, and recent audit activity.
 
 ### 1.2.0 (2026-11-22): command-view dashboards
 

@@ -115,6 +115,7 @@ $router->add('GET', '/users/{id}', [UserController::class, 'edit'], $admin);
 $router->add('POST', '/users/{id}', [UserController::class, 'update'], $admin);
 $router->add('POST', '/users/{id}/password', [UserController::class, 'resetPassword'], $admin);
 $router->add('POST', '/users/{id}/2fa-reset', [UserController::class, 'resetTwoFactor'], $admin);
+$router->add('GET', '/admin', [AdminController::class, 'index'], $admin);
 $router->add('GET', '/admin/audit', [AdminController::class, 'auditLog'], $admin);
 $router->add('GET', '/admin/settings', [AdminController::class, 'settings'], $admin);
 $router->add('POST', '/admin/settings', [AdminController::class, 'saveSettings'], $admin);

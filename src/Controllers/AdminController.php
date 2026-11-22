@@ -10,7 +10,8 @@ use Sentinel\Core\Response;
 use Sentinel\Core\Session;
 
 /**
- * Admin pages: audit log and general settings (admin only: enforced by the routes).
+ * Admin pages: the Administration overview, audit log and general settings
+ * (admin only: enforced by the routes).
  *
  * Untrusted: the page query parameter and all settings form fields.
  *
@@ -23,6 +24,28 @@ use Sentinel\Core\Session;
 final class AdminController extends Controller
 {
     private const AUDIT_PAGE_SIZE = 50;
+
+    /** GET /admin: the Administration overview, one card per area with its key status. */
+    public function index(Request $request): Response
+    {
+        $db = App::db();
+        $checks = App::health()->run();
+        $tokens = (int) $db->query('SELECT COUNT(*) FROM api_tokens WHERE revoked_at IS NULL AND expires_at > UTC_TIMESTAMP()')->fetchColumn();
+        return $this->page('admin/index', __('Administration'), [
+            'users' => [
+                'active' => (int) $db->query('SELECT COUNT(*) FROM users WHERE is_active = 1')->fetchColumn(),
+                'admins' => (int) $db->query("SELECT COUNT(*) FROM users WHERE is_active = 1 AND role = 'admin'")->fetchColumn(),
+            ],
+            'email' => App::settings()->get('email_enabled') === '1',
+            'webhook' => App::settings()->get('webhook_enabled') === '1',
+            'tokens' => $tokens,
+            'events' => App::settings()->get('event_webhook_enabled') === '1',
+            'problems' => count(array_filter($checks, static fn (array $c): bool => $c['status'] === 'fail')),
+            'warnings' => count(array_filter($checks, static fn (array $c): bool => $c['status'] === 'warn')),
+            'newer' => App::updates()->newer(),
+            'audit' => (int) $db->query('SELECT COUNT(*) FROM audit_log WHERE created_at > UTC_TIMESTAMP() - INTERVAL 1 DAY')->fetchColumn(),
+        ]);
+    }
 
     /** GET /admin/audit */
     public function auditLog(Request $request): Response

@@ -14,10 +14,21 @@ $isAdmin = isset($currentUser['role']) && Role::atLeast((string) $currentUser['r
 $path = parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH) ?: '/';
 $path = substr($path, strlen(App::basePath())) ?: '/';
 $navItem = static function (string $href, string $icon, string $label) use ($path): string {
-    $active = ($href === '/' ? $path === '/' : str_starts_with($path, $href)) ? ' active' : '';
+    // "/" and "/admin" (the overview) are active only on exactly that page; others on any page below them.
+    $active = (in_array($href, ['/', '/admin'], true) ? $path === $href : ($path === $href || str_starts_with($path, $href . '/'))) ? ' active' : '';
     return '<li class="nav-item"><a href="' . e(url($href)) . '" class="nav-link' . $active . '">'
         . '<i class="nav-icon bi ' . e($icon) . '" aria-hidden="true"></i><p>' . e($label) . '</p></a></li>';
 };
+// Administration is a separate section: its own left menu on admin pages, reached from the user drop-down.
+$inAdmin = $isAdmin && ($path === '/admin' || str_starts_with($path, '/admin/') || $path === '/users' || str_starts_with($path, '/users/'));
+$adminItems = [
+    ['/admin', 'bi-grid-1x2', __('Overview')],
+    ['/users', 'bi-people', __('Users')],
+    ['/admin/settings', 'bi-gear', __('Settings')],
+    ['/admin/api', 'bi-plug', __('API')],
+    ['/admin/system', 'bi-heart-pulse', __('System')],
+    ['/admin/audit', 'bi-journal-text', __('Audit log')],
+];
 try {
     $sourceUrl = App::settings()->get('source_url');
 } catch (\Throwable) {
@@ -69,6 +80,13 @@ try {
                     </a>
                     <ul class="dropdown-menu dropdown-menu-end">
                         <li><a class="dropdown-item" href="<?= e(url('/profile')) ?>"><i class="bi bi-person me-2" aria-hidden="true"></i><?= e(__('My profile')) ?></a></li>
+                        <?php if ($isAdmin): ?>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><h6 class="dropdown-header"><?= e(__('Administration')) ?></h6></li>
+                        <?php foreach ($adminItems as [$href, $icon, $label]): ?>
+                        <li><a class="dropdown-item" href="<?= e(url($href)) ?>"><i class="bi <?= e($icon) ?> me-2" aria-hidden="true"></i><?= e($label) ?></a></li>
+                        <?php endforeach; ?>
+                        <?php endif; ?>
                         <li><hr class="dropdown-divider"></li>
                         <li>
                             <form method="post" action="<?= e(url('/logout')) ?>" class="px-0">
@@ -83,7 +101,7 @@ try {
         </div>
     </nav>
 
-    <aside class="app-sidebar bg-body-secondary shadow" data-bs-theme="dark">
+    <aside class="app-sidebar bg-body-secondary shadow<?= $inAdmin ? ' is-admin' : '' ?>" data-bs-theme="dark">
         <div class="sidebar-brand">
             <a href="<?= e(url('/')) ?>" class="brand-link" title="<?= e($product) ?>">
                 <img src="<?= e(asset('img/logo.svg')) ?>" alt="" class="brand-logo" width="34" height="34">
@@ -91,24 +109,29 @@ try {
             </a>
         </div>
         <div class="sidebar-wrapper">
+            <?php if ($inAdmin): ?>
+            <div class="admin-mode"><i class="bi bi-shield-lock" aria-hidden="true"></i><?= e(__('Administration')) ?></div>
+            <nav class="mt-2" aria-label="<?= e(__('Administration menu')) ?>">
+                <ul class="nav sidebar-menu flex-column" role="menu">
+                    <?php foreach ($adminItems as [$href, $icon, $label]): ?>
+                    <?= $navItem($href, $icon, $label) ?>
+                    <?php endforeach; ?>
+                    <li class="nav-header"><?= e(__('LEAVE')) ?></li>
+                    <li class="nav-item"><a href="<?= e(url('/')) ?>" class="nav-link admin-exit"><i class="nav-icon bi bi-arrow-left-circle" aria-hidden="true"></i><p><?= e(__('Back to Sentinel')) ?></p></a></li>
+                </ul>
+            </nav>
+            <?php else: ?>
             <nav class="mt-2" aria-label="<?= e(__('Main menu')) ?>">
                 <ul class="nav sidebar-menu flex-column" role="menu">
                     <?= $navItem('/', 'bi-speedometer2', __('Dashboard')) ?>
                     <?= $navItem('/clients', 'bi-building', __('Clients')) ?>
                     <?= $navItem('/findings', 'bi-exclamation-diamond', __('Findings')) ?>
                     <?= $navItem('/reports', 'bi-file-earmark-text', __('Reports')) ?>
-                    <?php if ($isAdmin): ?>
-                    <li class="nav-header"><?= e(__('ADMINISTRATION')) ?></li>
-                    <?= $navItem('/users', 'bi-people', __('Users')) ?>
-                    <?= $navItem('/admin/audit', 'bi-journal-text', __('Audit log')) ?>
-                    <?= $navItem('/admin/settings', 'bi-gear', __('Settings')) ?>
-                    <?= $navItem('/admin/api', 'bi-plug', __('API')) ?>
-                    <?= $navItem('/admin/system', 'bi-heart-pulse', __('System')) ?>
-                    <?php endif; ?>
                     <li class="nav-header"><?= e(__('SUPPORT')) ?></li>
                     <?= $navItem('/help', 'bi-question-circle', __('Help')) ?>
                 </ul>
             </nav>
+            <?php endif; ?>
         </div>
     </aside>
 

@@ -148,11 +148,20 @@ return [
         [
             'title' => 'Audit log',
             'paragraphs' => [
-                'Admins can see a record of sign-ins, failed sign-ins, user changes and settings changes under Administration > Audit log. Entries cannot be edited or deleted from the web interface.',
+                'Admins can see a record of sign-ins, failed sign-ins, user changes and settings changes under Administration > Audit log (open Administration from your name at the top right). Entries cannot be edited or deleted from the web interface.',
             ],
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.3.0',
+            'date' => '2026-11-22',
+            'items' => [
+                'Administration is now its own section, opened from your name at the top right (admins only).',
+                'A new Administration overview shows users, alerts, API, system health and audit activity at a glance.',
+                'The left menu keeps only day-to-day work: Dashboard, Clients, Findings, Reports and Help.',
+            ],
+        ],
         [
             'version' => '1.2.0',
             'date' => '2026-11-22',

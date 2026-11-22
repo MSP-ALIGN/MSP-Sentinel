@@ -2,6 +2,14 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.3.0 (2026-11-22): Administration as its own section
+
+- The left menu now holds only day-to-day work: Dashboard, Clients, Findings, Reports and Help.
+- **Administration** moved to the user drop-down (top right) for admins: Overview, Users, Settings, API, System and
+  Audit log. Admin pages have their own left menu, clearly marked, with a "Back to Sentinel" link.
+- A new **Administration overview** shows each area with its key status: active users, email and webhook,
+  API tokens and events, system health and updates, and recent audit activity.
+
 ### 1.2.0 (2026-11-22): command-view dashboards
 
 - The **dashboard** is now a command view: a threat-level gauge (the highest client risk), totals, a 90-day trend,

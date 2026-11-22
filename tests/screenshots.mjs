@@ -172,6 +172,14 @@ await page.click('form[action$="/admin/api/tokens"] button[type=submit]');
 await page.waitForURL(/\/admin\/api/);
 await page.goto(`${base}/admin/api`);
 await shot(page, '34-api');
+// Administration section (its own menu), reached from the user drop-down.
+await page.goto(`${base}/admin`);
+await shot(page, '37-administration');
+await page.goto(`${base}/`);
+await page.click('.navbar .dropdown-toggle');
+await page.waitForTimeout(200);
+await page.screenshot({ path: `${out}38-user-menu.png`, clip: { x: 900, y: 0, width: 380, height: 420 } });
+await page.keyboard.press('Escape');
 // System page (health, updates, retention) after one worker run, so the heartbeat shows.
 await page.goto(`${base}/admin/system`);
 await shot(page, '35-system');

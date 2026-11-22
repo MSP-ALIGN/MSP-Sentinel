@@ -342,3 +342,23 @@ a.kpi:hover { background: rgba(var(--st-ember-rgb), .07); }
 .bars .b-track { fill: var(--st-hud-line); }
 .bars .b-bar { fill: var(--st-info); }
 .bars .b-risk { fill: var(--st-fail); }
+
+/* =====================================================================
+   Administration section (1.3.0): its own sidebar menu and overview cards.
+   ===================================================================== */
+.app-sidebar.is-admin { border-right-color: rgba(var(--st-ember-rgb), .45); }
+.admin-mode { display: flex; align-items: center; gap: .5rem; margin: .75rem .75rem 0; padding: .45rem .7rem; border: 1px solid rgba(var(--st-ember-rgb), .5);
+  background: rgba(var(--st-ember-rgb), .1); color: var(--st-ember-hot); font: 600 .78rem var(--st-display); letter-spacing: .14em; text-transform: uppercase; }
+.app-sidebar .admin-exit { color: #c9d1da !important; }
+.dropdown-header { font: 600 .7rem var(--st-display); letter-spacing: .14em; text-transform: uppercase; color: var(--st-ember-hot); }
+[data-bs-theme="light"] .dropdown-header { color: var(--st-ember-deep); }
+.admin-cards { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); }
+.admin-card { display: flex; gap: .9rem; align-items: flex-start; color: var(--bs-body-color); text-decoration: none !important; }
+.admin-card:hover { background: rgba(var(--st-ember-rgb), .07); }
+.admin-card-icon { font-size: 1.6rem; color: var(--st-ember-hot); line-height: 1; }
+[data-bs-theme="light"] .admin-card-icon { color: var(--st-ember-deep); }
+.admin-card-body { display: flex; flex-direction: column; gap: .2rem; min-width: 0; }
+.admin-card-title { font: 600 1rem var(--st-display); letter-spacing: .1em; text-transform: uppercase; color: var(--bs-emphasis-color); }
+.admin-card-status { font: .8rem var(--st-mono); }
+.admin-card-status.is-ok { color: var(--st-ok); } .admin-card-status.is-warn { color: var(--st-warn); } .admin-card-status.is-bad { color: var(--st-fail); }
+.admin-card-text { font-size: .86rem; color: var(--bs-secondary-color); }
