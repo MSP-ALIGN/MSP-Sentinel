@@ -54,6 +54,7 @@ final class SmtpMailer
         }
         $ctx = stream_context_create(['ssl' => array_filter([
             'verify_peer' => true, 'verify_peer_name' => true, 'peer_name' => $this->host, 'cafile' => $this->caFile,
+            'crypto_method' => STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT | STREAM_CRYPTO_METHOD_TLSv1_3_CLIENT,
         ], static fn ($v) => $v !== null)]);
         $scheme = $this->security === 'tls' ? 'ssl' : 'tcp';
         $sock = @stream_socket_client($scheme . '://' . (str_contains($this->host, ':') ? '[' . $this->host . ']' : $this->host) . ':' . $this->port,
@@ -92,7 +93,11 @@ final class SmtpMailer
             $this->command($sock, 'DATA', 354);
             $this->write($sock, self::buildMessage($this->from, $to, $subject, $body) . "\r\n.");
             $this->expect($sock, 250);
-            $this->command($sock, 'QUIT', 221);
+            // The message is accepted. A bad answer to QUIT must not make it look failed (and be sent again).
+            try {
+                $this->command($sock, 'QUIT', 221);
+            } catch (\RuntimeException) {
+            }
         } finally {
             fclose($sock);
         }
@@ -109,7 +114,9 @@ final class SmtpMailer
         $headers = [
             'From: MSP Sentinel <' . $from . '>',
             'To: ' . implode(', ', $to),
-            'Subject: =?UTF-8?B?' . base64_encode(mb_substr($subject, 0, 200)) . '?=',
+            // RFC 2047: encoded words of at most 75 characters, folded onto continuation lines.
+            'Subject: ' . implode("\r\n ", array_map(static fn (string $part): string => '=?UTF-8?B?' . base64_encode($part) . '?=',
+                mb_str_split(mb_substr($subject, 0, 200) === '' ? ' ' : mb_substr($subject, 0, 200), 30))),
             'Date: ' . gmdate('D, d M Y H:i:s') . ' +0000',
             'Message-ID: <' . bin2hex(random_bytes(12)) . '@msp-sentinel>',
             'MIME-Version: 1.0',

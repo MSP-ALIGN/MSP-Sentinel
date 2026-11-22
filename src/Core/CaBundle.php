@@ -8,10 +8,12 @@ namespace Sentinel\Core;
  * The CA bundle used to verify TLS connections Sentinel makes (certificate
  * checks, SMTP). PHP's "cafile" REPLACES the system trust store, so an extra
  * CA file (config tls.ca_file) is combined with the system bundle and written
- * once to a temporary file named after its contents' hash.
+ * once to a file named after its contents' hash, in the app's own storage/
+ * directory (not the shared /tmp, where another local user could plant a file).
  *
- * Security assumptions: the extra CA file is trusted admin config. The combined
- * file only contains public CA certificates.
+ * Security assumptions: the extra CA file is trusted admin config. An existing
+ * combined file is only reused if its contents match exactly what we would
+ * write; it is created with mode 0600 through a random temporary name.
  */
 final class CaBundle
 {
@@ -34,10 +36,23 @@ final class CaBundle
             }
         }
         $extra = (string) file_get_contents($extraCaFile);
-        $path = sys_get_temp_dir() . '/msp-sentinel-ca-' . hash('sha256', $system . $extra) . '.pem';
-        if (!is_file($path)) {
-            file_put_contents($path . '.tmp', $system . "\n" . $extra);
-            rename($path . '.tmp', $path);
+        $content = $system . "\n" . $extra;
+        $dir = dirname(__DIR__, 2) . '/storage/ca';
+        if (!is_dir($dir) && !@mkdir($dir, 0700, true) && !is_dir($dir)) {
+            throw new \RuntimeException('Cannot create ' . $dir . ' for the CA bundle.');
+        }
+        $path = $dir . '/ca-' . hash('sha256', $content) . '.pem';
+        if (!is_file($path) || is_link($path) || (string) @file_get_contents($path) !== $content) {
+            $tmp = $dir . '/.ca-' . bin2hex(random_bytes(8)) . '.tmp';
+            $old = umask(0077);
+            try {
+                if (@file_put_contents($tmp, $content, LOCK_EX) === false || !@rename($tmp, $path)) {
+                    @unlink($tmp);
+                    throw new \RuntimeException('Cannot write the CA bundle in ' . $dir . '.');
+                }
+            } finally {
+                umask($old);
+            }
         }
         return $cache[$extraCaFile] = $path;
     }

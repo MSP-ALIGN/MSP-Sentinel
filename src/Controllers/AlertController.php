@@ -76,7 +76,7 @@ final class AlertController extends Controller
         }
         $newUrl = $request->input('webhook_url');
         if ($newUrl !== '') {
-            $check = (new WebhookSender(App::config()->get('testing.allow_documentation_ranges', false) === true))->check($newUrl);
+            $check = (new WebhookSender(App::webhookTestMode()))->check($newUrl);
             if (is_string($check)) {
                 $errors[] = $check;
             }
@@ -144,15 +144,19 @@ final class AlertController extends Controller
             return Response::redirect('/admin/settings#alerts');
         }
         $id = (int) $db->lastInsertId();
-        $result = App::outbox()->flush(1, $id);
+        App::outbox()->flush(1, $id);
+        // Read the real outcome: the worker may have sent it first.
         $row = $db->query('SELECT status, last_error FROM deliveries WHERE id = ' . $id)->fetch();
-        $this->audit($request, 'settings.alerts_tested', null, null, ['channel' => $channel, 'ok' => $result['sent'] === 1]);
-        if ($result['sent'] === 1) {
+        $ok = $row['status'] === 'sent';
+        $this->audit($request, 'settings.alerts_tested', null, null, ['channel' => $channel, 'ok' => $ok]);
+        if ($ok) {
             Session::flash('success', $channel === 'email' ? __('Test email sent to {to}.', ['to' => $user['email']]) : __('Test webhook message sent.'));
         } else {
             // Don't keep retrying a test message in the background.
-            $db->prepare("UPDATE deliveries SET status = 'failed' WHERE id = :id")->execute(['id' => $id]);
-            Session::flash('danger', __('Sending failed: {e}', ['e' => (string) $row['last_error']]));
+            $db->prepare("UPDATE deliveries SET status = 'failed' WHERE id = :id AND status = 'pending'")->execute(['id' => $id]);
+            Session::flash('danger', $row['status'] === 'sending'
+                ? __('The test message is being sent by the background worker; check the recent deliveries below.')
+                : __('Sending failed: {e}', ['e' => (string) $row['last_error']]));
         }
         return Response::redirect('/admin/settings#alerts');
     }
@@ -164,7 +168,12 @@ final class AlertController extends Controller
         $stmt = App::db()->prepare('SELECT * FROM notifications WHERE user_id = :u ORDER BY id DESC LIMIT 100');
         $stmt->execute(['u' => $uid]);
         $rows = $stmt->fetchAll();
-        App::db()->prepare('UPDATE notifications SET read_at = UTC_TIMESTAMP() WHERE user_id = :u AND read_at IS NULL')->execute(['u' => $uid]);
+        if ($rows !== []) {
+            // Only what is shown is marked read (not older rows beyond the list, nor ones that arrive meanwhile).
+            $shown = array_map(static fn (array $r): int => (int) $r['id'], $rows);
+            App::db()->prepare('UPDATE notifications SET read_at = UTC_TIMESTAMP() WHERE user_id = :u AND read_at IS NULL AND id BETWEEN :lo AND :hi')
+                ->execute(['u' => $uid, 'lo' => min($shown), 'hi' => max($shown)]);
+        }
         return $this->page('notifications/index', __('Notifications'), ['notifications' => $rows]);
     }
 

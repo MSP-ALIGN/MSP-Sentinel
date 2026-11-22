@@ -13,14 +13,23 @@ use Sentinel\Core\Settings;
  * sends them (Outbox), so a slow mail server never delays a scan.
  *
  * What triggers what:
- * - a NEW or REAPPEARED Fail finding (still open): immediate alert (in-app for
- *   everyone; email to users who chose "immediate" or "both", plus the team
- *   addresses; webhook);
+ * - a NEW or REAPPEARED Fail finding, or an open Warning that became a Fail
+ *   (for example its CVE was added to the known-exploited list): immediate
+ *   alert (in-app for everyone; email to users who chose "immediate" or
+ *   "both", plus the team addresses; webhook). A finding that already
+ *   alerted in the last 24 hours doesn't alert again when it flaps
+ *   (resolves and comes back), so an unstable service can't flood anyone;
  * - after each scan or certificate job, if anything changed: one digest per
  *   client (new warnings, new fails, resolved findings): in-app; email to users
  *   who chose "digest" or "both", plus the team addresses; webhook;
- * - a failed scan job or feed refresh: in-app for admins and the team addresses
- *   (feed failures at most once a day).
+ * - a failed scan job: in-app for admins and an email to the team addresses;
+ * - a failed feed refresh: in-app for admins only, at most once a day per feed.
+ * Feed refreshes (bin/feeds.php) send immediate alerts only, no digest: new
+ * warnings and resolved items from them show in the next scan's client page
+ * and the findings list.
+ *
+ * Each email is a separate delivery per recipient, so one bad address can't
+ * block the others, and recipients never see each other's addresses.
  * Accepted and false-positive findings never trigger alerts.
  *
  * Security assumptions: notification and email text comes from finding
@@ -39,7 +48,7 @@ final class AlertService
     /**
      * React to a findings refresh for one client.
      *
-     * @param array{opened_ids:list<int>, reopened_ids:list<int>, resolved_ids:list<int>} $result From FindingsEngine::refreshClient.
+     * @param array{opened_ids:list<int>, reopened_ids:list<int>, resolved_ids:list<int>, escalated_ids?:list<int>} $result From FindingsEngine::refreshClient.
      * @param bool $digest Also send the change digest (after scan and certificate jobs; not after feed refreshes).
      */
     public function findingsChanged(int $clientId, array $result, bool $digest): void
@@ -47,13 +56,18 @@ final class AlertService
         $client = (string) $this->db->query('SELECT name FROM clients WHERE id = ' . (int) $clientId)->fetchColumn();
         $newIds = array_merge($result['opened_ids'], $result['reopened_ids']);
         $new = $this->findings($newIds);
-        $fails = array_values(array_filter($new, static fn (array $f): bool => $f['severity'] === 'fail' && $f['status'] === 'open'));
+        $escalated = array_values(array_filter($this->findings(array_diff($result['escalated_ids'] ?? [], $newIds)),
+            static fn (array $f): bool => $f['severity'] === 'fail' && $f['status'] === 'open'));
+        $fails = array_merge(array_values(array_filter($new, static fn (array $f): bool => $f['severity'] === 'fail' && $f['status'] === 'open')), $escalated);
         $warns = array_values(array_filter($new, static fn (array $f): bool => $f['severity'] === 'warn' && $f['status'] === 'open'));
         $resolved = $this->findings($result['resolved_ids']);
 
-        // Immediate alerts for new Fail findings (summarised if there are very many).
-        $immediate = array_slice($fails, 0, self::MAX_IMMEDIATE);
+        // Immediate alerts for new Fail findings (summarised if there are very many), skipping
+        // findings that already alerted in the last 24 hours (flapping).
+        $fresh = array_values(array_filter($fails, fn (array $f): bool => !$this->alertedRecently((int) $f['id'])));
+        $immediate = array_slice($fresh, 0, self::MAX_IMMEDIATE);
         foreach ($immediate as $f) {
+            $this->markAlerted((int) $f['id']);
             $title = __('Fail: {title}', ['title' => $f['title']]);
             $text = __('{client}: {target}', ['client' => $client, 'target' => $f['target']]) . ((int) $f['reappeared'] === 1 ? ' ' . __('(reappeared)') : '');
             $link = '/findings/' . (int) $f['id'];
@@ -62,8 +76,8 @@ final class AlertService
                 $title . "\n\n" . $text . "\n\n" . $f['detail'] . "\n\n" . $this->absolute($link));
             $this->queueWebhook(['title' => $title, 'text' => $text, 'severity' => 'fail', 'client' => $client, 'items' => [], 'link' => $this->absolute($link)]);
         }
-        if (count($fails) > self::MAX_IMMEDIATE) {
-            $more = count($fails) - self::MAX_IMMEDIATE;
+        if (count($fresh) > self::MAX_IMMEDIATE) {
+            $more = count($fresh) - self::MAX_IMMEDIATE;
             $this->notifyUsers('finding_fail', 'fail', __('{n} more new Fail findings for {client}', ['n' => $more, 'client' => $client]), '', '/findings?client=' . $clientId, null);
         }
 
@@ -125,7 +139,7 @@ final class AlertService
     }
 
     /**
-     * Queue one email to these recipients (nothing if email is off or there is no recipient).
+     * Queue the email once per recipient (nothing if email is off or there is no recipient).
      *
      * @param list<string> $recipients
      */
@@ -135,7 +149,10 @@ final class AlertService
         if ($recipients === [] || $this->settings->get('email_enabled') !== '1') {
             return;
         }
-        $this->queue('email', implode(',', $recipients), $subject, $body . "\n\n-- \n" . __('Sent by MSP Sentinel. Choose which emails you get on your profile page.'));
+        $body .= "\n\n-- \n" . __('Sent by MSP Sentinel. Choose which emails you get on your profile page.');
+        foreach ($recipients as $to) {
+            $this->queue('email', $to, $subject, $body);
+        }
     }
 
     /**
@@ -189,6 +206,21 @@ final class AlertService
         return $stmt->fetchAll();
     }
 
+    /** True if this finding sent an immediate alert in the last 24 hours. */
+    private function alertedRecently(int $findingId): bool
+    {
+        $stmt = $this->db->prepare("SELECT COUNT(*) FROM finding_events WHERE finding_id = :id AND event = 'alerted' AND created_at > UTC_TIMESTAMP() - INTERVAL 24 HOUR");
+        $stmt->execute(['id' => $findingId]);
+        return (int) $stmt->fetchColumn() > 0;
+    }
+
+    /** Record in the finding's history that an immediate alert went out. */
+    private function markAlerted(int $findingId): void
+    {
+        $this->db->prepare("INSERT INTO finding_events (finding_id, event, user_id, note, created_at) VALUES (:id, 'alerted', NULL, :n, UTC_TIMESTAMP())")
+            ->execute(['id' => $findingId, 'n' => __('Immediate alert sent.')]);
+    }
+
     /** Absolute link for emails and webhooks ('' when no public URL is configured). */
     private function absolute(string $path): string
     {
@@ -199,6 +231,6 @@ final class AlertService
     private function queue(string $channel, string $recipient, string $subject, string $body): void
     {
         $this->db->prepare("INSERT INTO deliveries (channel, recipient, subject, body, status, next_attempt_at, created_at) VALUES (:c, :r, :s, :b, 'pending', UTC_TIMESTAMP(), UTC_TIMESTAMP())")
-            ->execute(['c' => $channel, 'r' => mb_substr($recipient, 0, 500), 's' => mb_substr($subject, 0, 300), 'b' => $body]);
+            ->execute(['c' => $channel, 'r' => $recipient, 's' => mb_substr($subject, 0, 300), 'b' => $body]);
     }
 }

@@ -8,6 +8,8 @@ declare(strict_types=1);
  * Idempotent: CREATE TABLE IF NOT EXISTS and addColumnIfMissing. Safe to run twice.
  *
  * Security notes:
+ * - Each delivery is claimed (status 'sending') before it is sent, so two
+ *   processes never send the same message.
  * - The outbox stores the message to send (subject, plain-text body, recipient)
  *   but never SMTP credentials or webhook URLs. Those stay encrypted in settings.
  * - Notification text is built from finding titles (scan data, untrusted) and is escaped on output.
@@ -33,6 +35,7 @@ return [
             created_at DATETIME NOT NULL,
             read_at DATETIME NULL,
             KEY idx_notif_user (user_id, read_at, id),
+            KEY idx_notif_created (created_at),
             CONSTRAINT fk_notif_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE RESTRICT
         ) {$opts}");
 
@@ -42,13 +45,15 @@ return [
             recipient VARCHAR(500) NOT NULL DEFAULT '',
             subject VARCHAR(300) NOT NULL DEFAULT '',
             body MEDIUMTEXT NOT NULL,
-            status ENUM('pending','sent','failed') NOT NULL DEFAULT 'pending',
+            status ENUM('pending','sending','sent','failed') NOT NULL DEFAULT 'pending',
+            claimed_at DATETIME NULL,
             attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
             next_attempt_at DATETIME NOT NULL,
             last_error VARCHAR(300) NOT NULL DEFAULT '',
             created_at DATETIME NOT NULL,
             sent_at DATETIME NULL,
-            KEY idx_deliveries_due (status, next_attempt_at)
+            KEY idx_deliveries_due (status, next_attempt_at),
+            KEY idx_deliveries_created (created_at)
         ) {$opts}");
     },
 ];

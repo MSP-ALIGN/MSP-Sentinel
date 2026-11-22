@@ -40,6 +40,8 @@ use Sentinel\Tests\TestContext;
 
 $args = array_slice($argv, 1);
 $serve = in_array('--serve', $args, true);
+// Lets webhooks go to the fake receiver on http://127.0.0.1 (see App::webhookTestMode()). Never set this in production.
+putenv('SENTINEL_TEST_MODE=1');
 $filter = '';
 foreach ($args as $arg) {
     if (!str_starts_with($arg, '--')) {
@@ -89,7 +91,7 @@ $cleanup = static function () use (&$server, &$mocks, &$keepOutput, $admin, $dbN
 /** Run a CLI script with the test config. Returns [exit code, output]. */
 $cli = static function (string $script, array $scriptArgs = [], string $stdin = '') use ($root, $configPath): array {
     $cmd = array_merge([PHP_BINARY, $root . '/' . $script], $scriptArgs);
-    $proc = proc_open($cmd, [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $root, ['SENTINEL_CONFIG' => $configPath, 'PATH' => getenv('PATH')]);
+    $proc = proc_open($cmd, [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $root, ['SENTINEL_CONFIG' => $configPath, 'PATH' => getenv('PATH'), 'SENTINEL_TEST_MODE' => '1']);
     fwrite($pipes[0], $stdin);
     fclose($pipes[0]);
     $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
@@ -211,7 +213,7 @@ try {
         [0 => ['file', '/dev/null', 'r'], 1 => ['file', $logFile, 'a'], 2 => ['file', $logFile, 'a']],
         $pipes,
         $root,
-        ['SENTINEL_CONFIG' => $configPath, 'PATH' => getenv('PATH')]
+        ['SENTINEL_CONFIG' => $configPath, 'PATH' => getenv('PATH'), 'SENTINEL_TEST_MODE' => '1']
     );
     $baseUrl = "http://127.0.0.1:{$port}";
     for ($i = 0; $i < 50; $i++) {

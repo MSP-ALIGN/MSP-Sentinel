@@ -231,7 +231,18 @@ final class App
     {
         $caFile = (string) self::config()->get('tls.ca_file', '');
         return new Outbox(self::db(), self::settings(), $caFile === '' ? null : $caFile,
-            new WebhookSender(self::config()->get('testing.allow_documentation_ranges', false) === true));
+            new WebhookSender(self::webhookTestMode()));
+    }
+
+    /**
+     * True only inside the test suite: webhooks may then go to http://127.0.0.1.
+     * Needs BOTH the config flag and the SENTINEL_TEST_MODE=1 environment
+     * variable (set only by tests/run.php), so a config change alone can't
+     * open loopback services to webhook requests in production.
+     */
+    public static function webhookTestMode(): bool
+    {
+        return self::config()->get('testing.allow_documentation_ranges', false) === true && getenv('SENTINEL_TEST_MODE') === '1';
     }
 
     /** Findings store (list, history, triage). */

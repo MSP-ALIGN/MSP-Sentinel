@@ -77,6 +77,8 @@ return [
             $ctx->db->exec("UPDATE users SET email = 'dana@msp.example', alert_email = 'digest' WHERE id = {$id}");
             $id2 = $ctx->createUser('quiet', 'viewer', 'Quiet-Pass-0001!');
             $ctx->db->exec("UPDATE users SET email = 'quiet@msp.example', alert_email = 'none' WHERE id = {$id2}");
+            $id3 = $ctx->createUser('gone', 'viewer', 'Gone-Pass-00001!');
+            $ctx->db->exec("UPDATE users SET email = 'gone@msp.example', alert_email = 'immediate' WHERE id = {$id3}");
         }
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $now = (int) gmdate('G');
@@ -95,14 +97,22 @@ return [
 
         $mails = array_slice($ctx->mails(), $before);
         $fails = array_values(array_filter($mails, static fn (array $m): bool => str_contains($m['subject'], 'Fail: Remote Desktop open to the internet')));
-        Assert::same(1, count($fails), 'one immediate alert for the RDP Fail');
-        Assert::true(in_array('admin@msp.example', $fails[0]['to'], true) && in_array('alerts@msp.example', $fails[0]['to'], true), 'admin (immediate) and team address');
-        Assert::true(!in_array('dana@msp.example', $fails[0]['to'], true) && !in_array('quiet@msp.example', $fails[0]['to'], true), 'digest-only and no-email users not included');
+        $to = array_merge(...array_map(static fn (array $m): array => $m['to'], $fails));
+        sort($to);
+        Assert::same(['admin@msp.example', 'alerts@msp.example'], $to,
+            'immediate alert: one email each to the admin (immediate) and the team; the digest-only, no-email and bad-address users get none');
+        foreach ($fails as $m) {
+            Assert::same(1, count($m['to']), 'one recipient per message: nobody sees the other addresses');
+        }
         Assert::contains('https://sentinel.example/findings/', $fails[0]['body'], 'links back to Sentinel');
         $digest = array_values(array_filter($mails, static fn (array $m): bool => str_contains($m['subject'], 'Scan summary')));
-        Assert::same(1, count($digest), 'one digest');
-        Assert::true(in_array('dana@msp.example', $digest[0]['to'], true) && !in_array('admin@msp.example', $digest[0]['to'], true), 'digest goes to digest users and the team');
+        $dto = array_merge(...array_map(static fn (array $m): array => $m['to'], $digest));
+        sort($dto);
+        Assert::same(['alerts@msp.example', 'dana@msp.example'], $dto, 'digest goes to digest users and the team');
         Assert::contains('FAIL: Remote Desktop open to the internet', $digest[0]['body']);
+        $bad = $ctx->db->query("SELECT status, last_error FROM deliveries WHERE recipient = 'gone@msp.example' ORDER BY id DESC LIMIT 1")->fetch();
+        Assert::same('pending', $bad['status'], 'the bad address is retried on its own');
+        Assert::contains('550', $bad['last_error']);
 
         $posts = array_map(static fn (string $l): array => json_decode($l, true), file($ctx->webhookLog, FILE_IGNORE_NEW_LINES));
         Assert::true(count($posts) >= 2, 'webhook got the immediate alert and the digest');
@@ -144,6 +154,62 @@ return [
         Assert::same(['failed', 3], [$row['status'], (int) $row['attempts']]);
         Assert::contains('Could not connect', $row['last_error']);
         Assert::notContains('Relay-Secret-123', $row['last_error']);
+    },
+    'review fixes: no double sending, flapping and escalation, channel off, notifications read' => function (TestContext $ctx) use ($configure): void {
+        $configure($ctx);
+        App::settings()->set('smtp_port', (string) $ctx->smtpPlainPort); // refresh this process's settings cache
+        $cid = (int) $ctx->db->query("SELECT id FROM clients WHERE name = 'Alerts Example'")->fetchColumn();
+        $db = $ctx->db;
+        // A delivery claimed by another process is not sent again; a stale claim goes back to the queue.
+        App::alerts()->queueEmail(['admin@msp.example'], 'Claim test', 'body');
+        $id = (int) $db->query("SELECT MAX(id) FROM deliveries WHERE subject = 'Claim test'")->fetchColumn();
+        $db->exec("UPDATE deliveries SET status = 'sending', claimed_at = UTC_TIMESTAMP() WHERE id = {$id}");
+        Assert::same(['sent' => 0, 'failed' => 0], App::outbox()->flush(5, $id), 'claimed elsewhere: skipped');
+        $db->exec("UPDATE deliveries SET claimed_at = UTC_TIMESTAMP() - INTERVAL 11 MINUTE WHERE id = {$id}");
+        App::outbox()->flush(5, $id); // recovers the stale claim (as attempt 1, due again in the future)
+        $db->exec("UPDATE deliveries SET next_attempt_at = UTC_TIMESTAMP() WHERE id = {$id}");
+        App::outbox()->flush(5, $id);
+        Assert::same(['sent', 2], array_map(null, [$db->query("SELECT status FROM deliveries WHERE id = {$id}")->fetchColumn(), (int) $db->query("SELECT attempts FROM deliveries WHERE id = {$id}")->fetchColumn()]));
+
+        // Flapping: the RDP finding resolves and comes back within 24 hours: no second immediate alert.
+        $rdp = (int) $db->query("SELECT id FROM findings WHERE client_id = {$cid} AND finding_key = 'port:203.0.113.160:3389'")->fetchColumn();
+        $db->exec("UPDATE findings SET status = 'open', resolved_from = NULL WHERE id = {$rdp}");
+        $svc = "SELECT s.id FROM services s JOIN assets a ON a.id = s.asset_id WHERE a.client_id = {$cid} AND s.port = 3389";
+        $db->exec("UPDATE services SET is_open = 0 WHERE id = ({$svc})");
+        App::findingsEngine()->refreshClient($cid);
+        $db->exec("UPDATE services SET is_open = 1 WHERE id = ({$svc})");
+        $res = App::findingsEngine()->refreshClient($cid);
+        Assert::true(in_array($rdp, $res['reopened_ids'], true), 'reopened');
+        $before = (int) $db->query('SELECT COUNT(*) FROM deliveries')->fetchColumn();
+        App::alerts()->findingsChanged($cid, $res, false);
+        Assert::same($before, (int) $db->query('SELECT COUNT(*) FROM deliveries')->fetchColumn(), 'already alerted today: no new alert');
+
+        // Escalation: an open Warning that becomes a Fail alerts like a new Fail.
+        $db->exec("DELETE FROM finding_events WHERE finding_id = {$rdp} AND event = 'alerted'");
+        $db->exec("UPDATE findings SET severity = 'warn' WHERE id = {$rdp}");
+        $res = App::findingsEngine()->refreshClient($cid);
+        Assert::same([$rdp], $res['escalated_ids']);
+        App::alerts()->findingsChanged($cid, $res, false);
+        Assert::true((int) $db->query("SELECT COUNT(*) FROM deliveries WHERE subject LIKE '%Fail: Remote Desktop%' AND id > (SELECT MAX(id) FROM deliveries WHERE subject = 'Claim test')")->fetchColumn() >= 2, 'escalation alerted');
+
+        // A channel turned off after queueing: dropped, not sent.
+        App::alerts()->queueWebhook(['title' => 'Off test', 'text' => '', 'severity' => 'info', 'client' => '', 'items' => [], 'link' => '']);
+        $wid = (int) $db->query("SELECT MAX(id) FROM deliveries WHERE subject = 'Off test'")->fetchColumn();
+        App::settings()->set('webhook_enabled', '0');
+        App::outbox()->flush(5, $wid);
+        Assert::same('failed', $db->query("SELECT status FROM deliveries WHERE id = {$wid}")->fetchColumn());
+        App::settings()->set('webhook_enabled', '1');
+
+        // Only the notifications shown are marked read.
+        $uid = (int) $db->query("SELECT id FROM users WHERE username = 'admin'")->fetchColumn();
+        $db->exec("UPDATE notifications SET read_at = NULL WHERE user_id = {$uid}");
+        $total = (int) $db->query("SELECT COUNT(*) FROM notifications WHERE user_id = {$uid}")->fetchColumn();
+        for ($i = $total; $i < 105; $i++) {
+            $db->exec("INSERT INTO notifications (user_id, kind, severity, title, created_at) VALUES ({$uid}, 'digest', 'info', 'Filler {$i}', UTC_TIMESTAMP())");
+        }
+        $ctx->login('admin', 'Admin-Pass-0001!')->get('/notifications');
+        Assert::true((int) $db->query("SELECT COUNT(*) FROM notifications WHERE user_id = {$uid} AND read_at IS NULL")->fetchColumn() > 0, 'older rows beyond the list stay unread');
+        $db->exec("UPDATE notifications SET read_at = UTC_TIMESTAMP() WHERE user_id = {$uid}");
     },
     'STARTTLS: works with a trusted certificate, refuses a name mismatch' => function (TestContext $ctx) use ($configure): void {
         $configure($ctx, ['smtp_host' => 'localhost', 'smtp_port' => (string) $ctx->smtpTlsPort, 'smtp_security' => 'starttls', 'smtp_password' => '']);

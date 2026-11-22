@@ -54,7 +54,7 @@ final class FindingsEngine
      * scan job, never interleave), and reads the current issues INSIDE the
      * lock, so a decision is never made on a stale snapshot.
      *
-     * @return array{opened:int, reopened:int, resolved:int, current:int, opened_ids:list<int>, reopened_ids:list<int>, resolved_ids:list<int>}
+     * @return array{opened:int, reopened:int, resolved:int, current:int, opened_ids:list<int>, reopened_ids:list<int>, resolved_ids:list<int>, escalated_ids:list<int>}
      */
     public function refreshClient(int $clientId): array
     {
@@ -80,7 +80,7 @@ final class FindingsEngine
         // Vulnerability findings of services still waiting for NVD data are left alone:
         // missing data is not evidence that a problem was fixed.
         $awaiting = $this->vulns->servicesAwaitingData($clientId);
-        $stats = ['opened' => 0, 'reopened' => 0, 'resolved' => 0, 'current' => count($current), 'opened_ids' => [], 'reopened_ids' => [], 'resolved_ids' => []];
+        $stats = ['opened' => 0, 'reopened' => 0, 'resolved' => 0, 'current' => count($current), 'opened_ids' => [], 'reopened_ids' => [], 'resolved_ids' => [], 'escalated_ids' => []];
         $this->db->beginTransaction();
         try {
             $stmt = $this->db->prepare('SELECT * FROM findings WHERE client_id = :c FOR UPDATE');
@@ -128,6 +128,9 @@ final class FindingsEngine
                 }
                 if ($row['severity'] !== $issue['severity']) {
                     $this->event($id, 'severity_changed', null, __('Severity changed from {old} to {new}.', ['old' => $row['severity'], 'new' => $issue['severity']]));
+                    if ($issue['severity'] === 'fail' && $newStatus === 'open') {
+                        $stats['escalated_ids'][] = $id; // an open Warning became a Fail: alert like a new Fail
+                    }
                 }
                 $update->execute([
                     'sev' => $issue['severity'], 't' => $issue['title'], 'd' => $issue['detail'], 'tg' => $issue['target'], 'ev' => $issue['evidence'],

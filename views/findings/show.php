@@ -11,7 +11,7 @@ $canTriage = Role::atLeast((string) $currentUser['role'], Role::TECHNICIAN);
 $values = $values ?? ['status' => '', 'note' => ''];
 $eventLabels = [
     'opened' => __('First seen'), 'resolved' => __('Resolved automatically'), 'reopened' => __('Seen again (reopened)'),
-    'evidence_changed' => __('Reopened: evidence changed'), 'severity_changed' => __('Grade changed'),
+    'evidence_changed' => __('Reopened: evidence changed'), 'severity_changed' => __('Grade changed'), 'alerted' => __('Alert sent'),
     'triaged_accepted' => __('Marked as accepted risk'), 'triaged_false_positive' => __('Marked as false positive'), 'triaged_open' => __('Reopened by a user'),
 ];
 ?>

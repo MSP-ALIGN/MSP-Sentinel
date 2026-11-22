@@ -79,9 +79,13 @@ final class ScanWorker
         }
         try {
             // We hold the only worker lock, so any job still "running" belongs to a worker that died.
+            $died = $this->db->query("SELECT id, client_id FROM scan_jobs WHERE status = 'running'")->fetchAll();
             $this->db->exec("UPDATE scan_jobs SET status = 'failed', finished_at = UTC_TIMESTAMP(),
                              summary = '{\"messages\":[\"The worker stopped unexpectedly during this job.\"]}' WHERE status = 'running'");
             $this->db->exec("UPDATE scan_log SET result = 'interrupted', finished_at = UTC_TIMESTAMP() WHERE result = 'running' AND finished_at IS NULL");
+            foreach ($died as $d) {
+                $this->alerts?->scanFailed((int) $d['client_id'], (int) $d['id'], 'The worker stopped unexpectedly during this job.');
+            }
             $queued = $schedule ? $this->scheduleDue() : 0;
             $job = $this->nextRunnable($onlyJobId);
             $result = $job === null ? "Scheduled {$queued} job(s). Nothing to run now." : "Scheduled {$queued} job(s). " . $this->runJob($job);
@@ -89,6 +93,7 @@ final class ScanWorker
             if ($this->outbox !== null) {
                 try {
                     $sent = $this->outbox->flush();
+                    $this->outbox->prune();
                     if ($sent['sent'] + $sent['failed'] > 0) {
                         $result .= " Alerts: {$sent['sent']} sent, {$sent['failed']} failed.";
                     }

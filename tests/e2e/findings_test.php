@@ -82,7 +82,7 @@ return [
             ['status' => 'accepted', 'note' => 'Client needs RDP for a supplier until March; VPN migration planned.']));
         $rdp = $finding($ctx, $id, 'port:203.0.113.160:3389');
         Assert::same('accepted', $rdp['status']);
-        Assert::same(['opened', 'triaged_accepted'], $events($ctx, (int) $rdp['id']));
+        Assert::same(['opened', 'alerted', 'triaged_accepted'], $events($ctx, (int) $rdp['id']));
         Assert::contains('VPN migration planned', $tech->get('/findings/' . (int) $rdp['id'])->body);
         Assert::true((int) $ctx->db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'finding.triaged' AND target_id = " . (int) $rdp['id'])->fetchColumn() === 1, 'audited');
 
@@ -103,7 +103,7 @@ return [
         $rdp = $finding($ctx, $id, 'port:203.0.113.160:3389');
         Assert::same(['accepted', 1, 1], [$rdp['status'], (int) $rdp['reappeared'], (int) $rdp['reopened_count']], 'back with unchanged evidence: the accepted decision is restored, flagged as reappeared');
         Assert::same(null, $rdp['resolved_at']);
-        Assert::same(['opened', 'triaged_accepted', 'resolved', 'reopened'], $events($ctx, (int) $rdp['id']), 'full history kept');
+        Assert::same(['opened', 'alerted', 'triaged_accepted', 'resolved', 'reopened'], $events($ctx, (int) $rdp['id']), 'full history kept');
         Assert::contains('earlier decision (accepted) still applies', (string) $ctx->db->query("SELECT note FROM finding_events WHERE finding_id = {$rdp['id']} ORDER BY id DESC LIMIT 1")->fetchColumn());
 
         // An untriaged finding that comes back is open again.

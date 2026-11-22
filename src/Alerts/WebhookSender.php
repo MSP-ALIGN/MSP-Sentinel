@@ -16,7 +16,10 @@ use Sentinel\Scope\ScopeParser;
  *   https is allowed, and the host must resolve to PUBLIC addresses only.
  *   The request is pinned to the checked address (CURLOPT_RESOLVE), so a DNS
  *   change between check and use (rebinding) can't redirect it. Redirects
- *   are not followed. Plain http to 127.0.0.1 is allowed only in the test suite.
+ *   are not followed. Plain http to 127.0.0.1 is allowed only in the test suite
+ *   (App::webhookTestMode(): a config flag AND an environment variable only
+ *   the test harness sets). No proxy is ever used, and the address actually
+ *   connected to is checked against the pinned one.
  * - Payloads contain only alert summaries (client name, finding titles, grades, links).
  */
 final class WebhookSender
@@ -85,16 +88,22 @@ final class WebhookSender
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2,
             CURLOPT_RESOLVE => [$target['host'] . ':' . $target['port'] . ':' . $target['ip']],
-            CURLOPT_NOPROXY => $this->testMode ? '*' : '',
+            // Never use a proxy from the environment: a proxy would resolve the host itself and defeat the pinning.
+            CURLOPT_PROXY => '',
+            CURLOPT_NOPROXY => '*',
             CURLOPT_USERAGENT => 'MSP-Sentinel alerts',
             CURLOPT_MAXFILESIZE => 1_000_000,
         ]);
         $ok = curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        $connected = (string) curl_getinfo($ch, CURLINFO_PRIMARY_IP);
         $error = curl_error($ch);
         curl_close($ch);
         if ($ok === false) {
             throw new \RuntimeException('Webhook could not be reached: ' . mb_substr((string) preg_replace('#https?://\S+#', '[url]', $error), 0, 150));
+        }
+        if ($connected !== $target['ip']) {
+            throw new \RuntimeException('Webhook connection went to an unexpected address; not trusted.');
         }
         if ($status < 200 || $status >= 300) {
             throw new \RuntimeException('Webhook answered HTTP ' . $status . '.');

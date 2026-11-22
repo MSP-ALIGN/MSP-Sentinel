@@ -204,9 +204,12 @@ final class TestContext
         foreach ($files as $file) {
             $m = json_decode((string) file_get_contents($file), true);
             [$head, $body] = array_pad(explode("\r\n\r\n", (string) $m['data'], 2), 2, '');
-            preg_match('/^Subject: =\?UTF-8\?B\?([^?]*)\?=/m', $head, $sm);
+            // The subject may be folded into several encoded words (RFC 2047).
+            preg_match('/^Subject: ([^\r\n]*(?:\r\n [^\r\n]*)*)/m', $head, $sm);
+            preg_match_all('/=\?UTF-8\?B\?([^?]*)\?=/', $sm[1] ?? '', $words);
+            $subject = implode('', array_map('base64_decode', $words[1]));
             $out[] = ['from' => $m['from'], 'to' => $m['to'], 'auth_user' => $m['auth_user'], 'tls' => $m['tls'],
-                      'subject' => base64_decode($sm[1] ?? ''), 'body' => (string) base64_decode(str_replace(["\r", "\n"], '', $body))];
+                      'subject' => $subject, 'body' => (string) base64_decode(str_replace(["\r", "\n"], '', $body))];
         }
         return $out;
     }
@@ -225,7 +228,7 @@ final class TestContext
     public function cli(string $script, array $args = []): array
     {
         $proc = proc_open(array_merge([PHP_BINARY, $this->root . '/' . $script], $args), [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $this->root,
-            ['SENTINEL_CONFIG' => $this->configPath, 'PATH' => (string) getenv('PATH'), 'SENTINEL_ALLOW_ROOT' => '1']);
+            ['SENTINEL_CONFIG' => $this->configPath, 'PATH' => (string) getenv('PATH'), 'SENTINEL_ALLOW_ROOT' => '1', 'SENTINEL_TEST_MODE' => '1']);
         $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
         return [proc_close($proc), $out];
     }

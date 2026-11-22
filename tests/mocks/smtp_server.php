@@ -70,8 +70,13 @@ while (true) {
             $msg['from'] = trim(substr($line, 10), '<> ');
             $send($c, '250 ok');
         } elseif (str_starts_with(strtoupper($line), 'RCPT TO:')) {
-            $msg['to'][] = trim(substr($line, 8), '<> ');
-            $send($c, '250 ok');
+            $rcpt = trim(substr($line, 8), '<> ');
+            if (str_starts_with($rcpt, 'gone')) {
+                $send($c, '550 no such mailbox'); // lets tests check that one bad address doesn't block others
+            } else {
+                $msg['to'][] = $rcpt;
+                $send($c, '250 ok');
+            }
         } elseif ($cmd === 'DATA') {
             $send($c, '354 end with .');
             $data = '';

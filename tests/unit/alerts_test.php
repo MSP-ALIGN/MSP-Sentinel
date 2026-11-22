@@ -22,6 +22,10 @@ return [
             Assert::true(!SmtpMailer::validAddress($bad), 'rejected: ' . json_encode($bad));
         }
         Assert::true(SmtpMailer::validAddress('alerts@msp.example'), 'plain address accepted');
+        $long = SmtpMailer::buildMessage('s@msp.example', ['a@msp.example'], str_repeat('Überwachung ', 30), 'b');
+        foreach (explode("\r\n", explode("\r\n\r\n", $long, 2)[0]) as $line) {
+            Assert::true(strlen($line) <= 78, 'header lines folded: ' . strlen($line));
+        }
     },
     'plain SMTP is refused to anything but a local relay' => function (TestContext $ctx): void {
         $m = new SmtpMailer('mail.example.com', 25, 'none', 'u', 'secret-pw', 'sentinel@msp.example');
@@ -39,6 +43,10 @@ return [
                   'https://203.0.113.5/hook', 'https://user:pw@hooks.example/x', 'ftp://hooks.example/x', 'http://127.0.0.1:8080/hook'] as $bad) {
             Assert::true(is_string($prod->check($bad)), 'refused in production: ' . $bad);
         }
+        putenv('SENTINEL_TEST_MODE');
+        Assert::true(!\Sentinel\Core\App::webhookTestMode(), 'the config flag alone does not enable webhook test mode');
+        putenv('SENTINEL_TEST_MODE=1');
+        Assert::true(\Sentinel\Core\App::webhookTestMode(), 'harness: config flag plus environment variable');
         $test = new WebhookSender(true);
         Assert::true(is_array($test->check('http://127.0.0.1:8080/hook')), 'local http allowed only in test mode');
     },
