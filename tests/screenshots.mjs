@@ -143,6 +143,36 @@ await shot(page, '24-finding-detail');
 await page.locator('#fix').screenshot({ path: `${out}40-fix-card.png` });
 await page.goto(`${base}/findings?assignee=me`);
 await shot(page, '41-findings-mine');
+// On-premises agent: signed internal authorisation, one-time enrolment code, then the real agent runs once
+// (fake nmap, mock services, test mode only) and the client page shows the site's agent and internal devices.
+await page.goto(clientUrl);
+const siteId = await page.locator('#agents a[href*="/internal-authorisations/new"]').first().getAttribute('href').then((h) => h.match(/sites\/(\d+)/)[1]);
+await page.goto(`${clientUrl}/sites/${siteId}/internal-authorisations/new`);
+await page.fill('#approved_by_name', 'Dana Example');
+await page.fill('#approved_by_role', 'Managing Director');
+await page.fill('#ranges', '# Head office LAN\n10.90.0.0/24');
+await page.check('#confirm');
+await shot(page, '42-internal-authorisation');
+await page.click('.app-content form button.btn-primary[type=submit]');
+await page.waitForURL(/\/clients\/\d+/);
+await page.click('#agents form[action$="/enrol"] button');
+await page.waitForURL(/\/enrol$/);
+await shot(page, '43-agent-enrolment');
+const enrolCode = (await page.locator('#enrol-code').textContent()).trim();
+execFileSync('php', [new URL('agent_demo.php', import.meta.url).pathname, `${serve.dir}/config.php`, base, enrolCode, `${serve.dir}/agent-demo`],
+  { env: { ...process.env, SENTINEL_TEST_MODE: '1', SENTINEL_ALLOW_ROOT: '1' } });
+await page.goto(clientUrl);
+await page.fill('#agents form[action$="/scan"] input[name="reason"]', 'First inventory of the office network');
+await page.click('#agents form[action$="/scan"] button');
+await page.waitForURL(/\/clients\/\d+/);
+execFileSync('php', [new URL('../bin/sentinel-agent.php', import.meta.url).pathname, 'run', '--once', '--config', `${serve.dir}/agent-demo/agent.json`],
+  { env: { ...process.env, SENTINEL_TEST_MODE: '1', SENTINEL_ALLOW_ROOT: '1' } });
+await page.goto(clientUrl);
+await page.locator('#agents').screenshot({ path: `${out}44-agents.png` });
+await page.locator('#devices').screenshot({ path: `${out}45-internal-devices.png` });
+await page.click('#devices a[href*="/devices/"]');
+await page.waitForURL(/\/devices\/\d+$/);
+await shot(page, '46-device');
 // Reports: branding (made-up MSP), then both reports for the demo client.
 await page.goto(`${base}/admin/settings`);
 await page.fill('#brand_name', 'Example MSP Ltd');

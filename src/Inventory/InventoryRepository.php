@@ -205,7 +205,9 @@ final class InventoryRepository
         $stmt = $this->db->prepare(
             "SELECT d.*, (SELECT COUNT(*) FROM device_patches p WHERE p.device_id = d.id) AS patch_count,
                     (SELECT COUNT(DISTINCT sv.cve_id) FROM software_vulns sv JOIN device_software s ON s.id = sv.software_id WHERE s.device_id = d.id) AS vuln_count,
-                    (SELECT COUNT(*) FROM device_software s WHERE s.device_id = d.id) AS software_count
+                    (SELECT COUNT(*) FROM device_software s WHERE s.device_id = d.id) AS software_count,
+                    (SELECT COUNT(*) FROM findings f WHERE f.device_id = d.id AND f.status = 'open' AND f.severity = 'fail') AS open_fail,
+                    (SELECT COUNT(*) FROM findings f WHERE f.device_id = d.id AND f.status = 'open' AND f.severity = 'warn') AS open_warn
              FROM devices d WHERE d.client_id = :c AND d.removed_at IS NULL ORDER BY d.name, d.id LIMIT 5000"
         );
         $stmt->execute(['c' => $clientId]);

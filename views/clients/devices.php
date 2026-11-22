@@ -55,8 +55,10 @@ $chip = static function (string $sev, string $text): string {
                         <?php if ($d['ip_addresses'] !== ''): ?> · <span class="font-monospace"><?= e(str_replace(',', ', ', mb_strimwidth((string) $d['ip_addresses'], 0, 60, '…'))) ?></span><?php endif; ?>
                         <?php if ($d['source'] === 'agent'): ?> · <?= e(__('found by agent')) ?><?php endif; ?></div></td>
                 <td><?= e($d['os_name'] ?: '?') ?><?php if ($d['os_build'] !== ''): ?> <span class="text-body-secondary font-monospace"><?= e($d['os_build']) ?></span><?php endif; ?></td>
-                <td><?php if ($issues === []): ?><?= $chip('ok', __('No problems found')) ?><?php endif; ?>
-                    <?php foreach ($issues as $i): ?><?= $chip($i['severity'], $i['text']) ?><?php endforeach; ?></td>
+                <?php $open = (int) $d['open_fail'] + (int) $d['open_warn']; ?>
+                <td><?php if ($issues === [] && $open === 0): ?><?= $chip('ok', __('No problems found')) ?><?php endif; ?>
+                    <?php foreach ($issues as $i): ?><?= $chip($i['severity'], $i['text']) ?><?php endforeach; ?>
+                    <?php if ($open > 0): ?><a href="<?= e(url('/clients/' . (int) $client['id'] . '/devices/' . (int) $d['id'])) ?>"><?= $chip((int) $d['open_fail'] > 0 ? 'fail' : 'warn', __('{n} open finding(s)', ['n' => $open])) ?></a><?php endif; ?></td>
                 <td class="text-end"><?= (int) $d['vuln_count'] > 0 ? '<span class="badge text-bg-danger">' . e($d['vuln_count']) . '</span>' : '<span class="text-body-secondary">0</span>' ?></td>
                 <td class="text-nowrap"><?= e((string) ($d['last_contact'] ?? '?')) ?></td>
             </tr>
