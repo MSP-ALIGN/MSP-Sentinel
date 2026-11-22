@@ -46,5 +46,15 @@ return [
         Assert::notContains('/admin/settings', $page, 'non-admins see no admin links');
         Assert::notContains('Administration', $page);
         Assert::status(403, $tech->get('/admin'));
+        $denied = $tech->get('/admin/settings');
+        Assert::status(403, $denied);
+        Assert::notContains('class="admin-mode"', $denied->body, 'a refused page shows the normal menu, not the admin one');
+
+        // Trailing slash and encoded paths get the same menu state as the router.
+        $slash = $admin->get('/admin/')->body;
+        Assert::true((bool) preg_match('#href="/admin" class="nav-link active" aria-current="page"#', $slash), 'Overview active on /admin/ too');
+        Assert::contains('class="admin-mode"', $admin->get('/%61dmin')->body);
+        Assert::contains('Help', substr($slash, (int) strpos($slash, '<aside'), 4000), 'Help reachable from the admin menu');
+        Assert::notContains('role="menu"', $slash, 'plain navigation lists, not ARIA menus');
     },
 ];

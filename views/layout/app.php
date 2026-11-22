@@ -11,12 +11,21 @@ use Sentinel\Core\Csrf;
 
 $product = App::productName();
 $isAdmin = isset($currentUser['role']) && Role::atLeast((string) $currentUser['role'], Role::ADMIN);
-$path = parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH) ?: '/';
-$path = substr($path, strlen(App::basePath())) ?: '/';
+// Normalise the path exactly as Request::fromGlobals does (decode, strip the base path only if it is
+// a prefix, drop a trailing slash), so menu state always matches the page the router served.
+$path = rawurldecode((string) (parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH) ?? '/'));
+$base = App::basePath();
+if ($base !== '' && str_starts_with($path, $base)) {
+    $path = substr($path, strlen($base));
+}
+$path = $path === '' || $path[0] !== '/' ? '/' . $path : $path;
+if ($path !== '/') {
+    $path = rtrim($path, '/') ?: '/';
+}
 $navItem = static function (string $href, string $icon, string $label) use ($path): string {
     // "/" and "/admin" (the overview) are active only on exactly that page; others on any page below them.
     $active = (in_array($href, ['/', '/admin'], true) ? $path === $href : ($path === $href || str_starts_with($path, $href . '/'))) ? ' active' : '';
-    return '<li class="nav-item"><a href="' . e(url($href)) . '" class="nav-link' . $active . '">'
+    return '<li class="nav-item"><a href="' . e(url($href)) . '" class="nav-link' . $active . '"' . ($active !== '' ? ' aria-current="page"' : '') . '>'
         . '<i class="nav-icon bi ' . e($icon) . '" aria-hidden="true"></i><p>' . e($label) . '</p></a></li>';
 };
 // Administration is a separate section: its own left menu on admin pages, reached from the user drop-down.
@@ -112,17 +121,18 @@ try {
             <?php if ($inAdmin): ?>
             <div class="admin-mode"><i class="bi bi-shield-lock" aria-hidden="true"></i><?= e(__('Administration')) ?></div>
             <nav class="mt-2" aria-label="<?= e(__('Administration menu')) ?>">
-                <ul class="nav sidebar-menu flex-column" role="menu">
+                <ul class="nav sidebar-menu flex-column">
                     <?php foreach ($adminItems as [$href, $icon, $label]): ?>
                     <?= $navItem($href, $icon, $label) ?>
                     <?php endforeach; ?>
                     <li class="nav-header"><?= e(__('LEAVE')) ?></li>
                     <li class="nav-item"><a href="<?= e(url('/')) ?>" class="nav-link admin-exit"><i class="nav-icon bi bi-arrow-left-circle" aria-hidden="true"></i><p><?= e(__('Back to Sentinel')) ?></p></a></li>
+                    <?= $navItem('/help', 'bi-question-circle', __('Help')) ?>
                 </ul>
             </nav>
             <?php else: ?>
             <nav class="mt-2" aria-label="<?= e(__('Main menu')) ?>">
-                <ul class="nav sidebar-menu flex-column" role="menu">
+                <ul class="nav sidebar-menu flex-column">
                     <?= $navItem('/', 'bi-speedometer2', __('Dashboard')) ?>
                     <?= $navItem('/clients', 'bi-building', __('Clients')) ?>
                     <?= $navItem('/findings', 'bi-exclamation-diamond', __('Findings')) ?>
