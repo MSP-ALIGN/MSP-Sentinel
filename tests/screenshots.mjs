@@ -172,6 +172,9 @@ await page.click('form[action$="/admin/api/tokens"] button[type=submit]');
 await page.waitForURL(/\/admin\/api/);
 await page.goto(`${base}/admin/api`);
 await shot(page, '34-api');
+// System page (health, updates, retention) after one worker run, so the heartbeat shows.
+await page.goto(`${base}/admin/system`);
+await shot(page, '35-system');
 await page.goto(`${base}/clients`);
 await shot(page, '17-clients');
 await page.goto(`${base}/`);
