@@ -94,10 +94,17 @@ final class FindingController extends Controller
             'values' => $values + ['status' => '', 'note' => ''],
             'assignable' => App::fixWorkflow()->assignableUsers(),
             'verifiable' => VerifyTarget::fromKey((string) $finding['finding_key']) !== null,
-            'itflowTicket' => (static function (int $id): ?array {
-                $t = App::db()->prepare("SELECT reference, url, itflow_ticket_id, created_at FROM itflow_tickets WHERE kind = 'finding' AND finding_id = :f");
-                $t->execute(['f' => $id]);
-                return $t->fetch() ?: null;
+            // This finding's ITFlow tickets (the current one first, then ones it replaced), with a link to ITFlow's
+            // agent view built from the ticket number (never ITFlow's guest link, which holds a secret key).
+            'itflowTickets' => (static function (int $id): array {
+                $t = App::db()->prepare("SELECT t.reference, t.itflow_ticket_id, t.created_at, t.state, t.itflow_status, t.last_error, t.finding_id, c.itflow_client_id
+                                         FROM itflow_tickets t JOIN clients c ON c.id = t.client_id
+                                         WHERE t.kind = 'finding' AND (t.finding_id = :f OR t.history_finding_id = :h) ORDER BY t.finding_id IS NULL, t.id DESC LIMIT 10");
+                $t->execute(['f' => $id, 'h' => $id]);
+                $base = App::settings()->get('itflow_url');
+                $http = App::webhookTestMode();
+                return array_map(static fn (array $r): array => $r + ['link' => (int) $r['itflow_ticket_id'] > 0 && $r['itflow_client_id'] !== null
+                    ? \Sentinel\Itflow\ItflowClient::ticketUrl($base, (int) $r['itflow_client_id'], (int) $r['itflow_ticket_id'], $http) : ''], $t->fetchAll());
             })((int) $finding['id']),
         ], $status);
     }

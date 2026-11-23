@@ -17,10 +17,19 @@ namespace Sentinel\Itflow;
  *   {"success":"False","message":"No resource ..."} with HTTP 200, which is an empty page, not an error.
  * - A wrong or expired key answers HTTP 401.
  * - POST /api/v1/tickets/create.php (JSON body: client_id, ticket_subject, ticket_details HTML, ticket_priority one of
- *   Low|Medium|High|Urgent) -> {"success":"True","data":[{"insert_id":N}],"ticket_reference":"...","ticket_url":"..."};
- *   a refused request answers 400 {"success":"False","message":"..."}. Without ticket_notify nobody is emailed.
+ *   Low|Medium|High|Urgent, ticket_vendor_ticket_number) -> {"success":"True","data":[{"insert_id":N}],
+ *   "ticket_reference":"...","ticket_url":"..."}; a refused request answers 400 {"success":"False","message":"..."}.
+ *   Without ticket_notify nobody is emailed. ticket_url is the client's guest link (it carries the ticket's secret
+ *   url_key): Sentinel never stores or shows it, and links to the agent view (agent/ticket.php) instead.
+ * - GET /api/v1/tickets/read.php?client_id=N&limit=&offset= lists a client's tickets (with
+ *   ticket_vendor_ticket_number), used to find a ticket whose create call timed out.
  * - POST /api/v1/ticket_replies/create.php (client_id, ticket_id, ticket_reply HTML, ticket_reply_type "Internal")
- *   -> {"success":"True","data":[{"insert_id":N}]}; an Internal reply is not emailed to the client.
+ *   -> {"success":"True","data":[{"insert_id":N}]}; an Internal reply is not emailed to the client. A closed ticket
+ *   takes no replies.
+ * - GET /api/v1/tickets/read.php?ticket_id=N -> one row with ticket_status (1 New, 2 Open, 3 On Hold, 4 Resolved,
+ *   5 Closed, or a custom open status), ticket_resolved_at, ticket_closed_at; "No resource" when it is gone.
+ * - POST /api/v1/tickets/resolve.php and reopen.php (client_id, ticket_id) -> {"success":"True","count":1}.
+ *   A closed ticket can't be reopened ("start a new one instead").
  *
  * Security assumptions:
  * - The address is ITFlow's, entered by an admin (it may be an internal host: both are self-hosted). Only https,
@@ -34,6 +43,7 @@ final class ItflowClient
     private const PAGE = 200;
     private const MAX_PAGES = 500;
     private const MAX_BYTES = 16777216;
+    private const MARKER_PAGES = 25;
 
     /** @param bool $allowHttp Test suite only. */
     public function __construct(private readonly string $baseUrl, private readonly string $apiKey, private readonly bool $allowHttp = false)
@@ -84,29 +94,89 @@ final class ItflowClient
 
     /**
      * Open a ticket for a client. ITFlow stores the details as HTML: the caller must have escaped every value in it.
+     * $marker goes into the ticket's vendor ticket number, so a ticket whose create call timed out can be found again
+     * (findByMarker) instead of opened twice.
      *
-     * @return array{id:int, reference:string, url:string}
+     * @return array{id:int, reference:string}
      */
-    public function createTicket(int $clientId, string $subject, string $detailsHtml, string $priority): array
+    public function createTicket(int $clientId, string $subject, string $detailsHtml, string $priority, string $marker = ''): array
     {
         if (!in_array($priority, ['Low', 'Medium', 'High', 'Urgent'], true)) {
             throw new \InvalidArgumentException('Unknown ITFlow priority.');
         }
-        $data = $this->post('/api/v1/tickets/create.php', ['client_id' => $clientId, 'ticket_subject' => mb_substr($subject, 0, 200),
-            'ticket_details' => $detailsHtml, 'ticket_priority' => $priority]);
+        $fields = ['client_id' => $clientId, 'ticket_subject' => mb_substr($subject, 0, 200), 'ticket_details' => $detailsHtml, 'ticket_priority' => $priority];
+        if ($marker !== '') {
+            $fields['ticket_vendor_ticket_number'] = $marker;
+        }
+        $data = $this->post('/api/v1/tickets/create.php', $fields);
         $id = $data['data'][0]['insert_id'] ?? null;
         if (!is_numeric($id) || (int) $id <= 0) {
             throw new ItflowException('ITFlow did not return the new ticket\'s number.');
         }
         $ref = is_string($data['ticket_reference'] ?? null) ? mb_substr($data['ticket_reference'], 0, 40) : '';
-        $url = is_string($data['ticket_url'] ?? null) && preg_match('#^https?://#', $data['ticket_url']) === 1 ? mb_substr($data['ticket_url'], 0, 500) : '';
-        return ['id' => (int) $id, 'reference' => (string) preg_replace('/[^A-Za-z0-9#._-]/', '', $ref), 'url' => $url];
+        return ['id' => (int) $id, 'reference' => (string) preg_replace('/[^A-Za-z0-9#._-]/', '', $ref)];
+    }
+
+    /**
+     * The ticket of a client whose vendor ticket number is $marker, or null when there is none. Reads at most
+     * MARKER_PAGES pages of the client's tickets; more than that throws (unknown, not "none").
+     *
+     * @return array{id:int, reference:string}|null
+     */
+    public function findByMarker(int $clientId, string $marker): ?array
+    {
+        for ($page = 0; $page < self::MARKER_PAGES; $page++) {
+            $rows = $this->read('/api/v1/tickets/read.php', ['client_id' => $clientId, 'limit' => self::PAGE, 'offset' => $page * self::PAGE]);
+            foreach ($rows as $r) {
+                if (is_array($r) && ($r['ticket_vendor_ticket_number'] ?? null) === $marker && is_numeric($r['ticket_id'] ?? null)
+                    && (int) ($r['ticket_client_id'] ?? 0) === $clientId) {
+                    $ref = is_scalar($r['ticket_prefix'] ?? null) && is_scalar($r['ticket_number'] ?? null) ? $r['ticket_prefix'] . $r['ticket_number'] : '';
+                    return ['id' => (int) $r['ticket_id'], 'reference' => (string) preg_replace('/[^A-Za-z0-9#._-]/', '', mb_substr($ref, 0, 40))];
+                }
+            }
+            if (count($rows) < self::PAGE) {
+                return null;
+            }
+        }
+        throw new ItflowException('The client has too many ITFlow tickets to look through.');
+    }
+
+    /** The agent's view of a ticket in ITFlow (no secret in it), or '' when the address isn't valid. */
+    public static function ticketUrl(string $baseUrl, int $clientId, int $ticketId, bool $allowHttp = false): string
+    {
+        return self::validUrl($baseUrl, $allowHttp) ? rtrim($baseUrl, '/') . '/agent/ticket.php?' . http_build_query(['client_id' => $clientId, 'ticket_id' => $ticketId]) : '';
     }
 
     /** Add an internal note (not emailed to the client) to a ticket. The caller must have escaped the HTML. */
     public function addNote(int $clientId, int $ticketId, string $html): void
     {
         $this->post('/api/v1/ticket_replies/create.php', ['client_id' => $clientId, 'ticket_id' => $ticketId, 'ticket_reply' => $html, 'ticket_reply_type' => 'Internal']);
+    }
+
+    /** A ticket's state in ITFlow: open (any working status), resolved, closed, or gone (deleted or out of reach). */
+    public function ticketStatus(int $ticketId): string
+    {
+        $rows = $this->read('/api/v1/tickets/read.php', ['ticket_id' => $ticketId]);
+        $t = $rows[0] ?? null;
+        if (!is_array($t)) {
+            return 'gone';
+        }
+        $status = (int) ($t['ticket_status'] ?? 0);
+        $closed = is_string($t['ticket_closed_at'] ?? null) && $t['ticket_closed_at'] !== '' && !str_starts_with($t['ticket_closed_at'], '0000');
+        $resolved = is_string($t['ticket_resolved_at'] ?? null) && $t['ticket_resolved_at'] !== '' && !str_starts_with($t['ticket_resolved_at'], '0000');
+        return $closed || $status === 5 ? 'closed' : ($resolved || $status === 4 ? 'resolved' : 'open');
+    }
+
+    /** Resolve a ticket. */
+    public function resolveTicket(int $clientId, int $ticketId): void
+    {
+        $this->post('/api/v1/tickets/resolve.php', ['client_id' => $clientId, 'ticket_id' => $ticketId]);
+    }
+
+    /** Reopen a resolved ticket (ITFlow refuses closed ones). */
+    public function reopenTicket(int $clientId, int $ticketId): void
+    {
+        $this->post('/api/v1/tickets/reopen.php', ['client_id' => $clientId, 'ticket_id' => $ticketId]);
     }
 
     /**
@@ -123,11 +193,16 @@ final class ItflowClient
             return $data;
         }
         $msg = is_array($data) && is_string($data['message'] ?? null) ? mb_substr((string) preg_replace('/[^\P{C}]/u', '', $data['message']), 0, 200) : 'HTTP ' . $status;
-        throw new ItflowException(match ($status) {
-            401 => 'ITFlow refused the API key (wrong or expired).',
-            403 => 'The ITFlow API key\'s user may not do this (it needs tickets in its role): ' . $msg,
-            default => 'ITFlow refused: ' . $msg,
-        });
+        if ($status === 401) {
+            throw new ItflowException('ITFlow refused the API key (wrong or expired).', ItflowException::KIND_AUTH);
+        }
+        if ($status === 403) {
+            throw new ItflowException('The ITFlow API key\'s user may not do this (its role needs the Support module, and access to this client): ' . $msg, ItflowException::KIND_REFUSED);
+        }
+        if (($status === 200 && is_array($data)) || in_array($status, [400, 404, 409, 422], true)) {
+            throw new ItflowException('ITFlow refused: ' . $msg, ItflowException::KIND_REFUSED);
+        }
+        throw new ItflowException('ITFlow answered HTTP ' . $status . ' for ' . $path . '.'); // unknown whether it was done
     }
 
     /**
@@ -140,10 +215,10 @@ final class ItflowClient
     {
         [$status, $body] = $this->request($path, $query, null);
         if ($status === 401) {
-            throw new ItflowException('ITFlow refused the API key (wrong or expired).');
+            throw new ItflowException('ITFlow refused the API key (wrong or expired).', ItflowException::KIND_AUTH);
         }
         if ($status === 403) {
-            throw new ItflowException('The ITFlow API key\'s user may not read clients (check the user\'s role in ITFlow).');
+            throw new ItflowException('The ITFlow API key\'s user may not read this (check the user\'s role and client access in ITFlow).', ItflowException::KIND_REFUSED);
         }
         $data = json_decode($body, true);
         if ($status !== 200 || !is_array($data)) {
@@ -156,7 +231,7 @@ final class ItflowClient
         if (str_starts_with($msg, 'No resource')) {
             return []; // ITFlow's way of saying "nothing (more) here"
         }
-        throw new ItflowException('ITFlow refused the request: ' . mb_substr((string) preg_replace('/[^\P{C}]/u', '', $msg), 0, 200));
+        throw new ItflowException('ITFlow refused the request: ' . mb_substr((string) preg_replace('/[^\P{C}]/u', '', $msg), 0, 200), ItflowException::KIND_REFUSED);
     }
 
     /**

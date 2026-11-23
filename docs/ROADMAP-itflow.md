@@ -44,12 +44,18 @@ The **ITFlow client ID** is the shared key: Sentinel stores it on each client, a
 - Tickets are internal (ITFlow doesn't email the client). Turning tickets on only covers findings from then on; an
   admin can open tickets for the existing Fails with one button. At most 20 tickets per run, every 5 minutes.
 
-## Phase 3: two-way status
+## Phase 3: two-way status (1.19.0, done)
 
-- Fixed in Sentinel (a later check no longer sees it) → a "verified fixed" note and the ITFlow ticket is resolved.
-- Resolved or closed in ITFlow → Sentinel runs Verify fix at once: gone → the finding closes; still there → the
-  ticket is reopened with what Sentinel still sees.
-- Sentinel polls the status of the tickets it opened every few minutes (ITFlow has no webhooks).
+- Fixed in Sentinel (a later check no longer sees it), or marked accepted risk / false positive → an internal note
+  and the ITFlow ticket is resolved.
+- Resolved or closed in ITFlow → Sentinel runs Verify fix at once (device findings: with the device's next data):
+  gone → the finding closes; still there → a resolved ticket is reopened with what Sentinel still sees, and a closed
+  one (ITFlow can't reopen closed tickets) is replaced by a new ticket that names the old one.
+- A problem that comes back after its ticket was resolved reopens it (or replaces it).
+- Sentinel polls the status of the tickets it opened every 5 minutes, up to 50 a run (ITFlow has no webhooks).
+- From the 1.18.0 review: a refused ticket no longer stops the others (retried with a growing delay); a timed-out
+  create is found again by its marker instead of opened twice; links go to ITFlow's technician view, never the
+  client guest link.
 
 ## Phase 4 (later): Huntress and DNSFilter
 

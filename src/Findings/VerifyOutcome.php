@@ -108,6 +108,10 @@ final class VerifyOutcome
         }
         $db->prepare("INSERT INTO finding_events (finding_id, event, user_id, note, created_at) VALUES (:f, 'verified', NULL, :n, UTC_TIMESTAMP())")
             ->execute(['f' => $findingId, 'n' => mb_substr($note, 0, 1000)]);
+        // The result itself too (not only as text), for the ITFlow two-way status: a closed ticket is reopened only
+        // on a conclusive "still_present".
+        $db->prepare('UPDATE findings SET verify_result = :r, verify_result_at = UTC_TIMESTAMP() WHERE id = :f')
+            ->execute(['r' => in_array($result, self::RESULTS, true) ? $result : 'not_verified', 'f' => $findingId]);
         if ($requestedBy === null) {
             return;
         }

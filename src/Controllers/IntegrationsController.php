@@ -235,6 +235,7 @@ final class IntegrationsController extends Controller
         $tickets = $request->input('tickets') === '1';
         if ($tickets && $s->get('itflow_tickets_enabled') !== '1') {
             $s->set('itflow_tickets_since', gmdate('Y-m-d H:i:s')); // only findings from now on (no flood when turning it on)
+            $s->set('itflow_tickets_weekly_since', gmdate('Y-m-d H:i:s'));
         }
         foreach (['itflow_url' => $url, 'itflow_enabled' => $enabled ? '1' : '0', 'itflow_tickets_enabled' => $tickets ? '1' : '0'] as $key => $value) {
             if ($s->get($key) !== $value) {
@@ -305,7 +306,8 @@ final class IntegrationsController extends Controller
 
     /**
      * POST /admin/integrations/itflow/tickets: open due tickets now; with existing=1 first include the open Fail findings
-     * that were there before tickets were turned on (the rest follow every 5 minutes, MAX_PER_RUN at a time).
+     * that were there before tickets were turned on (the rest follow every 5 minutes, MAX_PER_RUN at a time). Weekly
+     * Warnings tickets keep their own start (itflow_tickets_weekly_since), so this never sends every client one.
      */
     public function ticketsItflow(Request $request): Response
     {

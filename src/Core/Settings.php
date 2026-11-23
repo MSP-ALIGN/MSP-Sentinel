@@ -91,7 +91,7 @@ final class Settings
         'itflow_last_ok' => '',
         // ITFlow tickets from findings (ItflowTickets): on/off, from when, and the last run.
         'itflow_tickets_enabled' => '0',
-        'itflow_tickets_since' => '',
+        'itflow_tickets_since' => '', 'itflow_tickets_weekly_since' => '',
         'itflow_tickets_last_run' => '',
         'itflow_tickets_last_result' => '',
         'itflow_tickets_last_ok' => '',

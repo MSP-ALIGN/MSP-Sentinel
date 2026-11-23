@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.18.0](https://img.shields.io/badge/version-1.18.0-ff5a1f?style=flat-square)
+![Version 1.19.0](https://img.shields.io/badge/version-1.19.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -149,6 +149,29 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
 
 ## What's new
 
+### 1.19.0 (2026-11-23): ITFlow tickets both ways
+
+- **Two-way status** (phase 3 of [docs/ROADMAP-itflow.md](docs/ROADMAP-itflow.md)):
+  - When Sentinel no longer sees a problem, or someone marks it accepted risk or false positive, the ticket gets an
+    internal note saying so and is resolved in ITFlow.
+  - When a ticket is resolved or closed in ITFlow while the problem is still open, Sentinel checks again. A port or
+    email problem gets a "verify fix" recheck at once; a device problem waits for the device's next data.
+  - Gone: the finding closes and the ticket gets a "verified fixed" note.
+  - Still there: a resolved ticket is reopened with what Sentinel still sees. A closed ticket can't be reopened in
+    ITFlow, so it is replaced by a new ticket that names the old one.
+  - A problem that comes back after its ticket was resolved reopens the ticket (or replaces it if it was closed).
+  - The finding page shows each ticket's state and its earlier tickets.
+- **Fixes from the 1.18.0 review:**
+  - One ticket that ITFlow refuses (a deleted client, a closed ticket, no access) no longer stops all ticketing. It
+    is retried later (after 1, 2, 4… hours) and the reason shows on the finding.
+  - The ticket link goes to ITFlow's technician view. Sentinel no longer keeps ITFlow's client guest link, which
+    carries a secret key.
+  - A ticket whose create call timed out is found again in ITFlow instead of opened twice.
+  - Known-exploited is decided from the CISA KEV list, not the finding's title. A finding added to the KEV list after
+    tickets were turned on gets a ticket.
+  - "Also open tickets for existing Fail findings" no longer sends a weekly Warnings ticket to every client at once.
+    The weekly list always shows the new warnings first.
+
 ### 1.18.0 (2026-11-23): ITFlow tickets from findings
 
 - **Findings open ITFlow tickets** (phase 2 of [docs/ROADMAP-itflow.md](docs/ROADMAP-itflow.md)): each Fail, and
@@ -158,7 +181,8 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
 - Warnings are grouped into one ticket per client a week, when there are new ones.
 - Tickets are internal (ITFlow doesn't email the client). Turning tickets on covers findings from then on; one button
   opens tickets for the existing Fails too. The finding page shows its ticket.
-- Next: Sentinel resolves tickets it sees fixed, and closing a ticket in ITFlow makes Sentinel recheck.
+- Next: Sentinel resolves tickets it sees fixed, and closing a ticket in ITFlow makes Sentinel recheck (done in
+  1.19.0).
 
 ### 1.17.0 (2026-11-22): clients from ITFlow
 

@@ -3,8 +3,10 @@
 declare(strict_types=1);
 
 /**
- * End-to-end tests for the ITFlow client sync (phase 1), against the mock ITFlow API (tests/mocks/itflow_mock.php on
- * 127.0.0.1, its client list in itflow-clients.json). Never contacts a real ITFlow. Made-up data only.
+ * End-to-end tests for the ITFlow integration: client sync (phase 1), tickets from findings (phase 2) and two-way
+ * status (phase 3), against the mock ITFlow API (tests/mocks/itflow_mock.php on 127.0.0.1, its client list in
+ * itflow-clients.json, tickets in itflow-tickets.json). Rechecks use the test suite's fake nmap. Never contacts a real
+ * ITFlow or scans a real host. Made-up data only.
  */
 
 use Sentinel\Core\App;
@@ -191,5 +193,160 @@ return [
         Assert::contains('Stopped: ITFlow refused', App::itflowTickets()->run());
         App::settings()->set('itflow_enabled', '0');
         App::settings()->set('itflow_tickets_enabled', '0');
+    },
+    'ITFlow two-way: fixed in Sentinel resolves the ticket; closed in ITFlow rechecks, then reopens or replaces' => function (TestContext $ctx) use ($base, $setItflow, $key): void {
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $dir = dirname($ctx->feedsLog);
+        $setItflow($ctx, [[820, 'Twoway Example Ltd'], [821, 'Refused Example Ltd']]);
+        @unlink($dir . '/itflow-tickets.json');
+        @unlink($dir . '/itflow-fail.json');
+        @unlink($dir . '/nmap-closed.json');
+        $admin->submit('/admin/integrations', '/admin/integrations/itflow', ['url' => $base($ctx), 'api_key' => $key, 'enabled' => '1']);
+        App::itflowSync()->sync();
+        $admin->submit('/admin/integrations', '/admin/integrations/itflow', ['url' => $base($ctx), 'api_key' => $key, 'enabled' => '1', 'tickets' => '1']);
+        $cid = (int) $ctx->db->query('SELECT id FROM clients WHERE itflow_client_id = 820')->fetchColumn();
+        $cid2 = (int) $ctx->db->query('SELECT id FROM clients WHERE itflow_client_id = 821')->fetchColumn();
+        $admin->submit('/clients/' . $cid . '/authorisations/new', '/clients/' . $cid . '/authorisations', [
+            'approved_by_name' => 'Jo Example', 'approved_by_role' => 'Owner', 'approved_on' => gmdate('Y-m-d'), 'valid_from' => gmdate('Y-m-d', time() - 86400),
+            'valid_until' => gmdate('Y-m-d', time() + 86400 * 200), 'document_ref' => '', 'notes' => '', 'scope' => '203.0.113.160', 'confirm' => '1']);
+        $finding = static function (int $client, string $key, string $title) use ($ctx): int {
+            $ctx->db->prepare("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, detail, target, evidence, status, first_seen, last_seen, opened_at)
+                               VALUES (:c, :k, 'port', 'fail', :ti, 'Reachable from the internet.', :tg, 'open', 'open', UTC_TIMESTAMP(), UTC_TIMESTAMP() - INTERVAL 1 HOUR, UTC_TIMESTAMP())")
+                ->execute(['c' => $client, 'k' => $key, 'ti' => $title, 'tg' => substr($key, 5)]);
+            return (int) $ctx->db->lastInsertId();
+        };
+        $sent = static fn (): array => json_decode((string) @file_get_contents($dir . '/itflow-tickets.json'), true) ?: ['tickets' => [], 'replies' => [], 'log' => []];
+        $setStatus = static function (int $ticket, string $status) use ($dir, $sent): void {
+            $st = $sent();
+            foreach ($st['tickets'] as &$t) {
+                if ((int) $t['id'] === $ticket) {
+                    $t['status'] = $status;
+                }
+            }
+            unset($t);
+            file_put_contents($dir . '/itflow-tickets.json', json_encode($st));
+        };
+        $row = static fn (int $f): array|false => $ctx->db->query("SELECT * FROM itflow_tickets WHERE kind = 'finding' AND finding_id = {$f}")->fetch();
+        $lastReply = static fn (int $ticket): string => (string) (array_values(array_filter($sent()['replies'], static fn (array $r): bool => (int) $r['ticket_id'] === $ticket))[0] ?? ['ticket_reply' => ''])['ticket_reply'];
+        $repliesTo = static fn (int $ticket): array => array_values(array_map(static fn (array $r): string => $r['ticket_reply'], array_filter($sent()['replies'], static fn (array $r): bool => (int) $r['ticket_id'] === $ticket)));
+        $recheck = static function () use ($ctx, $cid): int {
+            $job = (int) $ctx->db->query("SELECT MAX(id) FROM scan_jobs WHERE client_id = {$cid} AND job_type = 'verify' AND status = 'queued'")->fetchColumn();
+            if ($job > 0) {
+                $ctx->cli('bin/worker.php', ['--no-schedule', '--job=' . $job]);
+            }
+            return $job;
+        };
+
+        // A ticket, with a link to ITFlow's agent view; ITFlow's guest link (with its secret key) is never kept.
+        $f1 = $finding($cid, 'port:203.0.113.160:3389', 'Remote Desktop open to the internet');
+        App::itflowTickets()->run();
+        $t1 = (int) $row($f1)['itflow_ticket_id'];
+        Assert::true($t1 > 0, 'ticket opened');
+        Assert::same('open', $row($f1)['state']);
+        Assert::contains('sentinel-', (string) $sent()['tickets'][0]['ticket_vendor_ticket_number'], 'marked, so a timed-out create is found again');
+        Assert::notContains('SECRETKEY', json_encode($ctx->db->query('SELECT * FROM itflow_tickets')->fetchAll()), 'guest link not stored');
+        $page = $admin->get('/findings/' . $f1)->body;
+        Assert::contains('/itflow/agent/ticket.php?client_id=820&amp;ticket_id=' . $t1, $page);
+        Assert::notContains('SECRETKEY', $page);
+
+        // Resolved in ITFlow while still open here: Sentinel rechecks at once; still there -> reopened with a note.
+        $setStatus($t1, 'resolved');
+        App::itflowTickets()->run();
+        Assert::same('awaiting_check', $row($f1)['state']);
+        $job = $recheck();
+        Assert::true($job > 0, 'a verify-fix recheck was queued');
+        $payload = json_decode((string) $ctx->db->query("SELECT payload FROM scan_jobs WHERE id = {$job}")->fetchColumn(), true);
+        Assert::same([['203.0.113.160'], [3389]], [$payload['ips'], $payload['ports']], 'only that address and port');
+        Assert::same('still_present', $ctx->db->query("SELECT verify_result FROM findings WHERE id = {$f1}")->fetchColumn());
+        $summary = App::itflowTickets()->run();
+        Assert::contains('1 reopened', $summary);
+        Assert::contains('reopen:' . $t1, json_encode($sent()['log']));
+        Assert::contains('still sees this problem', implode(' ', $repliesTo($t1)));
+        Assert::same('open', $row($f1)['state']);
+
+        // Closed in ITFlow (can't be reopened) and still there: a new ticket that names the old one.
+        $setStatus($t1, 'closed');
+        App::itflowTickets()->run();
+        $recheck();
+        $before = count($sent()['tickets']);
+        Assert::contains('1 replaced', App::itflowTickets()->run());
+        Assert::same($before + 1, count($sent()['tickets']));
+        $t2 = (int) $row($f1)['itflow_ticket_id'];
+        Assert::true($t2 !== $t1, 'new ticket');
+        Assert::contains('TCK-' . $t1 . ' was closed, but Sentinel still sees this problem', end($sent()['tickets'])['ticket_details']);
+        Assert::same(1, (int) $ctx->db->query("SELECT COUNT(*) FROM itflow_tickets WHERE history_finding_id = {$f1} AND state = 'replaced' AND itflow_ticket_id = {$t1}")->fetchColumn());
+        Assert::contains('Earlier ITFlow ticket', $admin->get('/findings/' . $f1)->body);
+
+        // Fixed this time: closing the new ticket in ITFlow -> recheck -> finding resolved -> "verified fixed" note.
+        file_put_contents($dir . '/nmap-closed.json', json_encode(['203.0.113.160:3389']));
+        $setStatus($t2, 'resolved');
+        App::itflowTickets()->run();
+        $recheck();
+        Assert::same('resolved', $ctx->db->query("SELECT status FROM findings WHERE id = {$f1}")->fetchColumn());
+        Assert::contains('1 confirmed fixed', App::itflowTickets()->run());
+        Assert::same('done', $row($f1)['state']);
+        Assert::contains('Verified fixed by Sentinel', implode(' ', $repliesTo($t2)));
+
+        // Fixed in Sentinel first: a note and the ticket resolved; the problem coming back reopens it.
+        $f2 = $finding($cid, 'port:203.0.113.194:445', 'Windows file sharing open');
+        App::itflowTickets()->run();
+        $t3 = (int) $row($f2)['itflow_ticket_id'];
+        $ctx->db->exec("UPDATE findings SET status = 'resolved', resolved_at = UTC_TIMESTAMP() WHERE id = {$f2}");
+        Assert::contains('1 resolved as fixed', App::itflowTickets()->run());
+        Assert::contains('resolve:' . $t3, json_encode($sent()['log']));
+        Assert::contains('Verified fixed by Sentinel', $lastReply($t3));
+        Assert::same('sentinel_resolved', $row($f2)['state']);
+        $ctx->db->exec("UPDATE findings SET status = 'open', resolved_at = NULL, opened_at = UTC_TIMESTAMP() WHERE id = {$f2}");
+        App::itflowTickets()->run();
+        Assert::contains('reopen:' . $t3, json_encode($sent()['log']));
+        Assert::contains('came back', implode(' ', $repliesTo($t3)));
+        Assert::same('open', $row($f2)['state']);
+        $hist = implode("\n", $ctx->db->query("SELECT note FROM finding_events WHERE finding_id = {$f2} AND event = 'itflow_ticket'")->fetchAll(PDO::FETCH_COLUMN));
+        Assert::contains('resolved: no longer seen by Sentinel', $hist, 'history on the finding');
+
+        // One refused item never holds up the others; it is retried later.
+        file_put_contents($dir . '/itflow-fail.json', json_encode(['refuse_clients' => [821]]));
+        $f3 = $finding($cid2, 'port:203.0.113.195:3389', 'Remote Desktop open to the internet');
+        $f4 = $finding($cid, 'port:203.0.113.194:23', 'Telnet open to the internet');
+        $summary = App::itflowTickets()->run();
+        Assert::contains('1 refused by ITFlow (retried later)', $summary);
+        Assert::notContains('Stopped', $summary);
+        Assert::same('open', $row($f4)['state'], 'the next finding still got its ticket');
+        Assert::same('failed', $row($f3)['state']);
+        Assert::contains('Client not found', $admin->get('/findings/' . $f3)->body, 'the reason is shown on the finding');
+        @unlink($dir . '/itflow-fail.json');
+        App::itflowTickets()->run();
+        Assert::same('failed', $row($f3)['state'], 'not before its retry time');
+        $ctx->db->exec("UPDATE itflow_tickets SET retry_at = UTC_TIMESTAMP() - INTERVAL 1 MINUTE WHERE finding_id = {$f3}");
+        App::itflowTickets()->run();
+        Assert::same('open', $row($f3)['state'], 'retried');
+
+        // An unclear answer (ITFlow saved it, then a 502): the run stops, and the next one finds the ticket instead
+        // of opening it twice.
+        file_put_contents($dir . '/itflow-fail.json', json_encode(['create_502' => true]));
+        $f5 = $finding($cid, 'port:203.0.113.194:21', 'FTP open to the internet');
+        Assert::contains('Stopped: ITFlow answered HTTP 502', App::itflowTickets()->run());
+        Assert::same('pending', $row($f5)['state']);
+        $count = count($sent()['tickets']);
+        @unlink($dir . '/itflow-fail.json');
+        App::itflowTickets()->run();
+        Assert::same($count, count($sent()['tickets']), 'not opened twice');
+        Assert::same('open', $row($f5)['state']);
+        Assert::same((int) end($sent()['tickets'])['id'], (int) $row($f5)['itflow_ticket_id'], 'the saved ticket was adopted');
+
+        // A ticket deleted in ITFlow is no longer followed; demo clients are never touched.
+        $setStatus((int) $row($f4)['itflow_ticket_id'], 'deleted');
+        App::itflowTickets()->run();
+        Assert::same('gone', $row($f4)['state']);
+        $ctx->db->exec("UPDATE clients SET is_demo = 1 WHERE id = {$cid2}");
+        $ctx->db->exec("UPDATE findings SET status = 'resolved', resolved_at = UTC_TIMESTAMP() WHERE id = {$f3}");
+        $calls = count($sent()['log'] ?? []);
+        App::itflowTickets()->run();
+        Assert::same($calls, count($sent()['log'] ?? []), 'demo client: nothing sent');
+        Assert::same('open', $row($f3)['state']);
+        $ctx->db->exec("UPDATE clients SET is_demo = 0, is_archived = 1 WHERE id = {$cid2}");
+        App::settings()->set('itflow_enabled', '0');
+        App::settings()->set('itflow_tickets_enabled', '0');
+        @unlink($dir . '/nmap-closed.json');
     },
 ];

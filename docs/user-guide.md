@@ -42,11 +42,11 @@ back. The client's forms (edit, new authorisation, agent enrolment, a device) ke
 
 ## ITFlow
 
-ITFlow is the list of clients (see [ROADMAP-itflow.md](ROADMAP-itflow.md) for where this is going: tickets from
-findings, closed from ITFlow). Today Sentinel keeps its clients in step with ITFlow:
+ITFlow is the list of clients and the ticket board (see [ROADMAP-itflow.md](ROADMAP-itflow.md)). Sentinel keeps
+its clients in step with ITFlow, opens tickets for findings and follows them both ways:
 
-1. In ITFlow, add an agent named MSP Sentinel with a role that can read clients and create tickets and ticket replies,
-   with access to all clients. Then go to
+1. In ITFlow, add an agent named MSP Sentinel with a role that can read clients and work tickets (the Support
+   module at write level: create, reply, resolve and reopen), with access to all clients. Then go to
    **Admin → API Keys**, create a key for that agent (with an expiry date) and copy it.
 2. In Sentinel, go to **Administration → Integrations → ITFlow**: enter ITFlow's address and the key, tick **Sync
    clients from ITFlow**, save, and click **Test connection**, then **Sync now**.
@@ -83,8 +83,24 @@ board:
 - Turning tickets on covers findings from then on. **Also open tickets for existing Fail findings** catches up on the
   rest (20 at a time, every 5 minutes).
 
-Coming next: Sentinel resolves the ticket when it sees the problem fixed, and closing the ticket in ITFlow makes
-Sentinel recheck (and reopen the ticket if the problem is still there).
+**Both ways.** Sentinel follows each finding ticket (it reads up to 50 ticket statuses every 5 minutes, since ITFlow
+has no webhooks):
+
+- **Fixed in Sentinel** (a later check no longer sees it), or marked accepted risk or false positive: the ticket gets
+  an internal note saying so and is resolved in ITFlow.
+- **Resolved or closed in ITFlow** while the finding is still open: Sentinel checks again. A port or email finding
+  gets a "verify fix" recheck straight away (same rules as the button: in scope, not paused). A device finding waits
+  for the device's next data (NinjaOne sync or agent scan).
+  - Gone: the finding closes, and a resolved ticket gets a "verified fixed" note.
+  - Still there: a resolved ticket is reopened with what Sentinel still sees. A **closed** ticket can't be reopened
+    in ITFlow, so Sentinel opens a new one that names the old one.
+  - No clear answer within 10 days: Sentinel stops waiting and says so on the finding, which stays open.
+- **Came back** after its ticket was resolved: the ticket is reopened (or replaced, if it was closed).
+- A ticket deleted in ITFlow is no longer followed. Weekly Warnings tickets are informational and not followed.
+- A ticket ITFlow refuses (a deleted client, no access) doesn't hold up the others: it is retried after 1, 2, 4 hours
+  and so on (at most a day apart), and the reason shows on the finding.
+
+Every step is written in the finding's history. The finding page links each ticket to ITFlow's technician view.
 
 ## NinjaOne
 
