@@ -28,6 +28,7 @@ use Sentinel\AgentClient\AgentKey;
 use Sentinel\AgentClient\Credentials;
 use Sentinel\AgentClient\Http;
 use Sentinel\AgentClient\JobVerifier;
+use Sentinel\AgentClient\Mover;
 use Sentinel\AgentClient\Runner;
 use Sentinel\AgentClient\State;
 use Sentinel\AgentClient\Updater;
@@ -128,11 +129,14 @@ switch ($command) {
         $c = $load();
         // Test settings (fake nmap, mock services) only with SENTINEL_TEST_MODE=1; otherwise a direct connector.
         $connector = $testMode && is_array($c['testing'] ?? null) ? Connector::fromTesting($c['testing']) : Connector::direct();
-        $http = new Http((string) $c['server'], (string) $c['token'], is_string($c['ca_file'] ?? null) ? $c['ca_file'] : null, $testMode);
+        $stateDir = dirname((string) ($c['state_file'] ?? dirname($configFile) . '/state.json'));
+        // Moved to a new Sentinel address (Administration, System)? It is kept in the state folder; the config is read-only.
+        $mover = new Mover($stateDir, (string) $c['server_public_key'], (int) $c['agent_id'], (int) $c['site_id'], (int) $c['client_id'], (string) $c['token'], $testMode, $say);
+        $moved = $mover->override();
+        $http = new Http($moved['server'] ?? (string) $c['server'], (string) $c['token'], $moved !== null ? $moved['ca_file'] : (is_string($c['ca_file'] ?? null) ? $c['ca_file'] : null), $testMode);
         // The agent's own key pair (sealed passwords) and the directory password it holds, in the state folder (the only
         // writable one: /var/lib/sentinel-agent; the config folder is read-only for the service). A key that can't be
         // read or created only turns those off: scans go on.
-        $stateDir = dirname((string) ($c['state_file'] ?? dirname($configFile) . '/state.json'));
         $key = null;
         $credentials = null;
         try {
@@ -144,7 +148,7 @@ switch ($command) {
         if ($command === 'status') {
             // Not idle: a status check must never take jobs or requests meant for the running agent.
             $res = $http->post('/agent/v1/poll', ['hostname' => (string) gethostname(), 'version' => Runner::version(), 'running' => [], 'idle' => false]);
-            $say('Agent #' . $c['agent_id'] . ' → ' . $c['server'] . ': ' . ($res['status'] === 200 ? 'connected' . (($res['data']['paused'] ?? false) ? ' (scanning paused)' : '') : 'HTTP ' . $res['status']));
+            $say('Agent #' . $c['agent_id'] . ' → ' . $http->server() . ($moved !== null ? ' (moved from ' . $c['server'] . ')' : '') . ': ' . ($res['status'] === 200 ? 'connected' . (($res['data']['paused'] ?? false) ? ' (scanning paused)' : '') : 'HTTP ' . $res['status']));
             // Compare with the fingerprint on the client's Agents page before typing a directory password.
             $say('Agent key fingerprint: ' . ($key !== null ? AgentKey::fingerprint($key->publicKey()) : 'none (key unusable)'));
             exit($res['status'] === 200 ? 0 : 1);
@@ -161,7 +165,8 @@ switch ($command) {
             new Updater($http, $testMode && is_string($c['testing']['release_key'] ?? null) ? $c['testing']['release_key'] : '/etc/sentinel-agent/release-key.pub',
                 $stateDir, $say, (string) $c['server_public_key'], (int) $c['agent_id'], (int) $c['site_id'], (int) $c['client_id'],
                 // The helper's results: a root-owned folder the agent can read but not change.
-                $testMode && is_string($c['testing']['update_result_dir'] ?? null) ? $c['testing']['update_result_dir'] : '/var/lib/sentinel-agent-update'));
+                $testMode && is_string($c['testing']['update_result_dir'] ?? null) ? $c['testing']['update_result_dir'] : '/var/lib/sentinel-agent-update'),
+            $mover);
         $say('Agent #' . $c['agent_id'] . ' started (version ' . Runner::version() . ').');
         do {
             try {

@@ -2,6 +2,17 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.23.0 (2026-11-23): move agents to a new Sentinel address
+
+- **Move every agent to a new Sentinel address** (and a private CA's certificate, if needed) from Administration →
+  System, without visiting any site.
+- **Each agent only switches after the new address proves it is this Sentinel.** The new address must sign a random
+  challenge with the key the agent pinned at enrolment. An impostor address gets nothing.
+- **Automatic fallback:** an agent goes back to its old address on its own if the new one fails 10 check-ins in a row.
+- The System page shows each agent's state: moved, waiting, not moved (and why), or needing an update first.
+- This completes managing agents from Sentinel: after the one-time install with an enrolment code, settings,
+  diagnostics, restarts, updates and address moves all happen from the web UI.
+
 ### 1.22.2 (2026-11-23): agent updates, fixes from re-review
 
 - **Repeat updates work.** In 1.22.1, the update helper's sandbox stopped the collector from removing the update

@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.22.2](https://img.shields.io/badge/version-1.22.2-ff5a1f?style=flat-square)
+![Version 1.23.0](https://img.shields.io/badge/version-1.23.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -148,6 +148,17 @@ curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install
 The same help is built into the app (**Help** in the menu), with a "What's new" page for every release.
 
 ## What's new
+
+### 1.23.0 (2026-11-23): move agents to a new Sentinel address
+
+- **Move every agent to a new Sentinel address** (and a private CA's certificate, if needed) from Administration →
+  System, without visiting any site.
+- **Each agent only switches after the new address proves it is this Sentinel.** The new address must sign a random
+  challenge with the key the agent pinned at enrolment. An impostor address gets nothing.
+- **Automatic fallback:** an agent goes back to its old address on its own if the new one fails 10 check-ins in a row.
+- The System page shows each agent's state: moved, waiting, not moved (and why), or needing an update first.
+- This completes managing agents from Sentinel: after the one-time install with an enrolment code, settings,
+  diagnostics, restarts, updates and address moves all happen from the web UI.
 
 ### 1.22.2 (2026-11-23): agent updates, fixes from re-review
 

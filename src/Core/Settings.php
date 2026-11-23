@@ -92,6 +92,7 @@ final class Settings
         // ITFlow tickets from findings (ItflowTickets): on/off, from when, and the last run.
         'itflow_tickets_enabled' => '0',
         'itflow_tickets_since' => '', 'itflow_tickets_weekly_since' => '',
+        'agent_move_url' => '', 'agent_move_ca' => '', 'agent_move_requested_at' => '',
         'itflow_tickets_last_run' => '',
         'itflow_tickets_last_result' => '',
         'itflow_tickets_last_ok' => '',

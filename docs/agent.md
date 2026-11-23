@@ -110,7 +110,24 @@ After the one-time install with an enrolment code, these are set on the client's
 - Agents older than 1.21.0 ignore the gentleness setting, Restart and Diagnostics; the Agents page says so. Upgrade
   them once by hand.
 
-Moving agents to a new Sentinel address follows in a next release.
+## Moving agents to a new Sentinel address (1.23)
+
+When Sentinel gets a new address (or a certificate from a private CA): Administration → System → **Move agents to a
+new Sentinel address**. Enter the new `https://` address and, for a private CA only, its certificate (PEM).
+
+- At their next check-in between scans, agents get the new address, signed with Sentinel's key.
+- **Each agent first asks the new address to prove it is this Sentinel:** it sends a random challenge, and only a
+  signature with the server key the agent pinned at enrolment counts. A wrong or impostor address gets nothing (no
+  results, no diagnostics) and the System page shows "not moved" with the reason.
+- The agent keeps the new address (and CA) in its state folder: its config file is read-only and never changes. It
+  restarts onto the new address.
+- **If the new address then fails 10 check-ins in a row**, the agent drops the move and goes back to its configured
+  address on its own.
+- The System page lists each agent: moved, waiting, not moved (why), or needing version 1.23.0 first. Cancel the move
+  there (agents that moved stay on the new address).
+
+Keep the old address working until every agent shows "moved". Re-enrolling is never needed: the agent's token and
+pinned key stay valid, because it is the same Sentinel.
 
 ## Updates from Sentinel (1.22)
 

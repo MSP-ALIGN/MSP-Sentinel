@@ -25,6 +25,12 @@ final class Http
         }
     }
 
+    /** The Sentinel address this client talks to. */
+    public function server(): string
+    {
+        return rtrim($this->server, '/');
+    }
+
     /**
      * POST JSON and decode the JSON answer.
      *

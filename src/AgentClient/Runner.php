@@ -68,6 +68,7 @@ final class Runner
         private readonly ?\Sentinel\Directory\DirectoryChecks $directory = null,
         private readonly ?\Sentinel\Directory\NameListener $listener = null,
         private readonly ?Updater $updater = null,
+        private readonly ?Mover $mover = null,
     ) {
         $this->log = $log;
     }
@@ -80,7 +81,18 @@ final class Runner
     public function pollOnce(): int
     {
         $this->sendPending();
-        $res = $this->http->post('/agent/v1/poll', $this->pollBody([], true));
+        try {
+            $res = $this->http->post('/agent/v1/poll', $this->pollBody([], true));
+        } catch (\Throwable $ex) {
+            // After a move, a new address that keeps failing sends the agent back to its configured one.
+            if ($this->mover?->checkInFailed() === true) {
+                return -2;
+            }
+            throw $ex;
+        }
+        if ($res['status'] >= 500 && $this->mover?->checkInFailed() === true) {
+            return -2;
+        }
         if ($res['status'] === 401) {
             ($this->log)('Sentinel no longer accepts this agent (revoked?). Deleting the directory password and stopping.');
             $this->credentials?->wipe();
@@ -90,6 +102,7 @@ final class Runner
             ($this->log)('Check-in failed (HTTP ' . $res['status'] . ').');
             return 60;
         }
+        $this->mover?->checkInWorked();
         $this->takeSecrets((array) $res['data']);
         if (($res['data']['diagnostics'] ?? false) === true) {
             $this->sendDiagnostics();
@@ -97,6 +110,12 @@ final class Runner
         if (($res['data']['restart'] ?? false) === true) {
             ($this->log)('Sentinel asked for a restart. Exiting; the service starts the agent again.');
             return -2;
+        }
+        if ($this->mover !== null && is_array($res['data']['move'] ?? null)) {
+            $move = $this->mover->requested($res['data']['move']);
+            if ($move !== null && $move['server'] !== $this->http->server() && $this->mover->tryMove($move['server'], $move['ca_pem'], $this->http) === '') {
+                return -2; // restart: the agent program starts on the new address
+            }
         }
         if ($this->updater !== null && $this->reportedResult !== null) {
             $this->updater->markReported($this->reportedResult); // Sentinel has the helper's result now
@@ -159,7 +178,7 @@ final class Runner
         $holds = $this->credentials?->holds() ?? false;
         $result = $idle ? $this->updater?->unreportedResult() : null; // the update helper's last result, until Sentinel has it
         $this->reportedResult = $result;
-        return ['hostname' => (string) gethostname(), 'version' => self::version(), 'running' => $running, 'idle' => $idle]
+        return ['hostname' => (string) gethostname(), 'version' => self::version(), 'running' => $running, 'idle' => $idle, 'server' => $this->http->server()]
             + ($result !== null ? ['update_result' => $result] : [])
             + ($this->key !== null ? ['box_public_key' => $this->key->publicKey(), 'holds_directory' => $holds,
                                       'directory_username' => $holds ? $this->credentials?->username() : ''] : []);

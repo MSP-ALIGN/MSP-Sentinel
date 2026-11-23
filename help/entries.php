@@ -103,6 +103,7 @@ return [
                 'An agent is a small Linux appliance at the client\'s site. It only connects out to Sentinel, finds the devices on the internal network with their open services, certificates and web pages, and reports them. A full scan runs weekly and a light sweep daily, inside the client\'s scan window (stopped when it closes and continued in the next window); admins can also press Scan now (with a reason).',
                 'An agent scans only the networks in a signed internal authorisation for its site: who at the client approved it, the dates, and exactly which private networks (each at most a /16). Sentinel signs the authorisation and every job; the agent checks both signatures and refuses any target outside the signed networks.',
                 'To add one: record an internal authorisation for the site, click Create an enrolment code (admins; shown once, valid once for 24 hours), and run the agent installer on the appliance with that code. Pause on the site stops agent scans within a minute; revoking an agent stops its token at once.',
+                'New Sentinel address: Administration, System, Move agents. Each agent switches only after the new address signs a challenge with this Sentinel\'s key, and goes back to its old address if the new one fails 10 check-ins in a row.',
                 'Updates: Update to x.y.z (per agent), Update all agents (per client, or under Administration, System). The agent installs a release only when it is signed with the maintainer\'s release key it pinned at install; a root helper checks everything again. Agents older than 1.22.0 must be upgraded once by hand.',
                 'Managed from the Agents page afterwards (admins): scan gentleness per site (very gentle, gentle or faster nmap timing, never more than nmap\'s normal -T3), how often agents check in, a Diagnostics report (versions, disk, memory, clock difference, key fingerprint) and Restart.',
                 'Risky internal protocols, checked read-only: SMBv1 enabled, Telnet open and SNMP answering the default "private" community are Fails; SMB signing not required, Remote Desktop without Network Level Authentication, FTP open, SNMP answering "public" and login pages over plain HTTP are Warnings. The SNMP check sends one read request with the default community names.',
@@ -224,6 +225,13 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.23.0',
+            'date' => '2026-11-23',
+            'items' => [
+                'Move every agent to a new Sentinel address (and CA) from Administration, System. Each agent switches only after the new address proves it is this Sentinel, and falls back on its own if the new address keeps failing.',
+            ],
+        ],
         [
             'version' => '1.22.2',
             'date' => '2026-11-23',

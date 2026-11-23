@@ -40,8 +40,53 @@ final class SystemController extends Controller
             'retentionLast' => $s->get('retention_last_run'),
             'sourceUrl' => $s->get('source_url'),
             'agentRelease' => App::agentRelease(),
+            'agentMove' => ['url' => $s->get('agent_move_url'), 'ca' => $s->get('agent_move_ca') !== '', 'since' => $s->get('agent_move_requested_at'),
+                'agents' => App::db()->query("SELECT a.id, a.name, a.server_url, a.version, a.move_result, a.move_result_at, c.name AS client_name FROM agents a JOIN clients c ON c.id = a.client_id
+                                              WHERE a.status = 'active' AND c.is_demo = 0 ORDER BY c.name, a.name")->fetchAll()],
             'agentVersions' => App::db()->query("SELECT a.version, COUNT(*) AS n FROM agents a JOIN clients c ON c.id = a.client_id WHERE a.status = 'active' AND c.is_demo = 0 GROUP BY a.version ORDER BY a.version")->fetchAll(),
         ]);
+    }
+
+    /**
+     * POST /admin/system/agents-move (admins): move every agent to a new Sentinel address (and CA), or cancel
+     * (cancel=1). Each agent switches only after the new address proves it holds this Sentinel's key, and goes back on
+     * its own if the new address then keeps failing.
+     */
+    public function moveAgents(Request $request): Response
+    {
+        $s = App::settings();
+        $back = Response::redirect('/admin/system#agents');
+        if ($request->input('cancel') === '1') {
+            $s->set('agent_move_url', '');
+            $s->set('agent_move_ca', '');
+            $this->audit($request, 'agent.move_cancelled');
+            Session::flash('success', __('Agent move cancelled. Agents that already moved stay on the new address.'));
+            return $back;
+        }
+        $url = rtrim($request->input('url'), '/');
+        $ca = trim($request->raw('ca'));
+        $error = match (true) {
+            !\Sentinel\AgentClient\Mover::validServer($url, App::webhookTestMode()) => __('Enter the new address as https://host or https://host:port.'),
+            $ca !== '' && (strlen($ca) > 32768 || preg_match_all('/-----BEGIN CERTIFICATE-----.+?-----END CERTIFICATE-----/s', $ca, $m) < 1) => __('The CA must be one or more PEM certificates.'),
+            default => null,
+        };
+        if ($error === null && $ca !== '') {
+            foreach ($m[0] as $pem) {
+                if (@openssl_x509_read($pem) === false) {
+                    $error = __('The CA must be one or more PEM certificates.');
+                }
+            }
+        }
+        if ($error !== null) {
+            Session::flash('danger', $error);
+            return $back;
+        }
+        $s->set('agent_move_url', $url);
+        $s->set('agent_move_ca', $ca);
+        $s->set('agent_move_requested_at', gmdate('Y-m-d H:i:s'));
+        $this->audit($request, 'agent.move_requested', null, null, ['url' => $url, 'ca' => $ca !== '']);
+        Session::flash('success', __('Agents move to {url} at their next check-in between scans, each after the new address proves it is this Sentinel.', ['url' => $url]));
+        return $back;
     }
 
     /** POST /admin/system/agents-update (admins): every agent of every client that can and needs to update. */

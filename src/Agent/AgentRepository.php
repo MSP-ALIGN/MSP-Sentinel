@@ -301,6 +301,24 @@ final class AgentRepository
             ->execute(['r' => $result, 'req' => $request, 'ok' => $ok ? 1 : 0, 'v' => $ok ? $version : '', 'running' => $running, 'id' => $agentId]);
     }
 
+    /** Record what an agent reported about moving to a new Sentinel address (untrusted: shortened). */
+    public function saveMoveResult(int $agentId, string $server, bool $ok, string $message): void
+    {
+        $this->db->prepare('UPDATE agents SET move_result = :r, move_result_at = UTC_TIMESTAMP() WHERE id = :id')
+            ->execute(['r' => json_encode(['server' => $server, 'ok' => $ok, 'message' => $message], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), 'id' => $agentId]);
+    }
+
+    /** Whether this agent reported a failed move to $url after the move was set ($since): don't ask it again. */
+    public function moveFailedSince(int $agentId, string $url, string $since): bool
+    {
+        $stmt = $this->db->prepare('SELECT move_result, move_result_at FROM agents WHERE id = :id');
+        $stmt->execute(['id' => $agentId]);
+        $r = $stmt->fetch() ?: [];
+        $res = json_decode((string) ($r['move_result'] ?? ''), true);
+        return is_array($res) && ($res['ok'] ?? true) === false && rtrim((string) ($res['server'] ?? ''), '/') === rtrim($url, '/')
+            && (string) ($r['move_result_at'] ?? '') >= $since;
+    }
+
     /** Ask an agent to restart, or to send diagnostics, at its next check-in. */
     public function request(int $agentId, string $what): void
     {
