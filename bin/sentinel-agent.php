@@ -125,7 +125,8 @@ switch ($command) {
             $say('The agent key is unusable (' . mb_substr($ex->getMessage(), 0, 200) . '): Active Directory checks are off until it is fixed (delete the file to create a new one, then set the password again).');
         }
         if ($command === 'status') {
-            $res = $http->post('/agent/v1/poll', ['hostname' => (string) gethostname(), 'version' => Runner::version(), 'running' => []]);
+            // Not idle: a status check must never take jobs or requests meant for the running agent.
+            $res = $http->post('/agent/v1/poll', ['hostname' => (string) gethostname(), 'version' => Runner::version(), 'running' => [], 'idle' => false]);
             $say('Agent #' . $c['agent_id'] . ' → ' . $c['server'] . ': ' . ($res['status'] === 200 ? 'connected' . (($res['data']['paused'] ?? false) ? ' (scanning paused)' : '') : 'HTTP ' . $res['status']));
             // Compare with the fingerprint on the client's Agents page before typing a directory password.
             $say('Agent key fingerprint: ' . ($key !== null ? AgentKey::fingerprint($key->publicKey()) : 'none (key unusable)'));

@@ -77,7 +77,7 @@ final class Runner
     public function pollOnce(): int
     {
         $this->sendPending();
-        $res = $this->http->post('/agent/v1/poll', $this->pollBody([]));
+        $res = $this->http->post('/agent/v1/poll', $this->pollBody([], true));
         if ($res['status'] === 401) {
             ($this->log)('Sentinel no longer accepts this agent (revoked?). Deleting the directory password and stopping.');
             $this->credentials?->wipe();
@@ -122,13 +122,16 @@ final class Runner
      * What every check-in sends: name, version, running jobs, this agent's public key (for sealed passwords) and
      * whether it holds a directory password.
      *
+     * "idle": true only from the main loop, which acts on jobs and one-off requests; check-ins during a scan say false,
+     * so the server keeps those for later instead of handing them to a check-in that ignores them.
+     *
      * @param list<int> $running
      * @return array<string,mixed>
      */
-    private function pollBody(array $running): array
+    private function pollBody(array $running, bool $idle): array
     {
         $holds = $this->credentials?->holds() ?? false;
-        return ['hostname' => (string) gethostname(), 'version' => self::version(), 'running' => $running]
+        return ['hostname' => (string) gethostname(), 'version' => self::version(), 'running' => $running, 'idle' => $idle]
             + ($this->key !== null ? ['box_public_key' => $this->key->publicKey(), 'holds_directory' => $holds,
                                       'directory_username' => $holds ? $this->credentials?->username() : ''] : []);
     }
@@ -347,7 +350,7 @@ final class Runner
         }
         $this->lastCheck = microtime(true);
         try {
-            $res = $this->http->post('/agent/v1/poll', $this->pollBody([$jobId]));
+            $res = $this->http->post('/agent/v1/poll', $this->pollBody([$jobId], false));
         } catch (\Throwable) {
             return false; // Sentinel briefly unreachable: carry on (the job's own limits still apply)
         }

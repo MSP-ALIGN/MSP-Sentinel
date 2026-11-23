@@ -19,12 +19,18 @@ declare(strict_types=1);
 $log = $argv[1];
 $args = array_slice($argv, 2);
 file_put_contents($log, json_encode($args) . "\n", FILE_APPEND);
-// The agent's per-site timing profiles (-T1/10, -T3/200) are checked like the default -T2/50; anything else fails.
-foreach ([['-T1', '10'], ['-T3', '200']] as [$t, $r]) {
-    $i = array_search($t, $args, true);
-    if ($i !== false && ($args[$i + 1] ?? '') === '--max-rate' && ($args[$i + 2] ?? '') === $r) {
-        $args[$i] = '-T2';
-        $args[$i + 2] = '50';
+// The agent's other per-site timing profiles (exact argument sequences only) are checked like the default -T2/50,
+// but only when the agent's test config says so (FAKE_NMAP_AGENT_PROFILES=1): the external scanner must always send
+// the default, and the scanning tests prove it.
+if (getenv('FAKE_NMAP_AGENT_PROFILES') === '1') {
+    foreach ([['-T2', '--max-rate', '10', '--max-parallelism', '1'], ['-T3', '--max-rate', '200']] as $profile) {
+        $n = count($profile);
+        for ($i = 0; $i + $n <= count($args); $i++) {
+            if (array_slice($args, $i, $n) === $profile) {
+                array_splice($args, $i, $n, ['-T2', '--max-rate', '50']);
+                break 2;
+            }
+        }
     }
 }
 

@@ -12,8 +12,10 @@ use Sentinel\Core\Config;
  * Fixed arguments (no user-controlled options):
  *   -sT --unprivileged   TCP connect scan, no root or raw sockets needed
  *   -Pn -n               no ping (many hosts block it), no reverse DNS
- *   -T2 --max-rate 50    "polite" timing, at most 50 packets per second (the "gentle" profile; agents can be set
- *                        per site to "very_gentle" -T1/10 or "normal" -T3/200, never faster: PROFILES)
+ *   -T2 --max-rate 50    "polite" timing (a pause between probes; about 2-3 probes a second in practice), at most
+ *                        50 packets per second: the "gentle" profile. Agents can be set per site to "very_gentle"
+ *                        (also one probe at a time, at most 10 per second) or "normal" (-T3: no pause between
+ *                        probes, in parallel, at most 200 per second; far more traffic). Never faster: PROFILES.
  *   --max-retries 2 --host-timeout 20m
  *   -sV --version-light  light service/version detection on open ports only
  *   -p <ports> -oX -     ports from PortProfile (ints), XML to stdout
@@ -32,8 +34,15 @@ use Sentinel\Core\Config;
  */
 final class NmapRunner
 {
-    /** Timing profiles: nmap timing template and packets per second at most. Nothing faster than -T3 exists here. */
-    public const PROFILES = ['very_gentle' => ['-T1', '10'], 'gentle' => ['-T2', '50'], 'normal' => ['-T3', '200']];
+    /**
+     * Timing profiles: the nmap arguments that set the pace. Based on -T2 plus explicit limits (the -T1 template waits
+     * 15 seconds between probes, too slow to finish real scans). Nothing faster than -T3 exists here.
+     */
+    public const PROFILES = [
+        'very_gentle' => ['-T2', '--max-rate', '10', '--max-parallelism', '1'],
+        'gentle' => ['-T2', '--max-rate', '50'],
+        'normal' => ['-T3', '--max-rate', '200'],
+    ];
 
     /** Use fromConfig() normally. */
     public function __construct(private readonly string $nmapPath, private readonly int $hostTimeoutSeconds = 1500, private readonly string $profile = 'gentle')
@@ -96,8 +105,7 @@ final class NmapRunner
                 throw new \InvalidArgumentException('Invalid port.');
             }
         }
-        [$timing, $rate] = self::PROFILES[$this->profile];
-        $args = [$this->nmapPath, '-sT', '--unprivileged', '-Pn', '-n', $timing, '--max-rate', $rate, '--max-retries', '2',
+        $args = [$this->nmapPath, '-sT', '--unprivileged', '-Pn', '-n', ...self::PROFILES[$this->profile], '--max-retries', '2',
                  '--host-timeout', '20m', '-sV', '--version-light', '--noninteractive', '-p', PortProfile::toNmapArg($ports), '-oX', '-'];
         if (str_contains($ip, ':')) {
             $args[] = '-6';
@@ -141,8 +149,7 @@ final class NmapRunner
             }
             $v6 = $isV6;
         }
-        [$timing, $rate] = self::PROFILES[$this->profile];
-        $args = [$this->nmapPath, '-sn', '--unprivileged', '-n', $timing, '--max-rate', $rate, '--max-retries', '1', '--host-timeout', '2m', '-oX', '-'];
+        $args = [$this->nmapPath, '-sn', '--unprivileged', '-n', ...self::PROFILES[$this->profile], '--max-retries', '1', '--host-timeout', '2m', '-oX', '-'];
         if ($v6) {
             $args[] = '-6';
         }

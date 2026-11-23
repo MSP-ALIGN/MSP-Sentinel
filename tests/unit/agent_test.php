@@ -57,6 +57,40 @@ return [
             . '<host><status state="down"/><address addr="10.0.0.6" addrtype="ipv4"/></host></nmaprun>');
         Assert::same([['ip' => '10.0.0.5', 'mac' => 'aa:bb:cc:00:11:22']], $hosts, 'only hosts that are up');
     },
+    'agent timing profiles: exact arguments, never faster than -T3; the agent refuses any other timing' => function (TestContext $ctx): void {
+        $n = new NmapRunner('/usr/bin/nmap');
+        Assert::same(['-T2', '--max-rate', '50'], array_slice($n->arguments('10.0.0.5', [22]), 5, 3), 'default: gentle');
+        Assert::same(['-T2', '--max-rate', '10', '--max-parallelism', '1'], array_slice($n->withProfile('very_gentle')->arguments('10.0.0.5', [22]), 5, 5));
+        Assert::same(['-T3', '--max-rate', '200'], array_slice($n->withProfile('normal')->discoveryArguments(['10.0.0.0/24']), 4, 3));
+        foreach (NmapRunner::PROFILES as $args) {
+            Assert::true(!array_intersect($args, ['-T4', '-T5', '--min-rate', '--privileged']), 'nothing aggressive in a profile');
+        }
+        $threw = false;
+        try {
+            $n->withProfile('insane');
+        } catch (\InvalidArgumentException) {
+            $threw = true;
+        }
+        Assert::true($threw, 'unknown profile refused');
+        // A signed job with an unknown timing is refused by the agent; none means gentle.
+        $s = Signer::fromAppKey(str_repeat("\x03", 32));
+        $auth = $s->sign(['v' => 1, 'type' => 'internal_authorisation', 'site_id' => 1, 'client_id' => 1, 'timezone' => 'UTC',
+            'valid_from' => gmdate('Y-m-d', time() - 86400), 'valid_until' => gmdate('Y-m-d', time() + 86400), 'ranges' => ['10.0.0.0/24']]);
+        $job = static fn (array $extra): array => $s->sign($extra + ['v' => 1, 'type' => 'agent_job', 'job_id' => 7, 'agent_id' => 1, 'site_id' => 1, 'client_id' => 1,
+            'kind' => 'full', 'ports' => [22], 'targets' => ['10.0.0.0/24'], 'udp_ports' => [], 'issued_at' => gmdate('Y-m-d\TH:i:s\Z'),
+            'expires_at' => gmdate('Y-m-d\TH:i:s\Z', time() + 3600), 'authorisation' => $auth]);
+        $v = new \Sentinel\AgentClient\JobVerifier($s->publicKey(), 1, 1, 1);
+        $ok = $job([]);
+        Assert::same('gentle', $v->verify($ok['payload'], $ok['signature'], [])['timing'] ?? null, 'none: gentle');
+        $fast = $job(['timing' => 'normal']);
+        Assert::same('normal', $v->verify($fast['payload'], $fast['signature'], [])['timing'] ?? null);
+        foreach (['insane', 'T5', ''] as $bad) {
+            $j = $job(['timing' => $bad]);
+            Assert::same('unknown scan timing', $v->verify($j['payload'], $j['signature'], []), 'refused: ' . $bad);
+        }
+        $j = $job(['timing' => ['-T5']]);
+        Assert::same('unknown scan timing', $v->verify($j['payload'], $j['signature'], []), 'refused: not a string');
+    },
     'agent state: job history and results kept until accepted' => function (TestContext $ctx): void {
         $dir = sys_get_temp_dir() . '/sentinel-agent-state-' . bin2hex(random_bytes(4));
         mkdir($dir, 0700);

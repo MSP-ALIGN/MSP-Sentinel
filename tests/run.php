@@ -153,6 +153,13 @@ try {
         . escapeshellarg($outDir . '/nmap-args.log') . " \"\$@\"\n");
     chmod($nmapWrapper, 0700);
     $cfg['scanner'] = ['nmap_path' => $nmapWrapper, 'host_timeout' => 60];
+    // The agents' fake nmap: the same, but it also accepts the agents' other timing profiles. The external scanner
+    // keeps the strict wrapper above, so the scanning tests prove it always sends the default.
+    $agentNmap = $outDir . '/fake-nmap-agent.sh';
+    file_put_contents($agentNmap, "#!/bin/sh\nFAKE_NMAP_AGENT_PROFILES=1 exec " . escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/mocks/fake_nmap.php') . ' '
+        . escapeshellarg($outDir . '/nmap-args.log') . " \"\$@\"\n");
+    chmod($agentNmap, 0700);
+    $cfg['testing']['agent_nmap_path'] = $agentNmap;
 
     // Mock TLS/HTTP servers on 127.0.0.1 with throwaway certificates. The TLS and HTTP checks reach them
     // through testing.redirect_connections (honoured only together with allow_documentation_ranges).

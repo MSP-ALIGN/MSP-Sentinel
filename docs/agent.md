@@ -91,16 +91,24 @@ is kept). Remove: `sudo ./install/agent-install.sh --uninstall`, and revoke the 
 
 After the one-time install with an enrolment code, these are set on the client's **Agents** page (admins):
 
-- **Scan gentleness** per site: *Very gentle* (nmap `-T1`, at most 10 packets per second), *Gentle* (`-T2`, 50; the
-  default) or *Normal* (`-T3`, 200). It is part of each signed job; the agent accepts only these three, so nothing
-  faster than `-T3` can be asked for.
-- **Check-in interval** per site: 30 seconds to 10 minutes (default 1 minute). Pausing and stopping scans take up to
-  one interval.
-- **Diagnostics**: the agent sends a report at its next check-in: versions (agent, PHP, nmap, system), free disk and
+- **Scan gentleness** per site, part of each signed job (the agent accepts only these three; nothing faster than
+  `-T3` can be asked for):
+  - *Very gentle*: nmap's polite timing (`-T2`) with one probe at a time and at most 10 per second. The slowest.
+  - *Gentle* (default): `-T2 --max-rate 50`. `-T2` pauses between probes, so in practice about 2-3 probes a second.
+  - *Faster*: nmap's normal timing (`-T3`, at most 200 per second): no pauses and probes in parallel, so many times
+    the traffic of *Gentle*. Use it only for networks that can take it.
+- **Check-in interval** per site: 30 seconds to 10 minutes (default 1 minute). "Scan now", Restart and Diagnostics
+  wait for the next check-in between scans. Pausing and stopping are still quick: running scans check in every 30
+  seconds whatever the interval.
+- **Diagnostics** (what the agent reports about itself; compare key fingerprints on the appliance before trusting
+  them): the agent sends a report at its next check-in: versions (agent, PHP, nmap, system), free disk and
   memory, load, uptime, results waiting to upload, the clock difference with Sentinel (jobs carry expiry times, so
   more than a couple of minutes matters), its key fingerprint and whether it holds a directory password. Never the
   token or the password.
-- **Restart**: the agent exits at its next check-in, between scans, and its service starts it again.
+- **Restart**: the agent exits at its next check-in between scans (after a running scan), and its service starts it
+  again a minute later. A restart goes out on its own, so no scan is lost.
+- Agents older than 1.21.0 ignore the gentleness setting, Restart and Diagnostics; the Agents page says so. Upgrade
+  them once by hand.
 
 Agent updates and moving agents to a new Sentinel address follow in the next releases.
 

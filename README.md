@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.21.0](https://img.shields.io/badge/version-1.21.0-ff5a1f?style=flat-square)
+![Version 1.21.1](https://img.shields.io/badge/version-1.21.1-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -149,11 +149,31 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
 
 ## What's new
 
+### 1.21.1 (2026-11-23): agent settings, fixes from review
+
+- **Restart, Diagnostics and Scan now are no longer lost.** Check-ins during a running scan, and the agent's
+  `status` command, used to take these requests and ignore them. Now only the agent's idle check-ins between scans
+  receive them. A restart is handed out on its own, so a queued scan isn't marked as sent and then expired. This also
+  fixes an older problem: a scan queued while another was running could expire without running.
+- **Honest gentleness settings:**
+  - *Very gentle* now keeps nmap's polite timing with one probe at a time, at most 10 a second. The old `-T1`
+    template waited 15 seconds between probes and couldn't finish real scans.
+  - *Faster* (nmap `-T3`) is labelled as the much heavier traffic it really is.
+- **Older agents are flagged.** The Agents page says when an agent older than 1.21.0 ignores these settings.
+- **Diagnostics** are labelled as reported by the agent, and a key fingerprint that doesn't match the pinned key is
+  flagged.
+- **Smaller fixes:**
+  - Requests are taken atomically.
+  - Odd numbers in a report can't wipe it.
+  - The settings audit entry records the old values.
+  - Messages reflect longer check-in intervals.
+  - Tests prove the external scanner always uses the default timing.
+
 ### 1.21.0 (2026-11-23): agent settings from the web UI
 
 - **Manage agents from the client's Agents page** (admins) after the one-time install:
-  - **Scan gentleness per site:** very gentle (nmap `-T1`, 10 packets/s), gentle (`-T2`, 50; the default) or normal
-    (`-T3`, 200). It is signed into each job, and the agent refuses anything else.
+  - **Scan gentleness per site:** very gentle, gentle (the default) or faster (labels and timings corrected in
+    1.21.1). It is signed into each job, and the agent refuses anything else.
   - **Check-in interval per site:** 30 seconds to 10 minutes.
   - **Diagnostics:** a report from the agent with versions, disk, memory, load, uptime, clock difference with
     Sentinel, key fingerprint and whether it holds a directory password. Never a secret.

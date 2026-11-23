@@ -135,7 +135,18 @@ final class AgentKernel
         }
         // Still working on the rest: keep them alive.
         App::agents()->extendLease((int) $agent['id'], array_values(array_diff($running, $stop)));
-        if (!$paused) {
+        // Only a check-in that can act on them gets jobs and one-off requests: the agent says "idle" from its main loop,
+        // and "not idle" from check-ins during a scan and from its status command (both ignore jobs and requests, so
+        // anything handed to them would be lost). Older agents don't say: they get jobs when not running one, never
+        // requests (they can't act on them).
+        $idle = $body['idle'] ?? null;
+        $requests = $idle === true ? App::agents()->takeRequests((int) $agent['id']) : [];
+        if ($requests !== []) {
+            App::audit()->log('agent.requests_handed_out', null, null, 'agent', (int) $agent['id'], ['client_id' => (int) $agent['client_id'], 'requests' => array_keys($requests)], $request->ip());
+        }
+        // A restart goes out alone: jobs in the same answer would be marked sent and never run.
+        $giveJobs = !$paused && !isset($requests['restart']) && ($idle === true || ($idle === null && $running === []));
+        if ($giveJobs) {
             foreach (App::agents()->jobsFor((int) $agent['id']) as $job) {
                 if (!AgentService::inWindow($job, $agent)) {
                     continue; // scheduled jobs start only inside the scan window
@@ -149,8 +160,6 @@ final class AgentKernel
                 $jobs[] = $signed;
             }
         }
-        // One-off requests from the Agents page: restart (the service restarts it) and a diagnostics report.
-        $requests = App::agents()->takeRequests((int) $agent['id']);
         return ApiKernel::json(['jobs' => $jobs, 'stop' => array_values(array_unique($stop)), 'paused' => $paused,
                                 'poll_seconds' => max(30, min(600, (int) ($agent['agent_poll_seconds'] ?? self::POLL_SECONDS)))] + $requests
             + self::secrets($agent, ($body['holds_directory'] ?? false) === true, is_string($body['directory_username'] ?? null) ? $body['directory_username'] : null));

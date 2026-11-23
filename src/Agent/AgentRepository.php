@@ -227,18 +227,15 @@ final class AgentRepository
      */
     public function takeRequests(int $agentId): array
     {
-        $stmt = $this->db->prepare('SELECT restart_requested, diagnostics_requested FROM agents WHERE id = :id');
-        $stmt->execute(['id' => $agentId]);
-        $r = $stmt->fetch() ?: [];
+        // Each flag is taken by an UPDATE that only succeeds while it is set: a request made at the same moment is
+        // never cleared without being handed out.
         $out = [];
-        if ((int) ($r['restart_requested'] ?? 0) === 1) {
-            $out['restart'] = true;
-        }
-        if ((int) ($r['diagnostics_requested'] ?? 0) === 1) {
-            $out['diagnostics'] = true;
-        }
-        if ($out !== []) {
-            $this->db->prepare('UPDATE agents SET restart_requested = 0, diagnostics_requested = 0 WHERE id = :id')->execute(['id' => $agentId]);
+        foreach (['restart' => 'restart_requested', 'diagnostics' => 'diagnostics_requested'] as $key => $column) {
+            $stmt = $this->db->prepare("UPDATE agents SET {$column} = 0 WHERE id = :id AND {$column} = 1");
+            $stmt->execute(['id' => $agentId]);
+            if ($stmt->rowCount() === 1) {
+                $out[$key] = true;
+            }
         }
         return $out;
     }
@@ -264,13 +261,14 @@ final class AgentRepository
         $out = [
             'version' => $text($d['version'] ?? '', 20), 'php' => $text($d['php'] ?? '', 40), 'os' => $text($d['os'] ?? '', 120), 'nmap' => $text($d['nmap'] ?? '', 120),
             'disk_free_mb' => $num($d['disk_free_mb'] ?? null, 100000000), 'uptime_seconds' => $num($d['uptime_seconds'] ?? null, 1000000000),
-            'load' => is_numeric($d['load'] ?? null) ? round((float) $d['load'], 2) : null, 'memory_mb' => $num($d['memory_mb'] ?? null, 10000000),
+            'load' => (is_int($d['load'] ?? null) || is_float($d['load'] ?? null)) && is_finite((float) $d['load']) && $d['load'] >= 0 && $d['load'] <= 10000 ? round((float) $d['load'], 2) : null,
+            'memory_mb' => $num($d['memory_mb'] ?? null, 10000000),
             'pending_results' => $num($d['pending_results'] ?? null, 100000), 'key_fingerprint' => $text($d['key_fingerprint'] ?? '', 40),
             'holds_directory' => ($d['holds_directory'] ?? false) === true, 'name_listening' => $text($d['name_listening'] ?? '', 80),
             'clock_skew_seconds' => $agentTime === false ? null : $agentTime - time(),
         ];
         $this->db->prepare('UPDATE agents SET diagnostics = :d, diagnostics_at = UTC_TIMESTAMP(), diagnostics_requested = 0 WHERE id = :id')
-            ->execute(['d' => json_encode($out, JSON_UNESCAPED_SLASHES), 'id' => $agentId]);
+            ->execute(['d' => json_encode($out, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), 'id' => $agentId]);
     }
 
     /** Record that an agent checked in. */

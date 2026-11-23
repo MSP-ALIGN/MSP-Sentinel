@@ -64,7 +64,9 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                             <?php if ($isAdmin): ?><form method="post" action="<?= e(url('/clients/' . $cid . '/agents/' . (int) $a['id'] . '/approve-key')) ?>" class="mt-1" data-confirm="<?= e(__('Approve this new agent key? Compare the fingerprint with the agent\'s status output first.')) ?>"><?= Csrf::field() ?>
                                 <input type="hidden" name="fingerprint" value="<?= e($pfp) ?>"><button class="btn btn-sm btn-outline-warning" type="submit"><?= e(__('Approve new key')) ?></button></form><?php endif; ?></div>
                         <?php endif; ?></td>
-                    <td class="font-monospace"><?= e($a['version'] ?: '?') ?></td>
+                    <td class="font-monospace"><?= e($a['version'] ?: '?') ?>
+                        <?php if ($a['status'] === 'active' && preg_match('/^\d+\.\d+\.\d+$/', (string) $a['version']) === 1 && version_compare((string) $a['version'], '1.21.0', '<')): ?>
+                        <div class="small text-warning font-sans-serif"><?= e(__('Upgrade this agent: before 1.21.0 it ignores the gentleness setting, Restart and Diagnostics.')) ?></div><?php endif; ?></td>
                     <td><?= e((string) ($a['last_seen_at'] ?? '-')) ?></td>
                     <td><?php if ($a['status'] === 'revoked'): ?><span class="badge text-bg-secondary"><?= e(__('Revoked')) ?></span>
                         <?php elseif ($online): ?><span class="badge text-bg-success"><i class="bi bi-wifi me-1" aria-hidden="true"></i><?= e(__('Online')) ?></span>
@@ -81,7 +83,9 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                 </tr>
                 <?php $diag = json_decode((string) ($a['diagnostics'] ?? ''), true); if (is_array($diag) && $a['status'] === 'active'): ?>
                 <tr><td colspan="5" class="small">
-                    <details><summary><?= e(__('Diagnostics from {t} UTC', ['t' => $a['diagnostics_at']])) ?></summary>
+                    <details><summary><?= e(__('Diagnostics reported by the agent, {t} UTC', ['t' => $a['diagnostics_at']])) ?></summary>
+                    <?php $reportedFp = (string) ($diag['key_fingerprint'] ?? ''); $knownFp = (string) $a['box_public_key'] !== '' ? \Sentinel\AgentClient\AgentKey::fingerprint((string) $a['box_public_key']) : ''; ?>
+                    <?php if ($reportedFp !== '' && $knownFp !== '' && $reportedFp !== $knownFp): ?><div class="alert alert-warning py-1 px-2 my-1"><?= e(__('The key this report names is not the pinned key ({fp}). Compare on the appliance itself (status command) before approving any key.', ['fp' => $knownFp])) ?></div><?php endif; ?>
                     <dl class="row mb-0 mt-1">
                         <?php foreach ([__('Agent version') => $diag['version'] ?? '', __('PHP') => $diag['php'] ?? '', __('System') => $diag['os'] ?? '', __('nmap') => $diag['nmap'] ?? '',
                                         __('Free disk') => isset($diag['disk_free_mb']) ? $diag['disk_free_mb'] . ' MB' : '', __('Free memory') => isset($diag['memory_mb']) ? $diag['memory_mb'] . ' MB' : '',
@@ -102,7 +106,7 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
             <form method="post" action="<?= e(url('/clients/' . $cid . '/sites/' . $sid . '/agent-settings')) ?>" class="d-flex flex-wrap align-items-end gap-2 mb-2 small"><?= Csrf::field() ?>
                 <div><label class="form-label mb-0" for="timing-<?= $sid ?>"><?= e(__('Scan gentleness')) ?></label>
                     <select class="form-select form-select-sm" id="timing-<?= $sid ?>" name="timing">
-                        <?php foreach (['very_gentle' => __('Very gentle (nmap -T1, 10 packets/s)'), 'gentle' => __('Gentle (nmap -T2, 50 packets/s; default)'), 'normal' => __('Normal (nmap -T3, 200 packets/s)')] as $v => $l): ?>
+                        <?php foreach (['very_gentle' => __('Very gentle (one probe at a time, at most 10 a second; slowest)'), 'gentle' => __('Gentle (nmap polite timing -T2; default)'), 'normal' => __('Faster (nmap normal timing -T3, parallel, up to 200 a second; much more traffic)')] as $v => $l): ?>
                         <option value="<?= e($v) ?>" <?= ($site['agent_timing'] ?? 'gentle') === $v ? 'selected' : '' ?>><?= e($l) ?></option>
                         <?php endforeach; ?></select></div>
                 <div><label class="form-label mb-0" for="poll-<?= $sid ?>"><?= e(__('Check-in every')) ?></label>

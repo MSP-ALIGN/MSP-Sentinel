@@ -34,7 +34,7 @@ $setSetup = static function (TestContext $ctx) use ($setDir): array {
     }
     $app = require $ctx->configPath;
     $c = json_decode((string) file_get_contents($setDir($ctx) . '/agent.json'), true);
-    $c['nmap_path'] = $app['scanner']['nmap_path'];
+    $c['nmap_path'] = $app['testing']['agent_nmap_path']; // accepts the agents' other timing profiles
     $c['testing'] = ['allow_documentation_ranges' => true, 'redirect_connections' => $app['testing']['redirect_connections'], 'arp_file' => $setDir($ctx) . '/arp'];
     file_put_contents($setDir($ctx) . '/agent.json', json_encode($c));
     file_put_contents($setDir($ctx) . '/arp', "IP address       HW type     Flags       HW address            Mask     Device\n");
@@ -47,7 +47,7 @@ return [
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $page = $ctx->clientSection($admin, $cid, 'agents');
         Assert::contains('Scan gentleness', $page);
-        Assert::contains('Gentle (nmap -T2, 50 packets/s; default)', $page);
+        Assert::contains('Gentle (nmap polite timing -T2; default)', $page);
         // Only the offered values; admins only.
         $admin->submit('/clients/' . $cid . '/agents', '/clients/' . $cid . '/sites/' . $site . '/agent-settings', ['timing' => 'insane', 'poll_seconds' => '60']);
         Assert::contains('Choose one of the offered settings', $ctx->clientSection($admin, $cid, 'agents'));
@@ -67,7 +67,7 @@ return [
         $answer = (string) @file_get_contents($ctx->baseUrl . '/agent/v1/poll', false, stream_context_create(['http' => ['method' => 'POST',
             'header' => "Authorization: Bearer {$c['token']}\r\nContent-Type: application/json\r\n", 'content' => '{}', 'ignore_errors' => true]]));
         Assert::same(300, json_decode($answer, true)['poll_seconds'] ?? null);
-        // A scan uses the site's timing (the signed job says very_gentle: nmap -T1 at 10 packets per second).
+        // A scan uses the site's timing (the signed job says very_gentle: one probe at a time, at most 10 a second).
         $before = count(@file($ctx->nmapLog) ?: []);
         $admin->submit('/clients/' . $cid, '/clients/' . $cid . '/sites/' . $site . '/scan', ['reason' => 'Timing test']);
         [$code, $out] = $setRun($ctx);
@@ -76,16 +76,19 @@ return [
         Assert::true($calls !== [], 'nmap ran');
         foreach ($calls as $line) {
             $args = json_decode($line, true);
-            $t = array_search('-T1', $args, true);
-            Assert::true($t !== false && $args[$t + 2] === '10', 'very gentle timing on every nmap call: ' . $line);
+            $t = array_search('--max-parallelism', $args, true);
+            Assert::true($t !== false && $args[$t + 1] === '1' && $args[$t - 1] === '10' && in_array('-T2', $args, true), 'very gentle timing on every nmap call: ' . $line);
         }
     },
-    'agent settings: diagnostics on request, and a restart between scans' => function (TestContext $ctx) use ($setSetup, $setRun): void {
+    'agent settings: diagnostics on request, and a restart between scans' => function (TestContext $ctx) use ($setSetup, $setRun, $setDir): void {
         [$cid, $site] = $setSetup($ctx);
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $agentId = (int) $ctx->db->query("SELECT id FROM agents WHERE site_id = {$site} AND status = 'active'")->fetchColumn();
         $admin->submit('/clients/' . $cid . '/agents', '/clients/' . $cid . '/agents/' . $agentId . '/diagnostics', []);
         Assert::contains('diagnostics requested', $ctx->clientSection($admin, $cid, 'agents'));
+        // The status command checks in too, but must not take the request meant for the running agent.
+        $ctx->cli('bin/sentinel-agent.php', ['status', '--config', $setDir($ctx) . '/agent.json']);
+        Assert::same(1, (int) $ctx->db->query("SELECT diagnostics_requested FROM agents WHERE id = {$agentId}")->fetchColumn(), 'still waiting');
         [$code, $out] = $setRun($ctx);
         Assert::contains('Diagnostics sent', $out);
         $d = json_decode((string) $ctx->db->query("SELECT diagnostics FROM agents WHERE id = {$agentId}")->fetchColumn(), true);
@@ -93,15 +96,19 @@ return [
         Assert::true($d['version'] !== '' && $d['key_fingerprint'] !== '' && is_int($d['disk_free_mb']) && abs((int) $d['clock_skew_seconds']) < 30, 'a full report');
         Assert::notContains('token', json_encode($d), 'no secrets in it');
         $page = $ctx->clientSection($admin, $cid, 'agents');
-        Assert::contains('Diagnostics from', $page);
+        Assert::contains('Diagnostics reported by the agent', $page);
         Assert::contains(PHP_VERSION, $page);
-        // Restart: handed out once; the agent exits for its service to start it again.
+        // Restart with a scan queued: the restart goes out alone (the scan stays queued, not lost), then the scan runs.
+        $admin->submit('/clients/' . $cid, '/clients/' . $cid . '/sites/' . $site . '/scan', ['reason' => 'Before restart']);
+        $job = (int) $ctx->db->query("SELECT MAX(id) FROM agent_jobs WHERE site_id = {$site}")->fetchColumn();
         $admin->submit('/clients/' . $cid . '/agents', '/clients/' . $cid . '/agents/' . $agentId . '/restart', []);
         [$code, $out] = $setRun($ctx);
         Assert::same(75, $code, 'exits for a restart');
         Assert::contains('asked for a restart', $out);
+        Assert::same('queued', $ctx->db->query("SELECT status FROM agent_jobs WHERE id = {$job}")->fetchColumn(), 'the scan was not handed out with the restart');
         [$code, $out] = $setRun($ctx);
         Assert::same(0, $code, 'asked once only');
+        Assert::true(in_array($ctx->db->query("SELECT status FROM agent_jobs WHERE id = {$job}")->fetchColumn(), ['done', 'partial'], true), 'then the scan ran');
         Assert::status(404, $admin->post('/clients/' . $cid . '/agents/999999/restart', ['_csrf' => $admin->get('/')->csrf()]));
     },
 ];

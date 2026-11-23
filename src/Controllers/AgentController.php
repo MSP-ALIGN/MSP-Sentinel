@@ -203,21 +203,22 @@ final class AgentController extends Controller
         }
         App::db()->prepare('UPDATE sites SET agent_timing = :t, agent_poll_seconds = :p, updated_at = UTC_TIMESTAMP() WHERE id = :s')
             ->execute(['t' => $timing, 'p' => $poll, 's' => (int) $site['id']]);
-        $this->audit($request, 'site.agent_settings', 'site', (int) $site['id'], ['client_id' => (int) $client['id'], 'timing' => $timing, 'poll_seconds' => $poll]);
-        Session::flash('success', __('Agent settings saved. The check-in interval applies from the next check-in, the gentleness from the next scan.'));
+        $this->audit($request, 'site.agent_settings', 'site', (int) $site['id'], ['client_id' => (int) $client['id'], 'timing' => $timing, 'poll_seconds' => $poll,
+            'was' => ['timing' => (string) ($site['agent_timing'] ?? 'gentle'), 'poll_seconds' => (int) ($site['agent_poll_seconds'] ?? 60)]]);
+        Session::flash('success', __('Agent settings saved. The check-in interval applies from the next check-in, the gentleness from the next scan. Running scans still check in every 30 seconds (pause and stop stay quick).'));
         return Response::redirect('/clients/' . (int) $client['id'] . '/agents');
     }
 
     /** POST /clients/{id}/agents/{agent}/restart (admins): the agent restarts at its next check-in (between scans). */
     public function restartAgent(Request $request, array $params): Response
     {
-        return $this->agentRequest($request, $params, 'restart', __('The agent restarts at its next check-in (between scans; its service starts it again within a minute or two).'));
+        return $this->agentRequest($request, $params, 'restart', __('The agent restarts at its next check-in between scans (up to the site\'s check-in interval, or after a running scan); its service starts it again a minute later.'));
     }
 
     /** POST /clients/{id}/agents/{agent}/diagnostics (admins): the agent sends a diagnostics report at its next check-in. */
     public function diagnosticsAgent(Request $request, array $params): Response
     {
-        return $this->agentRequest($request, $params, 'diagnostics', __('The agent sends its diagnostics at its next check-in (within a minute). Reload the page then.'));
+        return $this->agentRequest($request, $params, 'diagnostics', __('The agent sends its diagnostics at its next check-in between scans (up to the site\'s check-in interval, or after a running scan). Reload the page then.'));
     }
 
     private function agentRequest(Request $request, array $params, string $what, string $done): Response
@@ -280,7 +281,7 @@ final class AgentController extends Controller
         }
         $jobId = App::agents()->queueJob($agentId, (int) $client['id'], (int) $site['id'], (int) $auth['id'], 'full', 'manual', (int) $this->user()['id'], AgentService::PORTS, AgentService::JOB_HOURS);
         $this->audit($request, 'agent.scan_requested', 'agent_job', $jobId, ['client_id' => (int) $client['id'], 'site_id' => (int) $site['id'], 'reason' => mb_substr($reason, 0, 300)]);
-        Session::flash('success', __('Scan queued. The agent picks it up at its next check-in (within a minute).'));
+        Session::flash('success', __('Scan queued. The agent picks it up at its next check-in (within the site\'s check-in interval, 1 minute by default).'));
         return Response::redirect('/clients/' . (int) $client['id'] . '/agents');
     }
 
