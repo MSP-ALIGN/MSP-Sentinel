@@ -33,7 +33,7 @@ final class JobVerifier
     public const MAX_PORTS = 1000;
     public const MAX_LISTEN = 300;
     /** Engagement tests an agent runs (the same fixed list as the server's EngagementRepository::TESTS). */
-    public const ENGAGEMENT_TESTS = ['tcp_full', 'udp_common', 'nse_safe', 'anon_access'];
+    public const ENGAGEMENT_TESTS = ['tcp_full', 'udp_common', 'nse_safe', 'anon_access', 'default_creds'];
 
     /**
      * @param string $publicKey Pinned server public key (base64).

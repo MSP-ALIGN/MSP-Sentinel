@@ -28,7 +28,7 @@ use Sentinel\Scope\ScopeService;
 final class EngagementRepository
 {
     /** Test types an engagement can allow (fixed list; labels in the UI). */
-    public const TESTS = ['tcp_full', 'udp_common', 'nse_safe', 'anon_access'];
+    public const TESTS = ['tcp_full', 'udp_common', 'nse_safe', 'anon_access', 'default_creds'];
     public const INTENSITIES = ['gentle', 'normal'];
     /** Longest window, and how far ahead one may start. */
     public const MAX_DAYS = 14;

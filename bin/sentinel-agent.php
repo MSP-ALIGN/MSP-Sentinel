@@ -185,7 +185,9 @@ switch ($command) {
                 // The helper's results: a root-owned folder the agent can read but not change.
                 $testMode && is_string($c['testing']['update_result_dir'] ?? null) ? $c['testing']['update_result_dir'] : $platform->updateResultDir(),
                 is_string($c['release_public_key'] ?? null) ? $c['release_public_key'] : '', $platform->isWindows()),
-            $mover);
+            $mover,
+            // Vendor default passwords (signed engagement test only): 5 seconds between attempts (test suite: shorter).
+            new \Sentinel\Scanning\DefaultCredentials($connector, $testMode && is_numeric($c['testing']['creds_spacing'] ?? null) ? (float) $c['testing']['creds_spacing'] : 5.0));
         $say('Agent #' . $c['agent_id'] . ' started (version ' . Runner::version() . ').');
         do {
             try {

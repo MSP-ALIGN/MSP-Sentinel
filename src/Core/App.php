@@ -212,7 +212,9 @@ final class App
             new TlsChecker($connector, $caFile === '' ? null : $caFile), new HttpProbe($connector), self::endpoints(), self::vulnMatcher(15), self::findingsEngine(), self::alerts(), self::outbox(), self::reportService(), new StatsRecorder(self::db()), self::events(), self::housekeeping(),
             new \Sentinel\Web\WebsiteChecker(new HttpProbe($connector)), new \Sentinel\Web\WebsiteRepository(self::db()), $dns === null ? null : new \Sentinel\Web\EmailChecker($dns), self::fixWorkflow(),
             self::inventorySources() === [] ? null : self::inventorySync(), self::agentService(), new \Sentinel\Scanning\ProtocolProbes($connector),
-            $dns === null ? null : new \Sentinel\Web\DomainChecker($dns, $connector, new HttpProbe($connector), self::scopeParser()));
+            $dns === null ? null : new \Sentinel\Web\DomainChecker($dns, $connector, new HttpProbe($connector), self::scopeParser()),
+            // Vendor default passwords (engagements only): 5 seconds between attempts; the test suite may shorten it.
+            new \Sentinel\Scanning\DefaultCredentials($connector, self::webhookTestMode() ? (float) $config->get('testing.creds_spacing', 5.0) : 5.0));
     }
 
     /** Vulnerability data and match store. */

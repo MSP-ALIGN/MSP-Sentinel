@@ -40,7 +40,7 @@ $clientId = (int) $client['id'];
                     <div class="form-check"><input class="form-check-input" type="checkbox" name="tests[]" id="test-<?= e($key) ?>" value="<?= e($key) ?>" <?= in_array($key, (array) ($values['tests'] ?? []), true) ? 'checked' : '' ?>>
                         <label class="form-check-label" for="test-<?= e($key) ?>"><?= e($label) ?></label></div>
                     <?php endforeach; ?>
-                    <div class="form-text"><?= e(__('No password guessing, no exploits, nothing that changes the systems tested.')) ?></div>
+                    <div class="form-text"><?= e(__('No password guessing beyond the short default-password list (only when ticked), no exploits, nothing that changes the systems tested.')) ?></div>
                     <?php $field = 'tests'; require __DIR__ . '/../partials/field_error.php'; ?>
                 </fieldset>
                 <fieldset class="mb-3">
@@ -117,6 +117,11 @@ $clientId = (int) $client['id'];
                     <input class="form-check-input<?= $invalid('confirm') ?>" type="checkbox" id="confirm" name="confirm" value="1" <?= $val('confirm') === '1' ? 'checked' : '' ?>>
                     <label class="form-check-label" for="confirm"><?= e(__('The client signed the attached authorisation for these targets, tests and window.')) ?></label>
                     <?php $field = 'confirm'; require __DIR__ . '/../partials/field_error.php'; ?>
+                </div>
+                <div class="form-check mb-3">
+                    <input class="form-check-input<?= $invalid('creds_confirm') ?>" type="checkbox" id="creds_confirm" name="creds_confirm" value="1" <?= $val('creds_confirm') === '1' ? 'checked' : '' ?>>
+                    <label class="form-check-label" for="creds_confirm"><?= e(__('Only with "Vendor default passwords": the signed authorisation explicitly allows trying vendor default passwords (annex P3).')) ?></label>
+                    <?php $field = 'creds_confirm'; require __DIR__ . '/../partials/field_error.php'; ?>
                 </div>
                 <button class="btn btn-primary" type="submit"><?= e(__('Create engagement (needs another admin\'s approval)')) ?></button>
                 <a class="btn btn-outline-secondary" href="<?= e(url('/clients/' . $clientId . '/engagements')) ?>"><?= e(__('Cancel')) ?></a>

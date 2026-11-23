@@ -436,6 +436,8 @@ final class AgentRepository
 
     /** Agents from this version run engagement jobs (older ones refuse the unknown job kind). */
     public const ENGAGEMENT_SINCE = '1.27.0';
+    /** Agents that can run the default-credential test (1.29). */
+    public const DEFAULT_CREDS_SINCE = '1.29.0';
 
     /**
      * Queue an engagement's internal tests for one agent: the engagement's ranges for its site, until the engagement's

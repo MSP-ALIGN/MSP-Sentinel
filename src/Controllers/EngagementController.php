@@ -42,6 +42,7 @@ final class EngagementController extends Controller
             'udp_common' => __('Common UDP services: one read-only request each to SNMP (default communities), NTP and SSDP/UPnP'),
             'nse_safe' => __('nmap\'s "safe" service scripts (details of each service; no vulnerability or intrusive checks)'),
             'anon_access' => __('Anonymous access checks (anonymous FTP login, NFS exports; read only)'),
+            'default_creds' => __('Vendor default passwords: at most 3 per service (FTP, web admin pages with Basic login, MySQL/MariaDB, PostgreSQL), each a different account, 5 seconds apart, stopping at any lockout; and databases open without a password (Redis, MongoDB, Elasticsearch, Memcached)'),
         ];
     }
 
@@ -63,7 +64,7 @@ final class EngagementController extends Controller
         $tz = new DateTimeZone((string) $client['timezone']);
         $today = ScopeService::today((string) $client['timezone']);
         $v = [];
-        foreach (['name', 'signer_name', 'signer_role', 'signed_on', 'window_start', 'window_end', 'intensity', 'notes', 'confirm'] as $f) {
+        foreach (['name', 'signer_name', 'signer_role', 'signed_on', 'window_start', 'window_end', 'intensity', 'notes', 'confirm', 'creds_confirm'] as $f) {
             $v[$f] = $request->input($f);
         }
         $v['external'] = mb_substr($request->raw('external'), 0, 20000);
@@ -210,6 +211,10 @@ final class EngagementController extends Controller
         if ($v['confirm'] !== '1') {
             $errors['confirm'] = __('Confirm that the client signed this authorisation for these targets, tests and window.');
         }
+        // Trying passwords is a step further than scanning: the signed document must say so explicitly (annex, item 6).
+        if (in_array('default_creds', $v['tests'], true) && $v['creds_confirm'] !== '1') {
+            $errors['creds_confirm'] = __('Confirm that the signed authorisation explicitly allows trying vendor default passwords, or untick that test.');
+        }
         if ($errors !== []) {
             return $this->form($client, $v, $errors, 422);
         }
@@ -232,6 +237,7 @@ final class EngagementController extends Controller
             'document_sha256' => $sha, 'document_name' => mb_substr($name, 0, 190), 'document_bytes' => $docBytes, 'notes' => $v['notes'], 'retest_of' => $retestOf,
         ], $targets, (int) $this->user()['id']);
         $this->audit($request, 'engagement.created', 'engagement', $id, ['client_id' => $clientId, 'tests' => $v['tests'], 'intensity' => $v['intensity'],
+            'default_passwords_confirmed' => in_array('default_creds', $v['tests'], true),
             'external' => count($external), 'internal' => count(array_filter($targets, static fn (array $t): bool => $t['kind'] === 'internal')), 'document_sha256' => $sha]);
         Session::flash('success', __('Engagement created. Another admin must approve it before anything runs.'));
         return Response::redirect('/engagements/' . $id);
@@ -353,6 +359,8 @@ final class EngagementController extends Controller
         }
         $queued = [];
         $notes = [];
+        // The default-credential test needs agents that know it (older ones would refuse the signed job).
+        $minVersion = in_array('default_creds', $e['tests_list'], true) ? \Sentinel\Agent\AgentRepository::DEFAULT_CREDS_SINCE : \Sentinel\Agent\AgentRepository::ENGAGEMENT_SINCE;
         foreach ($bySite as $siteId => $ranges) {
             $auth = App::agents()->activeAuthorisation($siteId, ScopeService::today((string) $client['timezone']));
             if ($auth === null || isset($open[$siteId])) {
@@ -362,13 +370,13 @@ final class EngagementController extends Controller
             $agent = null;
             foreach (App::agents()->agents($siteId) as $a) {
                 if ($a['status'] === 'active' && preg_match('/^\d+\.\d+\.\d+$/', (string) $a['version']) === 1
-                    && version_compare((string) $a['version'], \Sentinel\Agent\AgentRepository::ENGAGEMENT_SINCE, '>=')) {
+                    && version_compare((string) $a['version'], $minVersion, '>=')) {
                     $agent = $a;
                     break;
                 }
             }
             if ($agent === null) {
-                $notes[] = __('A site has no agent of version {v} or later: update it first.', ['v' => \Sentinel\Agent\AgentRepository::ENGAGEMENT_SINCE]);
+                $notes[] = __('A site has no agent of version {v} or later: update it first.', ['v' => $minVersion]);
                 continue;
             }
             $queued[] = App::agents()->queueEngagementJob((int) $agent['id'], (int) $client['id'], $siteId, (int) $auth['id'], (int) $e['id'], (int) $this->user()['id'],

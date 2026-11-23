@@ -119,7 +119,7 @@ final class EngagementReport
             }
             return false;
         };
-        $externalDoor = $has(['ftp_anon', 'snmp_public', 'snmp_private', 'telnet', 'nfs_exports'], 'external')
+        $externalDoor = $has(['ftp_anon', 'snmp_public', 'snmp_private', 'telnet', 'nfs_exports', 'default_login', 'no_auth'], 'external')
             || array_filter($findings, static fn (array $f): bool => $f['origin'] === 'external' && str_starts_with($f['key'], 'exposed_')) !== [];
         $internalSpread = $has(['smb1', 'nfs_exports'], 'internal');
         $paths = [];
@@ -134,6 +134,12 @@ final class EngagementReport
         }
         if ($has(['snmp_private'])) {
             $paths[] = __('A device answering the default SNMP write community can be reconfigured by anyone who can reach it, for example to redirect or capture traffic.');
+        }
+        if ($has(['default_login'])) {
+            $paths[] = __('A vendor default password still works: anyone who can reach the service can sign in as that account, with no hacking skill needed (these passwords are published in manuals).');
+        }
+        if ($has(['no_auth'])) {
+            $paths[] = __('A database answers without any password: anyone who can reach it can read, change or delete its data.');
         }
         if ($has(['telnet', 'ftp'])) {
             $paths[] = __('Telnet and FTP send passwords unencrypted: anyone on the same network path can capture them and reuse them elsewhere.');

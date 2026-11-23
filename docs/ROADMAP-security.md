@@ -24,7 +24,9 @@ They run externally from Sentinel and internally through the agents. Each engage
 report (summary, how the findings chain together, evidence) and, after fixes, a retest letter. Day-to-day scanning
 stays gentle. See [engagements.md](engagements.md).
 
-Next steps: default credentials against a short vetted list, with lockout-aware limits.
+Default credentials (1.29.0, done): at most three published vendor defaults per service (FTP, HTTP Basic, MySQL/MariaDB,
+PostgreSQL), each a different account and spaced, stopping at any lockout; plus databases open without a password.
+Needs an explicit tick for the signed authorisation.
 
 ## 3. External attack surface additions (1.28.0, done)
 

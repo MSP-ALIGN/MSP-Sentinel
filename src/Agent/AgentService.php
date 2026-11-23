@@ -529,6 +529,11 @@ final class AgentService
             if (is_array($h['udp'] ?? null)) {
                 $checks['udp'] = array_slice(array_map(static fn ($v): string => is_scalar($v) ? mb_substr((string) $v, 0, 500) : '', $h['udp']), 0, 20, true);
             }
+            // Default-credential results (only when the engagement has that test): fixed values only; the username and the
+            // masked password as text, never anything longer (the agent never sends the password itself).
+            if (is_array($h['creds'] ?? null) && in_array('default_creds', $e['tests_list'], true)) {
+                $checks['creds'] = \Sentinel\Scanning\DefaultCredentials::cleanResults($h['creds']);
+            }
             $engagements->addResult((int) $e['id'], 'internal', (int) $job['site_id'], 'agent:' . (int) $job['id'], $ip, [$clean($h['hostname'] ?? '', 255)],
                 $ports, $checks, ($h['scanned'] ?? false) === true);
             $stats['accepted']++;

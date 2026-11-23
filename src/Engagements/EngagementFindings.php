@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sentinel\Engagements;
 
+use Sentinel\Scanning\DefaultCredentials;
 use Sentinel\Scanning\PortProfile;
 
 /**
@@ -12,7 +13,7 @@ use Sentinel\Scanning\PortProfile;
  * evidence, so the report always matches what was recorded, and a retest is the same analysis on newer evidence.
  *
  * Severities: 'fail' (fix soon: SMBv1, NFS exports open to everyone, default SNMP write community, high-risk services
- * on the internet, Telnet, anonymous FTP), 'warn' (should be fixed: SMB signing not required, NFS exports listed,
+ * on the internet, Telnet, anonymous FTP, a vendor default password that works, a database open without a password), 'warn' (should be fixed: SMB signing not required, NFS exports listed,
  * SNMP "public", plain FTP, UPnP on the internet), 'info' (worth knowing: services reachable).
  *
  * Untrusted: all evidence came from the tested hosts. Only fixed phrases are matched; evidence is cut to 600
@@ -97,6 +98,27 @@ final class EngagementFindings
                 $add($external ? 'warn' : 'info', 'ssdp', $external ? __('UPnP discovery (SSDP) answers from the internet (amplification attacks)') : __('UPnP discovery (SSDP) answers'),
                     $ip . ':1900/udp', $origin, (string) ($ssdp['server'] ?? ''), __('Turn UPnP off on this device, or block UDP 1900 at the firewall.'));
             }
+            // Vendor default passwords (1.29): evidence is the username and the MASKED password only.
+            foreach ((array) ($r['checks_list']['creds'] ?? []) as $c) {
+                $name = DefaultCredentials::NAMES[(string) ($c['service'] ?? '')] ?? null;
+                $target = $ip . ':' . (int) ($c['port'] ?? 0);
+                if ($name === null) {
+                    continue;
+                }
+                if (($c['result'] ?? '') === 'login') {
+                    $add('fail', 'default_login', __('A vendor default password works on {s} (user "{u}")', ['s' => $name, 'u' => (string) ($c['user'] ?? '')]), $target, $origin,
+                        __('Signed in as "{u}" with password {p} (a published vendor default); disconnected at once, nothing read.', ['u' => (string) ($c['user'] ?? ''), 'p' => (string) ($c['masked'] ?? '')]),
+                        __('Change this password now (long and unique), check the account\'s activity, and disable or rename default accounts that aren\'t needed.'));
+                } elseif (($c['result'] ?? '') === 'no_auth') {
+                    $memcachedInside = $c['service'] === 'memcached' && !$external;
+                    $add($memcachedInside ? 'warn' : 'fail', 'no_auth', __('{s} lets anyone in without a password', ['s' => $name]), $target, $origin,
+                        __('Answered without any login.'),
+                        __('Turn on authentication, and allow connections only from the servers that need it (bind to localhost or firewall it).'));
+                } elseif (($c['result'] ?? '') === 'locked') {
+                    $add('info', 'creds_locked', __('{s} signalled a lockout or block during the default-password test (testing stopped)', ['s' => $name]), $target, $origin,
+                        __('Stopped after {n} attempt(s).', ['n' => (int) ($c['tried'] ?? 0)]), __('Good: it limits failed logins. Check the account wasn\'t left locked.'));
+                }
+            }
             if ($is('ntp')) {
                 $add('info', 'ntp', __('A time service (NTP) answers'), $ip . ':123/udp', $origin, '', $external ? __('Allow NTP from the internet only if this is meant to be a public time server.') : __('Normal for servers and network gear.'));
             }
@@ -113,6 +135,7 @@ final class EngagementFindings
             'ftp_anon', 'nfs_exports' => 'anon_access',
             'smb1', 'smb_signing' => 'nse_safe',
             'snmp_public', 'snmp_private', 'ssdp', 'ntp' => 'udp_common',
+            'default_login', 'no_auth', 'creds_locked' => 'default_creds',
             default => '',
         };
     }

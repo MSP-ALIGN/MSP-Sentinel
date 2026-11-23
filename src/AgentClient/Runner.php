@@ -69,6 +69,7 @@ final class Runner
         private readonly ?\Sentinel\Directory\NameListener $listener = null,
         private readonly ?Updater $updater = null,
         private readonly ?Mover $mover = null,
+        private readonly ?\Sentinel\Scanning\DefaultCredentials $creds = null,
     ) {
         $this->log = $log;
     }
@@ -453,6 +454,10 @@ final class Runner
             }
             if ($this->probes !== null && in_array('udp_common', $tests, true) && in_array(161, $job['udp_ports'] ?? [], true) && !$shouldStop()) {
                 $h['udp'] = $this->probes->udpChecks((string) $ip); // SNMP, NTP, SSDP: signed in the job
+            }
+            // Vendor default passwords: only when signed in the job's tests, on the services found on this host.
+            if ($this->creds !== null && in_array('default_creds', $tests, true) && $h['ports'] !== [] && !$shouldStop()) {
+                $h['creds'] = $this->creds->check((string) $ip, $h['ports'], $shouldStop);
             }
             $hosts[] = $h;
         }

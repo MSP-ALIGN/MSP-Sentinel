@@ -313,5 +313,82 @@
         "product": "FragileDevice"
       }
     ]
+  },
+  "203.0.113.72": {
+    "open": [
+      {
+        "port": 21,
+        "name": "ftp",
+        "product": "Example FTPd"
+      },
+      {
+        "port": 80,
+        "name": "http",
+        "product": "Example Camera httpd"
+      },
+      {
+        "port": 3306,
+        "name": "mysql",
+        "product": "MySQL",
+        "version": "8.0.0"
+      },
+      {
+        "port": 3307,
+        "name": "mysql",
+        "product": "MySQL",
+        "version": "8.0.0"
+      },
+      {
+        "port": 5432,
+        "name": "postgresql",
+        "product": "PostgreSQL DB"
+      },
+      {
+        "port": 6379,
+        "name": "redis",
+        "product": "Redis key-value store"
+      },
+      {
+        "port": 9200,
+        "name": "http",
+        "product": "Elasticsearch REST API"
+      },
+      {
+        "port": 22,
+        "name": "ssh",
+        "product": "OpenSSH"
+      }
+    ]
+  },
+  "10.89.0.30": {
+    "mac": "02:00:00:00:89:30",
+    "open": [
+      {
+        "port": 21,
+        "name": "ftp",
+        "product": "Example NAS FTP"
+      },
+      {
+        "port": 5432,
+        "name": "postgresql",
+        "product": "PostgreSQL DB"
+      },
+      {
+        "port": 6379,
+        "name": "redis",
+        "product": "Redis key-value store"
+      },
+      {
+        "port": 11211,
+        "name": "memcached",
+        "product": "Memcached"
+      },
+      {
+        "port": 27017,
+        "name": "mongodb",
+        "product": "MongoDB"
+      }
+    ],
+    "hostscripts": []
   }
 }

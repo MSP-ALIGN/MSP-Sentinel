@@ -14,13 +14,15 @@ Chosen per engagement, from a fixed list:
 | Common UDP services | One read-only request each: SNMP's default communities, NTP (an ordinary time request), SSDP/UPnP discovery. |
 | nmap's "safe" scripts | Details of each service. Excluded: vulnerability checks (some send attack-like requests), and anything that broadcasts, contacts third parties, guesses passwords, may crash a service, exploits, fuzzes or checks for malware. |
 | Anonymous access | Anonymous FTP login (lists the top folder) and NFS exports. Read only. SMB share listing isn't included: nmap's script for it writes and deletes a test file in every share. |
+| Vendor default passwords (1.29) | Needs a second tick: the signed authorisation must allow it explicitly (annex P3). At most three published vendor defaults per service, on FTP, web admin pages that ask for a Basic login, MySQL/MariaDB and PostgreSQL. Each attempt uses a different account, so no account ever sees more than one failed attempt. Attempts run one at a time, 5 seconds apart, and stop at the first success or at any lockout or block. A login that works is closed at once; nothing is read. Also checks, without guessing, whether Redis, MongoDB, Elasticsearch/OpenSearch and Memcached answer with no password at all. Only services the port scan found are tried, so tick all ports to cover unusual ports. Agents need version 1.29.0. |
 
 Pace, per engagement: gentle (the same as day-to-day scans) or normal (nmap `-T3`, at most 200 packets a second).
 Nothing faster exists. All 65,535 ports need the normal pace: at the gentle pace one host would take about 7 hours.
 
 **Never done:**
 
-- password guessing;
+- password guessing (beyond the short vendor default list, only when that test is chosen);
+- SSH, Windows, Remote Desktop, WinRM or directory logins (lockout risk);
 - exploits;
 - denial of service;
 - anything that writes to or changes the systems tested.
@@ -89,9 +91,9 @@ earlier report is then marked:
 
 | Severity | Findings |
 |---|---|
-| **Fail** | Anonymous FTP login; SMBv1; NFS exports open to everyone; SNMP's default "private" community; SNMP "public" from the internet; Telnet; high-risk services (RDP, SMB, databases, WinRM and others) reachable from the internet |
-| **Warning** | SMB signing not required; NFS exports listed to anyone; SNMP "public" inside the network; plain FTP; VNC; UPnP/SSDP answering from the internet |
-| **Info** | Other services found, NTP |
+| **Fail** | A vendor default password that works (the evidence shows the username; the password only masked, like a•••n); a database open without a password; anonymous FTP login; SMBv1; NFS exports open to everyone; SNMP's default "private" community; SNMP "public" from the internet; Telnet; high-risk services (RDP, SMB, databases, WinRM and others) reachable from the internet |
+| **Warning** | Memcached open without a password inside the network; SMB signing not required; NFS exports listed to anyone; SNMP "public" inside the network; plain FTP; VNC; UPnP/SSDP answering from the internet |
+| **Info** | Other services found, NTP, a service that signalled a lockout during the default-password test (testing stopped there) |
 
 ## Limits
 

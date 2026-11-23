@@ -2,6 +2,24 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.29.0 (2026-11-23): default passwords in pen-test engagements
+
+- **New engagement test: vendor default passwords.** It needs a second tick confirming the signed authorisation
+  explicitly allows it (a new line in the annex, P3).
+  - Services: FTP, web admin pages that ask for a Basic login, MySQL/MariaDB and PostgreSQL.
+  - At most **three** published vendor defaults per service. Each uses a different account, so no account ever sees
+    more than one failed attempt.
+  - Attempts run one at a time, 5 seconds apart, and stop at the first success or at any lockout, block or
+    "too many attempts" answer.
+  - A login that works is closed at once; nothing is read.
+  - Never SSH, Windows, Remote Desktop, WinRM or directory logins.
+- **Databases open without a password:** Redis, MongoDB, Elasticsearch/OpenSearch and Memcached are checked without
+  guessing. Open is a Fail (Memcached inside the network: Warning).
+- **The password is never stored.** The evidence shows the username and the password masked (`a•••n`).
+- **Runs externally and through the site agents.** Internal runs need agents 1.29.0 or later; older agents aren't
+  given the job.
+- **The report says exactly what was tried,** and the attack paths explain what a working default password means.
+
 ### 1.28.1 (2026-11-23): attack-surface checks, fixes from review
 
 - **A zone with a wildcard record (`*.client.example`) is now reported as open.** Before, the name stopped the check

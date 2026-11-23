@@ -82,6 +82,7 @@ final class ScanWorker
         private readonly ?\Sentinel\Agent\AgentService $agentService = null,
         private readonly ?ProtocolProbes $probes = null,
         private readonly ?\Sentinel\Web\DomainChecker $domains = null,
+        private readonly ?DefaultCredentials $creds = null,
     ) {
         $this->log ??= static function (string $line): void {
         };
@@ -661,6 +662,11 @@ final class ScanWorker
             $checks = ['hostscripts' => $parsed['hostscripts']];
             if (in_array('udp_common', $tests, true) && $this->probes !== null && !$shouldStop($ip)) {
                 $checks['udp'] = $this->probes->udpChecks($ip);
+            }
+            // Vendor default passwords (signed test, explicit authorisation): the open services nmap identified; the stop
+            // callback re-checks the engagement and this host's scope before every attempt.
+            if (in_array('default_creds', $tests, true) && $this->creds !== null && !$shouldStop($ip)) {
+                $checks['creds'] = $this->creds->check($ip, $parsed['open'], fn (): bool => $shouldStop($ip) || !$allowed($ip, $names));
             }
             $engagements->addResult($eid, 'external', null, 'scan:' . $jobId, $ip, array_values(array_unique($names)), $parsed['open'], $checks, $complete);
             $this->scans->logFinish($logId, 'scanned', __('{n} open port(s)', ['n' => count($parsed['open'])]) . ($complete ? '' : ' ' . __('(incomplete)')));
