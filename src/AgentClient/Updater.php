@@ -26,7 +26,7 @@ final class Updater
      */
     public function __construct(private readonly Http $http, private readonly string $releaseKeyFile, private readonly string $stateDir, private $log,
         private readonly string $serverKey = '', private readonly int $agentId = 0, private readonly int $siteId = 0, private readonly int $clientId = 0,
-        private readonly string $resultDir = '/var/lib/sentinel-agent-update')
+        private readonly string $resultDir = '/var/lib/sentinel-agent-update', private readonly string $configKey = '')
     {
     }
 
@@ -65,7 +65,8 @@ final class Updater
         }
         $req = json_decode((string) @file_get_contents($file, false, null, 0, 4096), true);
         $res = json_decode((string) @file_get_contents($this->resultDir . '/result.json', false, null, 0, 8192), true);
-        $answered = is_array($req) && is_array($res) && ($res['request'] ?? null) === ($req['request'] ?? false) && ($res['version'] ?? null) === ($req['version'] ?? false);
+        $asked = is_array($req) ? ($req['version'] ?? (($req['kind'] ?? '') === 'pin' ? 'release-key' : false)) : false;
+        $answered = is_array($req) && is_array($res) && ($res['request'] ?? null) === ($req['request'] ?? false) && ($res['version'] ?? null) === $asked;
         if ($answered || (int) @filemtime($file) < time() - 3600) {
             @unlink($file);
             return false;
@@ -89,7 +90,44 @@ final class Updater
     /** Whether this agent can be updated remotely (a release key is pinned). */
     public function available(): bool
     {
-        return is_readable($this->releaseKeyFile) && trim((string) file_get_contents($this->releaseKeyFile)) !== '';
+        return $this->releaseKey() !== '';
+    }
+
+    /**
+     * The pinned release key: the root-owned key file (written by the installer or the root update helper), else the one
+     * in the root-owned config (given at enrolment). Never anything the agent itself can write.
+     */
+    public function releaseKey(): string
+    {
+        $file = is_readable($this->releaseKeyFile) ? trim((string) file_get_contents($this->releaseKeyFile, false, null, 0, 1024)) : '';
+        return $file !== '' ? $file : trim($this->configKey);
+    }
+
+    /**
+     * An offer of the release key from Sentinel (signed with the pinned server key, for this agent, recent): hand it to
+     * the root update helper, which checks it again and pins it (only when none is pinned, or with a rotation statement
+     * signed by the pinned key). Returns whether it was handed over.
+     *
+     * @param array<string,mixed> $signed
+     */
+    public function stagePin(array $signed): bool
+    {
+        if ($this->pending() || !is_string($signed['payload'] ?? null) || !is_string($signed['signature'] ?? null)
+            || !\Sentinel\Agent\Signer::verify($signed['payload'], $signed['signature'], $this->serverKey)) {
+            return false;
+        }
+        $d = json_decode($signed['payload'], true);
+        $issued = is_array($d) ? strtotime((string) ($d['issued_at'] ?? '')) : false;
+        if (!is_array($d) || ($d['type'] ?? null) !== 'agent_release_key' || ($d['agent_id'] ?? null) !== $this->agentId || ($d['site_id'] ?? null) !== $this->siteId
+            || ($d['client_id'] ?? null) !== $this->clientId || !is_string($d['key'] ?? null) || !ReleaseManifest::validPublicKey($d['key']) || $issued === false
+            || abs(time() - $issued) > 3600 || $d['key'] === $this->releaseKey()) {
+            return false;
+        }
+        file_put_contents($this->stateDir . '/release-key-offer.json', json_encode($signed, JSON_UNESCAPED_SLASHES));
+        file_put_contents($this->stateDir . '/update-request.tmp', json_encode(['kind' => 'pin', 'request' => (string) $d['issued_at']]));
+        rename($this->stateDir . '/update-request.tmp', $this->stateDir . '/update-request');
+        ($this->log)('Release key offered by Sentinel (' . ReleaseManifest::keyFingerprint($d['key']) . '); the update helper checks and pins it.');
+        return true;
     }
 
     /**
@@ -109,7 +147,7 @@ final class Updater
         if ($res['status'] !== 200 || $json === '') {
             return 'Sentinel has no signed release for ' . $target . '.';
         }
-        $m = ReleaseManifest::verify($json, $sig, (string) file_get_contents($this->releaseKeyFile));
+        $m = ReleaseManifest::verify($json, $sig, $this->releaseKey());
         if (is_string($m)) {
             return 'Release refused: ' . $m . '.';
         }
@@ -155,7 +193,16 @@ final class Updater
                 return null;
             }
         }
-        return trim((string) @file_get_contents($this->stateDir . '/update-reported')) === self::resultId($r) ? null : $r;
+        if (trim((string) @file_get_contents($this->stateDir . '/update-reported')) === self::resultId($r)) {
+            return null;
+        }
+        if (($r['version'] ?? '') === 'release-key') {
+            // The helper pinning a release key: logged here; Sentinel sees the new key's fingerprint at the next check-in.
+            ($this->log)('Release key: ' . mb_substr((string) ($r['message'] ?? ''), 0, 200));
+            $this->markReported($r);
+            return null;
+        }
+        return $r;
     }
 
     /** @param array<string,mixed> $r */

@@ -67,6 +67,52 @@ final class ReleaseManifest
         return ['v' => 1, 'type' => self::TYPE, 'version' => $version, 'files' => $files];
     }
 
+    /**
+     * The release files of an installed tree (for signing in the web UI, where there may be no git): every plain file
+     * except excluded folders, hidden files and folders, symlinks and the install's own BUILD stamp. Sorted.
+     *
+     * @return list<string>
+     */
+    public static function listTree(string $root): array
+    {
+        $out = [];
+        $it = new \RecursiveIteratorIterator(new \RecursiveCallbackFilterIterator(
+            new \RecursiveDirectoryIterator($root, \FilesystemIterator::SKIP_DOTS),
+            static function (\SplFileInfo $f, string $key, \RecursiveDirectoryIterator $it) use ($root): bool {
+                $rel = substr($f->getPathname(), strlen($root) + 1);
+                if ($f->isLink() || str_starts_with($f->getFilename(), '.')) {
+                    return false;
+                }
+                return !$f->isDir() || self::validPath($rel . '/x');
+            }
+        ));
+        foreach ($it as $f) {
+            $rel = substr($f->getPathname(), strlen($root) + 1);
+            if ($f->isFile() && $rel !== 'BUILD' && self::validPath($rel)) {
+                $out[] = $rel;
+                if (count($out) > self::MAX_FILES) {
+                    break;
+                }
+            }
+        }
+        sort($out, SORT_STRING);
+        return $out;
+    }
+
+    /** A public key's short fingerprint (for comparing by eye and in the database). */
+    public static function keyFingerprint(string $publicKeyB64): string
+    {
+        $raw = base64_decode(trim($publicKeyB64), true);
+        return $raw === false || $raw === '' ? '' : implode(':', str_split(strtoupper(substr(hash('sha256', $raw), 0, 32)), 4));
+    }
+
+    /** Whether a string is a base64 Ed25519 public key. */
+    public static function validPublicKey(string $publicKeyB64): bool
+    {
+        $raw = base64_decode(trim($publicKeyB64), true);
+        return $raw !== false && strlen($raw) === SODIUM_CRYPTO_SIGN_PUBLICKEYBYTES;
+    }
+
     /** The exact bytes that are signed. @param array<string,mixed> $manifest */
     public static function canonical(array $manifest): string
     {

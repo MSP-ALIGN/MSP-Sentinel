@@ -30,6 +30,7 @@ declare(strict_types=1);
  */
 
 require dirname(__DIR__) . '/src/System/ReleaseManifest.php';
+require dirname(__DIR__) . '/src/Agent/Signer.php';
 
 use Sentinel\System\ReleaseManifest;
 
@@ -42,7 +43,7 @@ $opt = static function (string $name) use ($argv): ?string {
     return $i !== false ? (string) ($argv[$i + 1] ?? '') : null;
 };
 $test = getenv('SENTINEL_TEST_MODE') === '1';
-foreach (['app', 'state', 'key', 'result'] as $o) {
+foreach (['app', 'state', 'key', 'result', 'config'] as $o) {
     if (!$test && $opt($o) !== null) {
         fwrite(STDERR, "Test options are only allowed in the test suite.\n");
         exit(2);
@@ -68,6 +69,8 @@ if (in_array('--collect', $argv, true)) {
     }
     @unlink($state . '/update-request');
     $out['request'] = json_decode($raw, true);
+    $out['offer'] = (string) @file_get_contents($state . '/release-key-offer.json', false, null, 0, 16384);
+    @unlink($state . '/release-key-offer.json');
     $out['manifest'] = (string) @file_get_contents($state . '/update/agent-manifest.json', false, null, 0, 1048576);
     $out['signature'] = (string) @file_get_contents($state . '/update/agent-manifest.sig', false, null, 0, 4096);
     $listed = json_decode($out['manifest'], true);
@@ -182,6 +185,41 @@ if (!is_dir($app) && is_dir($app . '.old')) {
 [$code, $raw] = $run($asAgent(array_merge([$php, __FILE__, '--collect'], $test ? ['--state', $state] : [])), COLLECT_SECONDS, MAX_COLLECTED);
 $c = $code === 0 ? json_decode($raw, true) : null;
 $req = is_array($c) && is_array($c['request'] ?? null) ? $c['request'] : [];
+
+// A release key offered by Sentinel: pin it (none pinned yet), or rotate to it (with a statement the pinned key signed).
+if (($req['kind'] ?? null) === 'pin' && is_array($c)) {
+    $requestId = is_string($req['request'] ?? null) && preg_match('/^[0-9TZ:. -]{1,30}$/', $req['request']) === 1 ? $req['request'] : '';
+    $configFile = $test && $opt('config') ? (string) $opt('config') : '/etc/sentinel-agent/agent.json';
+    $cfg = json_decode((string) @file_get_contents($configFile), true); // root-owned: the pinned server key and identity
+    $offer = json_decode((string) ($c['offer'] ?? ''), true);
+    $d = is_array($offer) && is_string($offer['payload'] ?? null) && is_string($offer['signature'] ?? null) && is_array($cfg)
+        && \Sentinel\Agent\Signer::verify($offer['payload'], $offer['signature'], (string) ($cfg['server_public_key'] ?? '')) ? json_decode($offer['payload'], true) : null;
+    $issued = is_array($d) ? strtotime((string) ($d['issued_at'] ?? '')) : false;
+    if (!is_array($d) || ($d['type'] ?? null) !== 'agent_release_key' || ($d['agent_id'] ?? null) !== ($cfg['agent_id'] ?? false)
+        || !is_string($d['key'] ?? null) || !ReleaseManifest::validPublicKey($d['key']) || $issued === false || abs(time() - $issued) > 7200) {
+        $result('release-key', false, 'The release key offer is not signed by this agent\'s Sentinel (or too old).');
+    }
+    $pinned = trim((string) @file_get_contents($keyFile));
+    $pinned = $pinned !== '' ? $pinned : trim((string) ($cfg['release_public_key'] ?? ''));
+    if ($pinned === $d['key']) {
+        $result('release-key', true, 'Already pinned.');
+    }
+    if ($pinned !== '') {
+        // Changing a pinned key needs the pinned key's own signature on the change.
+        $rot = is_array($d['rotation'] ?? null) ? $d['rotation'] : [];
+        $st = is_string($rot['statement'] ?? null) ? json_decode($rot['statement'], true) : null;
+        $sig = is_string($rot['signature'] ?? null) ? base64_decode($rot['signature'], true) : false;
+        if (!is_array($st) || ($st['type'] ?? null) !== 'release_key_rotation' || ($st['old_key'] ?? null) !== $pinned || ($st['new_key'] ?? null) !== $d['key']
+            || $sig === false || strlen($sig) !== SODIUM_CRYPTO_SIGN_BYTES || !sodium_crypto_sign_verify_detached($sig, (string) $rot['statement'], (string) base64_decode($pinned))) {
+            $result('release-key', false, 'A different release key is pinned and the change is not signed by it: give the new key by hand (agent-install.sh --release-key).');
+        }
+    }
+    $tmp = $keyFile . '.tmp';
+    if (file_put_contents($tmp, $d['key'] . "\n") === false || !chmod($tmp, 0644) || !rename($tmp, $keyFile)) {
+        $result('release-key', false, 'Could not write ' . $keyFile . '.');
+    }
+    $result('release-key', true, ($pinned === '' ? 'Release key pinned: ' : 'Release key rotated: ') . ReleaseManifest::keyFingerprint($d['key']) . '.');
+}
 $wanted = is_string($req['version'] ?? null) && preg_match('/^\d{1,4}\.\d{1,4}\.\d{1,4}$/', $req['version']) === 1 ? $req['version'] : '';
 $requestId = is_string($req['request'] ?? null) && preg_match('/^[0-9: -]{1,30}$/', $req['request']) === 1 ? $req['request'] : '';
 if (!is_array($c) || $wanted === '') {

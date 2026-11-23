@@ -95,6 +95,9 @@ final class Settings
         // Moving agents to a new Sentinel address: ONE value in SECRETS (agent_move, JSON url/ca/requested_at), encrypted
         // and authenticated with the app key from the config file, so a database write alone can't set a move.
         'agent_move' => '',
+        // Agent release key made on the System page: only the PUBLIC half (the private key stays in the admin's file).
+        // release_key_rotation: the statement, signed with the previous key, that agents need to accept a new one.
+        'release_public_key' => '', 'release_key_created_at' => '', 'release_previous_key' => '', 'release_key_rotation' => '',
         'itflow_tickets_last_run' => '',
         'itflow_tickets_last_result' => '',
         'itflow_tickets_last_ok' => '',

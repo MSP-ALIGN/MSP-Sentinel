@@ -104,6 +104,7 @@ return [
                 'An agent scans only the networks in a signed internal authorisation for its site: who at the client approved it, the dates, and exactly which private networks (each at most a /16). Sentinel signs the authorisation and every job; the agent checks both signatures and refuses any target outside the signed networks.',
                 'To add one: record an internal authorisation for the site, click Create an enrolment code (admins; shown once, valid once for 24 hours), and run the agent installer on the appliance with that code. Pause on the site stops agent scans within a minute; revoking an agent stops its token at once.',
                 'New Sentinel address: Administration, System, Move agents (with your password). Each agent switches only after the new address signs a challenge for that address with this Sentinel\'s key (nothing secret is sent before). Right after a move it goes back if the new address keeps failing; while moved it asks its original address every 6 hours, so keep that address working.',
+                'Release key (Administration, System): create it once in your browser (the private key downloads as a password-protected file; Sentinel keeps only the public half; it does not expire), then Sign this version after each Sentinel update. Agents learn the key from Sentinel. Rotate it with the old key file; Replace it only if the file is lost (agents then need it by hand).',
                 'Updates: Update to x.y.z (per agent), Update all agents (per client, or under Administration, System). The agent installs a release only when it is signed with the maintainer\'s release key it pinned at install; a root helper checks everything again. Agents older than 1.22.0 must be upgraded once by hand.',
                 'Managed from the Agents page afterwards (admins): scan gentleness per site (very gentle, gentle or faster nmap timing, never more than nmap\'s normal -T3), how often agents check in, a Diagnostics report (versions, disk, memory, clock difference, key fingerprint) and Restart.',
                 'Risky internal protocols, checked read-only: SMBv1 enabled, Telnet open and SNMP answering the default "private" community are Fails; SMB signing not required, Remote Desktop without Network Level Authentication, FTP open, SNMP answering "public" and login pages over plain HTTP are Warnings. The SNMP check sends one read request with the default community names.',
@@ -225,6 +226,13 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.24.0',
+            'date' => '2026-11-23',
+            'items' => [
+                'Release key on Administration, System: created in your browser (the private key downloads as a password-protected file and never reaches Sentinel), versions signed there, agents learn the key from Sentinel, rotation signed by the old key.',
+            ],
+        ],
         [
             'version' => '1.23.2',
             'date' => '2026-11-23',

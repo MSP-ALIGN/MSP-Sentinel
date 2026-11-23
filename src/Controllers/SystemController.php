@@ -40,8 +40,10 @@ final class SystemController extends Controller
             'retentionLast' => $s->get('retention_last_run'),
             'sourceUrl' => $s->get('source_url'),
             'agentRelease' => App::agentRelease(),
+            'releaseKey' => ['key' => App::agentRelease()->publicKey(), 'created' => $s->get('release_key_created_at'), 'previous' => $s->get('release_previous_key'),
+                'rotated' => $s->get('release_key_rotation') !== '', 'manifest' => App::agentRelease()->version() === null ? App::agentRelease()->manifestToSign() : null],
             'agentMove' => ['url' => App::agentMove()['url'], 'ca' => App::agentMove()['ca'] !== '', 'since' => App::agentMove()['requested_at'], 'complete' => App::agentMove()['complete'],
-                'agents' => App::db()->query("SELECT a.id, a.name, a.server_url, a.version, a.move_result, a.move_result_at, c.name AS client_name FROM agents a JOIN clients c ON c.id = a.client_id
+                'agents' => App::db()->query("SELECT a.id, a.name, a.server_url, a.version, a.move_result, a.move_result_at, a.release_key_fp, c.name AS client_name FROM agents a JOIN clients c ON c.id = a.client_id
                                               WHERE a.status = 'active' AND c.is_demo = 0 ORDER BY c.name, a.name")->fetchAll()],
             'agentVersions' => App::db()->query("SELECT a.version, COUNT(*) AS n FROM agents a JOIN clients c ON c.id = a.client_id WHERE a.status = 'active' AND c.is_demo = 0 GROUP BY a.version ORDER BY a.version")->fetchAll(),
         ]);
@@ -102,6 +104,70 @@ final class SystemController extends Controller
         $this->audit($request, 'agent.move_requested', null, null, ['url' => $url, 'ca' => $ca !== '']);
         Session::flash('success', __('Agents move to {url} at their next check-in between scans, each after the new address proves it is this Sentinel.', ['url' => $url]));
         return $back;
+    }
+
+    /**
+     * POST /admin/system/release-key (admins, with their password): set the agent release key made in the admin's
+     * browser. Only the PUBLIC key arrives here; the private key stays in the file the browser downloaded.
+     * - create: when there is no key yet;
+     * - rotate: a new key, with a statement naming it signed by the current key (agents accept it on their own);
+     * - replace: the old key file was lost (agents must be given the new key by hand: agent-install.sh --release-key).
+     */
+    public function releaseKey(Request $request): Response
+    {
+        $back = Response::redirect('/admin/system#agents');
+        $user = App::db()->query('SELECT id, password_hash FROM users WHERE id = ' . (int) $this->user()['id'])->fetch() ?: [];
+        if (($reauth = $this->checkCurrentPassword($request, $user, $request->raw('password'))) !== null) {
+            Session::flash('danger', __('Enter your Sentinel password to confirm.') . ' ' . $reauth);
+            return $back;
+        }
+        $s = App::settings();
+        $mode = $request->input('mode');
+        $new = trim($request->input('public_key'));
+        $current = App::agentRelease()->publicKey();
+        $error = match (true) {
+            !\Sentinel\System\ReleaseManifest::validPublicKey($new) => __('The key could not be made in your browser (open Sentinel over HTTPS).'),
+            $new === $current => __('That is already the release key.'),
+            $mode === 'create' && $current !== '' => __('There is already a release key: rotate it instead.'),
+            !in_array($mode, ['create', 'rotate', 'replace'], true), $mode !== 'create' && $current === '' => __('Create a release key first.'),
+            default => null,
+        };
+        $statement = $request->raw('statement');
+        if ($error === null && $mode === 'rotate') {
+            $st = json_decode($statement, true);
+            $sig = base64_decode($request->input('statement_signature'), true);
+            $error = !is_array($st) || ($st['type'] ?? null) !== 'release_key_rotation' || ($st['old_key'] ?? null) !== $current || ($st['new_key'] ?? null) !== $new
+                || $sig === false || strlen($sig) !== SODIUM_CRYPTO_SIGN_BYTES || !sodium_crypto_sign_verify_detached($sig, $statement, (string) base64_decode($current))
+                ? __('The old key file did not sign the change (wrong key file or password?).') : null;
+        }
+        if ($error !== null) {
+            Session::flash('danger', $error);
+            return $back;
+        }
+        $s->set('release_previous_key', $current);
+        $s->set('release_key_rotation', $mode === 'rotate' ? (string) json_encode(['statement' => $statement, 'signature' => $request->input('statement_signature')], JSON_UNESCAPED_SLASHES) : '');
+        $s->set('release_public_key', $new);
+        $s->set('release_key_created_at', (string) App::db()->query('SELECT UTC_TIMESTAMP()')->fetchColumn());
+        $this->audit($request, 'release_key.' . $mode, null, null, ['fingerprint' => \Sentinel\System\ReleaseManifest::keyFingerprint($new)]);
+        Session::flash('success', match ($mode) {
+            'create' => __('Release key created. Keep the downloaded key file and its password safe: you need both to sign releases. Now sign this version below.'),
+            'rotate' => __('Release key rotated: agents switch to the new key on their own. Keep the new key file safe, and sign this version again with it.'),
+            default => __('Release key replaced. Agents that pinned the old key must be given the new one by hand (see the list below). Sign this version with the new key.'),
+        });
+        return $back;
+    }
+
+    /** POST /admin/system/release-sign (admins): keep the signature the admin's browser made for this installation's files. */
+    public function releaseSign(Request $request): Response
+    {
+        $error = App::agentRelease()->acceptSignature($request->raw('manifest'), trim($request->input('signature')));
+        if ($error !== '') {
+            Session::flash('danger', $error);
+        } else {
+            $this->audit($request, 'release_key.signed', null, null, ['version' => App::agentRelease()->version()]);
+            Session::flash('success', __('Version {v} signed. Agents can be updated to it.', ['v' => App::agentRelease()->version() ?? '?']));
+        }
+        return Response::redirect('/admin/system#agents');
     }
 
     /** POST /admin/system/agents-update (admins): every agent of every client that can and needs to update. */

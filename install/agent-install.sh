@@ -9,6 +9,9 @@
 #   sudo ./install/agent-install.sh --upgrade
 # Remove (also revoke the agent in Sentinel):
 #   sudo ./install/agent-install.sh --uninstall
+# Give an agent the release key by hand (only needed when the old key file was lost and the key was replaced on the
+# System page; the key is shown there):
+#   sudo ./install/agent-install.sh --upgrade --release-key BASE64KEY
 # See what it would do, without changing anything:
 #   ./install/agent-install.sh --dry-run --server https://sentinel.msp.example --code SNE-...
 #
@@ -43,6 +46,7 @@ mode=install
 server=""
 code=""
 ca=""
+release_key=""
 dry=0
 skip_os=0
 while [ $# -gt 0 ]; do
@@ -50,6 +54,7 @@ while [ $# -gt 0 ]; do
     --server) server="${2:-}"; shift 2 ;;
     --code) code="${2:-}"; shift 2 ;;
     --ca) ca="${2:-}"; shift 2 ;;
+    --release-key) release_key="${2:-}"; shift 2 ;;
     --upgrade) mode=upgrade; shift ;;
     --uninstall) mode=uninstall; shift ;;
     --dry-run) dry=1; shift ;;
@@ -89,10 +94,17 @@ render() {
 # never changes it), and install the root update helper's path unit. Without a key in the release, remote updates stay
 # off and the agent can only be upgraded by hand.
 release_key_and_helper() {
-  if [ -s "$SRC/install/release-key.pub" ]; then
+  # The release key normally comes from Sentinel (at enrolment, or offered later); a key given with --release-key
+  # replaces the pinned one (after a lost key was replaced on the System page). A key file in the release folder is
+  # only used when none is pinned yet. An existing pin is never changed silently.
+  if [ -n "$release_key" ]; then
+    printf '%s' "$release_key" | grep -Eq '^[A-Za-z0-9+/]{43}=$' || die "--release-key must be the base64 public key shown on Sentinel's System page."
+    if [ "$dry" -eq 1 ]; then printf '  [dry-run] write %s/release-key.pub\n' "$CONF_DIR"; else
+      printf '%s\n' "$release_key" > "$CONF_DIR/release-key.pub.tmp"; chown root:root "$CONF_DIR/release-key.pub.tmp"; chmod 0644 "$CONF_DIR/release-key.pub.tmp"
+      mv -f "$CONF_DIR/release-key.pub.tmp" "$CONF_DIR/release-key.pub"; fi
+    echo "  Release key pinned from --release-key."
+  elif [ ! -s "$CONF_DIR/release-key.pub" ] && [ -s "$SRC/install/release-key.pub" ]; then
     run install -o root -g root -m 0644 "$SRC/install/release-key.pub" "$CONF_DIR/release-key.pub"
-  else
-    echo "  No release key in this release: remote agent updates stay off (upgrade by hand)."
   fi
   # The helper's results: root-owned, readable by the agent, not changeable by it.
   run install -d -o root -g sentinel-agent -m 0750 /var/lib/sentinel-agent-update

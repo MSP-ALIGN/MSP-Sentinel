@@ -2,6 +2,19 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.24.0 (2026-11-23): release key in the web UI
+
+- **The agent release key is created and used on Administration → System, in your browser.** The private key
+  downloads as a password-protected file to your computer and never reaches Sentinel; Sentinel keeps only the public
+  half. The key doesn't expire.
+- **Sign each version from the System page** by picking the key file and typing its password. Only the signature is
+  sent.
+- **Agents learn the key from Sentinel:** at enrolment, or at their next check-in through the root update helper when
+  they have none. A pinned key never changes by itself.
+- **Rotate the key** with the old key file: the old key signs the change, so agents switch on their own. **Replace**
+  it if the file is lost; agents then need the new key by hand (`agent-install.sh --release-key`).
+- The command-line signing tool remains as an alternative.
+
 ### 1.23.2 (2026-11-23): agent moves, fixes from re-review
 
 - **Older agents are never asked to move.** Only agents at 1.23.1 or later get move instructions, because 1.23.0

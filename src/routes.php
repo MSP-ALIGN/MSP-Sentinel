@@ -179,6 +179,8 @@ $router->add('POST', '/admin/system/demo', [SystemController::class, 'demo'], $a
 $router->add('POST', '/admin/system/update', [SystemController::class, 'update'], $admin);
 $router->add('POST', '/admin/system/agents-update', [SystemController::class, 'updateAgents'], $admin);
 $router->add('POST', '/admin/system/agents-move', [SystemController::class, 'moveAgents'], $admin);
+$router->add('POST', '/admin/system/release-key', [SystemController::class, 'releaseKey'], $admin);
+$router->add('POST', '/admin/system/release-sign', [SystemController::class, 'releaseSign'], $admin);
 $router->add('GET', '/admin/api', [ApiAdminController::class, 'index'], $admin);
 $router->add('POST', '/admin/api/tokens', [ApiAdminController::class, 'create'], $admin);
 $router->add('POST', '/admin/api/tokens/{id}/revoke', [ApiAdminController::class, 'revoke'], $admin);

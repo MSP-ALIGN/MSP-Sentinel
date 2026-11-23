@@ -124,6 +124,9 @@ final class Runner
             ($this->log)('Sentinel asked for a restart. Exiting; the service starts the agent again.');
             return -2;
         }
+        if ($this->updater !== null && is_array($res['data']['release_key'] ?? null)) {
+            $this->updater->stagePin($res['data']['release_key']);
+        }
         if ($this->mover !== null && is_array($res['data']['move'] ?? null)) {
             $move = $this->mover->requested($res['data']['move']);
             if ($move !== null && $move['server'] !== $this->http->server() && $this->mover->tryMove($move['server'], $move['ca_pem'], $this->http, $move['move_id']) === '') {
@@ -193,6 +196,7 @@ final class Runner
         $this->reportedResult = $result;
         return ['hostname' => (string) gethostname(), 'version' => self::version(), 'running' => $running, 'idle' => $idle, 'server' => $this->http->server()]
             + ($result !== null ? ['update_result' => $result] : [])
+            + ($this->updater !== null ? ['release_key_fp' => \Sentinel\System\ReleaseManifest::keyFingerprint($this->updater->releaseKey())] : [])
             + ($this->key !== null ? ['box_public_key' => $this->key->publicKey(), 'holds_directory' => $holds,
                                       'directory_username' => $holds ? $this->credentials?->username() : ''] : []);
     }

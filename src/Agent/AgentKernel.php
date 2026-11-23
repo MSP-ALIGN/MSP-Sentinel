@@ -137,7 +137,9 @@ final class AgentKernel
         App::audit()->log('agent.enrolled', null, null, 'agent', $result['agent_id'], ['client_id' => $result['client_id'], 'site_id' => $result['site_id']], $request->ip());
         // The agent pins the key, its site and its client: it refuses jobs for any other site or client.
         return ApiKernel::json(['agent_id' => $result['agent_id'], 'site_id' => $result['site_id'], 'client_id' => $result['client_id'], 'token' => $result['token'],
-                                'server_public_key' => App::agentSigner()->publicKey(), 'poll_seconds' => self::POLL_SECONDS], 201);
+                                'server_public_key' => App::agentSigner()->publicKey(), 'poll_seconds' => self::POLL_SECONDS,
+                                // The agent release key (public half): agents pin it now, so updates work without a site visit.
+                                'release_public_key' => App::agentRelease()->publicKey()], 201);
     }
 
     /**
@@ -223,6 +225,26 @@ final class AgentKernel
             $move = App::agentSigner()->sign(['v' => 1, 'type' => 'agent_move', 'agent_id' => (int) $agent['id'], 'site_id' => (int) $agent['site_id'], 'client_id' => (int) $agent['client_id'],
                 'server' => $mv['url'], 'ca_pem' => $mv['ca'], 'move_id' => $mv['id'], 'issued_at' => gmdate('Y-m-d\TH:i:s\Z')]);
         }
+        // The agent release key: offered (signed with this server's key) to agents that have none pinned, or that have the
+        // previous key when the admin rotated it (with the statement the previous key signed). Hourly at most. Root's
+        // update helper on the appliance checks it again before pinning.
+        $keyOffer = null;
+        if (is_string($body['release_key_fp'] ?? null)) {
+            $fpSeen = self::short($body['release_key_fp'], 40);
+            if ($fpSeen !== (string) ($agent['release_key_fp'] ?? '')) {
+                App::db()->prepare('UPDATE agents SET release_key_fp = :f WHERE id = :id')->execute(['f' => $fpSeen, 'id' => (int) $agent['id']]);
+            }
+            $rkey = App::agentRelease()->publicKey();
+            $rotation = null;
+            if ($fpSeen !== '' && $rkey !== '' && $fpSeen === \Sentinel\System\ReleaseManifest::keyFingerprint(App::settings()->fresh('release_previous_key'))) {
+                $rotation = json_decode(App::settings()->fresh('release_key_rotation'), true);
+            }
+            if ($idle === true && $rkey !== '' && $fpSeen !== \Sentinel\System\ReleaseManifest::keyFingerprint($rkey) && ($fpSeen === '' || is_array($rotation))
+                && App::agents()->takeKeyOffer((int) $agent['id'])) {
+                $keyOffer = App::agentSigner()->sign(['v' => 1, 'type' => 'agent_release_key', 'agent_id' => (int) $agent['id'], 'site_id' => (int) $agent['site_id'],
+                    'client_id' => (int) $agent['client_id'], 'key' => $rkey, 'rotation' => is_array($rotation) ? $rotation : null, 'issued_at' => gmdate('Y-m-d\TH:i:s\Z')]);
+            }
+        }
         // A restart, an update or a move goes out alone: jobs in the same answer would be marked sent and never run.
         $giveJobs = !$paused && !isset($requests['restart']) && $update === null && $move === null && ($idle === true || ($idle === null && $running === []));
         if ($giveJobs) {
@@ -240,7 +262,7 @@ final class AgentKernel
             }
         }
         return ApiKernel::json(['jobs' => $jobs, 'stop' => array_values(array_unique($stop)), 'paused' => $paused,
-                                'poll_seconds' => max(30, min(600, (int) ($agent['agent_poll_seconds'] ?? self::POLL_SECONDS)))] + $requests + ($update !== null ? ['update' => $update] : []) + ($move !== null ? ['move' => $move] : [])
+                                'poll_seconds' => max(30, min(600, (int) ($agent['agent_poll_seconds'] ?? self::POLL_SECONDS)))] + $requests + ($update !== null ? ['update' => $update] : []) + ($move !== null ? ['move' => $move] : []) + ($keyOffer !== null ? ['release_key' => $keyOffer] : [])
             + self::secrets($agent, ($body['holds_directory'] ?? false) === true, is_string($body['directory_username'] ?? null) ? $body['directory_username'] : null));
     }
 

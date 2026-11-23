@@ -179,29 +179,39 @@ An update request is handed out at most 3 times, 30 minutes apart, with scans go
 it ends with "no result from the update helper" (is `sentinel-agent-update.path` running?), so a stuck helper never
 stops an agent's scans. The helper runs in a hardened systemd service and stops after 5 starts in 10 minutes.
 
-Agents older than 1.22.0 (no helper, no pinned key) must be upgraded once by hand (`agent-install.sh --upgrade`).
+Agents older than 1.22.0 (no helper) must be upgraded once by hand (`agent-install.sh --upgrade`); agents from 1.24.0
+get the release key from Sentinel.
 New PHP extensions or system packages are not installed by a remote update; release notes will say when a release
 needs a manual upgrade.
 
-**For the maintainer: signing releases.** Only you hold the release key.
+**The release key (Administration → System → Release key).** Everything happens in your browser; Sentinel never
+holds the private key.
 
-1. Once, on your own computer: `php bin/release-sign.php keygen --out ~/sentinel-release.key`. Keep that file safe
-   and offline (it refuses to write inside the repository). Put the printed public key in `install/release-key.pub`
-   and commit it. Agents installed or upgraded by hand after that pin it.
-2. For each release, after the last code change is committed: `php bin/release-sign.php sign --key
-   ~/sentinel-release.key`, then commit `release/agent-manifest.json` and `release/agent-manifest.sig` with the
-   release. `php bin/release-sign.php verify` checks it.
-3. Sentinel offers an update only when its own version is signed. An unsigned build (for example a development
-   branch) offers none; agents there are upgraded by hand.
+1. **Create release key** (once): type a key-file password twice and your Sentinel password. Your browser makes an
+   Ed25519 key pair and downloads the private key as a file locked with that password (PBKDF2-SHA256, 600,000 rounds,
+   AES-256-GCM). Only the public half goes to Sentinel. Keep the file and its password safe (a password manager or
+   offline storage); you need both to sign releases. **The key does not expire.**
+2. **Sign this version** (after each Sentinel update): Sentinel lists its own files with their SHA-256; you pick the
+   key file and type its password; your browser checks the file is the release key Sentinel uses, signs, and sends
+   only the signature. Agents can then be updated to that version.
+3. **Agents learn the public key from Sentinel**: new agents at enrolment; agents enrolled before (1.24.0 or later)
+   at their next check-in, through the root update helper, which pins it only when the agent has no key yet. A pinned
+   key never changes by itself.
+4. **Rotate the key** (you still have the key file): pick the current key file and its password, and a new password.
+   The current key signs a statement naming the new key; agents check it with the key they pinned and switch on their
+   own. A new key file downloads; sign the version again with it.
+5. **Replace the key** (the key file or its password is lost): a new key without the old one's signature. Agents that
+   pinned the old key keep refusing updates until given the new key by hand (shown on the System page):
+   `sudo /opt/sentinel-agent/install/agent-install.sh --upgrade --release-key BASE64KEY`.
 
-If the release key is ever lost, make a new one and upgrade every agent by hand once (`agent-install.sh --upgrade`
-from the new release folder pins its `install/release-key.pub`). If it leaks, do the same at once: agents trust
-whatever it signs.
+**If the key file leaks**, rotate at once (the leaked key signs the change, which is still you if you rotate first),
+or replace it and give agents the new key by hand.
 
-What the agent's own user can do (if someone took it over): ask for any signed release newer than the installed one,
-or trigger the helper often enough to hit its start limit (remote updates then pause until the next reboot or
-`systemctl reset-failed sentinel-agent-update`). It can't get unsigned or older code installed, and root never
-touches its folder.
+Trade-off of signing in the browser: if the Sentinel server itself were taken over, someone could change its files
+and ask you to sign them (the page shows the version and file count, not the code). Sign right after you updated
+Sentinel yourself. The command line remains for maintainers who sign from their git repository instead:
+`php bin/release-sign.php keygen --out ~/sentinel-release.key`, then `sign --key …` for each release
+(release/agent-manifest.*); a Sentinel with a key created on the System page uses that key.
 
 Limit: Sentinel chooses WHICH signed release an agent gets (only newer ones are accepted). A compromised Sentinel
 can't install unsigned code, but it could offer an older signed release that is still newer than an agent's version.

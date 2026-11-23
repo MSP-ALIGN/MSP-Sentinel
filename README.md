@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.23.2](https://img.shields.io/badge/version-1.23.2-ff5a1f?style=flat-square)
+![Version 1.24.0](https://img.shields.io/badge/version-1.24.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -148,6 +148,19 @@ curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install
 The same help is built into the app (**Help** in the menu), with a "What's new" page for every release.
 
 ## What's new
+
+### 1.24.0 (2026-11-23): release key in the web UI
+
+- **The agent release key is created and used on Administration → System, in your browser.** The private key
+  downloads as a password-protected file to your computer and never reaches Sentinel; Sentinel keeps only the public
+  half. The key doesn't expire.
+- **Sign each version from the System page** by picking the key file and typing its password. Only the signature is
+  sent.
+- **Agents learn the key from Sentinel:** at enrolment, or at their next check-in through the root update helper when
+  they have none. A pinned key never changes by itself.
+- **Rotate the key** with the old key file: the old key signs the change, so agents switch on their own. **Replace**
+  it if the file is lost; agents then need the new key by hand (`agent-install.sh --release-key`).
+- The command-line signing tool remains as an alternative.
 
 ### 1.23.2 (2026-11-23): agent moves, fixes from re-review
 

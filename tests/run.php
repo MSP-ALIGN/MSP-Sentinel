@@ -228,6 +228,8 @@ try {
     file_put_contents($releaseRoot . '/release/agent-manifest.json', $releaseManifest);
     file_put_contents($releaseRoot . '/release/agent-manifest.sig', \Sentinel\System\ReleaseManifest::sign($releaseManifest, base64_encode(sodium_crypto_sign_secretkey($releasePair))));
     $cfg['testing']['release_root'] = $releaseRoot;
+    // Releases signed on the System page (in the browser) are kept here in the test suite (storage/agent-release live).
+    $cfg['testing']['release_ui_dir'] = $outDir . '/agent-release-ui';
     // Agent full scans listen for LLMNR/NetBIOS name requests for 2 seconds here (120 in production).
     $cfg['testing']['agent_listen_seconds'] = 2;
     // Inventory source (NinjaOne stand-in): tests write this file with dates relative to now.

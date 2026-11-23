@@ -308,6 +308,14 @@ final class AgentRepository
             ->execute(['r' => json_encode(['server' => $server, 'ok' => $ok, 'message' => $message], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), 'id' => $agentId]);
     }
 
+    /** Whether the release key may be offered to this agent now (hourly at most), and count it. */
+    public function takeKeyOffer(int $agentId): bool
+    {
+        $stmt = $this->db->prepare('UPDATE agents SET key_offered_at = UTC_TIMESTAMP() WHERE id = :id AND (key_offered_at IS NULL OR key_offered_at < UTC_TIMESTAMP() - INTERVAL 1 HOUR)');
+        $stmt->execute(['id' => $agentId]);
+        return $stmt->rowCount() === 1;
+    }
+
     /** Move instructions are handed out at most MOVE_HANDOUTS times per move, MOVE_RETRY_MINUTES apart (scans go on between). */
     public const MOVE_HANDOUTS = 5;
     public const MOVE_RETRY_MINUTES = 10;

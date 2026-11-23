@@ -453,7 +453,9 @@ final class App
     public static function agentRelease(): \Sentinel\Agent\AgentRelease
     {
         $test = self::config()->get('testing.allow_documentation_ranges', false) === true ? (string) self::config()->get('testing.release_root', '') : '';
-        return $test !== '' ? new \Sentinel\Agent\AgentRelease($test, self::version(), true) : new \Sentinel\Agent\AgentRelease(dirname(__DIR__, 2), self::version());
+        $key = self::settings()->fresh('release_public_key');
+        return $test !== '' ? new \Sentinel\Agent\AgentRelease($test, self::version(), true, $key, (string) self::config()->get('testing.release_ui_dir', ''))
+            : new \Sentinel\Agent\AgentRelease(dirname(__DIR__, 2), self::version(), false, $key, SENTINEL_ROOT . '/storage/agent-release');
     }
 
     /** Active Directory settings per site and the sealed password relay to agents. */

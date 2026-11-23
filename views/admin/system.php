@@ -106,6 +106,70 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
         <p class="mb-2"><?= e(__('Agents by version:')) ?>
             <?php foreach ($agentVersions as $v): ?><span class="badge text-bg-light border font-monospace me-1"><?= e(($v['version'] ?: '?') . ' × ' . (int) $v['n']) ?></span><?php endforeach; ?>
             <?php if ($agentVersions === []): ?><span class="text-body-secondary"><?= e(__('none yet')) ?></span><?php endif; ?></p>
+        <?php
+        $rk = $releaseKey;
+        $fp = $rk['key'] !== '' ? \Sentinel\System\ReleaseManifest::keyFingerprint($rk['key']) : '';
+        $keyAttrs = 'data-insecure-text="' . e(__('The release key is made and used in your browser, which needs an HTTPS page: open Sentinel through its https:// address.')) . '"'
+            . ' data-failed-text="' . e(__('That did not work: ')) . '" data-password-text="' . e(__('use a key password of at least 12 characters, typed twice the same')) . '"'
+            . ' data-wrong-key-text="' . e(__('this key file is not the release key Sentinel uses')) . '"';
+        $newPw = '<div class="col-md-4"><label class="form-label">' . e(__('Key file password')) . '</label><input class="form-control form-control-sm" type="password" data-key-field="new-password" autocomplete="new-password" minlength="12"></div>'
+            . '<div class="col-md-4"><label class="form-label">' . e(__('Key file password again')) . '</label><input class="form-control form-control-sm" type="password" data-key-field="new-password2" autocomplete="new-password"></div>';
+        $sentinelPw = '<div class="col-md-4"><label class="form-label">' . e(__('Your Sentinel password')) . '</label><input class="form-control form-control-sm" type="password" name="password" autocomplete="current-password" required></div>';
+        $note = '<div class="col-12"><div class="alert alert-warning py-1 px-2 mb-0 d-none" data-key-note role="status"></div></div>';
+        ?>
+        <h3 class="h6 mt-2"><?= e(__('Release key')) ?></h3>
+        <p class="text-body-secondary"><?= e(__('Agents install only releases signed with this key. It is made in your browser: the private key goes into a password-protected file on YOUR computer and never to Sentinel; Sentinel keeps only the public half and gives it to agents. It does not expire. Keep the file and its password safe: without them you can\'t sign releases.')) ?></p>
+        <?php if ($rk['key'] === ''): ?>
+        <form method="post" action="<?= e(url('/admin/system/release-key')) ?>" class="row g-2 mb-3" data-release-key="create" <?= $keyAttrs ?>><?= \Sentinel\Core\Csrf::field() ?>
+            <input type="hidden" name="mode" value="create"><input type="hidden" name="public_key" value="">
+            <?= $newPw . $sentinelPw . $note ?>
+            <div class="col-12"><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-key me-1" aria-hidden="true"></i><?= e(__('Create release key (downloads the key file)')) ?></button></div>
+        </form>
+        <?php else: ?>
+        <p><?= e(__('Key {fp}', ['fp' => $fp])) ?><?= $rk['created'] !== '' ? ' · ' . e(__('created {t} UTC', ['t' => $rk['created']])) : '' ?></p>
+        <?php if ($rk['manifest'] !== null): $mf = json_decode($rk['manifest'], true); ?>
+        <form method="post" action="<?= e(url('/admin/system/release-sign')) ?>" class="row g-2 mb-3" data-release-key="sign" data-public-key="<?= e($rk['key']) ?>" <?= $keyAttrs ?>><?= \Sentinel\Core\Csrf::field() ?>
+            <input type="hidden" name="manifest" value="<?= e($rk['manifest']) ?>"><input type="hidden" name="signature" value="">
+            <div class="col-12"><?= e(__('Sign version {v} ({n} files) so agents can be updated to it.', ['v' => $mf['version'] ?? '?', 'n' => count($mf['files'] ?? [])])) ?></div>
+            <div class="col-md-5"><label class="form-label"><?= e(__('Key file')) ?></label><input class="form-control form-control-sm" type="file" accept=".json,application/json" data-key-field="file"></div>
+            <div class="col-md-4"><label class="form-label"><?= e(__('Key file password')) ?></label><input class="form-control form-control-sm" type="password" data-key-field="password" autocomplete="off"></div>
+            <?= $note ?>
+            <div class="col-12"><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-pen me-1" aria-hidden="true"></i><?= e(__('Sign this version')) ?></button></div>
+        </form>
+        <?php else: ?>
+        <p class="text-success"><i class="bi bi-patch-check me-1" aria-hidden="true"></i><?= e(__('This version is signed.')) ?></p>
+        <?php endif; ?>
+        <details class="mb-2"><summary><?= e(__('Rotate the key (you have the current key file)')) ?></summary>
+            <form method="post" action="<?= e(url('/admin/system/release-key')) ?>" class="row g-2 mt-1" data-release-key="rotate" data-public-key="<?= e($rk['key']) ?>" <?= $keyAttrs ?>><?= \Sentinel\Core\Csrf::field() ?>
+                <input type="hidden" name="mode" value="rotate"><input type="hidden" name="public_key" value=""><input type="hidden" name="statement" value=""><input type="hidden" name="statement_signature" value="">
+                <div class="col-md-5"><label class="form-label"><?= e(__('Current key file')) ?></label><input class="form-control form-control-sm" type="file" accept=".json,application/json" data-key-field="file"></div>
+                <div class="col-md-4"><label class="form-label"><?= e(__('Its password')) ?></label><input class="form-control form-control-sm" type="password" data-key-field="password" autocomplete="off"></div>
+                <?= $newPw . $sentinelPw . $note ?>
+                <div class="col-12 form-text"><?= e(__('The current key signs the change, so agents accept the new key on their own. A new key file downloads; sign this version again with it.')) ?></div>
+                <div class="col-12"><button class="btn btn-sm btn-outline-primary" type="submit"><?= e(__('Rotate key')) ?></button></div>
+            </form></details>
+        <details class="mb-3"><summary class="text-danger"><?= e(__('Replace the key (the key file or its password is lost)')) ?></summary>
+            <form method="post" action="<?= e(url('/admin/system/release-key')) ?>" class="row g-2 mt-1" data-release-key="replace" <?= $keyAttrs ?> data-confirm="<?= e(__('Replace the release key? Agents that pinned the old key will need the new one given by hand (agent-install.sh --release-key).')) ?>"><?= \Sentinel\Core\Csrf::field() ?>
+                <input type="hidden" name="mode" value="replace"><input type="hidden" name="public_key" value="">
+                <?= $newPw . $sentinelPw . $note ?>
+                <div class="col-12"><button class="btn btn-sm btn-outline-danger" type="submit"><?= e(__('Replace key')) ?></button></div>
+            </form></details>
+        <?php
+        $behind = array_values(array_filter($agentMove['agents'], static fn (array $ag): bool => (string) ($ag['release_key_fp'] ?? '') !== $fp));
+        if ($behind !== []): ?>
+        <p class="mb-1"><?= e(__('Agents without this key yet:')) ?></p>
+        <ul class="list-unstyled mb-3">
+            <?php foreach ($behind as $ag): $agFp = (string) ($ag['release_key_fp'] ?? ''); ?>
+            <li><?= e($ag['client_name'] . ' · ' . $ag['name']) ?>:
+                <?php if ($agFp === '' && preg_match('/^\d+\.\d+\.\d+$/', (string) $ag['version']) === 1 && version_compare((string) $ag['version'], '1.24.0', '<')): ?><span class="text-warning"><?= e(__('needs agent 1.24.0 or later (upgrade it once by hand)')) ?></span>
+                <?php elseif ($agFp === '' || ($rk['rotated'] && $agFp === \Sentinel\System\ReleaseManifest::keyFingerprint($rk['previous']))): ?><span class="text-body-secondary"><?= e(__('gets it at its next check-in')) ?></span>
+                <?php else: ?><span class="text-danger"><?= e(__('pinned another key ({fp}): give it the new key by hand: agent-install.sh --release-key', ['fp' => $agFp])) ?></span><?php endif; ?></li>
+            <?php endforeach; ?>
+        </ul>
+        <?php endif; ?>
+        <?php endif; ?>
+        <script src="<?= e(asset('js/release-key.js')) ?>"></script>
+
         <h3 class="h6 mt-3"><?= e(__('Move agents to a new Sentinel address')) ?></h3>
         <p class="text-body-secondary"><?= e(__('When Sentinel gets a new address or certificate authority: agents switch at their next check-in between scans, only after the new address proves it is this Sentinel (it signs a challenge for that address with this Sentinel\'s key; nothing is sent to it before). Shortly after a move, an agent goes back on its own if the new address keeps failing; while moved, it checks with its original address every 6 hours so it can always be recalled. Keep the old address working. Agents need version 1.23.1 or later.')) ?></p>
         <?php if ($agentMove['url'] !== ''): ?>

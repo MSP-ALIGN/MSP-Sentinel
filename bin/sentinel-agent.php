@@ -113,6 +113,8 @@ switch ($command) {
         $config = ['server' => $server, 'agent_id' => (int) $res['data']['agent_id'], 'site_id' => $res['data']['site_id'], 'client_id' => $res['data']['client_id'],
                    'token' => (string) $res['data']['token'],
                    'server_public_key' => (string) $res['data']['server_public_key'], 'ca_file' => $ca, 'nmap_path' => '/usr/bin/nmap',
+                   // The agent release key (public), pinned at enrolment: updates need no site visit.
+                   'release_public_key' => is_string($res['data']['release_public_key'] ?? null) && \Sentinel\System\ReleaseManifest::validPublicKey($res['data']['release_public_key']) ? $res['data']['release_public_key'] : '',
                    'state_file' => dirname($configFile) . '/state.json'];
         if (!is_dir(dirname($configFile))) {
             mkdir(dirname($configFile), 0700, true);
@@ -166,7 +168,8 @@ switch ($command) {
             new Updater($http, $testMode && is_string($c['testing']['release_key'] ?? null) ? $c['testing']['release_key'] : '/etc/sentinel-agent/release-key.pub',
                 $stateDir, $say, (string) $c['server_public_key'], (int) $c['agent_id'], (int) $c['site_id'], (int) $c['client_id'],
                 // The helper's results: a root-owned folder the agent can read but not change.
-                $testMode && is_string($c['testing']['update_result_dir'] ?? null) ? $c['testing']['update_result_dir'] : '/var/lib/sentinel-agent-update'),
+                $testMode && is_string($c['testing']['update_result_dir'] ?? null) ? $c['testing']['update_result_dir'] : '/var/lib/sentinel-agent-update',
+                is_string($c['release_public_key'] ?? null) ? $c['release_public_key'] : ''),
             $mover);
         $say('Agent #' . $c['agent_id'] . ' started (version ' . Runner::version() . ').');
         do {
