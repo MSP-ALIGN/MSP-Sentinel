@@ -100,6 +100,14 @@ return [
         Assert::same(0, $code);
         Assert::same("1.25.0\n", file_get_contents($app . '/VERSION'), 'nothing installed through a link');
         unlink($wDir($ctx) . '/state/update-request');
+        // A state folder redirected elsewhere (a junction on Windows; a symlink here) is not read at all.
+        @mkdir($wDir($ctx) . '/elsewhere', 0700);
+        file_put_contents($wDir($ctx) . '/elsewhere/update-request', json_encode(['version' => '9.9.9', 'request' => '2026-01-02 00:00:00']));
+        @symlink($wDir($ctx) . '/elsewhere', $wDir($ctx) . '/state-link');
+        [$code, $out] = $ctx->cli('bin/agent-update-task.php', ['--config', $wDir($ctx) . '/config/agent.json', '--state', $wDir($ctx) . '/state-link', '--app', $app,
+            '--result', $wDir($ctx) . '/update', '--key', $wDir($ctx) . '/config/release-key.pub', '--php', PHP_BINARY, '--no-service']);
+        Assert::same(0, $code);
+        Assert::same("1.25.0\n", file_get_contents($app . '/VERSION'), 'nothing read through a redirected state folder');
         // A key offer not signed by this agent's Sentinel is refused; the pinned key stays.
         $before = file_get_contents($wDir($ctx) . '/config/release-key.pub');
         file_put_contents($wDir($ctx) . '/state/release-key-offer.json', json_encode(['payload' => json_encode(['type' => 'agent_release_key', 'agent_id' => 1,

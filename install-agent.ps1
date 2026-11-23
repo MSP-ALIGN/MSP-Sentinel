@@ -6,7 +6,7 @@
   For Windows Server 2022/2025 and Windows 11 (64-bit), run in an elevated PowerShell (Run as administrator). With a
   one-time enrolment code from the client's Agents page in Sentinel:
 
-    & ([scriptblock]::Create((Invoke-RestMethod https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install-agent.ps1))) -Server https://sentinel.example
+    [Net.ServicePointManager]::SecurityProtocol = 'Tls12'; & ([scriptblock]::Create((Invoke-RestMethod https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install-agent.ps1))) -Server https://sentinel.example
 
   It asks for the code (typed hidden, passed on stdin, never on a command line). What it does:
   - checks Windows (64-bit; Server 2022/2025 or Windows 11) and that it runs as administrator;
@@ -64,9 +64,11 @@ $Service   = 'SentinelAgent'
 $Account   = 'NT SERVICE\SentinelAgent'
 $TaskName  = 'MSP Sentinel Agent Update'
 
-# WinSW 2.12.0 (MIT licence), the 64-bit self-contained build: pinned by SHA-256.
-$WinswUrl    = 'https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe'
-$WinswSha256 = '05b82d46ad331cc16bdc00de5c6332c1ef818df8ceefcd49c726553209b3a0da'
+# WinSW 2.12.0 (MIT licence), the .NET Framework 4.6.1 build (.NET Framework 4.8 ships with Windows Server 2022/2025 and
+# Windows 11; unlike the self-contained build it extracts nothing to a temp folder at start): pinned by SHA-256.
+$WinswUrl    = 'https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW.NET461.exe'
+$WinswSha256 = 'b5066b7bbdfba1293e5d15cda3caaea88fbeab35bd5b38c41c913d492aadfc4f'
+$Launcher    = Join-Path $Root 'agent-update-launcher.php'
 
 function Say([string]$Text) { Write-Host "==> $Text" -ForegroundColor Cyan }
 # Failures throw (never `exit`: run as a script block, exit would close the administrator's PowerShell window).
@@ -85,6 +87,21 @@ function Assert-Windows {
     if (($os.ProductType -eq 1 -and $build -lt 22000) -or ($os.ProductType -ne 1 -and $build -lt 20348)) {
         Fail "Supported: Windows Server 2022/2025 and Windows 11 (found $($os.Caption), build $build)."
     }
+}
+
+# A folder an unprivileged account could have turned into a junction (mount point) or symbolic link: never act through it.
+function Test-Redirected([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path)) { return $false }
+    return [bool]((Get-Item -LiteralPath $Path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)
+}
+function Assert-NotRedirected {
+    foreach ($d in $Data, $ConfDir, $StateDir, $UpdateDir, $LogDir) {
+        if (Test-Redirected $d) { Fail "$d is a link or junction, not a folder: refusing to touch it. Inspect this machine." }
+    }
+}
+# Delete a folder tree without following junctions or links inside it (rmdir /s removes links, never their targets).
+function Remove-Tree([string]$Path) {
+    if (Test-Path -LiteralPath $Path) { & cmd.exe /d /c rmdir /s /q "`"$Path`"" | Out-Null }
 }
 
 function Get-Download([string]$Url, [string]$Dest) {
@@ -111,8 +128,9 @@ function New-PrivateDir([string]$Path) {
 }
 
 function Install-VcRuntime {
-    $installed = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64' -Name Installed -ErrorAction SilentlyContinue
-    if ($installed -and $installed.Installed -eq 1) { return }
+    # PHP 8.4 (built with Visual Studio 2022) needs the 14.30 runtime or later.
+    $rt = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64' -ErrorAction SilentlyContinue
+    if ($rt -and ($rt.PSObject.Properties.Name -contains 'Installed') -and $rt.Installed -eq 1 -and ($rt.PSObject.Properties.Name -contains 'Minor') -and [int]$rt.Minor -ge 30) { return }
     Say 'Installing the Microsoft Visual C++ runtime (needed by PHP)'
     $exe = Join-Path $Tmp 'vc_redist.x64.exe'
     Get-Download 'https://aka.ms/vs/17/release/vc_redist.x64.exe' $exe
@@ -133,12 +151,12 @@ function Install-Php {
     $zip = Join-Path $Tmp $zipInfo.path
     Get-Download ('https://windows.php.net/downloads/releases/' + $zipInfo.path) $zip
     Assert-Sha256 $zip $zipInfo.sha256
-    if (Test-Path $PhpDir) { Remove-Item -Recurse -Force $PhpDir }
+    Remove-Tree $PhpDir
     Expand-Archive -LiteralPath $zip -DestinationPath $PhpDir
     # Only what the agent needs; no php.ini is read from anywhere else (the service and the task pass -c).
     @(
         '; MSP Sentinel agent (written by install-agent.ps1)'
-        'extension_dir = "ext"'
+        "extension_dir = `"$PhpDir\ext`"
         'extension = curl'
         'extension = mbstring'
         'extension = openssl'
@@ -166,9 +184,14 @@ function Install-Nmap {
     $sha = ($Matches[1] -replace '\s', '')
     if ($sha.Length -ne 64) { Fail 'nmap.org published no SHA-256 for that file.' }
     Assert-Sha256 $exe $sha
-    Assert-Signed $exe '.'
-    # /S: silent. The free nmap installer skips Npcap when silent; the agent doesn't need it.
-    $p = Start-Process -FilePath $exe -ArgumentList '/S' -Wait -PassThru
+    Assert-Signed $exe 'Insecure\.Com|Nmap Software'
+    # /S: silent (it skips Npcap; the agent doesn't need it). If this nmap installer doesn't support a silent install,
+    # it waits for someone at the screen: stop after 5 minutes and say how to install nmap by hand.
+    $p = Start-Process -FilePath $exe -ArgumentList '/S' -PassThru
+    if (-not $p.WaitForExit(300000)) {
+        Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+        Fail "nmap's installer did not finish silently. Install nmap from nmap.org by hand (Npcap is not needed: untick it), then run this again."
+    }
     $found = @("${env:ProgramFiles(x86)}\Nmap\nmap.exe", "$env:ProgramFiles\Nmap\nmap.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
     if ($p.ExitCode -ne 0 -or -not $found) { Fail "nmap did not install (exit $($p.ExitCode))." }
     return $found
@@ -187,13 +210,15 @@ function Install-Code {
     # Mirror the release into the code folder, without what the agent doesn't need (and never config or data).
     & robocopy.exe $top.FullName $App /MIR /XD config storage dist tests .github /XF .gitignore .gitattributes /NFL /NDL /NJH /NJS /NP | Out-Null
     if ($LASTEXITCODE -ge 8) { Fail "Copying the agent code failed (robocopy $LASTEXITCODE)." }
+    # The update task's launcher lives outside app\ so the task can swap app\ (see agent-update-launcher.php).
+    Copy-Item -LiteralPath (Join-Path $App 'install\windows\agent-update-launcher.php') -Destination $Launcher -Force
     return (Get-Content -LiteralPath (Join-Path $App 'VERSION') -Raw).Trim()
 }
 
 function Install-Winsw {
     Say 'Installing the service wrapper (WinSW 2.12.0)'
     New-Item -ItemType Directory -Force -Path $SvcDir | Out-Null
-    $exe = Join-Path $Tmp 'WinSW-x64.exe'
+    $exe = Join-Path $Tmp 'WinSW.NET461.exe'
     Get-Download $WinswUrl $exe
     Assert-Sha256 $exe $WinswSha256
     Copy-Item -LiteralPath $exe -Destination (Join-Path $SvcDir "$Service.exe") -Force
@@ -220,20 +245,32 @@ function Install-Winsw {
 "@ | Set-Content -LiteralPath (Join-Path $SvcDir "$Service.xml") -Encoding UTF8
 }
 
+function Invoke-Icacls {
+    & icacls.exe @args | Out-Null
+    if ($LASTEXITCODE -ne 0) { Fail "Setting folder permissions failed (icacls $($args -join ' '))." }
+}
+
 function Set-Folders {
-    # ProgramData: no inherited permissions; Administrators and SYSTEM full control everywhere.
+    # A fresh install starts from a fresh folder: anything already there (a local user can create folders in ProgramData
+    # and would stay its owner) is removed first, without following links inside it.
+    Remove-Tree $Data
+    if (Test-Path -LiteralPath $Data) { Fail "$Data could not be removed: inspect this machine." }
     foreach ($d in $Data, $ConfDir, $StateDir, $UpdateDir, $LogDir) { New-Item -ItemType Directory -Force -Path $d | Out-Null }
-    & icacls.exe $Data /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' | Out-Null
+    # Owned by Administrators; no inherited permissions; Administrators and SYSTEM full control everywhere.
+    Invoke-Icacls $Data /setowner '*S-1-5-32-544' /T /C /L
+    Invoke-Icacls $Data /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F'
 }
 
 function Set-AgentAccess {
-    # The service account (exists once the service is registered): reads config and update results, writes state and logs.
-    & icacls.exe $Data /grant "${Account}:(RX)" | Out-Null
-    & icacls.exe $ConfDir /grant "${Account}:(OI)(CI)(RX)" | Out-Null
-    & icacls.exe $UpdateDir /grant "${Account}:(OI)(CI)(RX)" | Out-Null
-    & icacls.exe $StateDir /grant "${Account}:(OI)(CI)(M)" | Out-Null
-    & icacls.exe $LogDir /grant "${Account}:(OI)(CI)(M)" | Out-Null
-    if ($LASTEXITCODE -ne 0) { Fail 'Setting folder permissions failed.' }
+    # Only on a fresh install, when the folders are new and empty (on -Upgrade the permissions are already set, and the
+    # agent could have put junctions in its own folders that icacls would follow). The service account (exists once
+    # the service is registered): reads config and update results, writes state and logs.
+    Assert-NotRedirected
+    Invoke-Icacls $Data /grant "${Account}:(RX)"
+    Invoke-Icacls $ConfDir /grant "${Account}:(OI)(CI)(RX)"
+    Invoke-Icacls $UpdateDir /grant "${Account}:(OI)(CI)(RX)"
+    Invoke-Icacls $StateDir /grant "${Account}:(OI)(CI)(M)"
+    Invoke-Icacls $LogDir /grant "${Account}:(OI)(CI)(M)"
 }
 
 function Register-Service {
@@ -243,12 +280,16 @@ function Register-Service {
         if ($LASTEXITCODE -ne 0) { Fail 'Registering the service failed.' }
     }
     # Run as its own virtual account (no password, no admin rights).
-    & sc.exe config $Service obj= $Account password= '' | Out-Null
+    & sc.exe config $Service obj= $Account | Out-Null
     if ($LASTEXITCODE -ne 0) { Fail 'Setting the service account failed.' }
+    # Only the privileges it needs: every service gets "Impersonate a client" by default, which known tools turn into
+    # SYSTEM. With a required-privileges list, the service process gets these two and nothing else.
+    & sc.exe privs $Service 'SeChangeNotifyPrivilege/SeCreateGlobalPrivilege' | Out-Null
+    if ($LASTEXITCODE -ne 0) { Fail 'Limiting the service''s privileges failed.' }
 }
 
 function Register-UpdateTask {
-    $action = New-ScheduledTaskAction -Execute $Php -Argument "-c `"$PhpIni`" `"$App\bin\agent-update-task.php`"" -WorkingDirectory $UpdateDir
+    $action = New-ScheduledTaskAction -Execute $Php -Argument "-c `"$PhpIni`" `"$Launcher`"" -WorkingDirectory $UpdateDir
     $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 5)
     $principal = New-ScheduledTaskPrincipal -UserId 'S-1-5-18' -LogonType ServiceAccount -RunLevel Highest
     $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 30) -MultipleInstances IgnoreNew -StartWhenAvailable
@@ -262,6 +303,7 @@ function Set-ReleaseKey([string]$Key) {
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
+$script:RestartService = $false
 try {
     Assert-Admin
 
@@ -272,7 +314,8 @@ try {
             Stop-Service -Name $Service -Force -ErrorAction SilentlyContinue
             & (Join-Path $SvcDir "$Service.exe") uninstall | Out-Null
         }
-        foreach ($d in $Root, $Data) { if (Test-Path $d) { Remove-Item -Recurse -Force $d } }
+        # rmdir /s removes links and junctions the agent may have made in its folders, never what they point to.
+        foreach ($d in $Root, $Data) { Remove-Tree $d }
         Say 'Done. Revoke the agent on the client''s Agents page in Sentinel too. PHP''s runtime and nmap stay installed.'
         return
     }
@@ -283,16 +326,21 @@ try {
     if ($Upgrade) {
         if (-not (Test-Path (Join-Path $ConfDir 'agent.json'))) { Fail 'No enrolled agent found. Install without -Upgrade first.' }
         Say 'Upgrading the agent (the enrolment is kept)'
+        Assert-NotRedirected
+        # The update task must not swap app\ while this copies it: pause it and wait for a running one to finish.
+        Disable-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue | Out-Null
+        for ($i = 0; $i -lt 120 -and (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue | Where-Object State -eq 'Running'); $i++) { Start-Sleep -Seconds 5 }
+        $script:RestartService = $true
         Stop-Service -Name $Service -Force -ErrorAction SilentlyContinue
         Install-VcRuntime
         Install-Php
         $version = Install-Code
         Install-Winsw
         Register-Service
-        Set-AgentAccess
         if ($ReleaseKey) { Set-ReleaseKey $ReleaseKey }
         Register-UpdateTask
         Start-Service -Name $Service
+        $script:RestartService = $false
         Say "Done: agent $version is running."
         return
     }
@@ -304,7 +352,8 @@ try {
     }
     $Server = $Server.TrimEnd('/')
     $secure = Read-Host 'One-time enrolment code' -AsSecureString
-    $code = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
+    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+    try { $code = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) } finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
     if ($code -notmatch '^SNE(-[A-Z2-9]{5}){4}$') { Fail 'That is not an enrolment code (SNE-XXXXX-XXXXX-XXXXX-XXXXX).' }
 
     Install-VcRuntime
@@ -337,5 +386,10 @@ try {
     Write-Host "ERROR: $($_.Exception.Message)" -ForegroundColor Red
     $global:LASTEXITCODE = 1
 } finally {
-    if (Test-Path $Tmp) { Remove-Item -Recurse -Force $Tmp -ErrorAction SilentlyContinue }
+    # An -Upgrade that failed half-way: don't leave the agent stopped or its update task paused.
+    if ($script:RestartService) {
+        Start-Service -Name $Service -ErrorAction SilentlyContinue
+        Enable-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue | Out-Null
+    }
+    Remove-Tree $Tmp
 }

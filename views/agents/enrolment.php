@@ -9,7 +9,7 @@
 $server = $serverUrl !== '' ? $serverUrl : 'https://sentinel.example';
 $oneLine = 'curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install-agent.sh | sudo SENTINEL_SERVER=' . $server . ' bash';
 $fromArchive = 'sudo ./install/agent-install.sh --server ' . $server;
-$windows = '& ([scriptblock]::Create((Invoke-RestMethod https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install-agent.ps1))) -Server ' . $server;
+$windows = '[Net.ServicePointManager]::SecurityProtocol = \'Tls12\'; & ([scriptblock]::Create((Invoke-RestMethod https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install-agent.ps1))) -Server ' . $server;
 $cid = (int) $client['id'];
 /** A command in a box with a copy button (sentinel.js copies the text of the element named by data-copy). */
 $cmd = static function (string $id, string $text): string {

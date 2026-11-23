@@ -142,7 +142,7 @@ final class Updater
     public function stage(string $target, string $current, string $request = ''): string
     {
         if (!$this->available()) {
-            return 'No release key is pinned on this agent: upgrade it once by hand (agent-install.sh --upgrade).';
+            return 'No release key is pinned on this agent: upgrade it once by hand (agent-install.sh --upgrade; on Windows install-agent.ps1 -Upgrade).';
         }
         if (!ReleaseManifest::newer($target, $current)) {
             return 'Version ' . $target . ' is not newer than ' . $current . '.';

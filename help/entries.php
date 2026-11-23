@@ -227,6 +227,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.26.1',
+            'date' => '2026-11-23',
+            'items' => [
+                'Windows agent fixes: the service has only two privileges (no impersonation); updates run through a launcher outside the code folder so it can be swapped; TLS uses the Windows certificate store; the installer never acts through links or junctions; safer rollback and installer details.',
+            ],
+        ],
+        [
             'version' => '1.26.0',
             'date' => '2026-11-23',
             'items' => [

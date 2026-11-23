@@ -2,6 +2,34 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.26.1 (2026-11-23): Windows agent, fixes from review
+
+- **The agent's service has only two privileges.** It can no longer impersonate clients, which known tools turn into
+  SYSTEM (`sc privs`).
+- **Updates can swap the code folder.** The update task now runs through a small launcher outside that folder.
+  Windows can't rename a folder that holds an open file, and the launcher also repairs a half-finished update.
+- **TLS uses the Windows certificate store.** PHP's curl has no CA bundle of its own on Windows.
+- **The installer never acts through links or junctions** the agent could create:
+  - it checks its folders before changing permissions on `-Upgrade`;
+  - it deletes with `rmdir /s`, which removes links but never what they point to;
+  - a fresh install starts from a new ProgramData folder owned by Administrators.
+- **The update task:**
+  - refuses a redirected state folder;
+  - disables the service while it swaps folders, checks every rename, and says so if a rollback fails;
+  - writes its result reliably;
+  - keeps a log (`update\task.log`).
+- **Installer details:**
+  - WinSW's .NET Framework build;
+  - nmap's publisher checked, and a time limit if its installer isn't silent;
+  - no empty password argument;
+  - the Visual C++ runtime version checked;
+  - an absolute PHP extension folder;
+  - each permission change checked;
+  - the code wiped from memory;
+  - `-Upgrade` pauses the update task and restarts the service if it fails.
+- **The Windows command sets TLS 1.2 first.** The docs say exactly what is checked and what still needs testing on
+  Windows.
+
 ### 1.26.0 (2026-11-23): Windows agent (preview)
 
 - **The on-premises agent runs on Windows Server 2022/2025 and Windows 11**, installed with one PowerShell command (as
@@ -10,11 +38,12 @@ All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` 
   - PHP 8.4, checked against windows.php.net's published SHA-256;
   - nmap without Npcap, checked against nmap.org's SHA-256 and its signature;
   - WinSW, with its SHA-256 pinned;
-  - the "MSP Sentinel Agent" service, running under its own virtual account without admin rights;
+  - the "MSP Sentinel Agent" service, running under its own virtual account without admin rights, with only two
+    privileges (no impersonation);
   - tight folder permissions.
-- **Updates from Sentinel work as on Linux.** A SYSTEM task downloads the release itself and checks it with the
-  pinned release key, then installs it and rolls back if the service doesn't stay up. It never reads files from the
-  agent's own folder.
+- **Updates from Sentinel, built like the Linux ones.** A SYSTEM task downloads the release itself and checks it with
+  the pinned release key, then installs it and rolls back if the service doesn't stay up. It never writes or deletes
+  in the agent's own folder, and reads only the agent's small request from it (not through links or junctions).
 - **Same agent program on both platforms.** Windows differences: MAC addresses come from `arp -a`, and there is no
   name-poisoning listener (Windows owns those ports). Scans are slower without Npcap.
 - **Preview:** the PowerShell installer still needs testing on real Windows machines. See

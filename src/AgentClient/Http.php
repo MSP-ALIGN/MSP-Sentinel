@@ -53,6 +53,9 @@ final class Http
         ]);
         if ($this->caFile !== null && $this->caFile !== '') {
             curl_setopt($ch, CURLOPT_CAINFO, $this->caFile);
+        } elseif (PHP_OS_FAMILY === 'Windows' && defined('CURLSSLOPT_NATIVE_CA')) {
+            // Windows: PHP's curl (OpenSSL) has no CA bundle of its own; trust the Windows certificate store instead.
+            curl_setopt($ch, CURLOPT_SSL_OPTIONS, CURLSSLOPT_NATIVE_CA);
         }
         $raw = curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);

@@ -15,7 +15,7 @@ written: test it on a Windows Server 2022/2025 or Windows 11 machine before usin
    enrolment page:
 
    ```powershell
-   & ([scriptblock]::Create((Invoke-RestMethod https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install-agent.ps1))) -Server https://sentinel.msp.example
+   [Net.ServicePointManager]::SecurityProtocol = 'Tls12'; & ([scriptblock]::Create((Invoke-RestMethod https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install-agent.ps1))) -Server https://sentinel.msp.example
    ```
 
    It asks for the code. Add `-Ca C:\path\ca.pem` for a private CA.
@@ -42,12 +42,14 @@ Remote updates afterwards are checked with the pinned release key.
 - **No Npcap.** nmap runs unprivileged TCP connect scans (`-sT --unprivileged`, discovery with TCP connect pings), as
   the Linux agent already does. Npcap is not needed or used. The free Npcap can't be installed unattended, and
   bundling it needs a paid licence. Scans on Windows are slower, because Windows' connect calls are slower.
-- **A real Windows service through WinSW** (MIT licence; one program, its SHA-256 pinned in the installer). It runs
-  under its own virtual service account (`NT SERVICE\SentinelAgent`, no password, not an administrator) and restarts
-  on failure.
+- **A real Windows service through WinSW** (MIT licence; the .NET Framework build, its SHA-256 pinned in the
+  installer). It runs under its own virtual service account (`NT SERVICE\SentinelAgent`, no password, not an
+  administrator) and restarts on failure. Its privileges are limited to SeChangeNotifyPrivilege and
+  SeCreateGlobalPrivilege (`sc privs`). By default every service can impersonate clients, which known tools turn into
+  SYSTEM.
 - **A one-line PowerShell install** (as administrator) that asks for the enrolment code, downloads PHP (windows.php.net,
-  NTS x64) and nmap (nmap.org) with pinned SHA-256 checksums, installs WinSW and the agent, sets permissions, and
-  enrols.
+  NTS x64) and nmap (nmap.org), checks them against the SHA-256 their sites publish, installs WinSW (SHA-256 pinned)
+  and the agent, sets permissions, and enrols.
 - **Updates through a SYSTEM scheduled task**, the Windows twin of the Linux root update helper.
 
 ## How it stays safe on Windows
@@ -62,6 +64,14 @@ Remote updates afterwards are checked with the pinned release key.
 | Name-poisoning listener | UDP 137 and 5355 | off: Windows itself owns those ports |
 | ARP table (MAC addresses) | `/proc/net/arp` | `arp -a` |
 
+**The update task runs through a small launcher outside the code folder** (`agent-update-launcher.php`). PHP keeps
+the script it started with open, and Windows can't rename a folder with an open file in it. The launcher also repairs
+an update that stopped half-way.
+
+**The installer never acts through links.** Before changing permissions or deleting anything, it refuses if one of its
+folders is a junction or link. It deletes with `rmdir /s`, which removes links but never what they point to. A fresh
+install also starts from a new ProgramData folder owned by Administrators.
+
 **Why the Windows update task downloads the release itself:** on Windows the agent's account could create junctions
 in its own folder. If SYSTEM read or deleted staged files there, a compromised agent could redirect it. So the agent
 only writes a small request (the version and request id, and for a release key offer the offer signed by Sentinel).
@@ -74,7 +84,8 @@ The SYSTEM task:
    rolls back if it doesn't stay up;
 5. writes its result into its own folder, which the agent can read but not change.
 
-It never deletes or writes in the agent's folder.
+It never deletes or writes in the agent's folder. It reads only the two small request files there, and only when the
+folder and the files resolve to themselves (no junction, link or pipe).
 
 ## Limits on Windows
 
@@ -82,6 +93,10 @@ It never deletes or writes in the agent's folder.
   documentation says are slower.
 - **No name-poisoning check.** Windows uses the UDP 137 and 5355 ports itself, so the agent can't listen on them.
 - **Diagnostics leave out uptime and free memory.**
+- **Not verified on Windows yet:**
+  - nmap's free installer may not support a silent install. The installer then stops after 5 minutes and asks for nmap
+    to be installed by hand (without Npcap).
+  - The `sc queryex` output the update task reads is assumed to be in English.
 - **Updates use the address the agent was enrolled with.** The update task doesn't follow a move to a new Sentinel
   address, because it never reads the agent's own folder. Keep the old address working, or upgrade by hand after a
   move.
