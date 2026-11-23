@@ -9,6 +9,7 @@
 $server = $serverUrl !== '' ? $serverUrl : 'https://sentinel.example';
 $oneLine = 'curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install-agent.sh | sudo SENTINEL_SERVER=' . $server . ' bash';
 $fromArchive = 'sudo ./install/agent-install.sh --server ' . $server;
+$windows = '& ([scriptblock]::Create((Invoke-RestMethod https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install-agent.ps1))) -Server ' . $server;
 $cid = (int) $client['id'];
 /** A command in a box with a copy button (sentinel.js copies the text of the element named by data-copy). */
 $cmd = static function (string $id, string $text): string {
@@ -32,7 +33,8 @@ $cmd = static function (string $id, string $text): string {
 
         <h3 class="h6"><?= e(__('1. Prepare the appliance')) ?></h3>
         <ul class="small">
-            <li><?= e(__('A small mini-PC or virtual machine that stays on: Debian 13 (recommended), Debian 12 or Ubuntu 24.04 LTS, freshly installed, 64-bit. 2 CPU cores, 2 GB of memory and 20 GB of disk are plenty.')) ?></li>
+            <li><?= e(__('A small mini-PC or virtual machine that stays on: Debian 13 (recommended), Debian 12 or Ubuntu 24.04 LTS, freshly installed, 64-bit. 2 CPU cores, 2 GB of memory and 20 GB of disk are plenty.')) ?>
+                <?= e(__('Or a Windows machine that stays on: Windows Server 2022 or 2025, or Windows 11 (64-bit).')) ?></li>
             <li><?= e(__('On the internal network it should scan: a VM needs a bridged network adapter (an external virtual switch), not NAT. Give it a fixed address or a DHCP reservation.')) ?></li>
             <li><?= e(__('Outbound HTTPS (port 443) to {server}, and to the Debian or Ubuntu package mirrors (and GitHub for the one-line install). No inbound firewall rule is needed: Sentinel never connects to the agent.', ['server' => $server])) ?></li>
             <li><?= e(__('A user that can run sudo. The installer adds PHP and nmap, its own unprivileged user and a locked-down service.')) ?></li>
@@ -43,8 +45,10 @@ $cmd = static function (string $id, string $text): string {
         <?= $cmd('cmd-oneline', $oneLine) ?>
         <p class="small mb-1"><strong><?= e(__('Or from the release archive (no GitHub access needed):')) ?></strong> <?= e(__('copy the Sentinel release archive (the same file you installed Sentinel from) to the appliance, unpack it, and run in the unpacked folder (it asks for the enrolment code):')) ?></p>
         <?= $cmd('cmd-archive', $fromArchive) ?>
+        <p class="small mb-1"><strong><?= e(__('Or on Windows:')) ?></strong> <?= e(__('paste this into PowerShell opened with Run as administrator; it asks for the enrolment code. It installs PHP and nmap (without Npcap: scans are TCP connect scans, slower than on Linux), and the agent as the "MSP Sentinel Agent" service running under its own low-privilege account.')) ?></p>
+        <?= $cmd('cmd-windows', $windows) ?>
         <?php if ($serverUrl === ''): ?><div class="small text-warning mb-2"><?= e(__('Set app.public_url in the config so these commands show your address.')) ?></div><?php endif; ?>
-        <p class="small"><?= e(__('The code is typed at the prompt, not put on the command line, so it stays out of the shell history. If Sentinel uses a certificate from a private certificate authority, copy the CA certificate (PEM) to the appliance and add SENTINEL_CA=/path/ca.pem after sudo (one-line install) or --ca /path/ca.pem (archive install). Add --dry-run to the archive install to see every step first.')) ?></p>
+        <p class="small"><?= e(__('The code is typed at the prompt, not put on the command line, so it stays out of the shell history. If Sentinel uses a certificate from a private certificate authority, copy the CA certificate (PEM) to the appliance and add SENTINEL_CA=/path/ca.pem after sudo (one-line install), --ca /path/ca.pem (archive install) or -Ca C:\path\ca.pem (Windows). Add --dry-run to the archive install to see every step first.')) ?></p>
 
         <h3 class="h6"><?= e(__('3. Check it worked')) ?></h3>
         <ul class="small">
@@ -54,7 +58,8 @@ $cmd = static function (string $id, string $text): string {
             <?php else: ?>
             <li><?= e(__('No release key exists yet: create one on Administration, System, so this agent can be updated from Sentinel (it is offered at its next check-in).')) ?></li>
             <?php endif; ?>
-            <li><?= e(__('On the appliance:')) ?> <code>systemctl status sentinel-agent</code> <?= e(__('(running), and')) ?> <code>journalctl -u sentinel-agent -e</code> <?= e(__('for its log.')) ?></li>
+            <li><?= e(__('On the appliance:')) ?> <code>systemctl status sentinel-agent</code> <?= e(__('(running), and')) ?> <code>journalctl -u sentinel-agent -e</code> <?= e(__('for its log.')) ?>
+                <?= e(__('On Windows: the "MSP Sentinel Agent" service in services.msc, and its log in C:\ProgramData\MSP Sentinel Agent\logs.')) ?></li>
         </ul>
 
         <h3 class="h6"><?= e(__('If something goes wrong')) ?></h3>

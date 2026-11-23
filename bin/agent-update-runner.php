@@ -32,6 +32,7 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/src/System/ReleaseManifest.php';
 require dirname(__DIR__) . '/src/Agent/Signer.php';
+require dirname(__DIR__) . '/src/System/ReleaseKeyOffer.php';
 
 use Sentinel\System\ReleaseManifest;
 
@@ -226,45 +227,17 @@ $req = is_array($c) && is_array($c['request'] ?? null) ? $c['request'] : [];
 if (($req['kind'] ?? null) === 'pin' && is_array($c)) {
     $requestId = is_string($req['request'] ?? null) && preg_match('/^[0-9TZ:. -]{1,30}$/', $req['request']) === 1 ? $req['request'] : '';
     $cfg = json_decode((string) @file_get_contents($configFile), true); // root-owned: the pinned server key and identity
-    $offer = json_decode((string) ($c['offer'] ?? ''), true);
-    $d = is_array($offer) && is_string($offer['payload'] ?? null) && is_string($offer['signature'] ?? null) && is_array($cfg)
-        && \Sentinel\Agent\Signer::verify($offer['payload'], $offer['signature'], (string) ($cfg['server_public_key'] ?? '')) ? json_decode($offer['payload'], true) : null;
-    $issued = is_array($d) ? strtotime((string) ($d['issued_at'] ?? '')) : false;
-    if (!is_array($d) || ($d['type'] ?? null) !== 'agent_release_key' || ($d['agent_id'] ?? null) !== ($cfg['agent_id'] ?? false)
-        || !is_string($d['key'] ?? null) || !ReleaseManifest::validPublicKey($d['key']) || $issued === false || abs(time() - $issued) > 7200) {
-        $result('release-key', false, 'The release key offer is not signed by this agent\'s Sentinel (or too old).');
-    }
     [$pinState, $pinned] = $pinnedKey();
-    if ($pinState === 'bad') {
-        $result('release-key', false, 'The pinned release key (' . $keyFile . ' or agent.json) is damaged or not root-owned: nothing is pinned until it is fixed by hand (agent-install.sh --upgrade --release-key).');
+    $decision = \Sentinel\System\ReleaseKeyOffer::decide((string) ($c['offer'] ?? ''), is_array($cfg) ? $cfg : [], $pinState, $pinned, 'agent-install.sh --upgrade --release-key');
+    if (!$decision['ok'] || $decision['pin'] === null) {
+        $result('release-key', $decision['ok'], $decision['message']);
     }
-    if ($pinned === $d['key']) {
-        $result('release-key', true, 'Already pinned.');
-    }
-    if ($pinned !== '') {
-        // Changing a pinned key needs a chain of rotation statements from it: each names the next key and is signed by
-        // the key before it (the pinned key signs the first), and the chain ends at the offered key.
-        $current = $pinned;
-        $chain = is_array($d['rotations'] ?? null) ? array_values($d['rotations']) : [];
-        foreach (array_slice($chain, 0, ReleaseManifest::MAX_ROTATIONS) as $link) {
-            $st = is_array($link) && is_string($link['statement'] ?? null) ? json_decode($link['statement'], true) : null;
-            $sig = is_array($link) && is_string($link['signature'] ?? null) ? base64_decode($link['signature'], true) : false;
-            if (!is_array($st) || ($st['type'] ?? null) !== 'release_key_rotation' || ($st['old_key'] ?? null) !== $current || !is_string($st['new_key'] ?? null)
-                || !ReleaseManifest::validPublicKey($st['new_key']) || $sig === false || strlen($sig) !== SODIUM_CRYPTO_SIGN_BYTES
-                || !sodium_crypto_sign_verify_detached($sig, (string) $link['statement'], (string) base64_decode($current))) {
-                break;
-            }
-            $current = $st['new_key'];
-        }
-        if ($current !== $d['key']) {
-            $result('release-key', false, 'A different release key is pinned and the change is not signed by it: give the new key by hand (agent-install.sh --release-key).');
-        }
-    }
+    $d = ['key' => $decision['pin']];
     $tmp = $keyFile . '.tmp';
     if (file_put_contents($tmp, $d['key'] . "\n") === false || !chmod($tmp, 0644) || !rename($tmp, $keyFile)) {
         $result('release-key', false, 'Could not write ' . $keyFile . '.');
     }
-    $result('release-key', true, ($pinned === '' ? 'Release key pinned: ' : 'Release key rotated: ') . ReleaseManifest::keyFingerprint($d['key']) . '.');
+    $result('release-key', true, $decision['message']);
 }
 $wanted = is_string($req['version'] ?? null) && preg_match('/^\d{1,4}\.\d{1,4}\.\d{1,4}$/', $req['version']) === 1 ? $req['version'] : '';
 $requestId = is_string($req['request'] ?? null) && preg_match('/^[0-9: -]{1,30}$/', $req['request']) === 1 ? $req['request'] : '';

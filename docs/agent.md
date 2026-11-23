@@ -1,6 +1,7 @@
 # On-premises agent (internal scans)
 
-The agent is a small Linux appliance at a client's site. It finds the devices on the internal network, their open
+The agent is a small Linux appliance at a client's site (or, as a preview, a Windows machine: see
+[windows-agent.md](windows-agent.md)). It finds the devices on the internal network, their open
 services and versions, certificates and web pages, and reports them to Sentinel, which turns them into findings
 (vulnerable services, certificate problems) and new-device alerts.
 

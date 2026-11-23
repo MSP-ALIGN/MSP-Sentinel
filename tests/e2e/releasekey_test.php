@@ -199,7 +199,7 @@ return [
             $offer(['agent_id' => $agentId, 'site_id' => $site, 'client_id' => $cid, 'key' => $evil['publicKey'], 'rotations' => []]);
             [$code, $out] = $helper($ctx);
             Assert::same(1, $code);
-            Assert::contains('damaged or not root-owned', $out);
+            Assert::contains('damaged or not protected', $out);
             Assert::same("not a key\n", file_get_contents($rkDir($ctx) . '/release-key.pub'));
             file_put_contents($rkDir($ctx) . '/release-key.pub', $r['publicKey'] . "\n");
 

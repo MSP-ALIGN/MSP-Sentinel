@@ -106,6 +106,8 @@ return [
         Assert::contains('install-agent.sh | sudo SENTINEL_SERVER=' . ($server !== '' ? $server : 'https://sentinel.example') . ' bash', html_entity_decode($page, ENT_QUOTES));
         Assert::contains('./install/agent-install.sh --server', $page);
         Assert::contains('data-copy="cmd-oneline"', $page);
+        Assert::contains('install-agent.ps1))) -Server ', html_entity_decode($page, ENT_QUOTES));
+        Assert::contains('data-copy="cmd-windows"', $page);
         Assert::contains('Check it worked', $page);
         Assert::notContains('--code ' . ($m[0] ?? 'missing'), $page, 'the code is never put on a command line');
         Assert::notContains('no internal authorisation valid today', $page, 'this site has one');

@@ -1,9 +1,40 @@
-# Windows agent (in progress)
+# Windows agent (1.26, preview)
 
 The on-premises agent will also run natively on Windows, for client sites without a Linux machine. It is the same
 agent program (PHP) with a small platform layer; jobs, signatures, scans, results, updates and moves work as on
-Linux. This page records the agreed design. **Status: the platform layer is done and tested; the installer, the
-service and the update task are being built and need testing on a real Windows machine.**
+Linux.
+
+**Status: preview.** The agent program, the update task and the enrolment page are built and tested by the test suite
+(which runs on Linux with the Windows platform forced). The PowerShell installer could not be run where it was
+written: test it on a Windows Server 2022/2025 or Windows 11 machine before using it at a client.
+
+## Install
+
+1. On the client's Agents page, record an internal authorisation and click **Create an enrolment code**.
+2. On the Windows machine, open PowerShell with **Run as administrator** and paste the Windows command shown on the
+   enrolment page:
+
+   ```powershell
+   & ([scriptblock]::Create((Invoke-RestMethod https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install-agent.ps1))) -Server https://sentinel.msp.example
+   ```
+
+   It asks for the code. Add `-Ca C:\path\ca.pem` for a private CA.
+3. The agent appears on the Agents page within a minute. The service is **MSP Sentinel Agent** (services.msc), and
+   its log is in `C:\ProgramData\MSP Sentinel Agent\logs`.
+
+Upgrade by hand: run the same command with `-Upgrade`; it keeps the enrolment. Remove: `-Uninstall`, and revoke the
+agent in Sentinel. Give the release key by hand: `-Upgrade -ReleaseKey BASE64KEY`.
+
+What the installer checks before it runs anything:
+
+- **PHP 8.4 (NTS x64):** the SHA-256 that windows.php.net publishes in its release list.
+- **nmap:** the SHA-256 in nmap.org's digest file, and a valid Authenticode signature. It is installed silently,
+  without Npcap.
+- **Visual C++ runtime:** a valid Microsoft signature.
+- **WinSW 2.12.0:** a SHA-256 pinned in the script.
+- **The agent code:** downloaded from GitHub (the same trust as the Linux one-line install).
+
+Remote updates afterwards are checked with the pinned release key.
 
 ## Agreed choices
 
@@ -39,28 +70,31 @@ The SYSTEM task:
 1. reads that request (size-capped);
 2. fetches the manifest and files from Sentinel with the agent's own config;
 3. checks them with the pinned release key (and offers with Sentinel's key from the config, as on Linux);
-4. installs the files into a new folder, runs the self-check as the agent, swaps folders, restarts the service, and
+4. installs the files into a new folder, runs the new release's self-check, swaps folders, restarts the service, and
    rolls back if it doesn't stay up;
 5. writes its result into its own folder, which the agent can read but not change.
 
 It never deletes or writes in the agent's folder.
 
-## Done so far
+## Limits on Windows
 
-- `src/AgentClient/Platform.php`:
-  - the Windows paths;
-  - nmap's install folder;
-  - `arp -a` parsing (unicast entries only);
-  - no name listener on Windows;
-  - diagnostics without Linux-only values.
-- The test suite runs the real agent in Windows mode (`testing.platform`): scans, MAC addresses from `arp -a` output,
-  diagnostics.
+- **Slower scans.** There is no Npcap, so discovery and port scans use Windows' connect calls, which nmap's
+  documentation says are slower.
+- **No name-poisoning check.** Windows uses the UDP 137 and 5355 ports itself, so the agent can't listen on them.
+- **Diagnostics leave out uptime and free memory.**
+- **Updates use the address the agent was enrolled with.** The update task doesn't follow a move to a new Sentinel
+  address, because it never reads the agent's own folder. Keep the old address working, or upgrade by hand after a
+  move.
+- **The update task runs the new release's self-check as SYSTEM.** On Linux the helper runs it as the agent's user.
+  The code is signed and verified first.
 
-## Still to do
+## What to check on a real Windows machine
 
-- `install-agent.ps1`: downloads with pinned checksums, WinSW service, ACLs, enrolment with the code prompt,
-  uninstall.
-- The SYSTEM update task (PHP, run by Task Scheduler) and the agent's Windows request hand-off.
-- The enrolment page and docs: the PowerShell command next to the Linux one.
-- Testing on Windows Server 2022/2025 and Windows 11. PowerShell can't be run in the build environment, so each
-  step needs a check on a real machine.
+1. A fresh install on Server 2022, Server 2025 and Windows 11:
+   - the service runs as `NT SERVICE\SentinelAgent`;
+   - the agent appears in Sentinel;
+   - a scan completes.
+2. The agent can't write its config or code folders, and SYSTEM's task runs every 5 minutes.
+3. **Update to x.y.z** from Sentinel installs, and a broken release rolls back.
+4. A release key offer is pinned, and a rotation is followed.
+5. `-Upgrade` and `-Uninstall` work.

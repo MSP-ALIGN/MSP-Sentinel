@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.25.0](https://img.shields.io/badge/version-1.25.0-ff5a1f?style=flat-square)
+![Version 1.26.0](https://img.shields.io/badge/version-1.26.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -148,6 +148,24 @@ curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install
 The same help is built into the app (**Help** in the menu), with a "What's new" page for every release.
 
 ## What's new
+
+### 1.26.0 (2026-11-23): Windows agent (preview)
+
+- **The on-premises agent runs on Windows Server 2022/2025 and Windows 11**, installed with one PowerShell command (as
+  administrator) shown on the enrolment page next to the Linux ones.
+- **What the installer sets up:**
+  - PHP 8.4, checked against windows.php.net's published SHA-256;
+  - nmap without Npcap, checked against nmap.org's SHA-256 and its signature;
+  - WinSW, with its SHA-256 pinned;
+  - the "MSP Sentinel Agent" service, running under its own virtual account without admin rights;
+  - tight folder permissions.
+- **Updates from Sentinel work as on Linux.** A SYSTEM task downloads the release itself and checks it with the
+  pinned release key, then installs it and rolls back if the service doesn't stay up. It never reads files from the
+  agent's own folder.
+- **Same agent program on both platforms.** Windows differences: MAC addresses come from `arp -a`, and there is no
+  name-poisoning listener (Windows owns those ports). Scans are slower without Npcap.
+- **Preview:** the PowerShell installer still needs testing on real Windows machines. See
+  [docs/windows-agent.md](docs/windows-agent.md).
 
 ### 1.25.0 (2026-11-23): agent install steps
 

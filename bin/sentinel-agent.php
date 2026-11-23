@@ -116,10 +116,13 @@ switch ($command) {
         }
         $config = ['server' => $server, 'agent_id' => (int) $res['data']['agent_id'], 'site_id' => $res['data']['site_id'], 'client_id' => $res['data']['client_id'],
                    'token' => (string) $res['data']['token'],
-                   'server_public_key' => (string) $res['data']['server_public_key'], 'ca_file' => $ca, 'nmap_path' => $platform->nmapPath(),
+                   'server_public_key' => (string) $res['data']['server_public_key'], 'ca_file' => $ca,
+                   // --nmap: where the installer put nmap (Windows); else the platform's default.
+                   'nmap_path' => is_string($opts['nmap'] ?? null) && $opts['nmap'] !== '' ? $opts['nmap'] : $platform->nmapPath(),
                    // The agent release key (public), pinned at enrolment: updates need no site visit.
                    'release_public_key' => is_string($res['data']['release_public_key'] ?? null) && \Sentinel\System\ReleaseManifest::validPublicKey($res['data']['release_public_key']) ? $res['data']['release_public_key'] : '',
-                   'state_file' => dirname($configFile) . '/state.json'];
+                   // Linux enrols into the state folder (the installer then moves the config); Windows names it (--state-dir).
+                   'state_file' => (is_string($opts['state-dir'] ?? null) ? rtrim($opts['state-dir'], '\\/') : dirname($configFile)) . '/state.json'];
         if (!is_dir(dirname($configFile))) {
             mkdir(dirname($configFile), 0700, true);
         }
@@ -181,7 +184,7 @@ switch ($command) {
                 $stateDir, $say, (string) $c['server_public_key'], (int) $c['agent_id'], (int) $c['site_id'], (int) $c['client_id'],
                 // The helper's results: a root-owned folder the agent can read but not change.
                 $testMode && is_string($c['testing']['update_result_dir'] ?? null) ? $c['testing']['update_result_dir'] : $platform->updateResultDir(),
-                is_string($c['release_public_key'] ?? null) ? $c['release_public_key'] : ''),
+                is_string($c['release_public_key'] ?? null) ? $c['release_public_key'] : '', $platform->isWindows()),
             $mover);
         $say('Agent #' . $c['agent_id'] . ' started (version ' . Runner::version() . ').');
         do {

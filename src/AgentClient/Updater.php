@@ -24,10 +24,14 @@ final class Updater
     /**
      * @param callable(string):void $log
      * @param string $serverKey  the pinned server key (update requests from Sentinel are signed with it)
+     * @param bool $helperFetches Windows: the SYSTEM update task downloads and checks the release itself, so the agent
+     *                            stages no files (SYSTEM never reads files the agent's account could redirect), only the
+     *                            request
      */
     public function __construct(private readonly Http $http, private readonly string $releaseKeyFile, private readonly string $stateDir, private $log,
         private readonly string $serverKey = '', private readonly int $agentId = 0, private readonly int $siteId = 0, private readonly int $clientId = 0,
-        private readonly string $resultDir = '/var/lib/sentinel-agent-update', private readonly string $configKey = '')
+        private readonly string $resultDir = '/var/lib/sentinel-agent-update', private readonly string $configKey = '',
+        private readonly bool $helperFetches = false)
     {
     }
 
@@ -86,6 +90,7 @@ final class Updater
         file_put_contents($this->stateDir . '/update-reported', self::resultId($result));
         self::removeTree($this->stateDir . '/update');
         @unlink($this->stateDir . '/update-result.json'); // a 1.22.0 helper's result, in the agent's own folder
+        $this->pending(); // removes the request this result answers (Windows: the update task never deletes there)
     }
 
     /** Whether this agent can be updated remotely (a release key is pinned). */
@@ -154,6 +159,13 @@ final class Updater
         }
         if ($m['version'] !== $target) {
             return 'Release refused: it is version ' . $m['version'] . ', not ' . $target . '.';
+        }
+        if ($this->helperFetches) {
+            // Windows: only the request; the SYSTEM task fetches the release from Sentinel and checks it all again.
+            file_put_contents($this->stateDir . '/update-request.tmp', json_encode(['version' => $m['version'], 'request' => $request]));
+            rename($this->stateDir . '/update-request.tmp', $this->stateDir . '/update-request');
+            ($this->log)('Update to ' . $m['version'] . ' requested (signature checked); the update task downloads and installs it.');
+            return '';
         }
         $dir = $this->stateDir . '/update';
         self::removeTree($dir);

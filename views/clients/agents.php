@@ -30,7 +30,7 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
             <summary class="fw-semibold"><?= e(__('How to add an agent')) ?></summary>
             <ol class="mt-2 mb-1">
                 <li><?= e(__('Record an internal authorisation for the site below: who at the client approved internal scanning, the dates, and the private networks to scan.')) ?></li>
-                <li><?= e(__('Prepare a mini-PC or VM at the site that stays on: Debian 13 (or Debian 12 / Ubuntu 24.04), 2 CPU cores, 2 GB memory, 20 GB disk, on the internal network (a VM needs a bridged adapter, not NAT), with outbound HTTPS to Sentinel. No inbound firewall rule is needed.')) ?></li>
+                <li><?= e(__('Prepare a mini-PC or VM at the site that stays on: Debian 13 (or Debian 12 / Ubuntu 24.04), 2 CPU cores, 2 GB memory, 20 GB disk, on the internal network (a VM needs a bridged adapter, not NAT), with outbound HTTPS to Sentinel. No inbound firewall rule is needed. Or a Windows Server 2022/2025 or Windows 11 machine.')) ?></li>
                 <li><?= e(__('Click Create an enrolment code for the site (admins). The next page shows the code once, the install command for your Sentinel address with a copy button, and how to check it worked.')) ?></li>
                 <li><?= e(__('Run the command on the appliance and type the code when asked. The agent shows up here within a minute, and scans inside the client\'s scan window.')) ?></li>
             </ol>
