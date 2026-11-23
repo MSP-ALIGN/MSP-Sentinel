@@ -81,17 +81,29 @@ final class Runner
     public function pollOnce(): int
     {
         $this->sendPending();
+        $moved = $this->mover?->override() !== null;
+        if ($moved && $this->mover->recallDue() && $this->mover->recall()) {
+            return -2; // Sentinel (at the configured address) recalled this agent
+        }
         try {
             $res = $this->http->post('/agent/v1/poll', $this->pollBody([], true));
         } catch (\Throwable $ex) {
-            // After a move, a new address that keeps failing sends the agent back to its configured one.
-            if ($this->mover?->checkInFailed() === true) {
+            // Right after a move, a new address that keeps failing sends the agent back to its configured one.
+            if ($moved && $this->mover->checkInFailed()) {
                 return -2;
             }
             throw $ex;
         }
-        if ($res['status'] >= 500 && $this->mover?->checkInFailed() === true) {
+        if ($moved && $res['status'] === 401) {
+            // Refused at the moved-to address: never wipe or stop because of THAT address; go back to the configured one.
+            $this->mover->refusedAtNewAddress();
             return -2;
+        }
+        // Any other non-answer (an error page, a 404, a 200 that isn't Sentinel's) counts as a failure at a new address.
+        if ($moved && ($res['status'] !== 200 || !is_array($res['data']['jobs'] ?? null) || !is_int($res['data']['poll_seconds'] ?? null))) {
+            if ($this->mover->checkInFailed()) {
+                return -2;
+            }
         }
         if ($res['status'] === 401) {
             ($this->log)('Sentinel no longer accepts this agent (revoked?). Deleting the directory password and stopping.');
@@ -102,7 +114,9 @@ final class Runner
             ($this->log)('Check-in failed (HTTP ' . $res['status'] . ').');
             return 60;
         }
-        $this->mover?->checkInWorked();
+        if ($moved) {
+            $this->mover->checkInWorked();
+        }
         $this->takeSecrets((array) $res['data']);
         if (($res['data']['diagnostics'] ?? false) === true) {
             $this->sendDiagnostics();

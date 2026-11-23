@@ -113,21 +113,35 @@ After the one-time install with an enrolment code, these are set on the client's
 ## Moving agents to a new Sentinel address (1.23)
 
 When Sentinel gets a new address (or a certificate from a private CA): Administration → System → **Move agents to a
-new Sentinel address**. Enter the new `https://` address and, for a private CA only, its certificate (PEM).
+new Sentinel address**. Enter the new `https://` address, for a private CA only its certificate (PEM), and **your
+password** (moving every agent is too powerful for a stolen session alone).
 
-- At their next check-in between scans, agents get the new address, signed with Sentinel's key.
-- **Each agent first asks the new address to prove it is this Sentinel:** it sends a random challenge, and only a
-  signature with the server key the agent pinned at enrolment counts. A wrong or impostor address gets nothing (no
-  results, no diagnostics) and the System page shows "not moved" with the reason.
-- The agent keeps the new address (and CA) in its state folder: its config file is read-only and never changes. It
-  restarts onto the new address.
-- **If the new address then fails 10 check-ins in a row**, the agent drops the move and goes back to its configured
-  address on its own.
-- The System page lists each agent: moved, waiting, not moved (why), or needing version 1.23.0 first. Cancel the move
-  there (agents that moved stay on the new address).
+- The move is stored as one setting encrypted and authenticated with the app key from the config file: a database
+  write alone can't set one.
+- At their next check-in between scans, agents get the new address, signed with Sentinel's key (each agent at most 5
+  times per move, 10 minutes apart; scans go on in between).
+- **Each agent first asks the new address to prove it is this Sentinel, without sending it anything secret** (not
+  even its token): the new address must return a signature over a random challenge, the agent and *that address*,
+  made with the server key the agent pinned at enrolment. Sentinel only signs for the address an admin set, so a host
+  that relays the challenge to the real Sentinel gets no signature for its own address. A wrong address gets only the
+  challenge; the System page shows "not moved" with the reason.
+- The agent keeps the new address (and CA) in its state folder, written for this agent and pinned key only: its
+  config file is read-only and never changes. It restarts onto the new address.
+- **Probation:** in the first 24 hours after a move (until 20 good check-ins), 10 failed check-ins in a row (about
+  10 minutes) or a refusal of its token at the new address send the agent back to its configured address, and it
+  tells Sentinel there. After probation the move is permanent: an outage at the new address doesn't strand agents at
+  an old one.
+- **Recall:** while moved, an agent asks its configured (original) address every 6 hours which address to use (a signed
+  answer). If the move was cancelled or changed, it goes back. So keep the old address working (or pointing at this
+  Sentinel): it is how Sentinel can always reach its agents again.
+- The System page lists each agent: moved, waiting, not moved (why), or needing version 1.23.1 first. Cancel the move
+  there.
 
-Keep the old address working until every agent shows "moved". Re-enrolling is never needed: the agent's token and
-pinned key stay valid, because it is the same Sentinel.
+Re-enrolling is never needed: the agent's token and pinned key stay valid, because it is the same Sentinel. If the
+new address uses the same private CA as before, the agent uses its configured CA when none is given.
+
+Limit: someone with both the app key (config file) and an admin password could still move agents to a host they
+control; protect the config file and admin accounts like the rest of the server.
 
 ## Updates from Sentinel (1.22)
 

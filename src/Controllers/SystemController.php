@@ -40,7 +40,7 @@ final class SystemController extends Controller
             'retentionLast' => $s->get('retention_last_run'),
             'sourceUrl' => $s->get('source_url'),
             'agentRelease' => App::agentRelease(),
-            'agentMove' => ['url' => $s->get('agent_move_url'), 'ca' => $s->get('agent_move_ca') !== '', 'since' => $s->get('agent_move_requested_at'),
+            'agentMove' => ['url' => App::agentMove()['url'], 'ca' => App::agentMove()['ca'] !== '', 'since' => App::agentMove()['requested_at'],
                 'agents' => App::db()->query("SELECT a.id, a.name, a.server_url, a.version, a.move_result, a.move_result_at, c.name AS client_name FROM agents a JOIN clients c ON c.id = a.client_id
                                               WHERE a.status = 'active' AND c.is_demo = 0 ORDER BY c.name, a.name")->fetchAll()],
             'agentVersions' => App::db()->query("SELECT a.version, COUNT(*) AS n FROM agents a JOIN clients c ON c.id = a.client_id WHERE a.status = 'active' AND c.is_demo = 0 GROUP BY a.version ORDER BY a.version")->fetchAll(),
@@ -57,15 +57,18 @@ final class SystemController extends Controller
         $s = App::settings();
         $back = Response::redirect('/admin/system#agents');
         if ($request->input('cancel') === '1') {
-            $s->set('agent_move_url', '');
-            $s->set('agent_move_ca', '');
+            $s->setSecret('agent_move', '');
             $this->audit($request, 'agent.move_cancelled');
             Session::flash('success', __('Agent move cancelled. Agents that already moved stay on the new address.'));
             return $back;
         }
         $url = rtrim($request->input('url'), '/');
         $ca = trim($request->raw('ca'));
+        // Moving every agent is powerful: the signed-in admin confirms it with their password (a stolen session alone
+        // can't do it).
+        $hash = (string) App::db()->query('SELECT password_hash FROM users WHERE id = ' . (int) $this->user()['id'])->fetchColumn();
         $error = match (true) {
+            !\Sentinel\Auth\Passwords::verify($request->raw('password'), $hash) => __('Enter your password to confirm moving the agents.'),
             !\Sentinel\AgentClient\Mover::validServer($url, App::webhookTestMode()) => __('Enter the new address as https://host or https://host:port.'),
             $ca !== '' && (strlen($ca) > 32768 || preg_match_all('/-----BEGIN CERTIFICATE-----.+?-----END CERTIFICATE-----/s', $ca, $m) < 1) => __('The CA must be one or more PEM certificates.'),
             default => null,
@@ -81,9 +84,9 @@ final class SystemController extends Controller
             Session::flash('danger', $error);
             return $back;
         }
-        $s->set('agent_move_url', $url);
-        $s->set('agent_move_ca', $ca);
-        $s->set('agent_move_requested_at', gmdate('Y-m-d H:i:s'));
+        // One value, encrypted and authenticated with the app key: a database write alone can't set a move.
+        $s->setSecret('agent_move', (string) json_encode(['url' => $url, 'ca' => $ca, 'id' => bin2hex(random_bytes(8)),
+            'requested_at' => (string) App::db()->query('SELECT UTC_TIMESTAMP()')->fetchColumn()], JSON_UNESCAPED_SLASHES));
         $this->audit($request, 'agent.move_requested', null, null, ['url' => $url, 'ca' => $ca !== '']);
         Session::flash('success', __('Agents move to {url} at their next check-in between scans, each after the new address proves it is this Sentinel.', ['url' => $url]));
         return $back;

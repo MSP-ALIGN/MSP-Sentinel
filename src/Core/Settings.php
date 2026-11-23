@@ -92,7 +92,9 @@ final class Settings
         // ITFlow tickets from findings (ItflowTickets): on/off, from when, and the last run.
         'itflow_tickets_enabled' => '0',
         'itflow_tickets_since' => '', 'itflow_tickets_weekly_since' => '',
-        'agent_move_url' => '', 'agent_move_ca' => '', 'agent_move_requested_at' => '',
+        // Moving agents to a new Sentinel address: ONE value in SECRETS (agent_move, JSON url/ca/requested_at), encrypted
+        // and authenticated with the app key from the config file, so a database write alone can't set a move.
+        'agent_move' => '',
         'itflow_tickets_last_run' => '',
         'itflow_tickets_last_result' => '',
         'itflow_tickets_last_ok' => '',
@@ -110,7 +112,7 @@ final class Settings
     ];
 
     /** Settings that hold secrets: stored encrypted with the app key, never shown again. */
-    public const SECRETS = ['smtp_password', 'webhook_url', 'event_webhook_url', 'event_webhook_secret', 'ninjaone_client_secret', 'mspalign_api_key', 'itflow_api_key'];
+    public const SECRETS = ['smtp_password', 'webhook_url', 'event_webhook_url', 'event_webhook_secret', 'ninjaone_client_secret', 'mspalign_api_key', 'itflow_api_key', 'agent_move'];
 
     /** @var array<string,string>|null */
     private ?array $cache = null;

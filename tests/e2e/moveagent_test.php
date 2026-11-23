@@ -66,18 +66,35 @@ return [
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         try {
             // Validation; admins only.
-            $admin->submit('/admin/system', '/admin/system/agents-move', ['url' => 'ftp://sentinel.example', 'ca' => '']);
+            $pw = 'Admin-Pass-0001!';
+            $admin->submit('/admin/system', '/admin/system/agents-move', ['url' => $newUrl, 'ca' => '', 'password' => 'wrong-password']);
+            Assert::contains('Enter your password to confirm', $admin->get('/admin/system')->body, 'a move needs the admin\'s password');
+            $admin->submit('/admin/system', '/admin/system/agents-move', ['url' => 'ftp://sentinel.example', 'ca' => '', 'password' => $pw]);
             Assert::contains('Enter the new address as https://host', $admin->get('/admin/system')->body);
-            $admin->submit('/admin/system', '/admin/system/agents-move', ['url' => $newUrl, 'ca' => 'not a certificate']);
+            $admin->submit('/admin/system', '/admin/system/agents-move', ['url' => $newUrl, 'ca' => 'not a certificate', 'password' => $pw]);
             Assert::contains('The CA must be one or more PEM certificates', $admin->get('/admin/system')->body);
             if ((int) $ctx->db->query("SELECT COUNT(*) FROM users WHERE username = 'mvtech'")->fetchColumn() === 0) {
                 $ctx->createUser('mvtech', 'technician', 'Mvtech-Pass-0001!');
             }
             $tech = $ctx->login('mvtech', 'Mvtech-Pass-0001!');
-            Assert::status(403, $tech->post('/admin/system/agents-move', ['_csrf' => $tech->get('/')->csrf(), 'url' => $newUrl, 'ca' => '']));
+            Assert::status(403, $tech->post('/admin/system/agents-move', ['_csrf' => $tech->get('/')->csrf(), 'url' => $newUrl, 'ca' => '', 'password' => 'Mvtech-Pass-0001!']));
+            // A move written straight into the database (no app key) is ignored.
+            $ctx->db->prepare("REPLACE INTO settings (name, value) VALUES ('agent_move', :v)")->execute(['v' => json_encode(['url' => $newUrl, 'ca' => '', 'requested_at' => '2026-01-01 00:00:00', 'id' => 'forged'])]);
+            [$code, $out] = $mvRun($ctx);
+            Assert::same(0, $code, 'no move from a forged setting');
+            Assert::true(!is_file($mvDir($ctx) . '/server-override.json'), 'not moved');
 
             // The move: the new address proves itself, the agent switches and restarts onto it.
-            $admin->submit('/admin/system', '/admin/system/agents-move', ['url' => $newUrl, 'ca' => '']);
+            $admin->submit('/admin/system', '/admin/system/agents-move', ['url' => $newUrl, 'ca' => '', 'password' => $pw]);
+            // Sentinel signs proofs only for the configured address: a relay from another address gets nothing.
+            $prove = static function (string $server) use ($ctx, $agentId): array {
+                $raw = (string) @file_get_contents($ctx->baseUrl . '/agent/v1/prove', false, stream_context_create(['http' => ['method' => 'POST',
+                    'header' => "Content-Type: application/json\r\n", 'content' => json_encode(['agent_id' => $agentId, 'nonce' => str_repeat('ab', 16), 'server' => $server]), 'ignore_errors' => true]]));
+                return (array) json_decode($raw, true);
+            };
+            Assert::true(!isset($prove('https://relay.example')['signature']), 'no proof for another address');
+            $signed = $prove($newUrl);
+            Assert::same($newUrl, json_decode((string) ($signed['payload'] ?? ''), true)['server'] ?? null, 'the proof names the address, and needs no token');
             [$code, $out] = $mvRun($ctx);
             Assert::same(75, $code, 'restarts to use the new address: ' . $out);
             Assert::contains('proved it holds this Sentinel', $out);
@@ -96,29 +113,51 @@ return [
             // An impostor (a service that can't sign with Sentinel's key) gets nothing; the agent stays where it is.
             $feeds = parse_url((string) (require $ctx->configPath)['testing']['ninjaone_base_url']);
             $impostor = 'http://127.0.0.1:' . $feeds['port'];
-            $admin->submit('/admin/system', '/admin/system/agents-move', ['url' => $impostor, 'ca' => '']);
+            $admin->submit('/admin/system', '/admin/system/agents-move', ['url' => $impostor, 'ca' => '', 'password' => $pw]);
             [$code, $out] = $mvRun($ctx);
             Assert::same(0, $code);
-            Assert::contains('did not prove it is this Sentinel', $out);
             Assert::same($newUrl, json_decode((string) file_get_contents($mvDir($ctx) . '/server-override.json'), true)['server'], 'still on the proven address');
             Assert::contains('not moved:', $admin->get('/admin/system')->body);
             [$code, $out] = $mvRun($ctx);
             Assert::notContains('did not prove', $out, 'not asked again after it failed');
 
-            // A new address that keeps failing: after 10 failed check-ins the agent goes back to its configured address.
+            // Recall: cancelling the move brings moved agents back (they ask their configured address every few hours).
             $admin->submit('/admin/system', '/admin/system/agents-move', ['cancel' => '1']);
-            file_put_contents($mvDir($ctx) . '/server-override.json', json_encode(['server' => 'http://127.0.0.1:' . $freePort(), 'ca_file' => null, 'failures' => 9]));
+            $o = json_decode((string) file_get_contents($mvDir($ctx) . '/server-override.json'), true);
+            $o['recall_checked_at'] = gmdate('Y-m-d\TH:i:s\Z', time() - 7 * 3600);
+            file_put_contents($mvDir($ctx) . '/server-override.json', json_encode($o));
+            [$code, $out] = $mvRun($ctx);
+            Assert::same(75, $code, 'recalled: ' . $out);
+            Assert::contains('no longer wants this agent at ' . $newUrl, $out);
+            Assert::true(!is_file($mvDir($ctx) . '/server-override.json'), 'override removed');
+            $base = ['agent_id' => $agentId, 'key' => substr(hash('sha256', (string) json_decode((string) file_get_contents($mvDir($ctx) . '/agent.json'), true)['server_public_key']), 0, 16)];
+            // Right after a move (probation), a dead new address sends the agent back, and Sentinel is told.
+            file_put_contents($mvDir($ctx) . '/server-override.json', json_encode($base + ['server' => 'http://127.0.0.1:' . $freePort(), 'ca_file' => null, 'failures' => 9,
+                'moved_at' => gmdate('Y-m-d\TH:i:s\Z'), 'recall_checked_at' => gmdate('Y-m-d\TH:i:s\Z')]));
             [$code, $out] = $mvRun($ctx);
             Assert::same(75, $code, 'restarts on the configured address: ' . $out);
-            Assert::contains('going back to the configured address', $out);
+            Assert::contains('Going back to the configured address', $out);
             Assert::true(!is_file($mvDir($ctx) . '/server-override.json'), 'override removed');
+            Assert::contains('went back to its configured address', (string) $ctx->db->query("SELECT move_result FROM agents WHERE id = {$agentId}")->fetchColumn(), 'reported (no loop)');
+            // After probation the move is permanent: an outage at the new address doesn't send it back.
+            $dead = 'http://127.0.0.1:' . $freePort();
+            file_put_contents($mvDir($ctx) . '/server-override.json', json_encode($base + ['server' => $dead, 'ca_file' => null, 'failures' => 9, 'good' => 50,
+                'moved_at' => gmdate('Y-m-d\TH:i:s\Z', time() - 3 * 86400), 'recall_checked_at' => gmdate('Y-m-d\TH:i:s\Z')]));
+            [$code, $out] = $mvRun($ctx);
+            Assert::true($code !== 75, 'no fallback after probation');
+            Assert::same($dead, json_decode((string) file_get_contents($mvDir($ctx) . '/server-override.json'), true)['server']);
+            // An override written for another enrolment is ignored.
+            file_put_contents($mvDir($ctx) . '/server-override.json', json_encode(['agent_id' => $agentId + 1000] + $base + ['server' => $dead, 'moved_at' => gmdate('Y-m-d\TH:i:s\Z')]));
+            [$code, $out] = $ctx->cli('bin/sentinel-agent.php', ['status', '--config', $mvDir($ctx) . '/agent.json']);
+            Assert::contains('→ ' . $ctx->baseUrl . ': connected', $out, 'other enrolment\'s override ignored');
+            @unlink($mvDir($ctx) . '/server-override.json');
             [$code, $out] = $mvRun($ctx);
             Assert::same(0, $code);
             Assert::same($ctx->baseUrl, $ctx->db->query("SELECT server_url FROM agents WHERE id = {$agentId}")->fetchColumn(), 'back on the configured address');
             Assert::contains('agent.move_requested', implode("\n", $ctx->db->query('SELECT action FROM audit_log')->fetchAll(PDO::FETCH_COLUMN)));
         } finally {
             // Never leave a move set for the other tests' agents.
-            \Sentinel\Core\App::settings()->set('agent_move_url', '');
+            \Sentinel\Core\App::settings()->setSecret('agent_move', '');
             proc_terminate($second);
             proc_close($second);
         }

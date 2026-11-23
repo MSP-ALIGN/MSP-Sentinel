@@ -107,7 +107,7 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
             <?php foreach ($agentVersions as $v): ?><span class="badge text-bg-light border font-monospace me-1"><?= e(($v['version'] ?: '?') . ' × ' . (int) $v['n']) ?></span><?php endforeach; ?>
             <?php if ($agentVersions === []): ?><span class="text-body-secondary"><?= e(__('none yet')) ?></span><?php endif; ?></p>
         <h3 class="h6 mt-3"><?= e(__('Move agents to a new Sentinel address')) ?></h3>
-        <p class="text-body-secondary"><?= e(__('When Sentinel gets a new address or certificate authority: agents switch at their next check-in between scans, only after the new address proves it is this Sentinel (it signs a challenge with this Sentinel\'s key), and go back to their old address on their own if the new one then keeps failing. Agents need version 1.23.0 or later.')) ?></p>
+        <p class="text-body-secondary"><?= e(__('When Sentinel gets a new address or certificate authority: agents switch at their next check-in between scans, only after the new address proves it is this Sentinel (it signs a challenge for that address with this Sentinel\'s key; nothing is sent to it before). Shortly after a move, an agent goes back on its own if the new address keeps failing; while moved, it checks with its original address every 6 hours so it can always be recalled. Keep the old address working. Agents need version 1.23.1 or later.')) ?></p>
         <?php if ($agentMove['url'] !== ''): ?>
             <p><?= e(__('Moving agents to {url}{ca}, since {t} UTC.', ['url' => $agentMove['url'], 'ca' => $agentMove['ca'] ? ' ' . __('(with its CA)') : '', 't' => $agentMove['since']])) ?></p>
             <ul class="list-unstyled">
@@ -115,7 +115,7 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
                 <li><?= e($ag['client_name'] . ' · ' . $ag['name']) ?>:
                     <?php if ($there): ?><span class="text-success"><?= e(__('moved')) ?></span>
                     <?php elseif (is_array($mr) && ($mr['ok'] ?? true) === false && rtrim((string) ($mr['server'] ?? ''), '/') === rtrim($agentMove['url'], '/') && (string) $ag['move_result_at'] >= $agentMove['since']): ?><span class="text-danger"><?= e(__('not moved: {why}', ['why' => $mr['message'] ?? ''])) ?></span>
-                    <?php elseif (preg_match('/^\d+\.\d+\.\d+$/', (string) $ag['version']) === 1 && version_compare((string) $ag['version'], '1.23.0', '<')): ?><span class="text-warning"><?= e(__('needs agent 1.23.0 or later (update it first)')) ?></span>
+                    <?php elseif (preg_match('/^\d+\.\d+\.\d+$/', (string) $ag['version']) === 1 && version_compare((string) $ag['version'], '1.23.1', '<')): ?><span class="text-warning"><?= e(__('needs agent 1.23.1 or later (update it first)')) ?></span>
                     <?php else: ?><span class="text-body-secondary"><?= e(__('waiting for its next check-in')) ?></span><?php endif; ?></li>
             <?php endforeach; ?>
             </ul>
@@ -127,6 +127,8 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
                 <input class="form-control form-control-sm" id="move-url" name="url" maxlength="255" placeholder="https://sentinel.msp.example" value="<?= e($agentMove['url']) ?>" required></div>
             <div class="col-md-7"><label class="form-label" for="move-ca"><?= e(__('CA certificate for it (only for a private CA; PEM)')) ?></label>
                 <textarea class="form-control form-control-sm font-monospace" id="move-ca" name="ca" rows="2" placeholder="-----BEGIN CERTIFICATE-----"></textarea></div>
+            <div class="col-md-5"><label class="form-label" for="move-password"><?= e(__('Your password (to confirm)')) ?></label>
+                <input class="form-control form-control-sm" id="move-password" name="password" type="password" autocomplete="current-password" required></div>
             <div class="col-12"><button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-signpost-split me-1" aria-hidden="true"></i><?= e(__('Move agents')) ?></button></div>
         </form>
         <?php if ($rel !== null): ?>

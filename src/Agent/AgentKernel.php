@@ -21,8 +21,11 @@ use Sentinel\Core\Response;
  * - POST /agent/v1/update/manifest    {version}: the signed agent release manifest (only to an agent asked to update)
  * - POST /agent/v1/update/file        {version, path}: one file of that release, base64
  * - POST /agent/v1/update/result      {version, ok, message}: the agent couldn't stage the update
- * - POST /agent/v1/prove              {nonce}: Sentinel signs the nonce with its key, so an agent asked to move to a
- *                                     new address can tell that address really is this Sentinel before it switches
+ * - POST /agent/v1/prove              {agent_id, nonce, server} WITHOUT the agent's token: Sentinel signs the nonce,
+ *                                     the agent and the address, and only for the address an admin set as the move
+ *                                     target, so an agent can tell a new address really is this Sentinel before it
+ *                                     sends it anything (a relay to another address gets no signature for its own URL)
+ * - POST /agent/v1/move/check         a moved agent asks its original address for the current move (signed)
  * - POST /agent/v1/move/result        {server, ok, message}: what the agent did about a move
  *   (Sentinel only relays the release; the agent and its root helper accept it only when it is signed with the
  *   maintainer's release key they pinned at install.)
@@ -62,6 +65,9 @@ final class AgentKernel
             if ($request->path === '/agent/v1/enrol') {
                 return self::enrol($request);
             }
+            if ($request->path === '/agent/v1/prove') {
+                return self::prove($request);
+            }
             $agent = App::agents()->authenticate($request->header('Authorization'));
             if ($agent === null) {
                 return ApiKernel::error(401, 'Unknown or revoked agent token.')->header('WWW-Authenticate', 'Bearer');
@@ -80,13 +86,11 @@ final class AgentKernel
             if (preg_match('#^/agent/v1/secrets/([1-9][0-9]{0,9})/ack$#', $request->path, $m)) {
                 return self::ackSecret($agent, (int) $m[1]);
             }
-            if ($request->path === '/agent/v1/prove') {
-                $body = self::body(4096) ?? [];
-                $nonce = is_string($body['nonce'] ?? null) && preg_match('/^[0-9a-f]{32,64}$/', $body['nonce']) === 1 ? $body['nonce'] : '';
-                if ($nonce === '') {
-                    return ApiKernel::error(400, 'Send {"nonce": "..."} (hex).');
-                }
-                return ApiKernel::json(App::agentSigner()->sign(['v' => 1, 'type' => 'agent_prove', 'agent_id' => (int) $agent['id'], 'nonce' => $nonce]));
+            if ($request->path === '/agent/v1/move/check') {
+                // A moved agent asks its configured (original) address now and then what it should use: the signed
+                // current move address, '' for none. Lets Sentinel recall agents from an address that took them over.
+                return ApiKernel::json(App::agentSigner()->sign(['v' => 1, 'type' => 'agent_move_status', 'agent_id' => (int) $agent['id'],
+                    'server' => App::agentMove()['url'], 'issued_at' => gmdate('Y-m-d\TH:i:s\Z')]));
             }
             if ($request->path === '/agent/v1/move/result') {
                 $body = self::body(8192) ?? [];
@@ -203,16 +207,17 @@ final class AgentKernel
         // Move to a new Sentinel address (Administration, System): at an idle check-in, to agents not there yet, unless
         // this agent already failed to move to that address since it was set. Signed: the agent checks it, then asks
         // the new address to prove it holds this Sentinel's key before it switches.
-        if (is_string($body['server'] ?? null)) {
+        if (is_string($body['server'] ?? null) && self::short($body['server'], 255) !== (string) ($agent['server_url'] ?? '')) {
             App::db()->prepare('UPDATE agents SET server_url = :u WHERE id = :id')->execute(['u' => self::short($body['server'], 255), 'id' => (int) $agent['id']]);
+            App::audit()->log('agent.address_changed', null, null, 'agent', (int) $agent['id'], ['client_id' => (int) $agent['client_id'], 'server' => self::short($body['server'], 255)], $request->ip());
         }
         $move = null;
-        $settings = App::settings();
-        $moveUrl = $settings->fresh('agent_move_url');
-        if ($idle === true && $update === null && !isset($requests['restart']) && $moveUrl !== '' && is_string($body['server'] ?? null)
-            && rtrim($body['server'], '/') !== rtrim($moveUrl, '/') && !App::agents()->moveFailedSince((int) $agent['id'], $moveUrl, $settings->fresh('agent_move_requested_at'))) {
+        $mv = App::agentMove();
+        if ($idle === true && $update === null && !isset($requests['restart']) && $mv['url'] !== '' && is_string($body['server'] ?? null)
+            && rtrim($body['server'], '/') !== rtrim($mv['url'], '/') && !App::agents()->moveFailedSince((int) $agent['id'], $mv['url'], $mv['requested_at'])
+            && App::agents()->takeMoveHandout((int) $agent['id'], $mv['id'])) {
             $move = App::agentSigner()->sign(['v' => 1, 'type' => 'agent_move', 'agent_id' => (int) $agent['id'], 'site_id' => (int) $agent['site_id'], 'client_id' => (int) $agent['client_id'],
-                'server' => $moveUrl, 'ca_pem' => $settings->fresh('agent_move_ca'), 'issued_at' => gmdate('Y-m-d\TH:i:s\Z')]);
+                'server' => $mv['url'], 'ca_pem' => $mv['ca'], 'issued_at' => gmdate('Y-m-d\TH:i:s\Z')]);
         }
         // A restart, an update or a move goes out alone: jobs in the same answer would be marked sent and never run.
         $giveJobs = !$paused && !isset($requests['restart']) && $update === null && $move === null && ($idle === true || ($idle === null && $running === []));
@@ -286,6 +291,30 @@ final class AgentKernel
                 'site_id' => (int) $agent['site_id'], 'client_id' => (int) $agent['client_id'], 'issued_at' => gmdate('Y-m-d\TH:i:s\Z')]);
         }
         return $out;
+    }
+
+    /**
+     * POST /agent/v1/prove (no token: the agent sends nothing secret to an address before it is proven). Signs only for
+     * the move address an admin set, for an active agent; rate-limited per address.
+     */
+    private static function prove(Request $request): Response
+    {
+        $limiter = App::limiter();
+        $bucket = 'agent-prove:' . $request->ip();
+        if ($limiter->tooMany($bucket, 60, 3600)) {
+            return ApiKernel::error(429, 'Too many requests.')->header('Retry-After', '3600');
+        }
+        $limiter->hit($bucket);
+        $body = self::body(4096) ?? [];
+        $nonce = is_string($body['nonce'] ?? null) && preg_match('/^[0-9a-f]{32,64}$/', $body['nonce']) === 1 ? $body['nonce'] : '';
+        $agentId = is_int($body['agent_id'] ?? null) ? $body['agent_id'] : 0;
+        $server = is_string($body['server'] ?? null) ? rtrim($body['server'], '/') : '';
+        $move = App::agentMove()['url'];
+        $active = $agentId > 0 && (int) App::db()->query("SELECT COUNT(*) FROM agents WHERE status = 'active' AND id = " . $agentId)->fetchColumn() === 1;
+        if ($nonce === '' || !$active || $move === '' || $server !== rtrim($move, '/')) {
+            return ApiKernel::error(404, 'No move to that address.');
+        }
+        return ApiKernel::json(App::agentSigner()->sign(['v' => 1, 'type' => 'agent_prove', 'agent_id' => $agentId, 'nonce' => $nonce, 'server' => $server]));
     }
 
     /**

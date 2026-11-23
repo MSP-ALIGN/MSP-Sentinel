@@ -308,6 +308,21 @@ final class AgentRepository
             ->execute(['r' => json_encode(['server' => $server, 'ok' => $ok, 'message' => $message], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), 'id' => $agentId]);
     }
 
+    /** Move instructions are handed out at most MOVE_HANDOUTS times per move, MOVE_RETRY_MINUTES apart (scans go on between). */
+    public const MOVE_HANDOUTS = 5;
+    public const MOVE_RETRY_MINUTES = 10;
+
+    /** Whether a move instruction may go to this agent now (and count it). A new move ($request) starts afresh. */
+    public function takeMoveHandout(int $agentId, string $request): bool
+    {
+        $this->db->prepare("UPDATE agents SET move_request = :r, move_handouts = 0, move_handed_at = NULL WHERE id = :id AND move_request <> :r2")
+            ->execute(['r' => $request, 'r2' => $request, 'id' => $agentId]);
+        $stmt = $this->db->prepare('UPDATE agents SET move_handouts = move_handouts + 1, move_handed_at = UTC_TIMESTAMP() WHERE id = :id AND move_handouts < ' . self::MOVE_HANDOUTS
+            . ' AND (move_handed_at IS NULL OR move_handed_at < UTC_TIMESTAMP() - INTERVAL ' . self::MOVE_RETRY_MINUTES . ' MINUTE)');
+        $stmt->execute(['id' => $agentId]);
+        return $stmt->rowCount() === 1;
+    }
+
     /** Whether this agent reported a failed move to $url after the move was set ($since): don't ask it again. */
     public function moveFailedSince(int $agentId, string $url, string $since): bool
     {

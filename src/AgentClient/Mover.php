@@ -16,11 +16,16 @@ use Sentinel\Agent\Signer;
  *
  * Before switching (tryMove):
  * - the instruction must be signed with the pinned server key, for this agent, site and client, and recent;
- * - the new address must prove it is the same Sentinel: it signs a random nonce with the server key (POST
- *   /agent/v1/prove), checked against the PINNED key. A wrong or impostor address gets nothing: no results, no
- *   diagnostics, nothing sealed.
- * After switching, the new address must keep answering: after MAX_FAILURES failed check-ins in a row the override is
- * removed and the agent goes back to its configured address on its own.
+ * - the new address must prove it is the same Sentinel: asked WITHOUT the agent's token (nothing secret goes to an
+ *   unproven address), it returns a signature over a random nonce, this agent and ITS OWN address, made with the server
+ *   key, checked against the PINNED key. Sentinel only signs for the address an admin set (with their password; the
+ *   setting is encrypted with the app key), so relaying the proof from another address doesn't work.
+ * After switching:
+ * - probation: during the first PROBATION_HOURS, until PROBATION_CHECKINS good check-ins, MAX_FAILURES failed
+ *   check-ins in a row (or a refusal of its token) send the agent back to its configured address, and it says so;
+ * - recall: every RECALL_HOURS the agent asks its configured (original, read-only) address what it should use. A
+ *   signed answer naming another address, or none, ends the override: Sentinel can always bring its agents back.
+ * The override names this agent and the pinned server key: one from another enrolment is ignored.
  *
  * Untrusted: the instruction and everything the new address answers. The CA certificate is only used for the TLS
  * connection to that address, and checked to be PEM certificates.
@@ -28,11 +33,19 @@ use Sentinel\Agent\Signer;
 final class Mover
 {
     public const MAX_FAILURES = 10;
+    public const PROBATION_HOURS = 24;
+    public const PROBATION_CHECKINS = 20;
+    public const RECALL_HOURS = 6;
     private const MAX_CA = 32768;
 
-    /** @param callable(string):void $log */
+    /**
+     * @param callable(string):void $log
+     * @param string  $configuredServer the address in the (read-only) config: fallback and recall go there
+     * @param ?string $configuredCa     its CA file, if any
+     */
     public function __construct(private readonly string $stateDir, private readonly string $serverKey, private readonly int $agentId, private readonly int $siteId,
-        private readonly int $clientId, private readonly string $token, private readonly bool $testMode, private $log)
+        private readonly int $clientId, private readonly string $token, private readonly bool $testMode, private $log,
+        private readonly string $configuredServer = '', private readonly ?string $configuredCa = null)
     {
     }
 
@@ -43,11 +56,12 @@ final class Mover
      */
     public function override(): ?array
     {
-        $o = json_decode((string) @file_get_contents($this->stateDir . '/server-override.json'), true);
-        if (!is_array($o) || !is_string($o['server'] ?? null) || !self::validServer($o['server'], $this->testMode)) {
-            return null;
+        $o = $this->read();
+        if ($o === null || !is_string($o['server'] ?? null) || !self::validServer($o['server'], $this->testMode)
+            || ($o['agent_id'] ?? null) !== $this->agentId || ($o['key'] ?? null) !== $this->keyId()) {
+            return null; // none, or written for another enrolment
         }
-        $ca = is_string($o['ca_file'] ?? null) && is_file($o['ca_file']) ? $o['ca_file'] : null;
+        $ca = ($o['ca_file'] ?? null) === $this->stateDir . '/ca-override.pem' && is_file($o['ca_file']) ? $o['ca_file'] : null;
         return ['server' => $o['server'], 'ca_file' => $ca];
     }
 
@@ -96,32 +110,119 @@ final class Mover
         return $why;
     }
 
-    /** A check-in failed; true when the agent should go back to its configured address (restart). */
+    /**
+     * A check-in at the moved-to address failed; true when the agent should go back to its configured address
+     * (restart). Only during probation: afterwards the move is permanent (an outage at the new address mustn't strand
+     * agents at an old address that may be gone; recall still works).
+     */
     public function checkInFailed(): bool
     {
-        $o = json_decode((string) @file_get_contents($this->stateDir . '/server-override.json'), true);
-        if (!is_array($o)) {
+        $o = $this->read();
+        if ($o === null || !$this->inProbation($o)) {
             return false;
         }
         $o['failures'] = (int) ($o['failures'] ?? 0) + 1;
         if ($o['failures'] >= self::MAX_FAILURES) {
-            @unlink($this->stateDir . '/server-override.json');
-            @unlink($this->stateDir . '/ca-override.pem');
-            ($this->log)('The new Sentinel address failed ' . self::MAX_FAILURES . ' check-ins in a row: going back to the configured address.');
+            $this->fallBack('The new address failed ' . self::MAX_FAILURES . ' check-ins in a row right after the move.');
             return true;
         }
         $this->write($o);
         return false;
     }
 
-    /** A check-in worked: reset the failure count. */
+    /** A check-in at the moved-to address worked. */
     public function checkInWorked(): void
     {
-        $o = json_decode((string) @file_get_contents($this->stateDir . '/server-override.json'), true);
-        if (is_array($o) && (int) ($o['failures'] ?? 0) !== 0) {
+        $o = $this->read();
+        if ($o !== null) {
             $o['failures'] = 0;
+            $o['good'] = (int) ($o['good'] ?? 0) + 1;
             $this->write($o);
         }
+    }
+
+    /** Whether a moved agent's token refusal (401) at the new address should send it back (during probation). */
+    public function refusedAtNewAddress(): bool
+    {
+        $o = $this->read();
+        if ($o === null) {
+            return false;
+        }
+        $this->fallBack('The new address refused the agent\'s token.');
+        return true;
+    }
+
+    /**
+     * Go back to the configured address, and tell Sentinel there (so it doesn't hand out the same move again at once).
+     */
+    public function fallBack(string $why): void
+    {
+        $o = $this->read();
+        @unlink($this->stateDir . '/server-override.json');
+        @unlink($this->stateDir . '/ca-override.pem');
+        ($this->log)($why . ' Going back to the configured address ' . $this->configuredServer . '.');
+        if ($this->configuredServer !== '' && is_string($o['server'] ?? null)) {
+            $this->report($this->http($this->configuredServer, $this->configuredCa), (string) $o['server'], false, $why . ' The agent went back to its configured address.');
+        }
+    }
+
+    /** Whether it is time to ask the configured address about the move (while moved). */
+    public function recallDue(): bool
+    {
+        $o = $this->read();
+        return $o !== null && strtotime((string) ($o['recall_checked_at'] ?? $o['moved_at'] ?? '')) < time() - self::RECALL_HOURS * 3600;
+    }
+
+    /**
+     * Ask the configured (original) address which address to use (signed answer). True when the override ended (restart
+     * onto the configured address; a new move there is proven again). An unreachable configured address changes nothing.
+     */
+    public function recall(): bool
+    {
+        $o = $this->read();
+        if ($o === null || $this->configuredServer === '') {
+            return false;
+        }
+        $o['recall_checked_at'] = gmdate('Y-m-d\TH:i:s\Z');
+        $this->write($o);
+        try {
+            $res = $this->http($this->configuredServer, $this->configuredCa)->post('/agent/v1/move/check', [], 20);
+        } catch (\Throwable) {
+            return false;
+        }
+        $ok = $res['status'] === 200 && is_string($res['data']['payload'] ?? null) && is_string($res['data']['signature'] ?? null)
+            && Signer::verify($res['data']['payload'], $res['data']['signature'], $this->serverKey);
+        $d = $ok ? json_decode($res['data']['payload'], true) : null;
+        $issued = is_array($d) ? strtotime((string) ($d['issued_at'] ?? '')) : false;
+        if (!is_array($d) || ($d['type'] ?? null) !== 'agent_move_status' || ($d['agent_id'] ?? null) !== $this->agentId || !is_string($d['server'] ?? null)
+            || $issued === false || abs(time() - $issued) > 3600) {
+            return false;
+        }
+        if (rtrim($d['server'], '/') === rtrim((string) $o['server'], '/')) {
+            return false; // still the move Sentinel wants
+        }
+        @unlink($this->stateDir . '/server-override.json');
+        @unlink($this->stateDir . '/ca-override.pem');
+        ($this->log)('Sentinel (at the configured address) no longer wants this agent at ' . $o['server'] . ': going back.');
+        return true;
+    }
+
+    /** @param array<string,mixed> $o */
+    private function inProbation(array $o): bool
+    {
+        return strtotime((string) ($o['moved_at'] ?? '')) > time() - self::PROBATION_HOURS * 3600 && (int) ($o['good'] ?? 0) < self::PROBATION_CHECKINS;
+    }
+
+    /** @return array<string,mixed>|null */
+    private function read(): ?array
+    {
+        $o = json_decode((string) @file_get_contents($this->stateDir . '/server-override.json'), true);
+        return is_array($o) ? $o : null;
+    }
+
+    private function keyId(): string
+    {
+        return substr(hash('sha256', $this->serverKey), 0, 16);
     }
 
     private function prove(string $server, string $caPem): string
@@ -137,28 +238,56 @@ final class Mover
                 }
             }
             $caFile = $this->stateDir . '/ca-candidate.pem';
-            $this->writeFile($caFile, implode("\n", $m[0]) . "\n");
+            if (!$this->writeFile($caFile, implode("\n", $m[0]) . "\n")) {
+                return 'Could not save the CA in the agent\'s folder.';
+            }
         }
         $nonce = bin2hex(random_bytes(16));
-        try {
-            $res = $this->http($server, $caFile)->post('/agent/v1/prove', ['nonce' => $nonce], 20);
-        } catch (\Throwable $ex) {
+        // No token: nothing secret goes to an address before it proved itself. Without a CA given, the system CAs are
+        // tried first and then the configured private CA (the same CA under a new name).
+        $attempts = $caFile !== null ? [$caFile] : array_values(array_unique([null, $this->configuredCa]));
+        $res = null;
+        $error = '';
+        foreach ($attempts as $ca) {
+            try {
+                $res = (new Http($server, null, $ca, $this->testMode))->post('/agent/v1/prove', ['agent_id' => $this->agentId, 'nonce' => $nonce, 'server' => $server], 20);
+                $usedCa = $ca;
+                break;
+            } catch (\Throwable $ex) {
+                $error = mb_substr($ex->getMessage(), 0, 150);
+            }
+        }
+        if ($res === null) {
             @unlink((string) $caFile);
-            return 'The new address could not be reached: ' . mb_substr($ex->getMessage(), 0, 150);
+            return 'The new address could not be reached: ' . $error;
         }
         $ok = $res['status'] === 200 && is_string($res['data']['payload'] ?? null) && is_string($res['data']['signature'] ?? null)
             && Signer::verify($res['data']['payload'], $res['data']['signature'], $this->serverKey);
         $p = $ok ? json_decode($res['data']['payload'], true) : null;
-        if (!is_array($p) || ($p['type'] ?? null) !== 'agent_prove' || ($p['agent_id'] ?? null) !== $this->agentId || ($p['nonce'] ?? null) !== $nonce) {
+        if (!is_array($p) || ($p['type'] ?? null) !== 'agent_prove' || ($p['agent_id'] ?? null) !== $this->agentId || ($p['nonce'] ?? null) !== $nonce
+            || ($p['server'] ?? null) !== $server) {
             @unlink((string) $caFile);
-            return 'The new address did not prove it is this Sentinel (no valid signature with its key).';
+            return 'The new address did not prove it is this Sentinel (no valid signature for that address).';
         }
+        $caTarget = $this->stateDir . '/ca-override.pem';
+        $caInUse = $usedCa ?? null;
         if ($caFile !== null) {
-            rename($caFile, $this->stateDir . '/ca-override.pem');
+            if (!rename($caFile, $caTarget)) {
+                return 'Could not save the CA in the agent\'s folder.';
+            }
+            $caInUse = $caTarget;
+        } elseif ($caInUse !== null) {
+            if (!copy($caInUse, $caTarget)) {
+                return 'Could not save the CA in the agent\'s folder.';
+            }
+            $caInUse = $caTarget;
         } else {
-            @unlink($this->stateDir . '/ca-override.pem');
+            @unlink($caTarget);
         }
-        $this->write(['server' => $server, 'ca_file' => $caFile !== null ? $this->stateDir . '/ca-override.pem' : null, 'moved_at' => gmdate('Y-m-d\TH:i:s\Z'), 'failures' => 0]);
+        if (!$this->write(['server' => $server, 'ca_file' => $caInUse, 'moved_at' => gmdate('Y-m-d\TH:i:s\Z'), 'failures' => 0, 'good' => 0,
+                           'agent_id' => $this->agentId, 'key' => $this->keyId()])) {
+            return 'Could not save the new address in the agent\'s folder.';
+        }
         return '';
     }
 
@@ -177,17 +306,16 @@ final class Mover
     }
 
     /** @param array<string,mixed> $o */
-    private function write(array $o): void
+    private function write(array $o): bool
     {
-        $this->writeFile($this->stateDir . '/server-override.json', (string) json_encode($o, JSON_UNESCAPED_SLASHES));
+        return $this->writeFile($this->stateDir . '/server-override.json', (string) json_encode($o, JSON_UNESCAPED_SLASHES));
     }
 
-    private function writeFile(string $path, string $content): void
+    private function writeFile(string $path, string $content): bool
     {
         $old = umask(0077);
-        file_put_contents($path . '.tmp', $content);
+        $ok = file_put_contents($path . '.tmp', $content) === strlen($content);
         umask($old);
-        chmod($path . '.tmp', 0600);
-        rename($path . '.tmp', $path);
+        return $ok && chmod($path . '.tmp', 0600) && rename($path . '.tmp', $path);
     }
 }

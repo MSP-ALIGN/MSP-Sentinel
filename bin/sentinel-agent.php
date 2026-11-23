@@ -131,7 +131,8 @@ switch ($command) {
         $connector = $testMode && is_array($c['testing'] ?? null) ? Connector::fromTesting($c['testing']) : Connector::direct();
         $stateDir = dirname((string) ($c['state_file'] ?? dirname($configFile) . '/state.json'));
         // Moved to a new Sentinel address (Administration, System)? It is kept in the state folder; the config is read-only.
-        $mover = new Mover($stateDir, (string) $c['server_public_key'], (int) $c['agent_id'], (int) $c['site_id'], (int) $c['client_id'], (string) $c['token'], $testMode, $say);
+        $mover = new Mover($stateDir, (string) $c['server_public_key'], (int) $c['agent_id'], (int) $c['site_id'], (int) $c['client_id'], (string) $c['token'], $testMode, $say,
+            (string) $c['server'], is_string($c['ca_file'] ?? null) ? $c['ca_file'] : null);
         $moved = $mover->override();
         $http = new Http($moved['server'] ?? (string) $c['server'], (string) $c['token'], $moved !== null ? $moved['ca_file'] : (is_string($c['ca_file'] ?? null) ? $c['ca_file'] : null), $testMode);
         // The agent's own key pair (sealed passwords) and the directory password it holds, in the state folder (the only

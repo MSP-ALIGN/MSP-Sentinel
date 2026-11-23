@@ -2,12 +2,35 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.23.1 (2026-11-23): agent moves, security fixes from review
+
+- **No secrets go to an unproven address.** The new address is asked for its proof without the agent's token.
+  1.23.0 sent the token first, so a mistyped or rogue address could collect agents' tokens.
+- **The proof names the address.** Sentinel only signs proofs for the address an admin set, so a host that relays the
+  challenge to the real Sentinel can't pass.
+- **Starting a move needs your password**, and the move setting is encrypted and authenticated with the app key, so a
+  database write alone can't set one.
+- **Agents can always be recalled.** While moved, an agent asks its original address every 6 hours, and comes back
+  when the move was cancelled or changed.
+- **Fallback only right after a move:** within 24 hours or the first 20 good check-ins. After that the move is
+  permanent, so an outage can't strand agents at an old address. A fallback is reported, so the move isn't repeated
+  in a loop.
+- **Smaller fixes:**
+  - Move instructions are limited, so they never stop scans.
+  - Any non-answer at a new address counts as a failure, and a token refusal there sends the agent back instead of
+    wiping it.
+  - Writes are checked.
+  - Agents ignore a move file from another enrolment.
+  - The configured private CA is reused under a new name.
+  - Address changes are audited.
+- Moves set in 1.23.0 are cleared; set them again (with your password). Agents need 1.23.1.
+
 ### 1.23.0 (2026-11-23): move agents to a new Sentinel address
 
 - **Move every agent to a new Sentinel address** (and a private CA's certificate, if needed) from Administration →
   System, without visiting any site.
 - **Each agent only switches after the new address proves it is this Sentinel.** The new address must sign a random
-  challenge with the key the agent pinned at enrolment. An impostor address gets nothing.
+  challenge with the key the agent pinned at enrolment. Hardened in 1.23.1: the token was sent before the proof.
 - **Automatic fallback:** an agent goes back to its old address on its own if the new one fails 10 check-ins in a row.
 - The System page shows each agent's state: moved, waiting, not moved (and why), or needing an update first.
 - This completes managing agents from Sentinel: after the one-time install with an enrolment code, settings,
