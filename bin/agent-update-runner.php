@@ -101,21 +101,27 @@ $keyFile = $test && $opt('key') ? (string) $opt('key') : '/etc/sentinel-agent/re
 $resultDir = $test && $opt('result') ? rtrim((string) $opt('result'), '/') : '/var/lib/sentinel-agent-update';
 $systemd = !($test && in_array('--no-systemd', $argv, true));
 $php = PHP_BINARY;
-$asAgent = static fn (array $cmd): array => $test ? $cmd : array_merge(['/usr/sbin/runuser', '-u', 'sentinel-agent', '--'], $cmd);
+// As the agent's user: setpriv changes uid, gid and groups and then execs (no fork), so a timeout kill reaches the
+// command itself.
+$asAgent = static fn (array $cmd): array => $test ? $cmd : array_merge(['/usr/bin/setpriv', '--reuid=sentinel-agent', '--regid=sentinel-agent', '--init-groups', '--reset-env', '--'], $cmd);
 $say = static fn (string $m) => fwrite(STDOUT, '[' . gmdate('Y-m-d H:i:s') . '] ' . $m . "\n");
 $requestId = '';
 /** Write the result into the root-owned result folder (never the agent's), atomically. */
 $result = static function (string $version, bool $ok, string $message) use ($resultDir, $say, $test, &$requestId): never {
     $say(($ok ? 'Updated: ' : 'Update refused: ') . $message);
+    $gid = !$test && function_exists('posix_getgrnam') && ($g = posix_getgrnam('sentinel-agent')) !== false ? $g['gid'] : null;
     if (!is_dir($resultDir)) {
         mkdir($resultDir, 0750, true);
+        if ($gid !== null) {
+            chgrp($resultDir, $gid); // the agent must be able to read its results
+        }
     }
     $tmp = $resultDir . '/result.json.' . bin2hex(random_bytes(6));
     file_put_contents($tmp, json_encode(['version' => mb_substr($version, 0, 20), 'ok' => $ok, 'message' => mb_substr($message, 0, 300), 'request' => $requestId,
-        'at' => gmdate('Y-m-d\TH:i:s\Z')], JSON_UNESCAPED_SLASHES));
+        'at' => gmdate('Y-m-d\TH:i:s\Z')], JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE));
     chmod($tmp, 0640);
-    if (!$test && function_exists('posix_getgrnam') && ($g = posix_getgrnam('sentinel-agent')) !== false) {
-        chgrp($tmp, $g['gid']); // a file root just created in its own folder: safe
+    if ($gid !== null) {
+        chgrp($tmp, $gid); // a file root just created in its own folder: safe
     }
     rename($tmp, $resultDir . '/result.json');
     exit($ok ? 0 : 1);
@@ -165,6 +171,12 @@ $rm = static function (string $dir): void { // only for root-owned folders under
     }
     @rmdir($dir);
 };
+
+// 0. A crash in the middle of a swap must never leave the appliance without its agent.
+if (!is_dir($app) && is_dir($app . '.old')) {
+    rename($app . '.old', $app);
+    $say('Restored ' . $app . ' from ' . $app . '.old (an earlier update stopped half-way).');
+}
 
 // 1. Collect, as the agent's user.
 [$code, $raw] = $run($asAgent(array_merge([$php, __FILE__, '--collect'], $test ? ['--state', $state] : [])), COLLECT_SECONDS, MAX_COLLECTED);
@@ -225,7 +237,7 @@ if (!$test) {
 
 // 3. Pre-flight: the new release checks itself, as the agent's user.
 [$code, $check] = $run($asAgent([$php, $new . '/bin/sentinel-agent.php', 'selfcheck']), 60);
-if ($code !== 0 || !str_contains($check, 'selfcheck ok')) {
+if ($code !== 0 || trim($check) !== 'selfcheck ok ' . $m['version']) {
     $rm($new);
     $result($wanted, false, 'The new release did not pass its self-check on this appliance (' . mb_substr(trim($check), 0, 150) . '); upgrade by hand if it needs new packages.');
 }
@@ -252,17 +264,26 @@ if ($systemd) {
     $units($app);
     $run(['/usr/bin/systemctl', 'daemon-reload'], 60);
     $run(['/usr/bin/systemctl', 'restart', 'sentinel-agent.service'], 60);
-    sleep(20);
-    [$active] = $run(['/usr/bin/systemctl', 'is-active', '--quiet', 'sentinel-agent.service'], 15);
-    if ($active !== 0) {
+    // Healthy = active at 20 s and again at 50 s, without having been restarted in between (a restart resets NRestarts).
+    $healthy = true;
+    foreach ([20, 30] as $wait) {
+        sleep($wait);
+        [$active] = $run(['/usr/bin/systemctl', 'is-active', '--quiet', 'sentinel-agent.service'], 15);
+        [, $restarts] = $run(['/usr/bin/systemctl', 'show', '-p', 'NRestarts', '--value', 'sentinel-agent.service'], 15);
+        $healthy = $healthy && $active === 0 && trim($restarts) === '0';
+    }
+    if (!$healthy) {
         // Roll back to the previous version, which was running before.
         $rm($app . '.failed');
-        rename($app, $app . '.failed');
-        rename($app . '.old', $app);
+        $back = rename($app, $app . '.failed') && rename($app . '.old', $app);
+        if (!$back && !is_dir($app) && is_dir($app . '.failed')) {
+            rename($app . '.failed', $app); // never leave no agent at all
+        }
         $units($app);
         $run(['/usr/bin/systemctl', 'daemon-reload'], 60);
         $run(['/usr/bin/systemctl', 'restart', 'sentinel-agent.service'], 60);
-        $result($wanted, false, 'Version ' . $m['version'] . ' did not stay running; ' . $installed . ' was put back (rolled back).');
+        $result($wanted, false, $back ? 'Version ' . $m['version'] . ' did not stay running; ' . $installed . ' was put back (rolled back).'
+            : 'Version ' . $m['version'] . ' did not stay running and the rollback failed: check the appliance.');
     }
 }
 $result($m['version'], true, 'Agent updated from ' . $installed . ' to ' . $m['version'] . ' (' . count($m['files']) . ' files, signature and every file checked, self-check passed).');

@@ -75,8 +75,8 @@ switch ($command) {
         // Used by the update helper before switching to a new release (run as the agent's user): can this release run
         // on this appliance? Prints "selfcheck ok <version>" and exits 0, or says what is missing.
         $missing = array_values(array_filter(['curl', 'json', 'openssl', 'sodium', 'mbstring'], static fn (string $e): bool => !extension_loaded($e)));
-        if (PHP_VERSION_ID < 80200 || $missing !== []) {
-            fwrite(STDOUT, 'selfcheck failed: ' . (PHP_VERSION_ID < 80200 ? 'PHP 8.2 or later needed. ' : '') . ($missing !== [] ? 'Missing PHP extensions: ' . implode(', ', $missing) . '.' : '') . "\n");
+        if (PHP_VERSION_ID < 80300 || $missing !== []) {
+            fwrite(STDOUT, 'selfcheck failed: ' . (PHP_VERSION_ID < 80300 ? 'PHP 8.3 or later needed. ' : '') . ($missing !== [] ? 'Missing PHP extensions: ' . implode(', ', $missing) . '.' : '') . "\n");
             exit(1);
         }
         foreach ([Runner::class, JobVerifier::class, Updater::class, State::class] as $class) {

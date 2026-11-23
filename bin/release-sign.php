@@ -90,6 +90,12 @@ switch ($command) {
         }
         $paths = array_values(array_filter($lines, static fn (string $l): bool => $l !== '' && !str_ends_with($l, '/')));
         $manifest = ReleaseManifest::build($root, $version, $paths);
+        // Say what isn't part of the agent release (excluded folders, hidden files, odd names): a remote update installs
+        // exactly the signed files, so anything else disappears from an updated agent.
+        $left = array_values(array_filter($paths, static fn (string $p): bool => !isset($manifest['files'][$p]) && !preg_match('#^(config|storage|dist|tests|release)/#', $p)));
+        if ($left !== []) {
+            echo 'Not in the agent release (hidden files or unusual names): ' . implode(', ', array_slice($left, 0, 20)) . (count($left) > 20 ? ' ...' : '') . "\n";
+        }
         $json = ReleaseManifest::canonical($manifest);
         $sig = ReleaseManifest::sign($json, $secret);
         if (!is_array(ReleaseManifest::verify($json, $sig, $public))) {

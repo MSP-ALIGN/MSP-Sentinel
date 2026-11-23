@@ -2,6 +2,25 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.22.2 (2026-11-23): agent updates, fixes from re-review
+
+- **Repeat updates work.** In 1.22.1, the update helper's sandbox stopped the collector from removing the update
+  request. After the first remote update, the helper restarted in a loop and later updates were ignored. The collector
+  (running as the agent's user) can now remove it. The agent also removes a request the helper already answered, or
+  one older than an hour.
+- **Updating from 1.22.0 works.** The helper's result folder is created before its sandbox starts. A result left by
+  the 1.22.0 helper is read once. A request is marked done once the agent runs the version asked for, even if its
+  result was lost.
+- **Safer swap:**
+  - The agent must stay up for 50 seconds without restarting, or the previous version is put back.
+  - A rollback that can't complete never leaves the appliance without an agent.
+  - An update interrupted half-way is repaired on the next run.
+- **Smaller fixes:**
+  - The collector runs via `setpriv`, so a timeout reaches it.
+  - The self-check must report the exact version being installed, and checks for PHP 8.3.
+  - Results survive odd characters.
+  - `release-sign` lists files that aren't part of the agent release.
+
 ### 1.22.1 (2026-11-23): agent updates, security fixes from review
 
 - **Security fix:** the root update helper no longer reads, writes or deletes anything in the agent's own folder.

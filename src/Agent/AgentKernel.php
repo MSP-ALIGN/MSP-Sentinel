@@ -164,6 +164,10 @@ final class AgentKernel
         // Update: at an idle check-in, when an admin asked and the agent isn't on that version yet (signed by Sentinel's
         // key only to say "this server asks"; the code itself must carry the release key's signature). Alone, like a restart.
         $update = null;
+        // The agent now runs the version asked for (its result may have been lost): the request is done.
+        if ((string) ($body['version'] ?? '') !== '') {
+            App::db()->prepare("UPDATE agents SET update_to = '' WHERE id = :id AND update_to <> '' AND update_to = :v")->execute(['id' => (int) $agent['id'], 'v' => (string) $body['version']]);
+        }
         // Read again: the result just reported may have ended the request.
         $now = App::db()->query('SELECT update_to, update_requested_at, update_handouts, (update_handed_at IS NULL OR update_handed_at < UTC_TIMESTAMP() - INTERVAL '
             . self::UPDATE_RETRY_MINUTES . ' MINUTE) AS due FROM agents WHERE id = ' . (int) $agent['id'])->fetch();

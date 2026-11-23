@@ -133,7 +133,8 @@ code: a compromised Sentinel server can't push code to client networks.
    that needs something the appliance doesn't have isn't installed.
 5. It puts the new folder in place (the previous one stays as `/opt/sentinel-agent.old`), writes the systemd units
    from the new release and restarts the agent. **If the agent doesn't stay running, the previous version is put back
-   and restarted** (rollback).
+   and restarted** (rollback): it must be running 20 and 50 seconds later without having restarted. An update stopped
+   half-way (power cut) is repaired on the helper's next run.
 6. The result goes to `/var/lib/sentinel-agent-update` (root-owned; the agent can read it, not change it) and the
    Agents page shows it: "Updated to x.y.z", or why it was refused. The agent cleans up its own staging folder.
 
@@ -159,6 +160,11 @@ needs a manual upgrade.
 If the release key is ever lost, make a new one and upgrade every agent by hand once (`agent-install.sh --upgrade`
 from the new release folder pins its `install/release-key.pub`). If it leaks, do the same at once: agents trust
 whatever it signs.
+
+What the agent's own user can do (if someone took it over): ask for any signed release newer than the installed one,
+or trigger the helper often enough to hit its start limit (remote updates then pause until the next reboot or
+`systemctl reset-failed sentinel-agent-update`). It can't get unsigned or older code installed, and root never
+touches its folder.
 
 Limit: Sentinel chooses WHICH signed release an agent gets (only newer ones are accepted). A compromised Sentinel
 can't install unsigned code, but it could offer an older signed release that is still newer than an agent's version.

@@ -194,6 +194,13 @@ return [
         Assert::contains('did not pass its self-check', $out);
         Assert::same("1.22.0\n", file_get_contents($app . '/VERSION'), 'not installed');
         Assert::true(!is_dir($app . '.new'), 'the new folder was removed');
+        // A request the helper already answered but couldn't remove is cleaned up by the agent (it never blocks later updates).
+        $answered = json_decode((string) file_get_contents($upDir($ctx) . '-results/result.json'), true);
+        file_put_contents($state . '/update-request', json_encode(['version' => $answered['version'], 'request' => $answered['request']]));
+        $upd = new \Sentinel\AgentClient\Updater(new \Sentinel\AgentClient\Http($ctx->baseUrl, null, null, true), $state . '/release-key.pub', $state, static fn () => null,
+            '', 0, 0, 0, $upDir($ctx) . '-results');
+        Assert::same(false, $upd->pending(), 'an answered request is not pending');
+        Assert::true(!is_file($state . '/update-request'), 'and the agent removed it');
         // A helper that never answers: after 3 hand-outs the request ends, and scans flow in between.
         $ctx->db->exec("UPDATE agents SET update_to = '9.9.9', update_requested_at = UTC_TIMESTAMP(), update_handouts = 3, update_handed_at = UTC_TIMESTAMP() - INTERVAL 31 MINUTE WHERE id = {$agentId}");
         $upRun($ctx);

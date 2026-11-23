@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.22.1](https://img.shields.io/badge/version-1.22.1-ff5a1f?style=flat-square)
+![Version 1.22.2](https://img.shields.io/badge/version-1.22.2-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -148,6 +148,25 @@ curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install
 The same help is built into the app (**Help** in the menu), with a "What's new" page for every release.
 
 ## What's new
+
+### 1.22.2 (2026-11-23): agent updates, fixes from re-review
+
+- **Repeat updates work.** In 1.22.1, the update helper's sandbox stopped the collector from removing the update
+  request. After the first remote update, the helper restarted in a loop and later updates were ignored. The collector
+  (running as the agent's user) can now remove it. The agent also removes a request the helper already answered, or
+  one older than an hour.
+- **Updating from 1.22.0 works.** The helper's result folder is created before its sandbox starts. A result left by
+  the 1.22.0 helper is read once. A request is marked done once the agent runs the version asked for, even if its
+  result was lost.
+- **Safer swap:**
+  - The agent must stay up for 50 seconds without restarting, or the previous version is put back.
+  - A rollback that can't complete never leaves the appliance without an agent.
+  - An update interrupted half-way is repaired on the next run.
+- **Smaller fixes:**
+  - The collector runs via `setpriv`, so a timeout reaches it.
+  - The self-check must report the exact version being installed, and checks for PHP 8.3.
+  - Results survive odd characters.
+  - `release-sign` lists files that aren't part of the agent release.
 
 ### 1.22.1 (2026-11-23): agent updates, security fixes from review
 

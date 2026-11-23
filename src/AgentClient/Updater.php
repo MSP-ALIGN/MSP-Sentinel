@@ -52,10 +52,25 @@ final class Updater
         return [$d['version'], is_string($d['request'] ?? null) ? mb_substr($d['request'], 0, 30) : ''];
     }
 
-    /** Whether an update is staged and waiting for the helper (don't stage again meanwhile). */
+    /**
+     * Whether an update is staged and waiting for the helper (don't stage again meanwhile). A request the helper already
+     * answered (its result names the request), or one older than an hour, is removed here: the agent cleans up its
+     * own folder, so a request left behind never blocks later updates.
+     */
     public function pending(): bool
     {
-        return is_file($this->stateDir . '/update-request');
+        $file = $this->stateDir . '/update-request';
+        if (!is_file($file)) {
+            return false;
+        }
+        $req = json_decode((string) @file_get_contents($file, false, null, 0, 4096), true);
+        $res = json_decode((string) @file_get_contents($this->resultDir . '/result.json', false, null, 0, 8192), true);
+        $answered = is_array($req) && is_array($res) && ($res['request'] ?? null) === ($req['request'] ?? false) && ($res['version'] ?? null) === ($req['version'] ?? false);
+        if ($answered || (int) @filemtime($file) < time() - 3600) {
+            @unlink($file);
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -68,6 +83,7 @@ final class Updater
     {
         file_put_contents($this->stateDir . '/update-reported', self::resultId($result));
         self::removeTree($this->stateDir . '/update');
+        @unlink($this->stateDir . '/update-result.json'); // a 1.22.0 helper's result, in the agent's own folder
     }
 
     /** Whether this agent can be updated remotely (a release key is pinned). */
@@ -133,7 +149,11 @@ final class Updater
     {
         $r = json_decode((string) @file_get_contents($this->resultDir . '/result.json', false, null, 0, 8192), true);
         if (!is_array($r) || !is_string($r['version'] ?? null)) {
-            return null;
+            // A result an agent update helper of 1.22.0 left in the agent's own folder (read once, then removed).
+            $r = json_decode((string) @file_get_contents($this->stateDir . '/update-result.json', false, null, 0, 8192), true);
+            if (!is_array($r) || !is_string($r['version'] ?? null)) {
+                return null;
+            }
         }
         return trim((string) @file_get_contents($this->stateDir . '/update-reported')) === self::resultId($r) ? null : $r;
     }

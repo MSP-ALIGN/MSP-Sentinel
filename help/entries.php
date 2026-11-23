@@ -225,6 +225,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.22.2',
+            'date' => '2026-11-23',
+            'items' => [
+                'Agent updates: repeat updates work (the update request is removed after each one), updating from 1.22.0 works, and a failed update is rolled back more reliably.',
+            ],
+        ],
+        [
             'version' => '1.22.1',
             'date' => '2026-11-23',
             'items' => [

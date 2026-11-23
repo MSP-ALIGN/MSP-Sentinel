@@ -10,11 +10,15 @@ StartLimitBurst=5
 
 [Service]
 Type=oneshot
+# The result folder must exist before the sandbox is set up ("+": outside it). Root-owned, readable by the agent.
+ExecStartPre=+/usr/bin/install -d -o root -g sentinel-agent -m 0750 /var/lib/sentinel-agent-update
 ExecStart=__PHP__ __ROOT__/bin/agent-update-runner.php
 TimeoutStartSec=900
-# Hardening: it may only write the agent's code folder, its own result folder and the systemd units it owns.
+# Hardening: it may only write the agent's code folder, its own result folder and the systemd units it owns, plus the
+# agent's state folder, where ONLY the collector (running as the agent's user) removes the request. Root's own code
+# never touches that folder (bin/agent-update-runner.php).
 ProtectSystem=strict
-ReadWritePaths=/opt /etc/systemd/system /var/lib/sentinel-agent-update
+ReadWritePaths=/opt /etc/systemd/system /var/lib/sentinel-agent-update /var/lib/sentinel-agent
 ProtectHome=yes
 PrivateTmp=yes
 PrivateDevices=yes
