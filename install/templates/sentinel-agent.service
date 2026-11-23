@@ -8,6 +8,10 @@ Wants=network-online.target
 Type=simple
 User=sentinel-agent
 Group=sentinel-agent
+# Repair an update stopped half-way (power cut between the two renames): the code folder missing and the previous
+# version kept beside it. Runs as root ("+") before anything else, outside the code folder (which may be missing).
+# Fixed root-owned paths only; a symlink is never followed.
+ExecStartPre=+/bin/sh -c 'if [ ! -e __ROOT__ ] && [ ! -L __ROOT__ ] && [ -d __ROOT__.old ] && [ ! -L __ROOT__.old ]; then mv -T __ROOT__.old __ROOT__; fi'
 ExecStart=__PHP__ __ROOT__/bin/sentinel-agent.php run --config __CONF__/agent.json
 Restart=on-failure
 RestartSec=60

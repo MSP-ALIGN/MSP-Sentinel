@@ -183,6 +183,9 @@ try {
         '10.90.0.20:80' => ['plain', '-', $page('printer', '<html><head><title>Example Printer Status</title></head><body>Toner OK</body></html>')],
         '10.90.0.30:8080' => ['plain', '-', $page('intranet', '<html><head><title>Intranet</title></head><body>Welcome</body></html>')],
         '10.92.0.40:80' => ['plain', '-', $page('camera', '<html><head><title>Example Camera Login</title></head><body><form><input type="password" name="pw"></form></body></html>')],
+        // Subdomain takeover: a cloud storage name nobody owns any more (its "no such bucket" page), and a live site.
+        '203.0.113.77:443' => ['modern', $certs['good'], $page('nobucket', '<?xml version="1.0"?><Error><Code>NoSuchBucket</Code><Message>The specified bucket does not exist</Message></Error>')],
+        '203.0.113.78:443' => ['modern', $certs['good'], $page('livesite', '<html><head><title>Example Docs</title></head><body>Welcome to the docs.</body></html>')],
     ];
     $redirects = [];
     foreach ($tlsMocks as $target => [$mode, $pem, $htmlFile]) {
@@ -207,6 +210,9 @@ try {
             [0 => ['file', '/dev/null', 'r'], 1 => ['file', $outDir . '/mock-ldap.log', 'a'], 2 => ['file', $outDir . '/mock-ldap.log', 'a']], $pipes);
         $redirects[$target] = $p;
     }
+    // Zone transfers: the made-up zones' nameservers are the mock DNS server (TCP), one open and one refusing.
+    $redirects['203.0.113.53:53'] = $dnsPort;
+    $redirects['203.0.113.54:53'] = $dnsPort;
     $cfg['testing']['redirect_connections'] = $redirects;
     // Agent updates: a tiny made-up agent release (version 9.9.9), signed with a release key made for this run only.
     // Sentinel hands it out (testing.release_root); agents check it against the public key (testing.release_key in

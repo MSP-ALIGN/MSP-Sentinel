@@ -245,4 +245,40 @@ return [
         Assert::same(2, $code, 'no config to update');
         unlink($path);
     },
+    'agent units repair an update stopped half-way, before anything runs from the code folder' => function (TestContext $ctx): void {
+        $root = dirname(__DIR__, 2);
+        foreach (['sentinel-agent.service', 'sentinel-agent-update.service'] as $unitName) {
+            $unit = (string) file_get_contents($root . '/install/templates/' . $unitName);
+            Assert::true(preg_match("/^ExecStartPre=\\+\\/bin\\/sh -c '(.+)'$/m", $unit, $m) === 1, $unitName . ' has the root repair step');
+            Assert::true(strpos($unit, 'ExecStartPre=+/bin/sh') < strpos($unit, "\nExecStart="), $unitName . ': repair comes before the code runs');
+            // Run the step itself on test folders (the same shell line, with the code folder pointed at a temp folder).
+            $base = sys_get_temp_dir() . '/sn-repair-' . bin2hex(random_bytes(4));
+            mkdir($base);
+            $app = $base . '/sentinel-agent';
+            $runStep = static function () use ($m, $app): void {
+                exec('/bin/sh -c ' . escapeshellarg(str_replace('__ROOT__', $app, $m[1])) . ' 2>&1', $o, $rc);
+                Assert::same(0, $rc, implode("\n", $o));
+            };
+            // 1. Stopped between the two renames: only the previous version is there. It is put back.
+            mkdir($app . '.old');
+            file_put_contents($app . '.old/VERSION', "1.0.0\n");
+            $runStep();
+            Assert::true(is_file($app . '/VERSION') && !file_exists($app . '.old'), $unitName . ': previous version put back');
+            // 2. A normal state (code folder and an older copy): nothing changes.
+            mkdir($app . '.old');
+            $runStep();
+            Assert::true(is_dir($app) && is_dir($app . '.old') && !is_dir($app . '/sentinel-agent.old'), $unitName . ': nothing moved when the code is there');
+            // 3. A symlink in place of the previous version is never followed or moved.
+            exec('rm -rf ' . escapeshellarg($app) . ' ' . escapeshellarg($app . '.old'));
+            mkdir($base . '/elsewhere');
+            symlink($base . '/elsewhere', $app . '.old');
+            $runStep();
+            Assert::true(!file_exists($app) && is_link($app . '.old'), $unitName . ': a symlink is left alone');
+            // 4. Nothing at all: nothing happens, no error.
+            unlink($app . '.old');
+            $runStep();
+            Assert::true(!file_exists($app), $unitName . ": nothing created");
+            exec('rm -rf ' . escapeshellarg($base));
+        }
+    },
 ];

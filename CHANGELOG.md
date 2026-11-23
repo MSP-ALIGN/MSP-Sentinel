@@ -2,6 +2,28 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.28.0 (2026-11-23): attack-surface checks
+
+- **DNS zone transfers.** For each domain in the authorisation, Sentinel asks each of the domain's own listed
+  nameservers (at most 4, two addresses each) for a zone transfer, once a day at most. A nameserver that hands out the
+  whole zone is a Fail: anyone can list every name, including internal and forgotten systems. Only the first part of
+  the answer is read (enough to prove it and show a few names).
+- **Subdomain takeover.** Each authorised name, and each in-scope name seen on the client's addresses, is checked for a
+  CNAME to a cloud service (Amazon S3, GitHub Pages, Heroku, Azure, Shopify and others) that no longer exists. Either
+  the cloud name no longer resolves, or one request to the client's name gets the provider's own "no such site" page.
+  Both are Fails: anyone could claim the name and serve content on the client's domain.
+- **More management pages recognised:** hypervisors (VMware ESXi and vCenter, Proxmox, XenServer and XCP-ng,
+  Nutanix), out-of-band management (iDRAC, iLO, IPMI and other BMCs, XClarity), NAS devices (Synology, QNAP,
+  TrueNAS, unRAID, ReadyNAS, TerraMaster) and more network devices (UniFi, MikroTik, Omada). Each is a Fail when
+  reachable from the internet. A product named only in a page's text is not flagged.
+- **Default ports added:** 902 (VMware ESXi management, high risk), 5000 and 5001 (NAS admin pages), 8006 (Proxmox)
+  and 9090 (management consoles). Agents check 902, 5001 and 8006 too.
+- **The client's website card** has a DNS table: each nameserver's answer and each name's takeover check.
+- **Fix: a Linux agent update stopped half-way (power cut between the two renames) now repairs itself.** The agent's
+  service and the update helper put the previous version back before anything runs, so the agent starts again on
+  its own. Before, the helper's code was in the missing folder, so nothing could repair it. Agents get this with their
+  next update.
+
 ### 1.27.1 (2026-11-23): pen-test engagements, fixes from review
 
 - **Anonymous access no longer lists SMB shares.** nmap's script for that writes and deletes a test file in every

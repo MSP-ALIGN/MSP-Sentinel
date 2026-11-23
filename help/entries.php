@@ -70,8 +70,8 @@ return [
             'title' => 'Certificates and exposed admin pages',
             'paragraphs' => [
                 'After each port scan, and once a day inside the scan window, Sentinel connects briefly to each TLS service it found. It reads the certificate (expiry, issuer, whether it is trusted and matches the name, key size) and checks whether old TLS 1.0 or 1.1 is still accepted.',
-                'It also requests the start page of each web port once, without logging in, and recognises firewall and device admin pages, VPN portals, remote desktop web access and other login pages from their wording. The website checks (see "Website and email security") then request a short fixed list of paths.',
-                'Grading: an expired certificate, or a firewall or device admin page reachable from the internet, is a Fail. A certificate expiring within 14 days, self-signed or untrusted certificates, name mismatches, old TLS and weak keys are Warnings. VPN portals and remote desktop web access are Warnings too: they are often meant to be reachable, so make sure they are patched and use MFA.',
+                'It also requests the start page of each web port once, without logging in, and recognises firewall and device admin pages, hypervisor consoles (VMware, Proxmox, XenServer, Nutanix), out-of-band management (iDRAC, iLO, IPMI), NAS admin pages (Synology, QNAP, TrueNAS and others), VPN portals, remote desktop web access and other login pages from their wording. The website checks (see "Website and email security") then request a short fixed list of paths.',
+                'Grading: an expired certificate, or a firewall, device, hypervisor, out-of-band or NAS admin page reachable from the internet, is a Fail. A product named only in the page text is not flagged. A certificate expiring within 14 days, self-signed or untrusted certificates, name mismatches, old TLS and weak keys are Warnings. VPN portals and remote desktop web access are Warnings too: they are often meant to be reachable, so make sure they are patched and use MFA.',
                 'Mail services that start TLS later in the connection (STARTTLS on ports 25, 587, 143) are not checked yet.',
             ],
         ],
@@ -82,6 +82,7 @@ return [
                 'It requests a short, fixed list of files that are often left on websites by mistake: /.git/HEAD, /.env, common backup and database dump names, /phpinfo.php, /server-status and /.DS_Store. A file is only reported when its content proves it (for example a real git reference or a zip file), so sites that answer every address with a page are not flagged. The content of these files is never stored.',
                 'It recognises WordPress, Drupal and Joomla and common JavaScript libraries (jQuery, Bootstrap, AngularJS, Lodash, Moment.js, Vue.js) from the page markup. When a version is visible, it is matched to known vulnerabilities like any other software. Sentinel never guesses a version.',
                 'For each domain in the authorisation that receives email (has MX records), Sentinel checks the SPF and DMARC records and looks for DKIM under common selectors, through DNS only. Domains without MX records (or with a "null MX" that refuses email) are not judged. A wildcard entry such as *.client.example covers only subdomains, so client.example itself is checked only when it is listed too. An SPF record that hands over to another with redirect= is not judged, and a subdomain without its own DMARC record uses its parent domain\'s record when the parent is also authorised.',
+                'DNS checks (once a day at most): for each authorised domain, Sentinel asks each of the domain\'s own listed nameservers for a zone transfer. A nameserver that hands out the whole zone lets anyone list every name, including internal and forgotten systems; only the first part of the answer is read. Each authorised name (and each in-scope name seen on the client\'s addresses) is also checked for subdomain takeover: a CNAME to a cloud service such as Amazon S3, GitHub Pages, Heroku or Azure that no longer exists, either because the cloud name no longer resolves or because one request to the name gets the provider\'s "no such site" page. Both are Fails. The nameservers and cloud providers are usually third parties; each gets one standard request.',
                 'Grading: a login over HTTP, an exposed .git folder, .env file, backup or phpinfo page, and an SPF record that allows anyone to send (+all) are Fails. A missing HTTPS redirect, HSTS or Content-Security-Policy, insecure cookies, a directory listing, the server-status page, a .DS_Store file, a missing or weak SPF and a missing or "p=none" DMARC are Warnings. Other headers and DKIM not being found under a common selector are advice only (Info): DKIM may use a selector Sentinel does not know.',
             ],
         ],
@@ -235,6 +236,14 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.28.0',
+            'date' => '2026-11-23',
+            'items' => [
+                'Attack-surface checks: open DNS zone transfers (each authorised domain\'s own nameservers, once a day) and subdomain takeover (names pointing at a cloud service that no longer exists) are Fails, shown on the client\'s website card. Hypervisor, out-of-band (iDRAC, iLO, IPMI) and NAS admin pages are recognised, with ports 902, 5000, 5001, 8006 and 9090 added to the default list.',
+                'Fix: a Linux agent update stopped half-way (power cut) now repairs itself when the agent starts again.',
+            ],
+        ],
         [
             'version' => '1.27.1',
             'date' => '2026-11-23',

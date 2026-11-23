@@ -26,10 +26,11 @@ stays gentle. See [engagements.md](engagements.md).
 
 Next steps: default credentials against a short vetted list, with lockout-aware limits.
 
-## 3. External attack surface additions
+## 3. External attack surface additions (1.28.0, done)
 
-Subdomain takeover (DNS names pointing at unclaimed cloud services), open DNS zone transfers, and exposed management
-interfaces (firewall, switch and hypervisor admin pages).
+Subdomain takeover (DNS names pointing at unclaimed cloud services) and open DNS zone transfers, asked only of each
+authorised domain's own nameservers. Hypervisor, out-of-band (iDRAC, iLO, IPMI) and NAS admin pages are recognised,
+with their ports in the default list. See the user guide, "Website and email security".
 
 ## 4. Breached credentials
 

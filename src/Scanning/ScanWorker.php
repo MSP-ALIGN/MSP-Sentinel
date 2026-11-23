@@ -79,6 +79,7 @@ final class ScanWorker
         private readonly ?\Sentinel\Inventory\InventorySync $inventory = null,
         private readonly ?\Sentinel\Agent\AgentService $agentService = null,
         private readonly ?ProtocolProbes $probes = null,
+        private readonly ?\Sentinel\Web\DomainChecker $domains = null,
     ) {
         $this->log ??= static function (string $line): void {
         };
@@ -484,6 +485,7 @@ final class ScanWorker
         }
         if (!$isVerify) {
             $this->checkEmail($clientId, $summary);
+            $this->checkDomains($clientId, $summary);
         }
         $this->refreshFindings($clientId, $summary);
         if ($isVerify) {
@@ -787,6 +789,7 @@ final class ScanWorker
             $summary['messages'][] = $stopReason;
         }
         $this->checkEmail($clientId, $summary);
+        $this->checkDomains($clientId, $summary);
         $this->refreshFindings($clientId, $summary);
         $this->scans->finish($jobId, $status, $summary);
         $this->publishFinished($jobId, $clientId, 'tls', $status);
@@ -1024,6 +1027,72 @@ final class ScanWorker
      *
      * @param array<string,mixed> $summary
      */
+    /**
+     * DNS checks of the client's authorised names, at most once every 20 hours per name (1.28): zone transfers for each
+     * authorised domain (one AXFR request to each of its listed nameservers) and subdomain takeover for each authorised
+     * host name (the client's own exact names, and names seen on its scanned addresses that are in scope). Only names
+     * in scope right now; paused means paused. Results go to domain_checks; the findings refresh turns them into findings.
+     *
+     * @param array<string,mixed> $summary
+     */
+    private function checkDomains(int $clientId, array &$summary): void
+    {
+        if ($this->domains === null || $this->websiteStore === null) {
+            return;
+        }
+        try {
+            $client = $this->clients->find($clientId);
+            if ($client === null || (int) $client['scanning_paused'] === 1 || (int) $client['is_archived'] === 1 || $this->scope->globallyPaused()) {
+                return;
+            }
+            $zones = [];
+            $hosts = [];
+            foreach ($this->authorisations->activeEntries($clientId, ScopeService::today((string) $client['timezone'])) as $e) {
+                if ($e['entry_type'] !== 'domain') {
+                    continue;
+                }
+                $value = strtolower((string) $e['value']);
+                $d = (string) preg_replace('/^\*\./', '', $value);
+                if ($d === $value || $this->scope->isInScope($clientId, $d)) {
+                    $zones[$d] = true;
+                    $hosts[$d] = true;
+                }
+            }
+            // Names seen on the client's scanned addresses (certificates, earlier lookups), when they are in scope too.
+            $stmt = $this->db->prepare('SELECT hostnames FROM assets WHERE client_id = :c AND hostnames <> \'\'');
+            $stmt->execute(['c' => $clientId]);
+            foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $list) {
+                foreach (explode(',', (string) $list) as $h) {
+                    $h = strtolower(trim($h));
+                    if ($h !== '' && ScopeService::canonicalTarget($h) === $h && filter_var($h, FILTER_VALIDATE_IP) === false && $this->scope->isInScope($clientId, $h)) {
+                        $hosts[$h] = true;
+                    }
+                }
+            }
+            $zones = array_slice(array_keys($zones), 0, 20);
+            $hosts = array_slice(array_keys($hosts), 0, 50);
+            foreach (['zone' => $zones, 'takeover' => $hosts] as $kind => $names) {
+                $times = $this->websiteStore->domainCheckedTimes($clientId, $kind);
+                $results = [];
+                foreach ($names as $n) {
+                    if (isset($times[$n]) && strtotime($times[$n] . ' UTC') > time() - 20 * 3600) {
+                        continue;
+                    }
+                    if ($kind === 'zone') {
+                        $r = $this->domains->zoneTransfer($n);
+                        $results[$n] = $r['error'] === '' ? $r : null;
+                    } else {
+                        $results[$n] = ['finding' => $this->domains->takeover($n)];
+                    }
+                }
+                $this->websiteStore->saveDomainChecks($clientId, $kind, $results, $names);
+                $summary['dns_checked_' . $kind] = count($results);
+            }
+        } catch (\Throwable $ex) {
+            error_log('[msp-sentinel] DNS checks failed for client ' . $clientId . ': ' . $ex->getMessage());
+        }
+    }
+
     private function checkEmail(int $clientId, array &$summary, ?string $force = null): void
     {
         if ($this->email === null || $this->websiteStore === null) {

@@ -329,6 +329,31 @@ final class FindingsEngine
                 ]);
             }
             // Email security records (SPF, DMARC) for in-scope domains that receive mail.
+            // DNS: zone transfers and subdomain takeover (1.28).
+            foreach ($this->website->domainChecksForClient($clientId) as $dc) {
+                $r = $dc['result'];
+                if ($dc['kind'] === 'zone') {
+                    foreach ((array) ($r['nameservers'] ?? []) as $ns) {
+                        if (($ns['status'] ?? '') !== 'open') {
+                            continue;
+                        }
+                        $add('dns:' . $dc['name'] . ':' . $ns['ns'] . ':zone_transfer', [
+                            'type' => 'dns', 'severity' => 'fail',
+                            'title' => __('DNS zone transfer allowed: anyone can list every name in {d}', ['d' => $dc['name']]),
+                            'detail' => __('Nameserver {ns} ({ip}) handed out {n} record(s) of the zone, for example: {sample}.', ['ns' => $ns['ns'], 'ip' => $ns['ip'],
+                                'n' => (int) ($ns['records'] ?? 0), 'sample' => implode(', ', array_slice((array) ($ns['sample'] ?? []), 0, 8))]),
+                            'target' => $dc['name'], 'evidence' => 'zone_transfer|' . $ns['ns'],
+                        ]);
+                    }
+                } elseif (is_array($r['finding'] ?? null)) {
+                    $f = $r['finding'];
+                    $add('dns:' . $dc['name'] . ':takeover', [
+                        'type' => 'dns', 'severity' => 'fail',
+                        'title' => __('{h} can be taken over: it points at a {p} name that no longer exists', ['h' => $dc['name'], 'p' => (string) ($f['provider'] ?? '?')]),
+                        'detail' => (string) ($f['evidence'] ?? ''), 'target' => $dc['name'], 'evidence' => 'takeover|' . (string) ($f['cname'] ?? '') . '|' . (string) ($f['reason'] ?? ''),
+                    ]);
+                }
+            }
             foreach ($this->website->emailForClient($clientId) as $e) {
                 foreach ((array) ($e['issues'] ?? []) as $code) {
                     $rule = ExposureRules::emailIssue((string) $code);

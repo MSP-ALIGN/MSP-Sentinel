@@ -1,7 +1,8 @@
 <?php
 /**
  * Website and email security card on the client's pages.
- * Expects: $websiteChecks (WebsiteRepository::checksForClient), $emailChecks (emailForClient).
+ * Expects: $websiteChecks (WebsiteRepository::checksForClient), $emailChecks (emailForClient), $domainChecks
+ * (domainChecksForClient, 1.28: zone transfers and subdomain takeover).
  * Everything shown comes from scanned sites and DNS (untrusted) and is escaped.
  * Each status has an icon and a word, never colour alone.
  */
@@ -58,6 +59,35 @@ $chip = static function (string $sev, string $text): string {
                 <td class="text-break sn-records"><?php if (($m['spf'] ?? '') !== ''): ?><span class="d-block"><b>SPF</b> <code><?= e($m['spf']) ?></code></span><?php endif; ?>
                     <?php if (($m['dmarc'] ?? '') !== ''): ?><span class="d-block"><b>DMARC</b><?php if (($m['dmarc_from'] ?? '') !== ''): ?> <?= e(__('(from {domain})', ['domain' => (string) $m['dmarc_from']])) ?><?php endif; ?> <code><?= e($m['dmarc']) ?></code></span><?php endif; ?>
                     <?php if (!empty($m['dkim'])): ?><span class="d-block"><b>DKIM</b> <?= e(implode(', ', (array) $m['dkim'])) ?></span><?php endif; ?></td>
+            </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+        </div>
+        <?php endif; ?>
+        <h3 class="h6 mt-3"><?= e(__('DNS (zone transfers and subdomain takeover)')) ?></h3>
+        <?php $domainChecks ??= []; if ($domainChecks === []): ?>
+        <p class="small text-body-secondary mb-0"><?= e(__('No names checked yet. Names come from the client\'s authorisation.')) ?></p>
+        <?php else: ?>
+        <div class="table-responsive">
+        <table class="table table-sm align-middle small mb-0">
+            <thead><tr><th><?= e(__('Name')) ?></th><th><?= e(__('Check')) ?></th><th><?= e(__('Result')) ?></th></tr></thead>
+            <tbody>
+            <?php foreach ($domainChecks as $d): $res = $d['result']; ?>
+            <tr>
+                <td><code><?= e($d['name']) ?></code><br><span class="text-body-secondary"><?= e(__('Checked {time} UTC', ['time' => $d['checked_at']])) ?></span></td>
+                <td><?= e($d['kind'] === 'zone' ? __('Zone transfer') : __('Subdomain takeover')) ?></td>
+                <td><?php if ($d['kind'] === 'zone'): ?>
+                    <?php if ((array) ($res['nameservers'] ?? []) === []): ?><?= $chip('info', __('No nameserver address found')) ?><?php endif; ?>
+                    <?php foreach ((array) ($res['nameservers'] ?? []) as $ns): $st = (string) ($ns['status'] ?? ''); ?>
+                    <?= $st === 'open' ? $chip('fail', __('{ns} ({ip}) hands out the zone: {n} records', ['ns' => (string) ($ns['ns'] ?? ''), 'ip' => (string) ($ns['ip'] ?? ''), 'n' => (string) (int) ($ns['records'] ?? 0)]))
+                        : ($st === 'refused' ? $chip('ok', __('{ns} ({ip}) refuses', ['ns' => (string) ($ns['ns'] ?? ''), 'ip' => (string) ($ns['ip'] ?? '')]))
+                        : $chip('info', __('{ns} ({ip}) did not answer', ['ns' => (string) ($ns['ns'] ?? ''), 'ip' => (string) ($ns['ip'] ?? '')]))) ?>
+                    <?php if ($st === 'open' && !empty($ns['sample'])): ?><div class="text-body-secondary text-break"><?= e(__('Names handed out include: {names}', ['names' => implode(', ', (array) $ns['sample'])])) ?></div><?php endif; ?>
+                    <?php endforeach; ?>
+                <?php else: $tk = $res['finding'] ?? null; ?>
+                    <?= is_array($tk) ? $chip('fail', __('Can be taken over: {evidence}', ['evidence' => (string) ($tk['evidence'] ?? '')])) : $chip('ok', __('No problem found')) ?>
+                <?php endif; ?></td>
             </tr>
             <?php endforeach; ?>
             </tbody>

@@ -211,7 +211,8 @@ final class App
         return new ScanWorker(self::db(), self::clients(), self::authorisations(), self::scans(), self::scope(), NmapRunner::fromConfig($config), $dns, $log,
             new TlsChecker($connector, $caFile === '' ? null : $caFile), new HttpProbe($connector), self::endpoints(), self::vulnMatcher(15), self::findingsEngine(), self::alerts(), self::outbox(), self::reportService(), new StatsRecorder(self::db()), self::events(), self::housekeeping(),
             new \Sentinel\Web\WebsiteChecker(new HttpProbe($connector)), new \Sentinel\Web\WebsiteRepository(self::db()), $dns === null ? null : new \Sentinel\Web\EmailChecker($dns), self::fixWorkflow(),
-            self::inventorySources() === [] ? null : self::inventorySync(), self::agentService(), new \Sentinel\Scanning\ProtocolProbes($connector));
+            self::inventorySources() === [] ? null : self::inventorySync(), self::agentService(), new \Sentinel\Scanning\ProtocolProbes($connector),
+            $dns === null ? null : new \Sentinel\Web\DomainChecker($dns, $connector, new HttpProbe($connector)));
     }
 
     /** Vulnerability data and match store. */

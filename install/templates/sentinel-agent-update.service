@@ -12,6 +12,10 @@ StartLimitBurst=5
 Type=oneshot
 # The result folder must exist before the sandbox is set up ("+": outside it). Root-owned, readable by the agent.
 ExecStartPre=+/usr/bin/install -d -o root -g sentinel-agent -m 0750 /var/lib/sentinel-agent-update
+# The helper's own code is in the code folder: repair an update stopped half-way (power cut between the two renames): the code folder missing and the previous
+# version kept beside it. Runs as root ("+") before anything else, outside the code folder (which may be missing).
+# Fixed root-owned paths only; a symlink is never followed.
+ExecStartPre=+/bin/sh -c 'if [ ! -e __ROOT__ ] && [ ! -L __ROOT__ ] && [ -d __ROOT__.old ] && [ ! -L __ROOT__.old ]; then mv -T __ROOT__.old __ROOT__; fi'
 ExecStart=__PHP__ __ROOT__/bin/agent-update-runner.php
 TimeoutStartSec=900
 # Hardening: it may only write the agent's code folder, its own result folder, the systemd units it owns, the pinned

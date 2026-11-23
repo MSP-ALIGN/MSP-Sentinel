@@ -181,7 +181,8 @@ vouch for code. What that protects, and what it doesn't, is under "What the rele
 5. It puts the new folder in place (the previous one stays as `/opt/sentinel-agent.old`), writes the systemd units
    from the new release and restarts the agent. **If the agent doesn't stay running, the previous version is put back
    and restarted** (rollback): it must be running 20 and 50 seconds later without having restarted. An update stopped
-   half-way (power cut) is repaired on the helper's next run.
+   half-way (power cut between the two renames) is repaired by systemd before the agent or the helper starts (a
+   root step in both units puts `/opt/sentinel-agent.old` back), so the agent comes back on its own (1.28).
 6. The result goes to `/var/lib/sentinel-agent-update` (root-owned; the agent can read it, not change it) and the
    Agents page shows it: "Updated to x.y.z", or why it was refused. The agent cleans up its own staging folder.
 

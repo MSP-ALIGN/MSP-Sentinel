@@ -105,7 +105,7 @@ final class ClientController extends Controller
                         'scanLog' => fn () => App::scans()->logForClient($cid, 30), 'ports' => fn () => PortProfile::forClient($client), 'windowOpen' => fn () => ScanWindow::isOpen($client)],
             'vulnerabilities' => ['vulns' => fn () => App::vulns()->forClient($cid), 'vulnCoverage' => fn () => App::vulns()->coverage($cid), 'feeds' => fn () => App::vulns()->feedStatuses()],
             'certificates' => ['tlsEndpoints' => fn () => App::endpoints()->tlsForClient($cid), 'webPages' => fn () => App::endpoints()->webForClient($cid)],
-            'website' => ['websiteChecks' => fn () => $web()->checksForClient($cid), 'emailChecks' => fn () => $web()->emailForClient($cid)],
+            'website' => ['websiteChecks' => fn () => $web()->checksForClient($cid), 'emailChecks' => fn () => $web()->emailForClient($cid), 'domainChecks' => fn () => $web()->domainChecksForClient($cid)],
             'agents' => ['agentSites' => fn () => self::agentSites($client)],
             'devices' => ['inventorySources' => fn () => array_map(static fn (\Sentinel\Inventory\InventorySource $s): string => $s->label(), App::inventorySources()),
                           'inventoryLinks' => fn () => array_map(fn (\Sentinel\Inventory\InventorySource $s): ?array => App::inventory()->link($cid, $s->name()), App::inventorySources()),

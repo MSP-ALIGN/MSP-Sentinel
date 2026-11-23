@@ -175,10 +175,20 @@ commonly exposed files, and the CMS and libraries it can see) and the SPF, DMARC
 domain that receives email. Results are on the client's **Website & email** page. Exposed files are
 only reported when their content proves it, and their content is never stored. Email checks use DNS only.
 
+Once a day at most, Sentinel also checks DNS (1.28):
+
+- **Zone transfers:** each authorised domain's own listed nameservers are asked for a zone transfer. One that hands out
+  the whole zone lets anyone list every name.
+- **Subdomain takeover:** each authorised name is checked for a CNAME to a cloud service (Amazon S3, GitHub Pages,
+  Heroku, Azure and others) that no longer exists. Anyone could claim it and serve content on the client's name.
+
+Both are Fails, and the results are in the DNS table on the same page.
+
 ## Grades
 
 - **Fail:** fix now. For example: Remote Desktop or a database open to the internet, an expired certificate, an
-  exposed firewall admin page, a login page without HTTPS, an exposed .git folder, .env file or backup, an SPF
+  exposed firewall, hypervisor (VMware, Proxmox), out-of-band (iDRAC, iLO) or NAS admin page, an open DNS zone
+  transfer, a name that can be taken over, a login page without HTTPS, an exposed .git folder, .env file or backup, an SPF
   record that lets anyone send email as the domain, or a confirmed critical or known-exploited vulnerability.
 - **Warning:** fix soon. For example: a certificate expiring within 14 days, old TLS versions, an exposed VPN portal,
   a website without an HTTPS redirect, HSTS or Content-Security-Policy, insecure cookies, missing SPF or DMARC (or

@@ -37,9 +37,25 @@ final class Guidance
             'web' => self::web(substr($key, (int) strrpos($key, ':') + 1)),
             'vuln' => self::vuln($vuln),
             'email' => self::email(substr($key, (int) strrpos($key, ':') + 1)),
+            'dns' => self::dns(substr($key, (int) strrpos($key, ':') + 1)),
             'device', 'patch' => self::device(substr($key, (int) strrpos($key, ':') + 1)),
             'directory' => self::directory(substr($key, (int) strrpos($key, ':') + 1)),
             default => ['meaning' => __('This item needs a review by your IT provider.'), 'fix' => __('Review the details and decide whether to fix or accept it.')],
+        };
+    }
+
+    /**
+     * DNS weaknesses: zone transfers and subdomain takeover (1.28).
+     *
+     * @return array{meaning:string, fix:string}
+     */
+    private static function dns(string $code): array
+    {
+        return match ($code) {
+            'takeover' => ['meaning' => __('This name points at a cloud service that no longer exists. Anyone can create a service with that name and then serve their own website, steal cookies or receive email on your domain.'),
+                'fix' => __('Delete the DNS record (CNAME) if the service is no longer used, or set the service up again under your account.')],
+            default => ['meaning' => __('The nameserver hands a complete list of the domain\'s names to anyone who asks, including internal, test and forgotten systems an attacker would otherwise have to guess.'),
+                'fix' => __('Allow zone transfers only to your own secondary nameservers (by address or TSIG key), or turn them off; ask your DNS provider if they run it.')],
         };
     }
 
@@ -208,6 +224,18 @@ Turn off NetBIOS over TCP/IP (network adapter settings, or the DHCP option 001),
             'firewall_admin', 'device_admin' => [
                 'meaning' => __('The login page that controls a network device is open to the whole internet. If it is broken into, the attacker controls your network.'),
                 'fix' => __('Allow management only from inside the network or a VPN, and keep the device\'s firmware up to date.'),
+            ],
+            'hypervisor_admin' => [
+                'meaning' => __('The page that controls the virtual servers is open to the whole internet. Whoever gets in controls every server running on it, and ransomware groups target exactly these.'),
+                'fix' => __('Allow management only from inside the network or a VPN, and keep the hypervisor patched.'),
+            ],
+            'oob_admin' => [
+                'meaning' => __('Remote management of a server works even when the server is off, below the operating system. Taken over, it gives full control of the hardware.'),
+                'fix' => __('Never expose iDRAC, iLO or IPMI to the internet: put them on a separate management network reached by VPN, and update their firmware.'),
+            ],
+            'nas_admin' => [
+                'meaning' => __('The storage device\'s management page is open to the internet. NAS devices are a common ransomware target, and their data is often the backups.'),
+                'fix' => __('Turn off internet access to the NAS management page (and its cloud relay if not needed); use a VPN, and keep it updated.'),
             ],
             'vpn_portal' => [
                 'meaning' => __('VPN portals are a favourite target. Unpatched ones are regularly used to break into companies.'),

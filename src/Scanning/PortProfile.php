@@ -19,9 +19,9 @@ final class PortProfile
 {
     /** Default ports: risky services and common firewall/VPN admin ports (design section 7). */
     public const DEFAULT_TCP = [
-        21, 22, 23, 25, 53, 80, 110, 135, 139, 143, 389, 443, 445, 465, 587, 636, 993, 995, 1433, 1521, 1723, 2049,
-        3306, 3389, 4433, 4443, 5060, 5432, 5900, 5985, 5986, 6379, 8000, 8080, 8081, 8443, 8888, 9000, 9200, 9443,
-        10000, 10443, 27017,
+        21, 22, 23, 25, 53, 80, 110, 135, 139, 143, 389, 443, 445, 465, 587, 636, 902, 993, 995, 1433, 1521, 1723, 2049,
+        3306, 3389, 4433, 4443, 5000, 5001, 5060, 5432, 5900, 5985, 5986, 6379, 8000, 8006, 8080, 8081, 8443, 8888, 9000, 9090,
+        9200, 9443, 10000, 10443, 27017,
     ];
 
     /** Ports that should never be open to the internet (shown as high risk; FAIL in the findings step). */
@@ -29,6 +29,7 @@ final class PortProfile
         23 => 'Telnet', 445 => 'SMB (file sharing)', 3389 => 'Remote Desktop', 5900 => 'VNC', 1433 => 'Microsoft SQL Server',
         1521 => 'Oracle database', 3306 => 'MySQL/MariaDB', 5432 => 'PostgreSQL', 6379 => 'Redis', 9200 => 'Elasticsearch',
         27017 => 'MongoDB', 135 => 'Windows RPC', 139 => 'NetBIOS', 5985 => 'WinRM (HTTP)', 5986 => 'WinRM (HTTPS)',
+        902 => 'VMware ESXi management',
     ];
 
     private const MAX_PORTS = 1000;

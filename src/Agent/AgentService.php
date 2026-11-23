@@ -54,8 +54,8 @@ final class AgentService
     /** Hosts saved per database transaction while taking in results. */
     private const BATCH = 250;
     /** Common internal service ports for full scans (TCP connect scan, gentle). */
-    public const PORTS = [21, 22, 23, 25, 53, 80, 88, 110, 111, 135, 139, 143, 389, 443, 445, 465, 515, 548, 587, 631, 636, 873, 993, 995, 1433, 1521, 2049,
-        3000, 3306, 3389, 5000, 5432, 5900, 5985, 5986, 6379, 8000, 8008, 8080, 8081, 8443, 8888, 9000, 9090, 9100, 9200, 10000, 27017];
+    public const PORTS = [21, 22, 23, 25, 53, 80, 88, 110, 111, 135, 139, 143, 389, 443, 445, 465, 515, 548, 587, 631, 636, 873, 902, 993, 995, 1433, 1521, 2049,
+        3000, 3306, 3389, 5000, 5001, 5432, 5900, 5985, 5986, 6379, 8000, 8006, 8008, 8080, 8081, 8443, 8888, 9000, 9090, 9100, 9200, 10000, 27017];
     /** Certificate problems that are findings for internal devices (self-signed and name mismatches are normal inside). */
     private const INTERNAL_TLS = ['cert_expired' => 'warn', 'tls_old_protocol' => 'warn', 'cert_weak_key' => 'warn'];
 
@@ -680,7 +680,7 @@ final class AgentService
         if (!is_array($w) || ($w['ok'] ?? false) !== true) {
             return null;
         }
-        $categories = ['firewall_admin', 'device_admin', 'vpn_portal', 'remote_desktop_web', 'login_page', 'other'];
+        $categories = ['firewall_admin', 'device_admin', 'hypervisor_admin', 'oob_admin', 'nas_admin', 'vpn_portal', 'remote_desktop_web', 'login_page', 'other'];
         return json_encode([
             'status' => max(0, min(999, (int) ($w['status'] ?? 0))), 'title' => InventoryRepository::clean((string) ($w['title'] ?? ''), 200),
             'category' => in_array($w['category'] ?? '', $categories, true) ? (string) $w['category'] : 'other', 'scheme' => ($w['scheme'] ?? '') === 'https' ? 'https' : 'http',

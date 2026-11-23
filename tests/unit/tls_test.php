@@ -61,6 +61,16 @@ return [
         Assert::same('login_page', HttpProbe::classify('Sign in - Webmail', '<input type=password><a>Switch language</a>', [])[0], 'common words in body text never mean device admin');
         Assert::same('login_page', HttpProbe::classify('Customer portal', '<input type="password"><p>Track your UPS shipment</p>', [])[0]);
         Assert::same('firewall_admin', HttpProbe::classify('Welcome', '<h1>Firewall Administration</h1><input type="password">', [])[0], 'headings count');
+        // Named management products (1.28): hypervisors, server remote management, NAS, network controllers.
+        foreach (['VMware ESXi' => 'hypervisor_admin', 'Proxmox Virtual Environment' => 'hypervisor_admin', 'vSphere Client' => 'hypervisor_admin',
+                  'iDRAC9 - Login' => 'oob_admin', 'Integrated Lights-Out 5' => 'oob_admin', 'Synology DiskStation' => 'nas_admin', 'TrueNAS' => 'nas_admin',
+                  'UniFi Network' => 'device_admin', 'RouterOS router configuration page' => 'device_admin'] as $title => $category) {
+            Assert::same($category, HttpProbe::classify($title, '<input type="password">', [])[0], $title);
+        }
+        Assert::same(null, HttpProbe::classify('Example IT', '<p>We manage VMware vSphere, Proxmox and Synology for local businesses.</p>', [])[0], 'products named in body text are not flagged');
+        Assert::same('fail', ExposureRules::webIssue('hypervisor_admin')['severity']);
+        Assert::same('fail', ExposureRules::webIssue('oob_admin')['severity']);
+        Assert::same('fail', ExposureRules::webIssue('nas_admin')['severity']);
         $t = microtime(true);
         HttpProbe::classify('x', str_repeat('<script>', 32768) . '<style>' . str_repeat('a', 1000), []);
         Assert::true(microtime(true) - $t < 0.5, 'hostile unclosed tags are handled in linear time');

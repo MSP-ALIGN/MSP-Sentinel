@@ -118,6 +118,47 @@ final class DnsMessage
         return substr((string) preg_replace('/[^\x20-\x7E]/', '?', $out), 0, 4000);
     }
 
+    public const SOA = 6;
+    public const AXFR = 252;
+
+    /** A zone transfer request (AXFR) for $zone: no recursion asked. Sent over TCP by the caller. */
+    public static function buildAxfr(int $id, string $zone): string
+    {
+        return pack('nnnnnn', $id & 0xffff, 0x0000, 1, 0, 0, 0) . self::encodeName($zone) . pack('nn', self::AXFR, 1);
+    }
+
+    /**
+     * One message of a zone transfer answer: the response code, and each answer's owner name and type (at most 500).
+     * Only names and types are read (enough to tell an open transfer and show a few names as evidence).
+     *
+     * @param string $packet Untrusted bytes.
+     * @return array{rcode:int, records:list<array{name:string,type:int}>}
+     * @throws DnsException if the packet is malformed or doesn't answer our request.
+     */
+    public static function parseAxfrMessage(string $packet, int $expectedId): array
+    {
+        if (strlen($packet) < 12) {
+            throw new DnsException('DNS response too short.');
+        }
+        $h = unpack('nid/nflags/nqd/nan/nns/nar', substr($packet, 0, 12));
+        if ($h['id'] !== ($expectedId & 0xffff) || ($h['flags'] & 0x8000) === 0) {
+            throw new DnsException('DNS response does not match the request.');
+        }
+        $offset = 12;
+        for ($i = 0; $i < min($h['qd'], 1); $i++) {
+            self::readName($packet, $offset);
+            self::read($packet, $offset, 4);
+        }
+        $records = [];
+        for ($i = 0; $i < min($h['an'], 500); $i++) {
+            $name = self::readName($packet, $offset);
+            $fixed = unpack('ntype/nclass/Nttl/nlen', self::read($packet, $offset, 10));
+            self::read($packet, $offset, $fixed['len']);
+            $records[] = ['name' => $name, 'type' => $fixed['type']];
+        }
+        return ['rcode' => $h['flags'] & 0x0f, 'records' => $records];
+    }
+
     /** The reverse-lookup name for an IP, e.g. 203.0.113.5 -> 5.113.0.203.in-addr.arpa. */
     public static function reverseName(string $ip): string
     {

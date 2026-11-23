@@ -38,8 +38,16 @@ final class HttpProbe
          'pattern' => '/\b(ssl[\s-]?vpn|vpn\s+(portal|login|gateway|client)|remote\s+access\s+(portal|login|vpn))\b/i'],
         ['category' => 'remote_desktop_web', 'label' => 'Remote desktop web access',
          'pattern' => '/\b(rd\s?web\s+access|remote\s+desktop\s+(web|gateway)|\/rdweb\/)/i'],
+        // Named products first (more specific than the generic device page below). Strict: product names often appear in
+        // marketing text, so only the title, headings, form labels or authentication realm count.
+        ['category' => 'hypervisor_admin', 'label' => 'Hypervisor management page', 'strict' => true,
+         'pattern' => '/\b(vmware\s+(esxi|vsphere|vcenter)|vsphere\s+client|esxi\s+host\s+client|proxmox(\s+virtual\s+environment|\s+ve)?|xen\s?server|xen\s?orchestra|xcp-ng|nutanix\s+prism)\b/i'],
+        ['category' => 'oob_admin', 'label' => 'Server remote management (iDRAC, iLO, IPMI)', 'strict' => true,
+         'pattern' => '/\b(idrac\d*|integrated\s+dell\s+remote\s+access|ilo\s?\d?|integrated\s+lights[\s-]out|ipmi|baseboard\s+management|bmc\s+(login|web)|supermicro\s+(ipmi|bmc)|xclarity)\b/i'],
+        ['category' => 'nas_admin', 'label' => 'NAS management page', 'strict' => true,
+         'pattern' => '/\b(synology|diskstation(\s+manager)?|qnap|qts\s+login|truenas|freenas|unraid|readynas|terramaster)\b/i'],
         ['category' => 'device_admin', 'label' => 'Device or server management page', 'strict' => true,
-         'pattern' => '/\b(router|switch|nas|network\s+storage|printer|ups|ipmi|baseboard\s+management|lights[\s-]out|web\s?admin|admin(istration)?\s+(console|panel|interface)|management\s+(console|interface|portal)|device\s+management)\b/i'],
+         'pattern' => '/\b(router|switch|nas|network\s+storage|printer|ups|unifi|routeros|mikrotik|omada\s+controller|web\s?admin|admin(istration)?\s+(console|panel|interface)|management\s+(console|interface|portal)|device\s+management)\b/i'],
     ];
 
     /** @param int $timeout Seconds for the whole request. */

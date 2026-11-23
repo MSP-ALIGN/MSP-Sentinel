@@ -205,6 +205,47 @@ final class WebsiteRepository
     }
 
     /**
+     * Save DNS check results of one kind ('zone' or 'takeover') for the names checked now; names no longer in scope are
+     * removed. A null result (the check couldn't decide, e.g. DNS failed) keeps the earlier one.
+     *
+     * @param array<string,array<string,mixed>|null> $results name => result
+     * @param list<string> $inScope every name of this kind still in scope
+     */
+    public function saveDomainChecks(int $clientId, string $kind, array $results, array $inScope): void
+    {
+        $up = $this->db->prepare('INSERT INTO domain_checks (client_id, name, kind, result, checked_at) VALUES (:c, :n, :k, :r, UTC_TIMESTAMP())
+            ON DUPLICATE KEY UPDATE result = VALUES(result), checked_at = UTC_TIMESTAMP()');
+        foreach ($results as $name => $r) {
+            if ($r !== null && in_array($name, $inScope, true)) {
+                $up->execute(['c' => $clientId, 'n' => $name, 'k' => $kind, 'r' => json_encode($r, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE)]);
+            }
+        }
+        if ($inScope === []) {
+            $this->db->prepare('DELETE FROM domain_checks WHERE client_id = :c AND kind = :k')->execute(['c' => $clientId, 'k' => $kind]);
+        } else {
+            $this->db->prepare('DELETE FROM domain_checks WHERE client_id = ? AND kind = ? AND name NOT IN (' . implode(',', array_fill(0, count($inScope), '?')) . ')')
+                ->execute(array_merge([$clientId, $kind], $inScope));
+        }
+    }
+
+    /** When each name of a kind was last checked (UTC). @return array<string,string> */
+    public function domainCheckedTimes(int $clientId, string $kind): array
+    {
+        $stmt = $this->db->prepare('SELECT name, checked_at FROM domain_checks WHERE client_id = :c AND kind = :k');
+        $stmt->execute(['c' => $clientId, 'k' => $kind]);
+        return $stmt->fetchAll(\PDO::FETCH_KEY_PAIR);
+    }
+
+    /** A client's DNS check results. @return list<array{name:string, kind:string, result:array<string,mixed>, checked_at:string}> */
+    public function domainChecksForClient(int $clientId): array
+    {
+        $stmt = $this->db->prepare('SELECT name, kind, result, checked_at FROM domain_checks WHERE client_id = :c ORDER BY kind, name');
+        $stmt->execute(['c' => $clientId]);
+        return array_map(static fn (array $r): array => ['name' => (string) $r['name'], 'kind' => (string) $r['kind'],
+            'result' => (array) (json_decode((string) $r['result'], true) ?: []), 'checked_at' => (string) $r['checked_at']], $stmt->fetchAll());
+    }
+
+    /**
      * Email checks of a client.
      *
      * @return list<array<string,mixed>> Decoded results with checked_at.
