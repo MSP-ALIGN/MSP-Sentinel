@@ -370,6 +370,38 @@ final class FindingsEngine
                     ]);
                 }
             }
+            // Active Directory (on-premises agent, per site): what the last successful directory read found, and devices
+            // heard sending LLMNR/NetBIOS name requests. Stored results only change on a successful read or listen.
+            $dirs = $this->db->prepare("SELECT d.site_id, d.domain, d.results, s.name AS site_name FROM site_directory d JOIN sites s ON s.id = d.site_id WHERE d.client_id = :c AND d.results IS NOT NULL");
+            $dirs->execute(['c' => $clientId]);
+            foreach ($dirs->fetchAll() as $d) {
+                foreach (\Sentinel\Agent\DirectoryRules::issues((array) json_decode((string) $d['results'], true)) as $issue) {
+                    $add("ad:{$d['site_id']}:{$issue['code']}", [
+                        'type' => 'directory', 'severity' => $issue['severity'], 'title' => $issue['text'], 'detail' => $issue['detail'],
+                        'target' => (string) $d['domain'], 'evidence' => $issue['evidence'], 'source' => 'agent',
+                    ]);
+                }
+            }
+            $heard = $this->db->prepare('SELECT id, name, llmnr_results FROM sites WHERE client_id = :c AND llmnr_results IS NOT NULL');
+            $heard->execute(['c' => $clientId]);
+            $sitesHeard = $heard->fetchAll();
+            if ($sitesHeard !== []) {
+                $names = $this->db->prepare("SELECT ip_addresses, name FROM devices WHERE client_id = :c AND source = 'agent' AND removed_at IS NULL");
+                $names->execute(['c' => $clientId]);
+                $byIp = [];
+                foreach ($names->fetchAll() as $dev) {
+                    $byIp[(string) $dev['ip_addresses']] = (string) $dev['name'] !== (string) $dev['ip_addresses'] ? (string) $dev['name'] : '';
+                }
+                foreach ($sitesHeard as $site) {
+                    $issue = \Sentinel\Agent\DirectoryRules::nameIssue((array) json_decode((string) $site['llmnr_results'], true), static fn (string $ip): string => $byIp[$ip] ?? '');
+                    if ($issue !== null) {
+                        $add("names:{$site['id']}:{$issue['code']}", [
+                            'type' => 'directory', 'severity' => $issue['severity'], 'title' => $issue['text'], 'detail' => $issue['detail'],
+                            'target' => (string) $site['name'], 'evidence' => $issue['evidence'], 'source' => 'agent',
+                        ]);
+                    }
+                }
+            }
             // Certificates of internal services (on-premises agent): only problems that matter inside a network
             // (expired, old TLS, weak key); self-signed and name mismatches are normal on internal devices.
             foreach ($this->inventory->internalTls($clientId) as $t) {

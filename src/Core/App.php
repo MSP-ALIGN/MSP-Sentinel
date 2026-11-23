@@ -434,10 +434,19 @@ final class App
         return new \Sentinel\Agent\AgentRepository(self::db(), self::crypto(), self::agentSigner());
     }
 
+    /** Active Directory settings per site and the sealed password relay to agents. */
+    public static function directory(): \Sentinel\Agent\DirectoryRepository
+    {
+        return new \Sentinel\Agent\DirectoryRepository(self::db());
+    }
+
     /** Agent scheduling, job signing and results. */
     public static function agentService(): \Sentinel\Agent\AgentService
     {
-        return new \Sentinel\Agent\AgentService(self::db(), self::agents(), self::agentSigner(), self::scope(), self::inventory(), self::vulnMatcher(15), self::findingsEngine(), self::alerts());
+        // Seconds a full scan listens for name requests: 120, or a few seconds in the test suite.
+        $listen = self::config()->get('testing.allow_documentation_ranges', false) === true ? (int) self::config()->get('testing.agent_listen_seconds', \Sentinel\Agent\AgentService::LISTEN_SECONDS) : \Sentinel\Agent\AgentService::LISTEN_SECONDS;
+        return new \Sentinel\Agent\AgentService(self::db(), self::agents(), self::agentSigner(), self::scope(), self::inventory(), self::vulnMatcher(15), self::findingsEngine(), self::alerts(),
+            self::directory(), $listen);
     }
 
     /** Internal devices from inventory sources. */

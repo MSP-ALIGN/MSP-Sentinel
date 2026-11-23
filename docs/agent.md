@@ -25,8 +25,9 @@ services and versions, certificates and web pages, and reports them to Sentinel,
 - **No remote control.** The agent runs scans and returns results. It never runs commands it receives, and it has
   no shell access for anyone.
 - **Gentle and unprivileged.** Discovery and port scans are TCP connect scans with nmap at slow timing and a rate
-  limit (the same rules as external scans). The agent runs as its own user (`sentinel-agent`) with no extra
-  capabilities in a locked-down systemd service.
+  limit (the same rules as external scans). The agent runs as its own user (`sentinel-agent`) in a locked-down
+  systemd service with one capability: `CAP_NET_BIND_SERVICE`, to listen on UDP 137 for NetBIOS name requests (it
+  never answers them). No raw sockets.
 - **Kill switch.** *Pause* on the site (technicians and admins) stops running agent scans at the agent's next
   check-in, within a minute. The global kill switch and pausing the client do the same.
 - **Revocable.** Revoking the agent on the client page makes its token stop working immediately.
@@ -81,6 +82,10 @@ is kept). Remove: `sudo ./install/agent-install.sh --uninstall`, and revoke the 
 - If a job is refused, the log says why (for example "targets outside the signed authorisation" or "job expired").
   Check the internal authorisation's dates and networks, and the appliance's clock.
 - The agent's clock should be correct (NTP): jobs carry an expiry time.
+- Files in `/var/lib/sentinel-agent` (the only folder the service may write): `state.json` (jobs already run),
+  `agent-key.pem` (the agent's private key for sealed passwords; never leaves the appliance) and
+  `directory-credential.json` (the Active Directory password, still sealed). Reinstalling creates a new key: set the
+  directory password again afterwards (the Agents page says so).
 
 ## What is graded
 
@@ -101,3 +106,68 @@ is kept). Remove: `sudo ./install/agent-install.sh --uninstall`, and revoke the 
 
   A check that can't decide is never a finding, and it doesn't erase an earlier answer either: a device that was
   briefly unreachable keeps its findings until a check answers again.
+
+## Active Directory checks (1.20)
+
+With a read-only domain account, the agent reads the directory during each full scan and reports what attackers look
+for first. Nothing is changed in the directory, and nothing that could log in (no password hashes) is read.
+
+**Setting it up** (admins, on the client's **Agents** page, per site):
+
+1. Create an ordinary domain user for Sentinel (no admin rights; members of Domain Users can read everything the checks
+   need), for example `svc-sentinel`.
+2. Under **Active Directory checks**, enter the domain (`corp.example`), the domain controller's IP address (it must be
+   inside the site's internal authorisation), the account (`svc-sentinel@corp.example` or `CORP\svc-sentinel`) and its
+   password, and click **Save**.
+3. At the next full scan the agent fetches the domain controller's certificate and stops: the page shows its
+   fingerprint. Check it, and click **Trust this certificate**. From the next full scan the agent signs in and reads.
+
+To change the password later, open **Change settings or replace the password**, type the new password and save: the
+agent collects it within a minute and the page shows when it confirmed it. Leaving the password empty keeps the
+current one. **Turn off** deletes the settings and the results, and the agent deletes the password.
+
+**How the password is protected:**
+
+- **Sentinel never has it.** The password field is never sent. Your browser encrypts the password to the site
+  agent's own public key (ECDH P-256, HKDF-SHA256, AES-256-GCM, with Web Crypto) and sends only the sealed box, bound
+  to that agent, a one-off number and the account name. Sentinel stores the box until the agent collects it (signed
+  with Sentinel's key, like jobs), and deletes it when the agent confirms, or after 24 hours. Sentinel can't open it,
+  and neither can its database or backups.
+- **Only that agent can open it.** The private key is created on the appliance and never leaves it. The agent keeps
+  the box sealed on disk and opens it in memory only for the sign-in. A box sealed for another agent, changed on the
+  way, or replayed is refused, and the page says so.
+- **Never to an untrusted server.** The agent signs in over LDAPS (TLS from the first byte), and only when the
+  domain controller's certificate matches the fingerprint you trusted. A different certificate (a renewed one, or
+  something pretending to be the domain controller) gets nothing until you trust it.
+- **HTTPS needed.** Browsers only allow this encryption on HTTPS pages: open Sentinel through its `https://`
+  address to set or replace the password.
+- **Limit.** Someone who fully took over the Sentinel server could change the page to capture passwords typed in
+  future, or trust a certificate of their own and point the agent at a machine they control inside the client's
+  network. Passwords already held by agents stay sealed. Protect the server accordingly.
+
+**What is graded** (Balanced):
+
+- **Fail:** accounts that don't require Kerberos pre-authentication (AS-REP roasting: crackable offline without any
+  password); admin accounts with a service name (Kerberoasting); computers other than domain controllers trusted for
+  unconstrained delegation; devices heard sending LLMNR/NetBIOS name requests (see below).
+- **Warning:** other accounts with a service name; more than 5 Domain Admins; admin passwords that never expire; a
+  krbtgt password older than a year; computers in use without LAPS (or LAPS not used at all); LDAP signing not
+  required; admin accounts unused for 90 days.
+
+Each finding lists up to 25 account or computer names (the agent sends up to 200 and the count). Disabled accounts
+and computers that haven't signed in for 90 days are left out. "Admin" means `adminCount` set (protected groups) or
+a direct member of Domain Admins.
+
+*LDAP signing* is checked on the plain LDAP port (389) with a made-up account and a random password: a domain
+controller that requires signing refuses before it looks at the account. The real password is never sent there.
+
+A read that fails (wrong password, certificate changed, domain controller down) keeps the earlier results: no answer
+is not evidence of a fix. The error shows on the Agents page.
+
+## Name poisoning (LLMNR / NetBIOS)
+
+During each full scan the agent listens for 2 minutes for LLMNR (UDP 5355) and NetBIOS name service (UDP 137)
+requests. Devices that send them fall back to these protocols when DNS has no answer, so a poisoning tool (Responder
+and the like) on the network could answer instead and capture their users' password hashes. The agent only listens:
+it never answers or sends anything. Devices heard (inside the site's authorisation only) become one Fail finding,
+with their names when the agent knows them. It works without the Active Directory checks.

@@ -24,10 +24,14 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/src/bootstrap.php';
 
+use Sentinel\AgentClient\AgentKey;
+use Sentinel\AgentClient\Credentials;
 use Sentinel\AgentClient\Http;
 use Sentinel\AgentClient\JobVerifier;
 use Sentinel\AgentClient\Runner;
 use Sentinel\AgentClient\State;
+use Sentinel\Directory\DirectoryChecks;
+use Sentinel\Directory\NameListener;
 use Sentinel\Scanning\Connector;
 use Sentinel\Scanning\HttpProbe;
 use Sentinel\Scanning\NmapRunner;
@@ -113,9 +117,19 @@ switch ($command) {
             $say('Agent #' . $c['agent_id'] . ' → ' . $c['server'] . ': ' . ($res['status'] === 200 ? 'connected' . (($res['data']['paused'] ?? false) ? ' (scanning paused)' : '') : 'HTTP ' . $res['status']));
             exit($res['status'] === 200 ? 0 : 1);
         }
+        // The agent's own key pair (sealed passwords) and the directory password it holds, in the state folder (the only
+        // writable one: /var/lib/sentinel-agent; the config folder is read-only for the service).
+        $stateDir = dirname((string) ($c['state_file'] ?? dirname($configFile) . '/state.json'));
+        $key = new AgentKey($stateDir . '/agent-key.pem');
+        $credentials = new Credentials($stateDir . '/directory-credential.json', $key, (string) $c['server_public_key'], (int) $c['agent_id'], (int) $c['site_id'], (int) $c['client_id']);
         $runner = new Runner($http, new JobVerifier((string) $c['server_public_key'], (int) $c['agent_id'], (int) $c['site_id'], (int) $c['client_id']), new State((string) ($c['state_file'] ?? dirname($configFile) . '/state.json')),
             new NmapRunner((string) ($c['nmap_path'] ?? '/usr/bin/nmap')), new TlsChecker($connector), new HttpProbe($connector), $say,
-            $testMode && is_string($c['testing']['arp_file'] ?? null) ? $c['testing']['arp_file'] : '/proc/net/arp', new ProtocolProbes($connector));
+            $testMode && is_string($c['testing']['arp_file'] ?? null) ? $c['testing']['arp_file'] : '/proc/net/arp', new ProtocolProbes($connector), $key, $credentials,
+            new DirectoryChecks(static fn (string $ip, int $port): array => $connector->endpoint($ip, $port)),
+            // Test mode: listen on 127.0.0.1 and high ports, without joining the multicast group (no ports given: don't listen).
+            $testMode ? (is_array($c['testing']['names'] ?? null)
+                ? new NameListener('127.0.0.1', (int) $c['testing']['names']['llmnr_port'], (int) $c['testing']['names']['nbns_port'], false, (string) ($c['testing']['names']['loopback_as'] ?? '')) : null)
+                : new NameListener());
         $say('Agent #' . $c['agent_id'] . ' started (version ' . Runner::version() . ').');
         do {
             try {

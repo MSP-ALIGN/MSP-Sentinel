@@ -177,6 +177,30 @@ final class AgentRepository
     }
 
     /** Record that an agent checked in. */
+    /**
+     * Record the agent's public key (base64 SPKI, P-256) when it is valid and new. Returns true when it replaced a
+     * different key (the agent was reinstalled or lost its key file: what was sealed to the old key is lost).
+     */
+    public function setBoxKey(int $agentId, string $current, string $key): bool
+    {
+        if ($key === '' || $key === $current || strlen($key) > 255 || !self::validBoxKey($key)) {
+            return false;
+        }
+        $this->db->prepare('UPDATE agents SET box_public_key = :k WHERE id = :id')->execute(['k' => $key, 'id' => $agentId]);
+        return $current !== '';
+    }
+
+    /** Whether a string is a base64 SPKI P-256 public key (what browsers seal to). */
+    public static function validBoxKey(string $key): bool
+    {
+        $der = base64_decode($key, true);
+        if ($der === false || $der === '' || strlen($der) > 200) {
+            return false;
+        }
+        $pub = openssl_pkey_get_public("-----BEGIN PUBLIC KEY-----\n" . chunk_split(base64_encode($der), 64, "\n") . "-----END PUBLIC KEY-----\n");
+        return $pub !== false && (openssl_pkey_get_details($pub)['ec']['curve_name'] ?? '') === 'prime256v1';
+    }
+
     public function touch(int $agentId, string $ip, string $hostname, string $version): void
     {
         $this->db->prepare('UPDATE agents SET last_seen_at = UTC_TIMESTAMP(), last_ip = :ip, hostname = :h, version = :v WHERE id = :id')

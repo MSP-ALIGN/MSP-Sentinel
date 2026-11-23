@@ -19,13 +19,16 @@ use Sentinel\Agent\Signer;
  * - it carries an internal authorisation, also signed by the pinned key, for
  *   that same site and client, valid today in the client's time zone;
  * - every target is a private network inside the authorisation's ranges, and
- *   the ports are plain port numbers.
+ *   the ports are plain port numbers;
+ * - full jobs only: Active Directory checks name a domain and a domain controller address inside the signed ranges
+ *   (and a trusted certificate fingerprint, or none yet); listening for name requests lasts at most MAX_LISTEN seconds.
  *
  * Untrusted: everything in the job (it arrives over the network).
  */
 final class JobVerifier
 {
     public const MAX_PORTS = 1000;
+    public const MAX_LISTEN = 300;
 
     /**
      * @param string $publicKey Pinned server public key (base64).
@@ -40,7 +43,8 @@ final class JobVerifier
      * Check a signed job.
      *
      * @param list<int> $doneIds Jobs this agent already ran.
-     * @return array{job_id:int, kind:string, targets:list<string>, ports:list<int>, udp_ports:list<int>, ranges:list<string>}|string The job, or why it was refused.
+     * @return array{job_id:int, kind:string, targets:list<string>, ports:list<int>, udp_ports:list<int>, ranges:list<string>,
+     *               directory:?array{domain:string, dc_ip:string, cert_trusted:string}, listen:int}|string The job, or why it was refused.
      */
     public function verify(string $payload, string $signature, array $doneIds, ?int $now = null): array|string
     {
@@ -127,6 +131,24 @@ final class JobVerifier
                 return 'invalid UDP port';
             }
         }
-        return ['job_id' => $jobId, 'kind' => (string) $job['kind'], 'targets' => $targets, 'ports' => array_values($ports), 'udp_ports' => array_values($udp), 'ranges' => $ranges];
+        $directory = null;
+        if (isset($job['directory'])) {
+            $d = $job['directory'];
+            if ($job['kind'] !== 'full' || !is_array($d) || !is_string($d['domain'] ?? null) || !is_string($d['dc_ip'] ?? null) || !is_string($d['cert_trusted'] ?? null)
+                || preg_match('/^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/', $d['domain']) !== 1
+                || preg_match('/^([0-9a-f]{64})?$/', $d['cert_trusted']) !== 1) {
+                return 'invalid directory settings';
+            }
+            if (filter_var($d['dc_ip'], FILTER_VALIDATE_IP) === false || !isset(InternalRanges::parse($d['dc_ip'])['cidr']) || !InternalRanges::allWithin([$d['dc_ip']], $ranges)) {
+                return 'domain controller outside the signed authorisation';
+            }
+            $directory = ['domain' => $d['domain'], 'dc_ip' => $d['dc_ip'], 'cert_trusted' => $d['cert_trusted']];
+        }
+        $listen = $job['listen'] ?? 0;
+        if (!is_int($listen) || $listen < 0 || $listen > self::MAX_LISTEN || ($listen > 0 && $job['kind'] !== 'full')) {
+            return 'invalid listening time';
+        }
+        return ['job_id' => $jobId, 'kind' => (string) $job['kind'], 'targets' => $targets, 'ports' => array_values($ports), 'udp_ports' => array_values($udp), 'ranges' => $ranges,
+                'directory' => $directory, 'listen' => $listen];
     }
 }

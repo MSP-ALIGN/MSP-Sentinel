@@ -15,8 +15,9 @@ RestartSec=60
 RestartPreventExitStatus=3
 # Hardening: unprivileged scans only, read-only system (config included), only the state folder writable.
 NoNewPrivileges=yes
-CapabilityBoundingSet=
-AmbientCapabilities=
+# One capability only: listening on UDP 137 (NetBIOS name requests; it only listens, never answers). No raw sockets.
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_BIND_SERVICE
 ProtectSystem=strict
 ProtectHome=yes
 StateDirectory=sentinel-agent

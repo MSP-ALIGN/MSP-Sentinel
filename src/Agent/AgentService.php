@@ -39,6 +39,8 @@ use Sentinel\Vulns\VulnMatcher;
 final class AgentService
 {
     public const FULL_DAYS = 7;
+    /** Seconds a full scan listens for LLMNR/NetBIOS name requests. */
+    public const LISTEN_SECONDS = 120;
     public const LIGHT_HOURS = 20;
     public const JOB_HOURS = 12;
     public const MAX_HOSTS = 20000;
@@ -65,6 +67,8 @@ final class AgentService
         private readonly ?VulnMatcher $matcher,
         private readonly ?FindingsEngine $findings,
         private readonly ?AlertService $alerts,
+        private readonly ?DirectoryRepository $directory = null,
+        private readonly int $listenSeconds = self::LISTEN_SECONDS,
     ) {
     }
 
@@ -160,7 +164,17 @@ final class AgentService
             }
         }
         $ports = array_values(array_filter(array_map('intval', explode(',', (string) $job['ports'])), static fn (int $p): bool => $p > 0 && $p < 65536));
-        return $this->signer->sign([
+        $extra = [];
+        if ($job['kind'] === 'full') {
+            // Active Directory checks: only with a domain controller inside the signed ranges (the agent checks again).
+            // The password isn't in the job: the agent holds it, sealed. The trusted certificate fingerprint is.
+            $dir = $this->directory?->find((int) $job['site_id']);
+            if ($dir !== null && InternalRanges::allWithin([(string) $dir['dc_ip']], $auth['ranges_list'])) {
+                $extra['directory'] = ['domain' => (string) $dir['domain'], 'dc_ip' => (string) $dir['dc_ip'], 'cert_trusted' => (string) $dir['cert_trusted']];
+            }
+            $extra['listen'] = max(0, min(300, $this->listenSeconds));
+        }
+        return $this->signer->sign($extra + [
             'v' => 1, 'type' => 'agent_job', 'job_id' => (int) $job['id'], 'agent_id' => (int) $agent['id'], 'site_id' => (int) $job['site_id'], 'client_id' => (int) $job['client_id'],
             'kind' => (string) $job['kind'], 'ports' => $ports, 'targets' => $targets,
             // UDP ports the agent may send to (full scans: SNMP's read of the default communities).
@@ -245,6 +259,10 @@ final class AgentService
                 }
             }
         }
+        if ($full) {
+            $this->ingestDirectory($siteId, $data['directory'] ?? null);
+            $this->ingestNames($siteId, $data['names'] ?? null, $ranges);
+        }
         $stats['new_devices'] = count($new);
         $summary = ['hosts' => $stats['accepted'], 'rejected' => $stats['rejected'], 'new_devices' => count($new), 'messages' => $messages];
         if ($remaining !== []) {
@@ -279,6 +297,95 @@ final class AgentService
             }
         }
         return $stats;
+    }
+
+    /**
+     * Save the Active Directory part of a full scan's results (untrusted: every field is checked and shortened). The
+     * certificate the agent saw is always recorded (an admin trusts it on the Agents page); the directory results only
+     * replace the earlier ones after a successful sign-in, and the LDAP signing answer only when there was one.
+     */
+    private function ingestDirectory(int $siteId, mixed $d): void
+    {
+        if ($this->directory === null || !is_array($d)) {
+            return;
+        }
+        $site = $this->directory->find($siteId);
+        if ($site === null) {
+            return; // turned off since the job was signed
+        }
+        $cert = is_array($d['cert'] ?? null) ? $d['cert'] : [];
+        $sha = is_string($cert['sha256'] ?? null) && preg_match('/^[0-9a-f]{64}$/', $cert['sha256']) === 1 ? $cert['sha256'] : '';
+        $subject = InventoryRepository::clean($cert['subject'] ?? '', 255) . (isset($cert['not_after']) ? ' · ' . __('valid until {d}', ['d' => InventoryRepository::clean($cert['not_after'], 10)]) : '');
+        $signing = is_bool($d['signing_required'] ?? null) ? $d['signing_required'] : null;
+        $bind = in_array($d['bind'] ?? '', ['ok', 'untrusted_certificate', 'no_password', 'refused', 'failed'], true) ? (string) $d['bind'] : 'failed';
+        $previous = json_decode((string) ($site['results'] ?? ''), true);
+        $results = is_array($previous) ? $previous : null;
+        if ($bind === 'ok' && is_array($d['checks'] ?? null)) {
+            $results = self::directoryChecks($d['checks']);
+        }
+        if ($signing !== null) {
+            $results = ($results ?? []) + ['signing_required' => $signing];
+            $results['signing_required'] = $signing;
+        }
+        $error = $bind === 'ok' ? '' : InventoryRepository::clean($d['error'] ?? '', 300);
+        $this->directory->saveResults($siteId, $results, $error, $sha, $sha !== '' ? $subject : '');
+    }
+
+    /**
+     * The directory checks, validated: lists as {count, names (cleaned, at most 200)}, numbers in range.
+     *
+     * @param array<string,mixed> $c
+     * @return array<string,mixed>
+     */
+    public static function directoryChecks(array $c): array
+    {
+        $list = static function (mixed $l): ?array {
+            if (!is_array($l) || !is_int($l['count'] ?? null) || $l['count'] < 0 || $l['count'] > 10000000) {
+                return null;
+            }
+            $names = array_slice(array_values(array_filter(array_map(static fn ($n): string => InventoryRepository::clean($n, 100), (array) ($l['names'] ?? [])), static fn (string $n): bool => $n !== '')), 0, 200);
+            return ['count' => max($l['count'], count($names)), 'names' => $names];
+        };
+        $out = [];
+        foreach (['asrep', 'kerberoast_admin', 'kerberoast', 'admin_never_expires', 'stale_admins', 'domain_admins', 'unconstrained'] as $k) {
+            if (($v = $list($c[$k] ?? null)) !== null) {
+                $out[$k] = $v;
+            }
+        }
+        foreach (['users', 'computers', 'krbtgt_age_days'] as $k) {
+            if (is_int($c[$k] ?? null) && $c[$k] >= 0 && $c[$k] <= 10000000) {
+                $out[$k] = $c[$k];
+            }
+        }
+        if (is_array($c['laps'] ?? null) && is_bool($c['laps']['deployed'] ?? null) && ($l = $list($c['laps'])) !== null) {
+            $out['laps'] = $l + ['deployed' => $c['laps']['deployed'], 'eligible' => is_int($c['laps']['eligible'] ?? null) ? max(0, min(10000000, $c['laps']['eligible'])) : 0];
+        }
+        return $out;
+    }
+
+    /**
+     * Save what the agent heard while listening for name requests (only addresses inside the signed ranges). A protocol
+     * the agent couldn't listen to doesn't count as quiet: with neither, nothing changes.
+     *
+     * @param list<string> $ranges
+     */
+    private function ingestNames(int $siteId, mixed $n, array $ranges): void
+    {
+        if (!is_array($n) || (($n['llmnr'] ?? false) !== true && ($n['nbns'] ?? false) !== true)) {
+            return;
+        }
+        $sources = [];
+        foreach (array_slice(array_values(array_filter((array) ($n['sources'] ?? []), 'is_array')), 0, 500) as $s) {
+            $ip = self::canonicalIp($s['ip'] ?? null);
+            if ($ip === null || !InternalRanges::allWithin([$ip], $ranges)) {
+                continue;
+            }
+            $sources[] = ['ip' => $ip, 'protocols' => array_values(array_intersect(['llmnr', 'nbns'], (array) ($s['protocols'] ?? []))),
+                          'names' => array_slice(array_values(array_filter(array_map(static fn ($x): string => InventoryRepository::clean($x, 64), (array) ($s['names'] ?? [])))), 0, 10)];
+        }
+        $saved = ['seconds' => is_int($n['seconds'] ?? null) ? max(0, min(600, $n['seconds'])) : 0, 'llmnr' => ($n['llmnr'] ?? false) === true, 'nbns' => ($n['nbns'] ?? false) === true, 'sources' => $sources];
+        $this->db->prepare('UPDATE sites SET llmnr_results = :r, llmnr_checked_at = UTC_TIMESTAMP() WHERE id = :s')
+            ->execute(['r' => json_encode($saved, JSON_UNESCAPED_SLASHES), 's' => $siteId]);
     }
 
     /**

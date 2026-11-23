@@ -38,7 +38,50 @@ final class Guidance
             'vuln' => self::vuln($vuln),
             'email' => self::email(substr($key, (int) strrpos($key, ':') + 1)),
             'device', 'patch' => self::device(substr($key, (int) strrpos($key, ':') + 1)),
+            'directory' => self::directory(substr($key, (int) strrpos($key, ':') + 1)),
             default => ['meaning' => __('This item needs a review by your IT provider.'), 'fix' => __('Review the details and decide whether to fix or accept it.')],
+        };
+    }
+
+    /**
+     * Active Directory weaknesses and name poisoning (on-premises agent).
+     *
+     * @return array{meaning:string, fix:string}
+     */
+    private static function directory(string $code): array
+    {
+        return match ($code) {
+            'asrep' => ['meaning' => __('Anyone on the network can ask the domain for data about these accounts and crack their passwords offline, without any password of their own. It is a common first step in an attack.'),
+                'fix' => __("In Active Directory Users and Computers, open each account, Account tab, and untick 'Do not require Kerberos preauthentication'.
+If an old application really needs it, give that account a long random password (25+ characters).")],
+            'kerberoast_admin' => ['meaning' => __('Any domain user can request a ticket for these admin accounts and crack the password offline. A cracked admin password gives an attacker control of the domain.'),
+                'fix' => __("Do not run services as admin accounts: move the service to a dedicated account with only the rights it needs, or a group managed service account (gMSA).
+Remove the service name (SPN) from the admin account, or give it a long random password (25+ characters) and make sure it is not a Domain Admin.")],
+            'kerberoast' => ['meaning' => __('Any domain user can request a ticket for these service accounts and try to crack their passwords offline. Weak service passwords are often cracked within hours.'),
+                'fix' => __("Use group managed service accounts (gMSA), which have long passwords that change automatically.
+Otherwise give each service account a long random password (25+ characters) and only the rights it needs.")],
+            'unconstrained' => ['meaning' => __('A computer trusted for unconstrained delegation keeps the credentials of everyone who connects to it. An attacker who takes it over can impersonate those users, including domain admins.'),
+                'fix' => __("In each computer's properties, Delegation tab, choose 'Do not trust this computer for delegation', or constrained delegation to only the services it needs.
+Add admin accounts to the Protected Users group (or tick 'Account is sensitive and cannot be delegated').")],
+            'admin_never_expires' => ['meaning' => __('An admin password that never changes stays useful to an attacker forever once it leaks.'),
+                'fix' => __("Untick 'Password never expires' on admin accounts and change their passwords.
+For shared admin accounts, use a password manager or LAPS-style rotation.")],
+            'stale_admins' => ['meaning' => __('Admin accounts nobody uses are rarely watched; if their password leaks, an attacker can use them without anyone noticing.'),
+                'fix' => __('Disable admin accounts that are no longer needed (and delete them later), or remove them from admin groups.')],
+            'domain_admins' => ['meaning' => __('Every Domain Admin account is a key to the whole network. The more there are, the more chances an attacker has to steal one.'),
+                'fix' => __("Keep Domain Admins to a few named people, used only for domain work.
+Give day-to-day admin work its own, smaller rights (delegated groups) and separate admin accounts from everyday accounts.")],
+            'krbtgt_old' => ['meaning' => __('The krbtgt account signs every Kerberos ticket. If its password ever leaked, an attacker can forge tickets for any account until it is changed.'),
+                'fix' => __("Reset the krbtgt password twice, about 24 hours apart (Microsoft's New-KrbtgtKeys script helps), and then yearly or after any suspected compromise.")],
+            'laps_missing' => ['meaning' => __('Without LAPS, the local administrator password is usually the same on every computer: one stolen password opens them all.'),
+                'fix' => __("Turn on Windows LAPS (built into current Windows) with a Group Policy or Intune policy, so each computer gets its own changing local admin password.
+Check the listed computers receive the policy.")],
+            'ldap_signing' => ['meaning' => __('The domain controller accepts unsigned LDAP sign-ins, so an attacker in the middle can relay them and make changes in the directory as the victim.'),
+                'fix' => __("Set 'Domain controller: LDAP server signing requirements' to Require signing (Group Policy on the Domain Controllers OU), after checking the event log (event 2889) for clients that still sign in without signing.")],
+            'name_poisoning' => ['meaning' => __('These devices fall back to LLMNR or NetBIOS when DNS has no answer. A tool on the network can answer instead and collect password hashes, a very common way into Windows networks.'),
+                'fix' => __("Turn off LLMNR (Group Policy: Computer Configuration > Administrative Templates > Network > DNS Client > Turn off multicast name resolution).
+Turn off NetBIOS over TCP/IP (network adapter settings, or the DHCP option 001), and check the listed devices pick up the change.")],
+            default => ['meaning' => __('A weakness in the Active Directory configuration.'), 'fix' => __('Review the details and fix it in Active Directory.')],
         };
     }
 

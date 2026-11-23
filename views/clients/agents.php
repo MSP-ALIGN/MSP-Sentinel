@@ -2,7 +2,8 @@
 /**
  * On-premises agents card on the client's pages: per site, the internal authorisation, agents, kill switch and recent scans.
  * Expects: $client, $agentSites (ClientController::agentSites), $currentUser, $globallyPaused.
- * Agent-reported names and versions are untrusted and escaped.
+ * Agent-reported names and versions, and the directory certificate subject the agent saw, are untrusted and escaped.
+ * The directory password is never on this page: only its sealed state (where it is) is shown.
  */
 use Sentinel\Auth\Role;
 use Sentinel\Core\Csrf;
@@ -87,7 +88,75 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                 <?php endforeach; ?>
             </ul>
             <?php endif; ?>
+            <?php // Active Directory checks: settings, where the password is (never the password: Sentinel doesn't have it), the DC certificate.
+            $dir = $s['directory'];
+            $siteAgent = null;
+            foreach ($s['agents'] as $a) { if ($a['status'] === 'active') { $siteAgent = $a; break; } }
+            $fp = static fn (string $h): string => implode(':', str_split(strtoupper($h), 2));
+            ?>
+            <div class="border-top mt-3 pt-3" id="directory-<?= $sid ?>">
+                <h4 class="h6"><i class="bi bi-diagram-3 me-1" aria-hidden="true"></i><?= e(__('Active Directory checks')) ?></h4>
+                <p class="small text-body-secondary mb-2"><?= e(__('With a read-only domain account, the agent reads the directory during each full scan for what attackers look for first: accounts that can be cracked offline, too many or stale admins, unconstrained delegation, an old krbtgt password, missing LAPS and LDAP signing. Nothing is changed in the directory.')) ?></p>
+                <?php if ($dir !== null): ?>
+                <ul class="list-unstyled small mb-2">
+                    <li><strong><?= e(__('Domain:')) ?></strong> <?= e($dir['domain']) ?> · <?= e(__('domain controller')) ?> <span class="font-monospace"><?= e($dir['dc_ip']) ?></span> · <?= e(__('account')) ?> <span class="font-monospace"><?= e($dir['username']) ?></span></li>
+                    <li><strong><?= e(__('Password:')) ?></strong>
+                        <?php if ($dir['cred_state'] === 'held'): ?><span class="text-success"><i class="bi bi-shield-lock me-1" aria-hidden="true"></i><?= e(__('held by the agent (sealed), confirmed {t} UTC', ['t' => $dir['cred_confirmed_at']])) ?></span>
+                        <?php elseif ($dir['cred_state'] === 'waiting'): ?><span class="text-warning"><?= e(__('sealed and waiting for the agent to collect it (set {t} UTC)', ['t' => $dir['cred_set_at']])) ?></span>
+                        <?php elseif ($dir['cred_state'] === 'failed'): ?><span class="text-danger"><?= e(__('not with the agent: {why}', ['why' => $dir['cred_error']])) ?></span>
+                        <?php else: ?><span class="text-body-secondary"><?= e(__('not set')) ?></span><?php endif; ?>
+                        <span class="text-body-secondary">· <?= e(__('Sentinel never has the password: only the agent can open it.')) ?></span></li>
+                    <li><strong><?= e(__('Domain controller certificate:')) ?></strong>
+                        <?php if ($dir['cert_seen'] !== '' && $dir['cert_seen'] !== $dir['cert_trusted']): ?>
+                            <span class="text-warning"><?= e($dir['cert_trusted'] === '' ? __('waiting for you to trust it') : __('CHANGED since you trusted it: the agent will not sign in until you trust the new one')) ?></span>
+                            <div class="font-monospace text-break ps-3"><?= e($dir['cert_seen_subject']) ?><br>SHA-256 <?= e($fp($dir['cert_seen'])) ?></div>
+                            <?php if ($isAdmin): ?>
+                            <form method="post" action="<?= e(url('/clients/' . $cid . '/sites/' . $sid . '/directory/trust')) ?>" class="ps-3 mt-1" data-confirm="<?= e(__('Trust this certificate? Check that the fingerprint matches the domain controller\'s certificate first.')) ?>"><?= Csrf::field() ?>
+                                <input type="hidden" name="fingerprint" value="<?= e($dir['cert_seen']) ?>">
+                                <button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-patch-check me-1" aria-hidden="true"></i><?= e(__('Trust this certificate')) ?></button></form>
+                            <?php endif; ?>
+                        <?php elseif ($dir['cert_trusted'] !== ''): ?><span class="text-success"><?= e(__('trusted')) ?></span> <span class="font-monospace text-body-secondary small"><?= e(substr($fp($dir['cert_trusted']), 0, 23)) ?>…</span>
+                        <?php else: ?><span class="text-body-secondary"><?= e(__('not seen yet: the agent fetches it at its next full scan (it does not sign in before you trust it).')) ?></span><?php endif; ?></li>
+                    <li><strong><?= e(__('Last directory read:')) ?></strong>
+                        <?= e($dir['checked_at'] !== null ? __('{t} UTC', ['t' => $dir['checked_at']]) : __('not yet')) ?>
+                        <?php if ($dir['last_error'] !== ''): ?><div class="text-danger ps-3"><?= e($dir['last_error']) ?> <?= e($dir['last_attempt_at'] !== null ? '(' . $dir['last_attempt_at'] . ' UTC)' : '') ?></div><?php endif; ?></li>
+                </ul>
+                <?php endif; ?>
+                <?php if ($isAdmin): ?>
+                <details><summary class="small"><?= e($dir === null ? __('Set up Active Directory checks') : __('Change settings or replace the password')) ?></summary>
+                <?php if ($siteAgent === null): ?>
+                    <p class="small text-body-secondary mt-2"><?= e(__('Enrol an agent for this site first: the password is sealed for that agent.')) ?></p>
+                <?php else: $nonce = bin2hex(random_bytes(16)); ?>
+                <form method="post" action="<?= e(url('/clients/' . $cid . '/sites/' . $sid . '/directory')) ?>" class="row g-2 mt-1 small" autocomplete="off"
+                      data-agent-seal data-agent-key="<?= e((string) $siteAgent['box_public_key']) ?>"
+                      data-aad-prefix="<?= e(\Sentinel\AgentClient\AgentKey::directoryAad((int) $siteAgent['id'], $nonce, '')) ?>"
+                      data-insecure-text="<?= e(__('Passwords can only be sealed on an HTTPS page. Open Sentinel through its https:// address to set or replace the password.')) ?>"
+                      data-missing-text="<?= e(__('Enter the account name too.')) ?>"
+                      data-failed-text="<?= e(__('The password could not be sealed in your browser. Nothing was sent.')) ?>"><?= Csrf::field() ?>
+                    <input type="hidden" name="sealed" value=""><input type="hidden" name="nonce" value="<?= e($nonce) ?>"><input type="hidden" name="agent_id" value="<?= (int) $siteAgent['id'] ?>">
+                    <div class="col-md-4"><label class="form-label" for="dir-domain-<?= $sid ?>"><?= e(__('Domain')) ?></label>
+                        <input class="form-control form-control-sm" id="dir-domain-<?= $sid ?>" name="domain" maxlength="253" required placeholder="corp.example" value="<?= e($dir['domain'] ?? '') ?>"></div>
+                    <div class="col-md-3"><label class="form-label" for="dir-dc-<?= $sid ?>"><?= e(__('Domain controller IP')) ?></label>
+                        <input class="form-control form-control-sm font-monospace" id="dir-dc-<?= $sid ?>" name="dc_ip" maxlength="45" required placeholder="10.0.0.10" value="<?= e($dir['dc_ip'] ?? '') ?>"></div>
+                    <div class="col-md-5"><label class="form-label" for="dir-user-<?= $sid ?>"><?= e(__('Read-only account')) ?></label>
+                        <input class="form-control form-control-sm font-monospace" id="dir-user-<?= $sid ?>" name="username" maxlength="256" required placeholder="svc-sentinel@corp.example" value="<?= e($dir['username'] ?? '') ?>"></div>
+                    <div class="col-md-7"><label class="form-label" for="dir-pass-<?= $sid ?>"><?= e($dir !== null && $dir['cred_state'] !== 'none' ? __('New password (leave empty to keep the current one)') : __('Password')) ?></label>
+                        <input class="form-control form-control-sm" id="dir-pass-<?= $sid ?>" type="password" data-seal-password autocomplete="new-password">
+                        <div class="form-text"><?= e(__('Sealed in your browser for this site\'s agent before it is sent. Sentinel only relays it and cannot read it; the agent keeps it sealed on the appliance.')) ?></div></div>
+                    <div class="col-md-5 d-flex align-items-end gap-2">
+                        <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-lock me-1" aria-hidden="true"></i><?= e(__('Save')) ?></button></div>
+                    <div class="col-12"><div class="alert alert-warning py-1 px-2 mb-0 d-none" data-seal-note role="status"></div></div>
+                </form>
+                <?php endif; ?>
+                <?php if ($dir !== null): ?>
+                <form method="post" action="<?= e(url('/clients/' . $cid . '/sites/' . $sid . '/directory/remove')) ?>" class="mt-2" data-confirm="<?= e(__('Turn off Active Directory checks for this site? The agent deletes the password.')) ?>"><?= Csrf::field() ?>
+                    <button class="btn btn-sm btn-outline-danger" type="submit"><?= e(__('Turn off')) ?></button></form>
+                <?php endif; ?>
+                </details>
+                <?php endif; ?>
+            </div>
         </div>
         <?php endforeach; ?>
     </div>
 </div>
+<?php if ($isAdmin): ?><script src="<?= e(asset('js/agent-seal.js')) ?>"></script><?php endif; ?>

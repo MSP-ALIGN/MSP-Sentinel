@@ -108,6 +108,15 @@ return [
             ],
         ],
         [
+            'title' => 'Active Directory checks',
+            'paragraphs' => [
+                'On the client\'s Agents page (admins, per site): enter the domain, the domain controller\'s IP address (inside the site\'s internal authorisation), a read-only domain account and its password. The agent then reads the directory at each full scan and reports what attackers look for first. Nothing is changed in the directory.',
+                'The password never reaches Sentinel in readable form: your browser seals it to that site agent\'s own key before sending, Sentinel relays the sealed box and deletes it once the agent confirms (or after 24 hours), and the agent keeps it sealed. It needs an HTTPS page. To replace it, type a new one under Change settings or replace the password; leave it empty to keep the current one.',
+                'Before the first sign-in the agent only fetches the domain controller\'s certificate; check its fingerprint and click Trust this certificate. If the certificate changes later, the agent sends nothing until you trust the new one.',
+                'Fails: accounts without Kerberos pre-authentication (AS-REP roasting), admin accounts with a service name (Kerberoasting), computers other than domain controllers trusted for unconstrained delegation, and devices heard sending LLMNR/NetBIOS name requests (name poisoning; the agent listens for 2 minutes and never answers). Warnings: other accounts with a service name, more than 5 Domain Admins, admin passwords that never expire, a krbtgt password over a year old, computers without LAPS, LDAP signing not required, admin accounts unused for 90 days. Each finding lists up to 25 names.',
+            ],
+        ],
+        [
             'title' => 'Internal devices and NinjaOne',
             'paragraphs' => [
                 'Internal devices come from the on-premises agent and, once it is connected, from NinjaOne. Each client page shows them under Internal devices; a device page lists its open services, installed software with known vulnerabilities, and missing updates.',
@@ -213,6 +222,16 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.20.0',
+            'date' => '2026-11-23',
+            'items' => [
+                'Active Directory checks through the on-premises agent: AS-REP roasting, Kerberoasting, unconstrained delegation, Domain Admins, stale admins, never-expiring admin passwords, krbtgt age, LAPS and LDAP signing.',
+                'The directory password is sealed in your browser for the site\'s agent: Sentinel only relays it and can never read it. Replace it any time from the Agents page.',
+                'The domain controller\'s certificate is trusted once before the agent signs in; a changed certificate gets nothing.',
+                'Name poisoning: the agent listens for LLMNR/NetBIOS name requests during full scans (it never answers).',
+            ],
+        ],
         [
             'version' => '1.19.2',
             'date' => '2026-11-23',

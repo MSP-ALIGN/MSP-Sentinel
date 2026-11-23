@@ -161,6 +161,13 @@ For a client's internal network, install an agent at the site (see [`agent.md`](
 authorisation for the site, create an enrolment code, and run the agent installer with it. Internal devices, their
 services and certificates then appear on the client's **Devices** and **Agents** pages, with findings and new-device alerts.
 
+**Active Directory checks** (on the Agents page, per site): give the agent a read-only domain account and it reports
+what attackers look for first: accounts that can be cracked offline (AS-REP roasting, Kerberoasting), too many or
+stale admins, unconstrained delegation, an old krbtgt password, missing LAPS and LDAP signing. The password is sealed
+in your browser for that site's agent: Sentinel only relays it and can never read it. You trust the domain
+controller's certificate once before the agent signs in. Replace the password the same way, any time. The agent also
+listens for LLMNR/NetBIOS name requests (name poisoning). Details: [`agent.md`](agent.md#active-directory-checks-120).
+
 ## Website and email checks
 
 With each scan and once a day, Sentinel checks every website it found (HTTPS, headers, cookies, a short fixed list of

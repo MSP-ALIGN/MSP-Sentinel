@@ -22,7 +22,11 @@ use Sentinel\Web\WebsiteChecker;
  *   job's ports (TCP connect, service versions), then the certificate and
  *   start-page check on its TLS and web ports, and the read-only checks of
  *   risky protocols (SMBv1 and SMB signing on 445, NLA on 3389, default SNMP
- *   communities on 161/udp, login pages over plain HTTP).
+ *   communities on 161/udp, login pages over plain HTTP); then, when the
+ *   signed job asks for them, the Active Directory checks (DirectoryChecks:
+ *   the password is opened only for that sign-in, and only once the domain
+ *   controller's certificate matches the trusted one) and listening for
+ *   LLMNR/NetBIOS name requests (NameListener: it never answers).
  * Every device is checked against the signed ranges again before it is
  * touched. While a job runs, the agent checks in every 30 seconds and stops
  * at once if Sentinel says so (kill switch, pause, cancelled job).
@@ -57,6 +61,10 @@ final class Runner
         callable $log,
         private readonly string $arpFile = '/proc/net/arp',
         private readonly ?ProtocolProbes $probes = null,
+        private readonly ?AgentKey $key = null,
+        private readonly ?Credentials $credentials = null,
+        private readonly ?\Sentinel\Directory\DirectoryChecks $directory = null,
+        private readonly ?\Sentinel\Directory\NameListener $listener = null,
     ) {
         $this->log = $log;
     }
@@ -69,7 +77,7 @@ final class Runner
     public function pollOnce(): int
     {
         $this->sendPending();
-        $res = $this->http->post('/agent/v1/poll', ['hostname' => (string) gethostname(), 'version' => self::version(), 'running' => []]);
+        $res = $this->http->post('/agent/v1/poll', $this->pollBody([]));
         if ($res['status'] === 401) {
             ($this->log)('Sentinel no longer accepts this agent (revoked?). Stopping.');
             return -1;
@@ -78,6 +86,7 @@ final class Runner
             ($this->log)('Check-in failed (HTTP ' . $res['status'] . ').');
             return 60;
         }
+        $this->takeSecrets((array) $res['data']);
         foreach ((array) ($res['data']['jobs'] ?? []) as $signed) {
             if (!is_array($signed) || !is_string($signed['payload'] ?? null) || !is_string($signed['signature'] ?? null)) {
                 continue;
@@ -99,6 +108,52 @@ final class Runner
             $this->sendPending();
         }
         return max(30, min(600, (int) ($res['data']['poll_seconds'] ?? 60)));
+    }
+
+    /**
+     * What every check-in sends: name, version, running jobs, this agent's public key (for sealed passwords) and
+     * whether it holds a directory password.
+     *
+     * @param list<int> $running
+     * @return array<string,mixed>
+     */
+    private function pollBody(array $running): array
+    {
+        return ['hostname' => (string) gethostname(), 'version' => self::version(), 'running' => $running]
+            + ($this->key !== null ? ['box_public_key' => $this->key->publicKey(), 'holds_directory' => $this->credentials?->holds() ?? false] : []);
+    }
+
+    /**
+     * Sealed directory passwords and "forget it" instructions from a check-in answer (both signed; Credentials checks
+     * them). Each drop is answered: kept, or refused and why. The password itself is never logged or sent anywhere.
+     *
+     * @param array<string,mixed> $data
+     */
+    private function takeSecrets(array $data): void
+    {
+        if ($this->credentials === null) {
+            return;
+        }
+        foreach (array_slice((array) ($data['secrets'] ?? []), 0, 5) as $s) {
+            if (!is_array($s) || !is_string($s['payload'] ?? null) || !is_string($s['signature'] ?? null)) {
+                continue;
+            }
+            $r = $this->credentials->accept($s['payload'], $s['signature']);
+            if ($r === null) {
+                ($this->log)('Ignored a directory password that is not signed for this agent.');
+                continue;
+            }
+            ($this->log)($r['ok'] ? 'Directory password received and kept (sealed).' : 'Directory password refused: ' . $r['error']);
+            try {
+                $this->http->post('/agent/v1/secrets/' . $r['drop_id'] . '/ack', ['ok' => $r['ok'], 'error' => $r['error']]);
+            } catch (\Throwable $ex) {
+                ($this->log)('Could not confirm the directory password (will be sent again): ' . mb_substr($ex->getMessage(), 0, 200));
+            }
+        }
+        $f = $data['forget'] ?? null;
+        if (is_array($f) && is_string($f['payload'] ?? null) && is_string($f['signature'] ?? null) && $this->credentials->forget($f['payload'], $f['signature'])) {
+            ($this->log)('Directory password deleted, as Sentinel asked.');
+        }
     }
 
     /** Send finished results that Sentinel hasn't accepted yet (2xx accepted; 404/409: it no longer wants them). */
@@ -125,7 +180,7 @@ final class Runner
      * Run one verified job.
      *
      * @param array{job_id:int, kind:string, targets:list<string>, ports:list<int>, udp_ports?:list<int>, ranges:list<string>} $job
-     * @return array{status:string, messages:list<string>, hosts:list<array<string,mixed>>, unscanned:list<string>}
+     * @return array<string,mixed> status, messages, hosts, unscanned (and directory, names when the job asked for them).
      *         Hosts carry "scanned": true only when their port scan finished; unscanned lists hosts found but not scanned.
      */
     public function run(array $job): array
@@ -219,6 +274,16 @@ final class Runner
                 $found[$ip]['scanned'] = true;
             }
         }
+        $extra = [];
+        if ($job['kind'] === 'full' && ($job['directory'] ?? null) !== null && $this->directory !== null && !$shouldStop()) {
+            // The password is opened here, used for one sign-in (only after the certificate check) and dropped.
+            $password = $this->credentials?->password();
+            $extra['directory'] = $this->directory->run($job['directory'], $this->credentials?->username() ?? '', $password);
+            $password = null;
+        }
+        if ($job['kind'] === 'full' && ($job['listen'] ?? 0) > 0 && $this->listener !== null && !$shouldStop()) {
+            $extra['names'] = $this->listener->listen($job['listen'], static fn (string $ip): bool => InternalRanges::allWithin([$ip], $job['ranges']), $shouldStop);
+        }
         $unscanned = [];
         foreach ($found as $ip => $h) {
             if ($job['kind'] === 'full' && $h['scanned'] !== true) {
@@ -227,7 +292,7 @@ final class Runner
             }
         }
         $status = $this->stopNow ? ($unscanned === [] && $complete ? 'done' : 'partial') : ($complete ? 'done' : 'partial');
-        return ['status' => $status, 'messages' => array_slice($messages, 0, 20), 'hosts' => array_values($found), 'unscanned' => $unscanned];
+        return ['status' => $status, 'messages' => array_slice($messages, 0, 20), 'hosts' => array_values($found), 'unscanned' => $unscanned] + $extra;
     }
 
     /** Check in every 30 seconds while a job runs; true when Sentinel says this job must stop. */
@@ -241,7 +306,7 @@ final class Runner
         }
         $this->lastCheck = microtime(true);
         try {
-            $res = $this->http->post('/agent/v1/poll', ['hostname' => (string) gethostname(), 'version' => self::version(), 'running' => [$jobId]]);
+            $res = $this->http->post('/agent/v1/poll', $this->pollBody([$jobId]));
         } catch (\Throwable) {
             return false; // Sentinel briefly unreachable: carry on (the job's own limits still apply)
         }

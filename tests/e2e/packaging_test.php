@@ -114,9 +114,13 @@ return [
             Assert::same(1, $c, $why);
         }
         $unit = (string) file_get_contents($root . '/install/templates/sentinel-agent.service');
-        foreach (['User=sentinel-agent', 'NoNewPrivileges=yes', 'CapabilityBoundingSet=', 'ProtectSystem=strict', 'RestartPreventExitStatus=3'] as $line) {
+        foreach (['User=sentinel-agent', 'NoNewPrivileges=yes', 'ProtectSystem=strict', 'RestartPreventExitStatus=3'] as $line) {
             Assert::contains($line, $unit);
         }
+        // One capability only (listening on UDP 137 for NetBIOS name requests); never raw sockets or anything else.
+        Assert::contains("\nCapabilityBoundingSet=CAP_NET_BIND_SERVICE\n", $unit);
+        Assert::contains("\nAmbientCapabilities=CAP_NET_BIND_SERVICE\n", $unit);
+        Assert::notContains('CAP_NET_RAW', $unit);
     },
     'installer dry run shows every step and never a secret' => function (TestContext $ctx): void {
         $root = dirname(__DIR__, 2);

@@ -49,7 +49,7 @@ final class OpenApi
                 '/findings' => $get('List findings', array_merge($page, [$client, $since,
                     ['name' => 'status', 'in' => 'query', 'schema' => ['enum' => ['open', 'resolved', 'accepted', 'false_positive']]],
                     ['name' => 'severity', 'in' => 'query', 'schema' => ['enum' => ['fail', 'warn']]],
-                    ['name' => 'type', 'in' => 'query', 'schema' => ['enum' => ['port', 'tls', 'web', 'vuln', 'email', 'patch', 'device']]]]), 'Findings'),
+                    ['name' => 'type', 'in' => 'query', 'schema' => ['enum' => ['port', 'tls', 'web', 'vuln', 'email', 'patch', 'device', 'directory']]]]), 'Findings'),
                 '/findings/{id}' => $get('One finding with its history', [$id], 'Finding'),
                 '/findings/{id}/triage' => ['post' => ['summary' => 'Triage a finding (needs the "triage" permission)', 'parameters' => [$id],
                     'requestBody' => ['required' => true, 'content' => ['application/json' => ['schema' => ['type' => 'object', 'required' => ['status', 'note'],

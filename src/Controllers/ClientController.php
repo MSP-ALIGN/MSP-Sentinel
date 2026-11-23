@@ -188,7 +188,8 @@ final class ClientController extends Controller
         $out = [];
         foreach (App::clients()->sites((int) $client['id']) as $site) {
             $out[] = ['site' => $site, 'active' => $repo->activeAuthorisation((int) $site['id'], $today), 'authorisations' => $repo->authorisations((int) $site['id']),
-                      'agents' => $repo->agents((int) $site['id']), 'jobs' => $repo->recentJobs((int) $site['id'], 5)];
+                      'agents' => $repo->agents((int) $site['id']), 'jobs' => $repo->recentJobs((int) $site['id'], 5),
+                      'directory' => App::directory()->find((int) $site['id'])];
         }
         return $out;
     }

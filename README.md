@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.19.2](https://img.shields.io/badge/version-1.19.2-ff5a1f?style=flat-square)
+![Version 1.20.0](https://img.shields.io/badge/version-1.20.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -148,6 +148,32 @@ curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install
 The same help is built into the app (**Help** in the menu), with a "What's new" page for every release.
 
 ## What's new
+
+### 1.20.0 (2026-11-23): Active Directory checks
+
+- **Active Directory checks through the on-premises agent** (first item of
+  [docs/ROADMAP-security.md](docs/ROADMAP-security.md)). With a read-only domain account, the agent reads the
+  directory at each full scan. Nothing is changed. Balanced grading:
+  - **Fail:** AS-REP roastable accounts, Kerberoastable admin accounts, unconstrained delegation outside the domain
+    controllers.
+  - **Warning:** other Kerberoastable accounts, more than 5 Domain Admins, admin passwords that never expire, a
+    krbtgt password over a year old, missing LAPS, LDAP signing not required, stale admin accounts.
+  - Each finding lists up to 25 names, with step-by-step fixes in reports and ITFlow tickets. The findings also count
+    on the Compliance page.
+- **The password is sealed for the agent, never readable in Sentinel.** Your browser encrypts it to the site agent's
+  own key (Web Crypto). Sentinel relays the sealed box, signed, and deletes it once the agent confirms. The agent keeps
+  it sealed and opens it only for the sign-in. Replace it any time from the Agents page; the page shows when the agent
+  last confirmed it.
+- **The domain controller's certificate is trusted before the first sign-in.** The agent signs in over LDAPS only
+  when the certificate matches the one you trusted. A changed certificate gets nothing.
+- **LDAP signing** is checked with a made-up account; the real password never goes over plain LDAP.
+- **Name poisoning:** the agent listens for 2 minutes per full scan for LLMNR/NetBIOS name requests and never
+  answers. Devices sending them are a Fail.
+- **Agent changes:**
+  - The agent gets its own key pair, created on the appliance.
+  - The service gets one capability (`CAP_NET_BIND_SERVICE`) to listen on UDP 137.
+  - Agent files live in `/var/lib/sentinel-agent`.
+  - Upgrade agents with `--upgrade` to use these features.
 
 ### 1.19.2 (2026-11-23): faster ticket lookup, device evidence tested
 

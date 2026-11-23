@@ -16,6 +16,12 @@ use Sentinel\Core\Response;
  * - POST /agent/v1/enrol   {code, hostname, version} -> agent ID, token (once), server public key
  * - POST /agent/v1/poll    {hostname, version, running[]} -> signed jobs to run, job IDs to stop
  * - POST /agent/v1/jobs/{id}/results  results of one job
+ * - POST /agent/v1/secrets/{id}/ack   {ok, error}: the agent opened and kept (or refused) a sealed directory password
+ *
+ * Sealed passwords: the poll body carries the agent's public key (box_public_key) and whether it holds a directory
+ * password (holds_directory). The answer carries, signed with the server key, the sealed passwords waiting for it
+ * (DirectoryRepository; Sentinel can't open them) and, when the site no longer wants it to keep one, an instruction
+ * to delete it.
  *
  * Security assumptions: no session or cookies; poll and results need the
  * agent's bearer token (revocable); enrolment is limited per address and
@@ -54,6 +60,9 @@ final class AgentKernel
             }
             if (preg_match('#^/agent/v1/jobs/([1-9][0-9]{0,9})/results$#', $request->path, $m)) {
                 return self::results($request, $agent, (int) $m[1]);
+            }
+            if (preg_match('#^/agent/v1/secrets/([1-9][0-9]{0,9})/ack$#', $request->path, $m)) {
+                return self::ackSecret($agent, (int) $m[1]);
             }
             return ApiKernel::error(404, 'Not found.');
         } catch (\Throwable $ex) {
@@ -94,6 +103,10 @@ final class AgentKernel
     {
         $body = self::body(65536) ?? [];
         App::agents()->touch((int) $agent['id'], $request->ip(), self::short($body['hostname'] ?? $agent['hostname'], 255), self::short($body['version'] ?? $agent['version'], 20));
+        if (is_string($body['box_public_key'] ?? null) && App::agents()->setBoxKey((int) $agent['id'], (string) $agent['box_public_key'], $body['box_public_key'])) {
+            App::directory()->agentKeyChanged((int) $agent['id']);
+            App::audit()->log('agent.key_changed', null, null, 'agent', (int) $agent['id'], ['client_id' => (int) $agent['client_id']], $request->ip());
+        }
         $paused = (int) $agent['is_archived'] === 1 || (int) $agent['client_paused'] === 1 || (int) $agent['site_paused'] === 1 || App::scope()->globallyPaused();
         $running = array_values(array_filter((array) ($body['running'] ?? []), static fn ($id): bool => is_int($id) && $id > 0));
         $stop = App::agents()->jobsToStop((int) $agent['id']);
@@ -121,7 +134,8 @@ final class AgentKernel
                 $jobs[] = $signed;
             }
         }
-        return ApiKernel::json(['jobs' => $jobs, 'stop' => array_values(array_unique($stop)), 'paused' => $paused, 'poll_seconds' => self::POLL_SECONDS]);
+        return ApiKernel::json(['jobs' => $jobs, 'stop' => array_values(array_unique($stop)), 'paused' => $paused, 'poll_seconds' => self::POLL_SECONDS]
+            + self::secrets($agent, ($body['holds_directory'] ?? false) === true));
     }
 
     /**
@@ -151,6 +165,46 @@ final class AgentKernel
             throw $ex;
         }
         return ApiKernel::json(['ok' => true] + $stats);
+    }
+
+    /**
+     * Sealed directory passwords for this agent (signed, so the agent can tell they came through its pinned server),
+     * and a signed instruction to delete the one it holds when its site no longer wants that.
+     *
+     * @param array<string,mixed> $agent
+     * @return array<string,mixed>
+     */
+    private static function secrets(array $agent, bool $holds): array
+    {
+        $out = [];
+        $signer = App::agentSigner();
+        foreach (App::directory()->dropsFor((int) $agent['id']) as $d) {
+            $out['secrets'][] = $signer->sign(['v' => 1, 'type' => 'agent_secret', 'purpose' => 'directory_password', 'drop_id' => (int) $d['id'],
+                'agent_id' => (int) $agent['id'], 'site_id' => (int) $agent['site_id'], 'client_id' => (int) $agent['client_id'],
+                'nonce' => (string) $d['nonce'], 'username' => (string) $d['username'], 'sealed' => (string) $d['sealed'],
+                'expires_at' => str_replace(' ', 'T', (string) $d['expires_at']) . 'Z']);
+        }
+        if ($holds && !isset($out['secrets']) && App::directory()->shouldForget((int) $agent['id'], (int) $agent['site_id'])) {
+            $out['forget'] = $signer->sign(['v' => 1, 'type' => 'agent_forget', 'purpose' => 'directory_password', 'agent_id' => (int) $agent['id'],
+                'site_id' => (int) $agent['site_id'], 'client_id' => (int) $agent['client_id'], 'issued_at' => gmdate('Y-m-d\TH:i:s\Z')]);
+        }
+        return $out;
+    }
+
+    /**
+     * POST /agent/v1/secrets/{id}/ack: the agent opened and kept a sealed password (ok true), or couldn't (error).
+     *
+     * @param array<string,mixed> $agent
+     */
+    private static function ackSecret(array $agent, int $dropId): Response
+    {
+        $body = self::body(4096) ?? [];
+        $ok = ($body['ok'] ?? false) === true;
+        if (!App::directory()->acknowledge((int) $agent['id'], $dropId, $ok, self::short($body['error'] ?? '', 200))) {
+            return ApiKernel::error(404, 'Not found.');
+        }
+        App::audit()->log($ok ? 'agent.directory_password_received' : 'agent.directory_password_refused', null, null, 'agent', (int) $agent['id'], ['client_id' => (int) $agent['client_id'], 'site_id' => (int) $agent['site_id']]);
+        return ApiKernel::json(['ok' => true]);
     }
 
     /**

@@ -102,6 +102,10 @@ $router->add('POST', '/clients/{id}/agents/{agent}/revoke', [AgentController::cl
 $router->add('POST', '/clients/{id}/sites/{site}/pause', [AgentController::class, 'pause'], $technician);
 $router->add('POST', '/clients/{id}/sites/{site}/resume', [AgentController::class, 'resume'], $admin);
 $router->add('POST', '/clients/{id}/sites/{site}/scan', [AgentController::class, 'scan'], $admin);
+// Active Directory checks of a site (admins): settings and the password sealed in the browser for the agent.
+$router->add('POST', '/clients/{id}/sites/{site}/directory', [\Sentinel\Controllers\DirectoryController::class, 'save'], $admin);
+$router->add('POST', '/clients/{id}/sites/{site}/directory/trust', [\Sentinel\Controllers\DirectoryController::class, 'trust'], $admin);
+$router->add('POST', '/clients/{id}/sites/{site}/directory/remove', [\Sentinel\Controllers\DirectoryController::class, 'remove'], $admin);
 // Internal devices (inventory sources): everyone views; technicians ask for a sync; admins link and unlink.
 $router->add('GET', '/clients/{id}/devices/{device}', [InventoryController::class, 'device']);
 $router->add('GET', '/clients/{id}/inventory/link', [InventoryController::class, 'linkForm'], $admin);

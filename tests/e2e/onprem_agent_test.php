@@ -20,7 +20,13 @@ $agentDir = static fn (TestContext $ctx): string => dirname($ctx->configPath) . 
 $runAgent = static function (TestContext $ctx, array $args) use ($agentDir): array {
     return $ctx->cli('bin/sentinel-agent.php', array_merge($args, ['--config', $agentDir($ctx) . '/agent.json']));
 };
-$setup = static function (TestContext $ctx) use ($agentDir, $runAgent): array {
+$namePort = static function (): int {
+    $sock = stream_socket_server('udp://127.0.0.1:0', $errno, $errstr, STREAM_SERVER_BIND);
+    $port = (int) substr(strrchr(stream_socket_get_name($sock, false), ':'), 1);
+    fclose($sock);
+    return $port;
+};
+$setup = static function (TestContext $ctx) use ($agentDir, $runAgent, $namePort): array {
     $cid = (int) $ctx->db->query("SELECT id FROM clients WHERE name = 'Harbour Example'")->fetchColumn();
     if ($cid > 0) {
         return [$cid, (int) $ctx->db->query("SELECT id FROM sites WHERE client_id = {$cid} AND is_default = 1")->fetchColumn()];
@@ -43,7 +49,9 @@ $setup = static function (TestContext $ctx) use ($agentDir, $runAgent): array {
     $app = require $ctx->configPath;
     $c = json_decode((string) file_get_contents($agentDir($ctx) . '/agent.json'), true);
     $c['nmap_path'] = $app['scanner']['nmap_path'];
-    $c['testing'] = ['allow_documentation_ranges' => true, 'redirect_connections' => $app['testing']['redirect_connections'], 'arp_file' => $agentDir($ctx) . '/arp'];
+    $c['testing'] = ['allow_documentation_ranges' => true, 'redirect_connections' => $app['testing']['redirect_connections'], 'arp_file' => $agentDir($ctx) . '/arp',
+        // Name requests are listened for on 127.0.0.1 and these high ports (no multicast) in the test suite.
+        'names' => ['llmnr_port' => $namePort(), 'nbns_port' => $namePort()]];
     file_put_contents($agentDir($ctx) . '/agent.json', json_encode($c));
     file_put_contents($agentDir($ctx) . '/arp', "IP address       HW type     Flags       HW address            Mask     Device\n10.90.0.30       0x1         0x2         02:00:00:00:00:30     *        eth0\n");
     return [$cid, $site];

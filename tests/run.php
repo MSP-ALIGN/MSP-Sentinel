@@ -192,7 +192,17 @@ try {
             [0 => ['file', '/dev/null', 'r'], 1 => ['file', $outDir . '/mock-proto.log', 'a'], 2 => ['file', $outDir . '/mock-proto.log', 'a']], $pipes);
         $redirects[$target] = $p;
     }
+    // Mock Active Directory domain controller (10.90.0.5): LDAPS with the throwaway certificate, and the plain LDAP port
+    // for the signing probe. Binds are logged (with a hash of the password, never the password) to ldap-binds.log.
+    foreach (['10.90.0.5:636' => ['ldaps', $certs['good']], '10.90.0.5:389' => ['plain', '-']] as $target => [$ldapMode, $ldapPem]) {
+        $p = $freePort();
+        $mocks[] = proc_open([PHP_BINARY, __DIR__ . '/mocks/ldap_server.php', (string) $p, $ldapMode, $ldapPem, __DIR__ . '/fixtures/ldap_directory.json', $outDir . '/ldap-binds.log'],
+            [0 => ['file', '/dev/null', 'r'], 1 => ['file', $outDir . '/mock-ldap.log', 'a'], 2 => ['file', $outDir . '/mock-ldap.log', 'a']], $pipes);
+        $redirects[$target] = $p;
+    }
     $cfg['testing']['redirect_connections'] = $redirects;
+    // Agent full scans listen for LLMNR/NetBIOS name requests for 2 seconds here (120 in production).
+    $cfg['testing']['agent_listen_seconds'] = 2;
     // Inventory source (NinjaOne stand-in): tests write this file with dates relative to now.
     file_put_contents($outDir . '/inventory.json', json_encode(['organisations' => [], 'snapshots' => new stdClass()]));
     $cfg['testing']['inventory_fixture'] = $outDir . '/inventory.json';
@@ -286,7 +296,12 @@ try {
 
     // Collect tests: each file returns ['name' => fn(TestContext $ctx)].
     $tests = [];
+    // TEST_ONLY=name1,name2 runs only those test files (while working on one feature); the full run is the default.
+    $only = array_filter(explode(',', (string) getenv('TEST_ONLY')));
     foreach (array_merge(glob(__DIR__ . '/unit/*_test.php') ?: [], glob(__DIR__ . '/e2e/*_test.php') ?: []) as $file) {
+        if ($only !== [] && !in_array(basename($file, '_test.php'), $only, true)) {
+            continue;
+        }
         foreach (require $file as $name => $fn) {
             $tests[basename($file, '_test.php') . ': ' . $name] = $fn;
         }

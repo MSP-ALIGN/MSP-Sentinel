@@ -59,6 +59,12 @@ final class AlignCompliance
         'devvuln' => ['*' => ['vuln_patch_apps', 'vuln_remediation']],
         'proto' => ['rdp_no_nla' => ['net_remote_access', 'cfg_baseline'], 'http_login' => ['net_encrypt_transit'], '*' => ['cfg_ports_services', 'cfg_baseline']],
         'dport' => ['*' => ['net_encrypt_transit']],
+        // Active Directory checks and name poisoning (on-premises agent).
+        'ad' => ['asrep' => ['iam_passwords', 'iam_accounts'], 'kerberoast_admin' => ['iam_privileged', 'iam_passwords'], 'kerberoast' => ['iam_passwords'],
+                 'unconstrained' => ['iam_least_privilege', 'iam_privileged'], 'admin_never_expires' => ['iam_privileged', 'iam_passwords'],
+                 'stale_admins' => ['iam_privileged', 'iam_access_review'], 'domain_admins' => ['iam_privileged', 'iam_least_privilege'], 'krbtgt_old' => ['iam_privileged'],
+                 'laps_missing' => ['iam_privileged', 'iam_passwords'], 'ldap_signing' => ['cfg_baseline'], '*' => ['iam_accounts']],
+        'names' => ['*' => ['cfg_baseline']],
     ];
 
     /** Remote-access ports: an exposed one also concerns secure remote access. */
@@ -219,6 +225,11 @@ final class AlignCompliance
         $agent = $one("SELECT MAX(last_full_seen) AS at FROM devices WHERE client_id = :c AND removed_at IS NULL AND source = 'agent' AND last_full_seen > UTC_TIMESTAMP() - INTERVAL :d DAY");
         if (($agent['at'] ?? null) !== null) {
             $add(['cfg_ports_services', 'net_encrypt_transit'], __('internal scan, {d}', ['d' => substr((string) $agent['at'], 0, 10)]));
+        }
+        // A recent successful directory read assesses the privileged accounts (not the whole password policy or MFA).
+        $dir = $one('SELECT MAX(checked_at) AS at FROM site_directory WHERE client_id = :c AND checked_at > UTC_TIMESTAMP() - INTERVAL :d DAY');
+        if (($dir['at'] ?? null) !== null) {
+            $add(['iam_privileged'], __('Active Directory read by the agent, {d}', ['d' => substr((string) $dir['at'], 0, 10)]));
         }
         return $areas;
     }

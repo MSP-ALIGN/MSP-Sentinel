@@ -2,6 +2,32 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.20.0 (2026-11-23): Active Directory checks
+
+- **Active Directory checks through the on-premises agent** (first item of
+  [docs/ROADMAP-security.md](docs/ROADMAP-security.md)). With a read-only domain account, the agent reads the
+  directory at each full scan. Nothing is changed. Balanced grading:
+  - **Fail:** AS-REP roastable accounts, Kerberoastable admin accounts, unconstrained delegation outside the domain
+    controllers.
+  - **Warning:** other Kerberoastable accounts, more than 5 Domain Admins, admin passwords that never expire, a
+    krbtgt password over a year old, missing LAPS, LDAP signing not required, stale admin accounts.
+  - Each finding lists up to 25 names, with step-by-step fixes in reports and ITFlow tickets. The findings also count
+    on the Compliance page.
+- **The password is sealed for the agent, never readable in Sentinel.** Your browser encrypts it to the site agent's
+  own key (Web Crypto). Sentinel relays the sealed box, signed, and deletes it once the agent confirms. The agent keeps
+  it sealed and opens it only for the sign-in. Replace it any time from the Agents page; the page shows when the agent
+  last confirmed it.
+- **The domain controller's certificate is trusted before the first sign-in.** The agent signs in over LDAPS only
+  when the certificate matches the one you trusted. A changed certificate gets nothing.
+- **LDAP signing** is checked with a made-up account; the real password never goes over plain LDAP.
+- **Name poisoning:** the agent listens for 2 minutes per full scan for LLMNR/NetBIOS name requests and never
+  answers. Devices sending them are a Fail.
+- **Agent changes:**
+  - The agent gets its own key pair, created on the appliance.
+  - The service gets one capability (`CAP_NET_BIND_SERVICE`) to listen on UDP 137.
+  - Agent files live in `/var/lib/sentinel-agent`.
+  - Upgrade agents with `--upgrade` to use these features.
+
 ### 1.19.2 (2026-11-23): faster ticket lookup, device evidence tested
 
 - **After an unclear answer from ITFlow, Sentinel looks for the ticket from the newest end** of the client's ticket
