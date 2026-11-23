@@ -78,7 +78,7 @@ $chip = static function (string $sev, string $text): string {
                 <td><code><?= e($d['name']) ?></code><br><span class="text-body-secondary"><?= e(__('Checked {time} UTC', ['time' => $d['checked_at']])) ?></span></td>
                 <td><?= e($d['kind'] === 'zone' ? __('Zone transfer') : __('Subdomain takeover')) ?></td>
                 <td><?php if ($d['kind'] === 'zone'): ?>
-                    <?php if ((array) ($res['nameservers'] ?? []) === []): ?><?= $chip('info', __('No nameserver address found')) ?><?php endif; ?>
+                    <?php if ((array) ($res['nameservers'] ?? []) === []): ?><?= $chip('info', __('No nameserver of its own to ask (no NS records, or none at a public address)')) ?><?php endif; ?>
                     <?php foreach ((array) ($res['nameservers'] ?? []) as $ns): $st = (string) ($ns['status'] ?? ''); ?>
                     <?= $st === 'open' ? $chip('fail', __('{ns} ({ip}) hands out the zone: {n} records', ['ns' => (string) ($ns['ns'] ?? ''), 'ip' => (string) ($ns['ip'] ?? ''), 'n' => (string) (int) ($ns['records'] ?? 0)]))
                         : ($st === 'refused' ? $chip('ok', __('{ns} ({ip}) refuses', ['ns' => (string) ($ns['ns'] ?? ''), 'ip' => (string) ($ns['ip'] ?? '')]))
