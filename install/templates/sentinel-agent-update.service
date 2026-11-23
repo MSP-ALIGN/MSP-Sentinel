@@ -1,0 +1,12 @@
+# MSP Sentinel agent update helper (written by install/agent-install.sh). Runs as root, once per request: checks the
+# staged release against the pinned release key (/etc/sentinel-agent/release-key.pub), installs it and restarts the
+# agent. See bin/agent-update-runner.php.
+[Unit]
+Description=MSP Sentinel agent update helper
+# Many requests in a row must never stop the path unit from working (see the 1.13.1 web-update fix on the server).
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+ExecStart=__PHP__ __ROOT__/bin/agent-update-runner.php
+TimeoutStartSec=600

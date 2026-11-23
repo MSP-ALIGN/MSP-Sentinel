@@ -18,8 +18,11 @@
 # the hardened systemd service "sentinel-agent".
 #
 # Security notes:
-# - The agent runs as "sentinel-agent", never root, with no extra capabilities:
-#   scans are unprivileged TCP connect scans. The systemd unit locks down the
+# - The agent runs as "sentinel-agent", never root, with one capability (listening on UDP 137
+#   for NetBIOS name requests): scans are unprivileged TCP connect scans.
+# - Remote updates (from Sentinel's Agents page) are installed by a root helper
+#   (sentinel-agent-update.path/.service) only when signed with the maintainer's release key,
+#   pinned here at /etc/sentinel-agent/release-key.pub; Sentinel can't vouch for code. The systemd unit locks down the
 #   file system (only its state folder is writable) and forbids privilege gain.
 # - The config (with the agent token and the pinned server key, site and client)
 #   is /etc/sentinel-agent/agent.json, owned by root and only readable by the
@@ -77,7 +80,24 @@ copy_code() {
   run chmod 0750 "$APP_DIR/install/agent-install.sh"
 }
 unit() {
-  sed -e "s#__ROOT__#${APP_DIR}#g" -e "s#__PHP__#/usr/bin/${PHP_BIN}#g" -e "s#__CONF__#${CONF_DIR}#g" "$SRC/install/templates/sentinel-agent.service"
+  render "${1:-sentinel-agent.service}"
+}
+render() {
+  sed -e "s#__ROOT__#${APP_DIR}#g" -e "s#__PHP__#/usr/bin/${PHP_BIN}#g" -e "s#__CONF__#${CONF_DIR}#g" "$SRC/install/templates/$1"
+}
+# Remote updates (1.22): pin the maintainer's release public key OUTSIDE the code folder (root-owned; a remote update
+# never changes it), and install the root update helper's path unit. Without a key in the release, remote updates stay
+# off and the agent can only be upgraded by hand.
+release_key_and_helper() {
+  if [ -s "$SRC/install/release-key.pub" ]; then
+    run install -o root -g root -m 0644 "$SRC/install/release-key.pub" "$CONF_DIR/release-key.pub"
+  else
+    echo "  No release key in this release: remote agent updates stay off (upgrade by hand)."
+  fi
+  render sentinel-agent-update.service | write_file /etc/systemd/system/sentinel-agent-update.service 0644
+  render sentinel-agent-update.path | write_file /etc/systemd/system/sentinel-agent-update.path 0644
+  run systemctl daemon-reload
+  run systemctl enable --now sentinel-agent-update.path
 }
 
 [ -f "$SRC/VERSION" ] && [ -f "$SRC/bin/sentinel-agent.php" ] || die "Run this from an unpacked MSP Sentinel release."
@@ -85,8 +105,8 @@ if [ "$dry" -eq 0 ] && [ "$(id -u)" -ne 0 ]; then die "Run as root (sudo)."; fi
 
 if [ "$mode" = uninstall ]; then
   say "Removing the agent"
-  run systemctl disable --now sentinel-agent || true
-  run rm -f /etc/systemd/system/sentinel-agent.service
+  run systemctl disable --now sentinel-agent sentinel-agent-update.path || true
+  run rm -f /etc/systemd/system/sentinel-agent.service /etc/systemd/system/sentinel-agent-update.service /etc/systemd/system/sentinel-agent-update.path
   run systemctl daemon-reload
   run rm -rf "$APP_DIR" "$CONF_DIR" "$STATE_DIR"
   run userdel sentinel-agent || true
@@ -109,7 +129,7 @@ if [ "$mode" = upgrade ]; then
   run systemctl stop sentinel-agent || true
   copy_code
   unit | write_file /etc/systemd/system/sentinel-agent.service 0644
-  run systemctl daemon-reload
+  release_key_and_helper
   run systemctl start sentinel-agent
   say "Done"
   exit 0
@@ -169,6 +189,6 @@ run chmod 0640 "$CONF_DIR/agent.json"
 
 say "Service"
 unit | write_file /etc/systemd/system/sentinel-agent.service 0644
-run systemctl daemon-reload
+release_key_and_helper
 run systemctl enable --now sentinel-agent
 say "Done. The agent checks in within a minute; see the client page in Sentinel. Logs: journalctl -u sentinel-agent"

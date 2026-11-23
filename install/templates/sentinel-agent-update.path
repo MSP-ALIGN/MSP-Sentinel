@@ -1,0 +1,12 @@
+# MSP Sentinel agent: start the update helper when the agent asks for an update (written by install/agent-install.sh).
+# The agent (unprivileged) writes /var/lib/sentinel-agent/update-request after staging a signed release; the helper (root)
+# checks everything again before installing.
+[Unit]
+Description=MSP Sentinel agent update request
+
+[Path]
+PathExists=/var/lib/sentinel-agent/update-request
+Unit=sentinel-agent-update.service
+
+[Install]
+WantedBy=multi-user.target
