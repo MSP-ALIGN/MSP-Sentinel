@@ -61,7 +61,7 @@ final class Runner
         private readonly TlsChecker $tls,
         private readonly HttpProbe $web,
         callable $log,
-        private readonly string $arpFile = '/proc/net/arp',
+        private readonly ?Platform $platform = null,
         private readonly ?ProtocolProbes $probes = null,
         private readonly ?AgentKey $key = null,
         private readonly ?Credentials $credentials = null,
@@ -243,11 +243,7 @@ final class Runner
      */
     private function sendDiagnostics(): void
     {
-        $uptime = is_readable('/proc/uptime') ? (int) (float) explode(' ', (string) file_get_contents('/proc/uptime'))[0] : null;
-        $mem = null;
-        if (is_readable('/proc/meminfo') && preg_match('/MemAvailable:\s+(\d+)/', (string) file_get_contents('/proc/meminfo'), $m)) {
-            $mem = intdiv((int) $m[1], 1024);
-        }
+        ['uptime' => $uptime, 'memory_mb' => $mem] = ($this->platform ?? Platform::detect())->systemInfo();
         $free = @disk_free_space($this->state->directory());
         $load = function_exists('sys_getloadavg') ? (sys_getloadavg()[0] ?? null) : null;
         try {
@@ -256,7 +252,7 @@ final class Runner
                 'disk_free_mb' => $free === false ? null : (int) ($free / 1048576), 'uptime_seconds' => $uptime, 'memory_mb' => $mem, 'load' => $load,
                 'pending_results' => count($this->state->pending()), 'time' => gmdate('Y-m-d\TH:i:s\Z'),
                 'key_fingerprint' => $this->key !== null ? AgentKey::fingerprint($this->key->publicKey()) : '', 'holds_directory' => $this->credentials?->holds() ?? false,
-                'name_listening' => $this->listener === null ? 'off' : 'on (LLMNR UDP 5355, NetBIOS UDP 137)',
+                'name_listening' => $this->listener === null ? (($this->platform ?? Platform::detect())->namesListener() ? 'off' : 'not on Windows (the system owns those ports)') : 'on (LLMNR UDP 5355, NetBIOS UDP 137)',
             ]);
             ($this->log)('Diagnostics sent.');
         } catch (\Throwable $ex) {
@@ -427,21 +423,13 @@ final class Runner
     }
 
     /**
-     * MAC addresses the agent's own ARP table knows (Linux), by IP.
+     * MAC addresses the system's ARP table knows, by IP (Linux /proc/net/arp, Windows `arp -a`: see Platform).
      *
      * @return array<string,string>
      */
     private function arp(): array
     {
-        $out = [];
-        $lines = is_readable($this->arpFile) ? (array) file($this->arpFile, FILE_IGNORE_NEW_LINES) : [];
-        foreach (array_slice($lines, 1) as $line) {
-            $cols = preg_split('/\s+/', trim((string) $line)) ?: [];
-            if (count($cols) >= 4 && filter_var($cols[0], FILTER_VALIDATE_IP) && preg_match('/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/i', $cols[3]) && $cols[3] !== '00:00:00:00:00:00') {
-                $out[$cols[0]] = strtolower($cols[3]);
-            }
-        }
-        return $out;
+        return ($this->platform ?? Platform::detect())->arpTable();
     }
 
     /** A host name from a certificate's common name (only a plain DNS name, no wildcards). */

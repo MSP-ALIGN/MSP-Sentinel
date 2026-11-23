@@ -111,4 +111,35 @@ return [
         Assert::true(in_array($ctx->db->query("SELECT status FROM agent_jobs WHERE id = {$job}")->fetchColumn(), ['done', 'partial'], true), 'then the scan ran');
         Assert::status(404, $admin->post('/clients/' . $cid . '/agents/999999/restart', ['_csrf' => $admin->get('/')->csrf()]));
     },
+    'Windows agent (platform forced in the test suite): ARP from arp -a, no name listener, scans unchanged' => function (TestContext $ctx) use ($setSetup, $setRun, $setDir): void {
+        [$cid, $site] = $setSetup($ctx);
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $agentId = (int) $ctx->db->query("SELECT id FROM agents WHERE site_id = {$site} AND status = 'active'")->fetchColumn();
+        $cfgFile = $setDir($ctx) . '/agent.json';
+        $c = json_decode((string) file_get_contents($cfgFile), true);
+        $linux = $c;
+        $c['testing']['platform'] = 'windows';
+        $c['testing']['arp_file'] = $setDir($ctx) . '/arp-windows';
+        $c['testing']['names'] = ['llmnr_port' => 1, 'nbns_port' => 1]; // ignored on Windows
+        file_put_contents($cfgFile, json_encode($c));
+        file_put_contents($setDir($ctx) . '/arp-windows', "\r\nInterface: 10.91.0.5 --- 0x7\r\n  Internet Address      Physical Address      Type\r\n"
+            . "  10.91.0.5             02-00-00-00-91-05     dynamic   \r\n  10.91.0.255           ff-ff-ff-ff-ff-ff     static    \r\n");
+        try {
+            $admin->submit('/clients/' . $cid . '/agents', '/clients/' . $cid . '/agents/' . $agentId . '/diagnostics', []);
+            [$code, $out] = $setRun($ctx);
+            Assert::same(0, $code, 'agent: ' . $out);
+            $d = json_decode((string) $ctx->db->query("SELECT diagnostics FROM agents WHERE id = {$agentId}")->fetchColumn(), true);
+            Assert::contains('not on Windows', (string) ($d['name_listening'] ?? ''));
+            Assert::same(null, $d['uptime_seconds'] ?? null, 'uptime not read on Windows');
+            // A scan runs as on Linux; MAC addresses come from the Windows ARP table.
+            $admin->submit('/clients/' . $cid, '/clients/' . $cid . '/sites/' . $site . '/scan', ['reason' => 'Windows platform test']);
+            $job = (int) $ctx->db->query("SELECT MAX(id) FROM agent_jobs WHERE site_id = {$site}")->fetchColumn();
+            [$code, $out] = $setRun($ctx);
+            Assert::true(in_array($ctx->db->query("SELECT status FROM agent_jobs WHERE id = {$job}")->fetchColumn(), ['done', 'partial'], true), 'scan ran: ' . $out);
+            $mac = $ctx->db->query("SELECT mac FROM devices WHERE client_id = {$cid} AND source = 'agent' AND source_id LIKE '%:10.91.0.5'")->fetchColumn();
+            Assert::same('02:00:00:00:91:05', $mac, 'MAC address from the Windows ARP table');
+        } finally {
+            file_put_contents($cfgFile, json_encode($linux));
+        }
+    },
 ];

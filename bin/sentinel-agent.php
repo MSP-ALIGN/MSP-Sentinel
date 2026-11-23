@@ -37,6 +37,7 @@ use Sentinel\Directory\NameListener;
 use Sentinel\Scanning\Connector;
 use Sentinel\Scanning\HttpProbe;
 use Sentinel\Scanning\NmapRunner;
+use Sentinel\AgentClient\Platform;
 use Sentinel\Scanning\ProtocolProbes;
 use Sentinel\Scanning\TlsChecker;
 
@@ -49,8 +50,11 @@ for ($i = 2; $i < count($argv); $i++) {
         $opts[$name] = isset($argv[$i + 1]) && !str_starts_with($argv[$i + 1], '--') ? $argv[++$i] : true;
     }
 }
-$configFile = is_string($opts['config'] ?? null) ? $opts['config'] : '/etc/sentinel-agent/agent.json';
 $testMode = getenv('SENTINEL_TEST_MODE') === '1';
+// Linux or Windows: default paths, nmap, the ARP table (test mode may force Windows: SENTINEL_TEST_PLATFORM, or the
+// config's testing.platform below).
+$platform = Platform::detect($testMode && getenv('SENTINEL_TEST_PLATFORM') !== false ? (string) getenv('SENTINEL_TEST_PLATFORM') : null);
+$configFile = is_string($opts['config'] ?? null) ? $opts['config'] : $platform->configFile();
 $say = static function (string $line): void {
     fwrite(STDOUT, '[' . gmdate('Y-m-d H:i:s') . '] ' . $line . "\n");
 };
@@ -112,7 +116,7 @@ switch ($command) {
         }
         $config = ['server' => $server, 'agent_id' => (int) $res['data']['agent_id'], 'site_id' => $res['data']['site_id'], 'client_id' => $res['data']['client_id'],
                    'token' => (string) $res['data']['token'],
-                   'server_public_key' => (string) $res['data']['server_public_key'], 'ca_file' => $ca, 'nmap_path' => '/usr/bin/nmap',
+                   'server_public_key' => (string) $res['data']['server_public_key'], 'ca_file' => $ca, 'nmap_path' => $platform->nmapPath(),
                    // The agent release key (public), pinned at enrolment: updates need no site visit.
                    'release_public_key' => is_string($res['data']['release_public_key'] ?? null) && \Sentinel\System\ReleaseManifest::validPublicKey($res['data']['release_public_key']) ? $res['data']['release_public_key'] : '',
                    'state_file' => dirname($configFile) . '/state.json'];
@@ -159,19 +163,24 @@ switch ($command) {
             $say('Agent key fingerprint: ' . ($key !== null ? AgentKey::fingerprint($key->publicKey()) : 'none (key unusable)'));
             exit($res['status'] === 200 ? 0 : 1);
         }
+        if ($testMode && is_array($c['testing'] ?? null)) {
+            $platform = Platform::detect(is_string($c['testing']['platform'] ?? null) ? $c['testing']['platform'] : $platform->os,
+                is_string($c['testing']['arp_file'] ?? null) ? $c['testing']['arp_file'] : null);
+        }
         $runner = new Runner($http, new JobVerifier((string) $c['server_public_key'], (int) $c['agent_id'], (int) $c['site_id'], (int) $c['client_id']), new State((string) ($c['state_file'] ?? dirname($configFile) . '/state.json')),
-            new NmapRunner((string) ($c['nmap_path'] ?? '/usr/bin/nmap')), new TlsChecker($connector), new HttpProbe($connector), $say,
-            $testMode && is_string($c['testing']['arp_file'] ?? null) ? $c['testing']['arp_file'] : '/proc/net/arp', new ProtocolProbes($connector), $key, $credentials,
+            new NmapRunner((string) ($c['nmap_path'] ?? $platform->nmapPath())), new TlsChecker($connector), new HttpProbe($connector), $say,
+            $platform, new ProtocolProbes($connector), $key, $credentials,
             new DirectoryChecks(static fn (string $ip, int $port): array => $connector->endpoint($ip, $port)),
             // Test mode: listen on 127.0.0.1 and high ports, without joining the multicast group (no ports given: don't listen).
-            $testMode ? (is_array($c['testing']['names'] ?? null)
+            // Windows: no listener (the system owns UDP 137 and 5355).
+            !$platform->namesListener() ? null : ($testMode ? (is_array($c['testing']['names'] ?? null)
                 ? new NameListener('127.0.0.1', (int) $c['testing']['names']['llmnr_port'], (int) $c['testing']['names']['nbns_port'], false, (string) ($c['testing']['names']['loopback_as'] ?? '')) : null)
-                : new NameListener(),
+                : new NameListener()),
             // Updates: only code signed with the release key pinned at install (test suite: testing.release_key).
-            new Updater($http, $testMode && is_string($c['testing']['release_key'] ?? null) ? $c['testing']['release_key'] : '/etc/sentinel-agent/release-key.pub',
+            new Updater($http, $testMode && is_string($c['testing']['release_key'] ?? null) ? $c['testing']['release_key'] : $platform->releaseKeyFile(),
                 $stateDir, $say, (string) $c['server_public_key'], (int) $c['agent_id'], (int) $c['site_id'], (int) $c['client_id'],
                 // The helper's results: a root-owned folder the agent can read but not change.
-                $testMode && is_string($c['testing']['update_result_dir'] ?? null) ? $c['testing']['update_result_dir'] : '/var/lib/sentinel-agent-update',
+                $testMode && is_string($c['testing']['update_result_dir'] ?? null) ? $c['testing']['update_result_dir'] : $platform->updateResultDir(),
                 is_string($c['release_public_key'] ?? null) ? $c['release_public_key'] : ''),
             $mover);
         $say('Agent #' . $c['agent_id'] . ' started (version ' . Runner::version() . ').');
