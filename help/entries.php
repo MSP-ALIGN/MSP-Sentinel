@@ -227,6 +227,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.26.3',
+            'date' => '2026-11-23',
+            'items' => [
+                'Linux agent fix: an update stopped half-way by a power cut is repaired. The update helper now starts through a small root-owned launcher outside the code folder, which puts the previous version back (at the agent\'s next start or the helper\'s next run). Remote updates and agent-install.sh --upgrade install it.',
+            ],
+        ],
+        [
             'version' => '1.26.2',
             'date' => '2026-11-23',
             'items' => [

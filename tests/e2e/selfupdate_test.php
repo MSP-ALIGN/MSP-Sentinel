@@ -7,7 +7,9 @@ declare(strict_types=1);
  * (9.9.9, signed with a key made for this test run) from this server, checks it against its pinned release key and
  * stages it; the real root update helper (bin/agent-update-runner.php, in test mode on test folders) checks everything
  * again and installs it. Refusals: a release signed with another key, a staged file changed after staging, a
- * downgrade, test options outside the test suite. Made-up data only.
+ * downgrade, test options outside the test suite. On Linux the helper starts through a launcher outside the code
+ * folder (install/linux/agent-update-launcher.php), which repairs an update stopped half-way (code folder missing,
+ * .old there) first. Made-up data only.
  */
 
 use Sentinel\Core\App;
@@ -211,5 +213,76 @@ return [
         $job = (int) $ctx->db->query("SELECT MAX(id) FROM agent_jobs WHERE site_id = {$site}")->fetchColumn();
         $upRun($ctx);
         Assert::true(in_array($ctx->db->query("SELECT status FROM agent_jobs WHERE id = {$job}")->fetchColumn(), ['done', 'partial'], true), 'a scan runs while the update waits for its next attempt');
+    },
+    'agent updates (Linux): the launcher outside the code folder repairs an update stopped half-way, then runs the helper' => function (TestContext $ctx) use ($upSetup, $upRun, $upDir, $fakeApp, $releaseRoot): void {
+        [, $site] = $upSetup($ctx);
+        $agentId = (int) $ctx->db->query("SELECT id FROM agents WHERE site_id = {$site} AND status = 'active'")->fetchColumn();
+        $state = $upDir($ctx);
+        $results = $state . '-results';
+        $root = dirname(__DIR__, 2);
+        copy($releaseRoot($ctx) . '/install/release-key.pub', $state . '/release-key.pub');
+        $launch = static fn (array $args, array $env = []): array => $ctx->cli('install/linux/agent-update-launcher.php', $args, $env);
+        // A pretend installed agent with the helper in it, as /opt/sentinel-agent has.
+        $app = $fakeApp($ctx, 'installed-agent-8', '1.22.0');
+        foreach (['bin/agent-update-runner.php', 'src/System/ReleaseManifest.php', 'src/Agent/Signer.php', 'src/System/ReleaseKeyOffer.php'] as $f) {
+            @mkdir(dirname($app . '/' . $f), 0700, true);
+            copy($root . '/' . $f, $app . '/' . $f);
+        }
+
+        // A power cut between the helper's two renames: the code folder is gone, the previous one is .old.
+        rename($app, $app . '.old');
+        Assert::true(!is_file($app . '/bin/agent-update-runner.php'), 'the helper itself is in the missing folder');
+        // The agent's start (ExecStartPre --repair-only) puts it back; no update request is needed (it was taken already).
+        [$code, $out] = $launch(['--repair-only', '--app', $app, '--result', $results]);
+        Assert::same(0, $code, $out);
+        Assert::contains('Restored ' . $app, $out);
+        Assert::same("1.22.0\n", file_get_contents($app . '/VERSION'), 'repaired');
+        Assert::true(!is_dir($app . '.old'), 'moved back, not copied');
+        [$code, $out] = $launch(['--repair-only', '--app', $app, '--result', $results]);
+        Assert::same(0, $code, $out);
+        Assert::notContains('Restored', $out, 'nothing to repair: nothing changed');
+        // While the helper runs (it holds the update lock), the agent's start leaves the folders to it.
+        rename($app, $app . '.old');
+        $lock = fopen($results . '/update.lock', 'c');
+        flock($lock, LOCK_EX);
+        [$code, $out] = $launch(['--repair-only', '--app', $app, '--result', $results]);
+        flock($lock, LOCK_UN);
+        fclose($lock);
+        Assert::same(0, $code, $out);
+        Assert::true(!is_dir($app) && is_dir($app . '.old'), 'no repair in the middle of an update');
+
+        // The update service: the launcher repairs first, then runs the helper from the restored folder, which installs
+        // the staged release.
+        $ctx->db->exec("UPDATE agents SET update_to = '9.9.9', update_requested_at = UTC_TIMESTAMP() + INTERVAL 30 MINUTE, update_handouts = 0, update_handed_at = NULL, update_result = NULL WHERE id = {$agentId}");
+        [, $out] = $upRun($ctx);
+        Assert::contains('staged', $out);
+        [$code, $out] = $launch(['--app', $app, '--state', $state, '--key', $state . '/release-key.pub', '--result', $results, '--no-systemd']);
+        Assert::same(0, $code, $out);
+        Assert::contains('Restored ' . $app, $out);
+        Assert::same("9.9.9\n", file_get_contents($app . '/VERSION'), 'installed by the helper the launcher started');
+        Assert::same("1.22.0\n", file_get_contents($app . '.old/VERSION'), 'the restored version was kept aside as usual');
+        $r = json_decode((string) file_get_contents($results . '/result.json'), true);
+        Assert::same(['9.9.9', true], [$r['version'], $r['ok']]);
+        Assert::true(!is_file($state . '/update-request'), 'the request was taken');
+
+        // Test options are refused outside the test suite.
+        [$code, $out] = $launch(['--repair-only', '--app', $app], ['SENTINEL_TEST_MODE' => '0']);
+        Assert::same(2, $code);
+        Assert::contains('only allowed in the test suite', $out);
+
+        // The units start it from its fixed place; the update service keeps its hardening; the installer writes it.
+        $unit = (string) file_get_contents($root . '/install/templates/sentinel-agent-update.service');
+        Assert::contains("\nExecStart=__PHP__ /usr/local/lib/sentinel-agent/update-launcher.php\n", $unit);
+        Assert::contains("\nExecStartPre=-+/usr/bin/install -D -o root -g root -m 0644 __ROOT__/install/linux/agent-update-launcher.php /usr/local/lib/sentinel-agent/update-launcher.php\n", $unit);
+        Assert::notContains('agent-update-runner.php', implode("\n", array_filter(explode("\n", $unit), static fn (string $l): bool => !str_starts_with($l, '#'))));
+        foreach (["\nProtectSystem=strict\n", "\nReadWritePaths=/opt /etc/systemd/system /etc/sentinel-agent /var/lib/sentinel-agent-update /var/lib/sentinel-agent\n", "\nUMask=0027\n"] as $line) {
+            Assert::contains($line, $unit);
+        }
+        Assert::contains("\nExecStartPre=-+__PHP__ /usr/local/lib/sentinel-agent/update-launcher.php --repair-only\n", (string) file_get_contents($root . '/install/templates/sentinel-agent.service'));
+        exec('bash ' . escapeshellarg($root . '/install/agent-install.sh') . ' --dry-run --skip-os-check --upgrade 2>&1', $lines, $rc);
+        $dry = implode("\n", $lines);
+        Assert::same(0, $rc, $dry);
+        Assert::contains('install -o root -g root -m 0644 ' . $root . '/install/linux/agent-update-launcher.php /usr/local/lib/sentinel-agent/update-launcher.php', $dry, '--upgrade refreshes the launcher');
+        Assert::true(\Sentinel\System\ReleaseManifest::releaseFile('install/linux/agent-update-launcher.php'), 'remote updates carry it too');
     },
 ];

@@ -2,6 +2,20 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.26.3 (2026-11-23): Linux agent, half-finished updates are repaired
+
+- **An agent update stopped half-way (power cut between the helper's two renames) is repaired.** The root update
+  helper now starts through a launcher outside the code folder: `install/linux/agent-update-launcher.php`, installed
+  as `/usr/local/lib/sentinel-agent/update-launcher.php` (root-owned). It puts `/opt/sentinel-agent.old` back when
+  `/opt/sentinel-agent` is missing, then runs `bin/agent-update-runner.php`. The helper's own repair step could never
+  run in that case: systemd started it from inside the missing folder.
+- **The agent's own start repairs it too** (`ExecStartPre=-+... --repair-only` in `sentinel-agent.service`): after a
+  power cut no update request is left to start the helper. It never touches the folders while the helper runs (an
+  update lock in `/var/lib/sentinel-agent-update`).
+- **The update service keeps its hardening** (`ProtectSystem=strict`, same `ReadWritePaths`). It refreshes the
+  launcher from the code folder before each run, so agents updated remotely from an older version get it without a
+  manual upgrade. `agent-install.sh` (install and `--upgrade`) writes it; `--uninstall` removes it.
+
 ### 1.26.2 (2026-11-23): Windows agent, fixes from re-review
 
 - **A fresh install creates its ProgramData folder itself.** It fails if someone recreated the folder in between,

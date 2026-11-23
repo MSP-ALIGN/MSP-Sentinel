@@ -171,7 +171,8 @@ vouch for code. What that protects, and what it doesn't, is under "What the rele
    release public key it pinned (`/etc/sentinel-agent/release-key.pub`, else the key pinned at enrolment in the
    root-owned `agent.json`; an update never changes it): the signature, that it is the version asked for and newer than its own, and every file's SHA-256.
 2. It stages the files in its state folder and asks the root update helper (`sentinel-agent-update.path` starts
-   `bin/agent-update-runner.php`) to install them. The agent itself can't change its code.
+   `bin/agent-update-runner.php`, through a root-owned launcher outside the code folder:
+   `/usr/local/lib/sentinel-agent/update-launcher.php`) to install them. The agent itself can't change its code.
 3. **Root never touches the agent's folder** (its user could plant symlinks there). The helper has the staged release
    read by a collector running as the agent's user, and checks everything again in memory: the signature with the
    pinned key, the version (x.y.z, newer than the installed one; an unreadable installed version is refused) and every
@@ -181,7 +182,8 @@ vouch for code. What that protects, and what it doesn't, is under "What the rele
 5. It puts the new folder in place (the previous one stays as `/opt/sentinel-agent.old`), writes the systemd units
    from the new release and restarts the agent. **If the agent doesn't stay running, the previous version is put back
    and restarted** (rollback): it must be running 20 and 50 seconds later without having restarted. An update stopped
-   half-way (power cut) is repaired on the helper's next run.
+   half-way (power cut: `/opt/sentinel-agent` missing, `/opt/sentinel-agent.old` there) is repaired by the launcher,
+   at the agent's next start (boot) or the helper's next run; it never touches the folders while the helper runs.
 6. The result goes to `/var/lib/sentinel-agent-update` (root-owned; the agent can read it, not change it) and the
    Agents page shows it: "Updated to x.y.z", or why it was refused. The agent cleans up its own staging folder.
 

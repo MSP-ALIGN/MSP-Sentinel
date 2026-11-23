@@ -26,7 +26,9 @@
 # - Remote updates (from Sentinel's Agents page) are installed by a root helper
 #   (sentinel-agent-update.path/.service) only when signed with the maintainer's release key,
 #   pinned here at /etc/sentinel-agent/release-key.pub; Sentinel can't vouch for code. The systemd unit locks down the
-#   file system (only its state folder is writable) and forbids privilege gain.
+#   file system (only its state folder is writable) and forbids privilege gain. The helper starts through a root-owned
+#   launcher outside the code folder (/usr/local/lib/sentinel-agent/update-launcher.php), which also puts the code
+#   folder back if an update stopped half-way (power cut), at the helper's next run or the agent's next start.
 # - The config (with the agent token and the pinned server key, site and client)
 #   is /etc/sentinel-agent/agent.json, owned by root and only readable by the
 #   agent (0640): the agent can't change what it trusts. Only its state folder
@@ -38,6 +40,9 @@ set -euo pipefail
 APP_DIR=/opt/sentinel-agent
 CONF_DIR=/etc/sentinel-agent
 STATE_DIR=/var/lib/sentinel-agent
+# The update helper's launcher, outside the code folder (see install/linux/agent-update-launcher.php). The systemd
+# units name this path as is.
+LAUNCHER_DIR=/usr/local/lib/sentinel-agent
 PHPV=8.4
 PHP_BIN="php${PHPV}"
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
@@ -116,13 +121,17 @@ release_key_and_helper() {
   fi
   # The helper's results: root-owned, readable by the agent, not changeable by it.
   run install -d -o root -g sentinel-agent -m 0750 /var/lib/sentinel-agent-update
+  # The helper's launcher (root-owned, outside the code folder): repairs an update stopped half-way, then runs the
+  # helper. Written on install and on every --upgrade.
+  run install -d -o root -g root -m 0755 "$LAUNCHER_DIR"
+  run install -o root -g root -m 0644 "$SRC/install/linux/agent-update-launcher.php" "$LAUNCHER_DIR/update-launcher.php"
   render sentinel-agent-update.service | write_file /etc/systemd/system/sentinel-agent-update.service 0644
   render sentinel-agent-update.path | write_file /etc/systemd/system/sentinel-agent-update.path 0644
   run systemctl daemon-reload
   run systemctl enable --now sentinel-agent-update.path
 }
 
-[ -f "$SRC/VERSION" ] && [ -f "$SRC/bin/sentinel-agent.php" ] || die "Run this from an unpacked MSP Sentinel release."
+[ -f "$SRC/VERSION" ] && [ -f "$SRC/bin/sentinel-agent.php" ] && [ -f "$SRC/install/linux/agent-update-launcher.php" ] || die "Run this from an unpacked MSP Sentinel release."
 if [ "$dry" -eq 0 ] && [ "$(id -u)" -ne 0 ]; then die "Run as root (sudo)."; fi
 
 if [ "$mode" = uninstall ]; then
@@ -130,7 +139,7 @@ if [ "$mode" = uninstall ]; then
   run systemctl disable --now sentinel-agent sentinel-agent-update.path || true
   run rm -f /etc/systemd/system/sentinel-agent.service /etc/systemd/system/sentinel-agent-update.service /etc/systemd/system/sentinel-agent-update.path
   run systemctl daemon-reload
-  run rm -rf "$APP_DIR" "$APP_DIR.old" "$APP_DIR.new" "$APP_DIR.failed" "$CONF_DIR" "$STATE_DIR" /var/lib/sentinel-agent-update
+  run rm -rf "$APP_DIR" "$APP_DIR.old" "$APP_DIR.new" "$APP_DIR.failed" "$CONF_DIR" "$STATE_DIR" /var/lib/sentinel-agent-update "$LAUNCHER_DIR"
   run userdel sentinel-agent || true
   echo "  Removed. Also revoke the agent on the client page in Sentinel, so its token stops working."
   exit 0

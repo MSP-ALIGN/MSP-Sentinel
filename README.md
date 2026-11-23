@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.26.2](https://img.shields.io/badge/version-1.26.2-ff5a1f?style=flat-square)
+![Version 1.26.3](https://img.shields.io/badge/version-1.26.3-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -148,6 +148,15 @@ curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install
 The same help is built into the app (**Help** in the menu), with a "What's new" page for every release.
 
 ## What's new
+
+### 1.26.3 (2026-11-23): Linux agent, half-finished updates are repaired
+
+- **A power cut in the middle of an agent update no longer leaves the appliance without its agent.** The update
+  helper now starts through a small root-owned launcher outside the code folder
+  (`/usr/local/lib/sentinel-agent/update-launcher.php`). If `/opt/sentinel-agent` is missing and
+  `/opt/sentinel-agent.old` is there, the launcher puts it back, at the agent's next start (boot) or the helper's
+  next run. Before, the repair was in the helper itself, inside the missing folder, so it could never run.
+- **Remote updates install the launcher by themselves;** `agent-install.sh --upgrade` installs and refreshes it too.
 
 ### 1.26.2 (2026-11-23): Windows agent, fixes from re-review
 

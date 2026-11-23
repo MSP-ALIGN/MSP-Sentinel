@@ -8,6 +8,10 @@ Wants=network-online.target
 Type=simple
 User=sentinel-agent
 Group=sentinel-agent
+# Before every start (as root, "+"; "-": never blocks the start): put the code folder back if an update stopped
+# half-way (power cut). Nothing else would: the update request was already taken. See
+# install/linux/agent-update-launcher.php; it does nothing while the update helper runs.
+ExecStartPre=-+__PHP__ /usr/local/lib/sentinel-agent/update-launcher.php --repair-only
 ExecStart=__PHP__ __ROOT__/bin/sentinel-agent.php run --config __CONF__/agent.json
 Restart=on-failure
 RestartSec=60

@@ -25,6 +25,10 @@ declare(strict_types=1);
  * The result goes to /var/lib/sentinel-agent-update/result.json: a root-owned folder the agent can read but not
  * change. Cleaning up the staged files is the agent's job.
  *
+ * systemd starts it through a launcher outside the code folder (install/linux/agent-update-launcher.php, installed
+ * as /usr/local/lib/sentinel-agent/update-launcher.php), which holds the update lock and repairs an update stopped
+ * half-way first (this file is in the folder that would be missing). The collector (--collect) is started directly.
+ *
  * TEST SUITE ONLY: with SENTINEL_TEST_MODE=1, --app, --state, --key, --result and --no-systemd point it at test
  * folders, and the collector and pre-flight run as the current user (no runuser). Without it those options are
  * refused and it must run as root.
@@ -212,10 +216,16 @@ $pinnedKey = static function () use ($keyFile, $configFile, $test): array {
     return $k === '' ? ['absent', ''] : (ReleaseManifest::validPublicKey($k) ? ['ok', $k] : ['bad', '']);
 };
 
-// 0. A crash in the middle of a swap must never leave the appliance without its agent.
+// 0. A crash in the middle of a swap must never leave the appliance without its agent. Normally the launcher
+// (install/linux/agent-update-launcher.php, outside this folder) has repaired it already (SENTINEL_UPDATE_REPAIRED):
+// started from here, this code could not run while the folder is missing. Kept for a helper started directly.
+$repaired = defined('SENTINEL_UPDATE_REPAIRED');
 if (!is_dir($app) && is_dir($app . '.old')) {
-    rename($app . '.old', $app);
+    $repaired = rename($app . '.old', $app);
     $say('Restored ' . $app . ' from ' . $app . '.old (an earlier update stopped half-way).');
+}
+if ($repaired && $systemd) {
+    $run(['/usr/bin/systemctl', 'start', 'sentinel-agent.service'], 60); // it may have given up while its code was missing
 }
 
 // 1. Collect, as the agent's user.
