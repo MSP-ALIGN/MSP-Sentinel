@@ -99,7 +99,7 @@ final class Runner
             return -2;
         }
         if ($this->updater !== null && $this->reportedResult !== null) {
-            $this->updater->clearResult(); // Sentinel has the helper's result now
+            $this->updater->markReported($this->reportedResult); // Sentinel has the helper's result now
             $this->reportedResult = null;
         }
         if ($this->updater !== null && is_array($res['data']['update'] ?? null) && !$this->updater->pending()) {
@@ -157,7 +157,7 @@ final class Runner
     private function pollBody(array $running, bool $idle): array
     {
         $holds = $this->credentials?->holds() ?? false;
-        $result = $idle ? $this->updater?->lastResult() : null; // the update helper's last result, until Sentinel has it
+        $result = $idle ? $this->updater?->unreportedResult() : null; // the update helper's last result, until Sentinel has it
         $this->reportedResult = $result;
         return ['hostname' => (string) gethostname(), 'version' => self::version(), 'running' => $running, 'idle' => $idle]
             + ($result !== null ? ['update_result' => $result] : [])

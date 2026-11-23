@@ -1,12 +1,29 @@
-# MSP Sentinel agent update helper (written by install/agent-install.sh). Runs as root, once per request: checks the
-# staged release against the pinned release key (/etc/sentinel-agent/release-key.pub), installs it and restarts the
-# agent. See bin/agent-update-runner.php.
+# MSP Sentinel agent update helper (written by install/agent-install.sh). Runs as root, once per request: collects the
+# staged release AS THE AGENT'S USER (root never touches the agent's folder), checks it against the pinned release key
+# (/etc/sentinel-agent/release-key.pub), runs the new release's self-check as the agent's user, installs it, restarts
+# the agent and rolls back if it doesn't stay up. See bin/agent-update-runner.php.
 [Unit]
 Description=MSP Sentinel agent update helper
-# Many requests in a row must never stop the path unit from working (see the 1.13.1 web-update fix on the server).
-StartLimitIntervalSec=0
+# A request the helper can't remove must not make it run as root in a tight loop.
+StartLimitIntervalSec=600
+StartLimitBurst=5
 
 [Service]
 Type=oneshot
 ExecStart=__PHP__ __ROOT__/bin/agent-update-runner.php
-TimeoutStartSec=600
+TimeoutStartSec=900
+# Hardening: it may only write the agent's code folder, its own result folder and the systemd units it owns.
+ProtectSystem=strict
+ReadWritePaths=/opt /etc/systemd/system /var/lib/sentinel-agent-update
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+SystemCallArchitectures=native
+UMask=0027

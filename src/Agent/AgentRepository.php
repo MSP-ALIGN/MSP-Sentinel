@@ -279,7 +279,8 @@ final class AgentRepository
     /** Ask an agent to update to $version at its next idle check-in. */
     public function requestUpdate(int $agentId, string $version, int $userId): void
     {
-        $this->db->prepare("UPDATE agents SET update_to = :v, update_requested_at = UTC_TIMESTAMP(), update_requested_by = :u WHERE id = :id AND status = 'active'")
+        $this->db->prepare("UPDATE agents SET update_to = :v, update_requested_at = UTC_TIMESTAMP(), update_requested_by = :u, update_handed_at = NULL, update_handouts = 0
+                            WHERE id = :id AND status = 'active'")
             ->execute(['v' => $version, 'u' => $userId, 'id' => $agentId]);
     }
 

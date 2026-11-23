@@ -125,11 +125,21 @@ code: a compromised Sentinel server can't push code to client networks.
    update): the signature, that it is the version asked for and newer than its own, and every file's SHA-256.
 2. It stages the files in its state folder and asks the root update helper (`sentinel-agent-update.path` starts
    `bin/agent-update-runner.php`) to install them. The agent itself can't change its code.
-3. The helper checks everything again itself: the signature with the pinned key, the version (no downgrades), and
-   every file, by copying it into a new root-owned folder and hashing the copy (so the agent's user can't swap a file
-   after the check). Then it puts the new folder in place (the previous one stays as `/opt/sentinel-agent.old`),
-   writes the systemd units from the new release and restarts the agent.
-4. The Agents page shows the result: "Updated to x.y.z", or why it was refused.
+3. **Root never touches the agent's folder** (its user could plant symlinks there). The helper has the staged release
+   read by a collector running as the agent's user, and checks everything again in memory: the signature with the
+   pinned key, the version (x.y.z, newer than the installed one; an unreadable installed version is refused) and every
+   file's hash. Only then does it write the files into a new root-owned folder.
+4. **Pre-flight:** the new release's own self-check runs as the agent's user (PHP version and extensions). A release
+   that needs something the appliance doesn't have isn't installed.
+5. It puts the new folder in place (the previous one stays as `/opt/sentinel-agent.old`), writes the systemd units
+   from the new release and restarts the agent. **If the agent doesn't stay running, the previous version is put back
+   and restarted** (rollback).
+6. The result goes to `/var/lib/sentinel-agent-update` (root-owned; the agent can read it, not change it) and the
+   Agents page shows it: "Updated to x.y.z", or why it was refused. The agent cleans up its own staging folder.
+
+An update request is handed out at most 3 times, 30 minutes apart, with scans going on in between. Without a result
+it ends with "no result from the update helper" (is `sentinel-agent-update.path` running?), so a stuck helper never
+stops an agent's scans. The helper runs in a hardened systemd service and stops after 5 starts in 10 minutes.
 
 Agents older than 1.22.0 (no helper, no pinned key) must be upgraded once by hand (`agent-install.sh --upgrade`).
 New PHP extensions or system packages are not installed by a remote update; release notes will say when a release
@@ -146,8 +156,13 @@ needs a manual upgrade.
 3. Sentinel offers an update only when its own version is signed. An unsigned build (for example a development
    branch) offers none; agents there are upgraded by hand.
 
-If the release key is ever lost, make a new one and upgrade every agent by hand once (they pin the new key). If it
-leaks, do the same at once: agents trust whatever it signs.
+If the release key is ever lost, make a new one and upgrade every agent by hand once (`agent-install.sh --upgrade`
+from the new release folder pins its `install/release-key.pub`). If it leaks, do the same at once: agents trust
+whatever it signs.
+
+Limit: Sentinel chooses WHICH signed release an agent gets (only newer ones are accepted). A compromised Sentinel
+can't install unsigned code, but it could offer an older signed release that is still newer than an agent's version.
+Upgrade agents promptly so they stay on the latest release.
 
 ## What is graded
 

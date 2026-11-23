@@ -81,7 +81,7 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                         <?php else: ?><span class="badge text-bg-warning"><i class="bi bi-wifi-off me-1" aria-hidden="true"></i><?= e(__('Offline')) ?></span><?php endif; ?></td>
                     <td class="text-end"><?php if ($isAdmin && $a['status'] === 'active'): ?>
                         <div class="d-flex flex-wrap gap-1 justify-content-end">
-                        <?php if ($agentRelease !== null && \Sentinel\System\ReleaseManifest::newer($agentRelease, (string) $a['version']) && \Sentinel\Agent\AgentRepository::canUpdateRemotely((string) $a['version']) && (string) ($a['update_to'] ?? '') === ''): ?>
+                        <?php if ($agentRelease !== null && \Sentinel\System\ReleaseManifest::newer($agentRelease, (string) $a['version']) && \Sentinel\Agent\AgentRepository::canUpdateRemotely((string) $a['version']) && (string) ($a['update_to'] ?? '') !== $agentRelease): ?>
                         <form method="post" action="<?= e(url('/clients/' . $cid . '/agents/' . (int) $a['id'] . '/update')) ?>" data-confirm="<?= e(__('Update this agent to {v} at its next check-in between scans?', ['v' => $agentRelease])) ?>"><?= Csrf::field() ?><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-cloud-arrow-down me-1" aria-hidden="true"></i><?= e(__('Update to {v}', ['v' => $agentRelease])) ?></button></form>
                         <?php endif; ?>
                         <form method="post" action="<?= e(url('/clients/' . $cid . '/agents/' . (int) $a['id'] . '/diagnostics')) ?>"><?= Csrf::field() ?><button class="btn btn-sm btn-outline-secondary" type="submit"><i class="bi bi-clipboard-pulse me-1" aria-hidden="true"></i><?= e(__('Diagnostics')) ?></button></form>

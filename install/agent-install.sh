@@ -94,6 +94,8 @@ release_key_and_helper() {
   else
     echo "  No release key in this release: remote agent updates stay off (upgrade by hand)."
   fi
+  # The helper's results: root-owned, readable by the agent, not changeable by it.
+  run install -d -o root -g sentinel-agent -m 0750 /var/lib/sentinel-agent-update
   render sentinel-agent-update.service | write_file /etc/systemd/system/sentinel-agent-update.service 0644
   render sentinel-agent-update.path | write_file /etc/systemd/system/sentinel-agent-update.path 0644
   run systemctl daemon-reload
@@ -108,7 +110,7 @@ if [ "$mode" = uninstall ]; then
   run systemctl disable --now sentinel-agent sentinel-agent-update.path || true
   run rm -f /etc/systemd/system/sentinel-agent.service /etc/systemd/system/sentinel-agent-update.service /etc/systemd/system/sentinel-agent-update.path
   run systemctl daemon-reload
-  run rm -rf "$APP_DIR" "$CONF_DIR" "$STATE_DIR"
+  run rm -rf "$APP_DIR" "$APP_DIR.old" "$APP_DIR.new" "$APP_DIR.failed" "$CONF_DIR" "$STATE_DIR" /var/lib/sentinel-agent-update
   run userdel sentinel-agent || true
   echo "  Removed. Also revoke the agent on the client page in Sentinel, so its token stops working."
   exit 0

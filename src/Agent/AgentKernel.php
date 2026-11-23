@@ -45,6 +45,9 @@ final class AgentKernel
     private const MAX_RESULTS = 8388608;
     private const MAX_DEPTH = 12;
     public const POLL_SECONDS = 60;
+    /** An update request is handed out at most this often, this many minutes apart (scans go on in between). */
+    public const UPDATE_HANDOUTS = 3;
+    public const UPDATE_RETRY_MINUTES = 30;
 
     /** Handle one agent API request. */
     public static function handle(Request $request): Response
@@ -162,11 +165,19 @@ final class AgentKernel
         // key only to say "this server asks"; the code itself must carry the release key's signature). Alone, like a restart.
         $update = null;
         // Read again: the result just reported may have ended the request.
-        $now = App::db()->query('SELECT update_to, update_requested_at FROM agents WHERE id = ' . (int) $agent['id'])->fetch();
+        $now = App::db()->query('SELECT update_to, update_requested_at, update_handouts, (update_handed_at IS NULL OR update_handed_at < UTC_TIMESTAMP() - INTERVAL '
+            . self::UPDATE_RETRY_MINUTES . ' MINUTE) AS due FROM agents WHERE id = ' . (int) $agent['id'])->fetch();
         $updateTo = (string) ($now['update_to'] ?? '');
-        if ($idle === true && !isset($requests['restart']) && $updateTo !== '' && $updateTo !== (string) ($body['version'] ?? '')) {
-            $update = App::agentSigner()->sign(['v' => 1, 'type' => 'agent_update', 'agent_id' => (int) $agent['id'], 'site_id' => (int) $agent['site_id'],
-                'client_id' => (int) $agent['client_id'], 'version' => $updateTo, 'request' => (string) $now['update_requested_at'], 'issued_at' => gmdate('Y-m-d\TH:i:s\Z')]);
+        if ($idle === true && !isset($requests['restart']) && $updateTo !== '' && $updateTo !== (string) ($body['version'] ?? '') && (int) $now['due'] === 1) {
+            if ((int) $now['update_handouts'] >= self::UPDATE_HANDOUTS) {
+                // Handed out several times without a result: the helper isn't working. End it; scans go on.
+                App::agents()->saveUpdateResult((int) $agent['id'], $updateTo, false, 'No result from the agent\'s update helper after ' . self::UPDATE_HANDOUTS
+                    . ' attempts (is sentinel-agent-update.path running on the appliance?). Upgrade by hand.', (string) ($body['version'] ?? ''), (string) $now['update_requested_at']);
+            } else {
+                App::db()->prepare('UPDATE agents SET update_handed_at = UTC_TIMESTAMP(), update_handouts = update_handouts + 1 WHERE id = :id')->execute(['id' => (int) $agent['id']]);
+                $update = App::agentSigner()->sign(['v' => 1, 'type' => 'agent_update', 'agent_id' => (int) $agent['id'], 'site_id' => (int) $agent['site_id'],
+                    'client_id' => (int) $agent['client_id'], 'version' => $updateTo, 'request' => (string) $now['update_requested_at'], 'issued_at' => gmdate('Y-m-d\TH:i:s\Z')]);
+            }
         }
         // A restart or an update goes out alone: jobs in the same answer would be marked sent and never run.
         $giveJobs = !$paused && !isset($requests['restart']) && $update === null && ($idle === true || ($idle === null && $running === []));

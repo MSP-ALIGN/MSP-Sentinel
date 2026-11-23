@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.22.0](https://img.shields.io/badge/version-1.22.0-ff5a1f?style=flat-square)
+![Version 1.22.1](https://img.shields.io/badge/version-1.22.1-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -148,6 +148,23 @@ curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install
 The same help is built into the app (**Help** in the menu), with a "What's new" page for every release.
 
 ## What's new
+
+### 1.22.1 (2026-11-23): agent updates, security fixes from review
+
+- **Security fix:** the root update helper no longer reads, writes or deletes anything in the agent's own folder.
+  The agent's user could plant symlinks there and get a root-owned file overwritten. A collector running as the
+  agent's user now hands the staged release to the helper, which checks it in memory. Results go to a root-owned
+  folder the agent can only read, and the agent cleans up its own staging. Versions that aren't x.y.z are never used.
+- **Pre-flight and rollback:** the new release's self-check runs as the agent's user before anything is swapped. If
+  the updated agent doesn't stay running, the previous version is put back automatically.
+- **A stuck update can't stop scans.** A request is handed out at most 3 times, 30 minutes apart, with scans in
+  between, then ends with a clear message.
+- **Releases are signed exactly as the release archive ships them**, so Sentinels installed from the tarball can hand
+  out every file.
+- **Smaller fixes:**
+  - The helper's systemd service is hardened, and limited to 5 starts in 10 minutes.
+  - An unreadable installed version is refused.
+  - "Update to" can be pressed again for a newer release.
 
 ### 1.22.0 (2026-11-23): agent updates from Sentinel
 

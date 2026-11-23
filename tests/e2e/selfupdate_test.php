@@ -41,7 +41,7 @@ $upSetup = static function (TestContext $ctx) use ($upDir, $releaseRoot): array 
     $c['nmap_path'] = $app['scanner']['nmap_path'];
     // The agent pins the release key as the installer would (here: the made-up release's public key).
     $c['testing'] = ['allow_documentation_ranges' => true, 'redirect_connections' => $app['testing']['redirect_connections'], 'arp_file' => $upDir($ctx) . '/arp',
-        'release_key' => $upDir($ctx) . '/release-key.pub'];
+        'release_key' => $upDir($ctx) . '/release-key.pub', 'update_result_dir' => $upDir($ctx) . '-results'];
     file_put_contents($upDir($ctx) . '/agent.json', json_encode($c));
     file_put_contents($upDir($ctx) . '/arp', "IP address       HW type     Flags       HW address            Mask     Device\n");
     copy($releaseRoot($ctx) . '/install/release-key.pub', $upDir($ctx) . '/release-key.pub');
@@ -55,8 +55,9 @@ $fakeApp = static function (TestContext $ctx, string $name, string $version): st
     file_put_contents($dir . '/bin/sentinel-agent.php', "<?php // installed {$version}\n");
     return $dir;
 };
+// The root helper in test mode: test folders, no systemd; its results go to a separate folder (root-owned in production).
 $helper = static fn (TestContext $ctx, string $app, string $keyFile, array $env = []): array => $ctx->cli('bin/agent-update-runner.php',
-    ['--app', $app, '--state', $upDir($ctx), '--key', $keyFile, '--no-systemd'], $env);
+    ['--app', $app, '--state', $upDir($ctx), '--key', $keyFile, '--result', $upDir($ctx) . '-results', '--no-systemd'], $env);
 
 return [
     'agent updates: admins hand out the signed release; the agent stages it, the root helper checks it again and installs it' => function (TestContext $ctx) use ($upSetup, $upRun, $upDir, $fakeApp, $helper): void {
@@ -93,9 +94,11 @@ return [
         Assert::same("9.9.9\n", file_get_contents($app . '/VERSION'), 'installed');
         Assert::same("release 9.9.9\n", file_get_contents($app . '/src/marker.txt'));
         Assert::same("1.22.0\n", file_get_contents($app . '.old/VERSION'), 'previous version kept aside');
-        Assert::true(!is_file($upDir($ctx) . '/update-request') && !is_dir($upDir($ctx) . '/update'), 'request and staging cleaned up');
-        // The agent reports the helper's result.
+        Assert::true(!is_file($upDir($ctx) . '/update-request'), 'the request was taken (by the collector, as the agent\'s user)');
+        Assert::true(is_file($upDir($ctx) . '-results/result.json') && !is_file($upDir($ctx) . '/update-result.json'), 'the result is outside the agent\'s folder');
+        // The agent reports the helper's result, then cleans up its own staging folder (root never deletes there).
         $upRun($ctx);
+        Assert::true(!is_dir($upDir($ctx) . '/update'), 'staging cleaned up by the agent');
         $r = json_decode((string) $ctx->db->query("SELECT update_result FROM agents WHERE id = {$agentId}")->fetchColumn(), true);
         Assert::same(['9.9.9', true], [$r['version'], $r['ok']]);
         Assert::contains('Updated to 9.9.9', $ctx->clientSection($admin, $cid, 'agents'));
@@ -108,7 +111,7 @@ return [
         $n = 0;
         $ask = static function () use ($ctx, $agentId, &$n): void {
             $n++;
-            $ctx->db->exec("UPDATE agents SET update_to = '9.9.9', update_requested_at = UTC_TIMESTAMP() + INTERVAL {$n} MINUTE WHERE id = {$agentId}");
+            $ctx->db->exec("UPDATE agents SET update_to = '9.9.9', update_requested_at = UTC_TIMESTAMP() + INTERVAL {$n} MINUTE, update_handouts = 0, update_handed_at = NULL WHERE id = {$agentId}");
         };
         $ctx->db->exec("UPDATE agents SET update_result = NULL WHERE id = {$agentId}");
         $ask();
@@ -119,11 +122,10 @@ return [
         $app = $fakeApp($ctx, 'installed-agent-2', '1.22.0');
         [$code, $out] = $helper($ctx, $app, $upDir($ctx) . '/release-key.pub');
         Assert::same(1, $code);
-        Assert::contains('does not match the signed release', $out);
+        Assert::contains('not matching the signed release', $out);
         Assert::same("1.22.0\n", file_get_contents($app . '/VERSION'), 'nothing installed');
         // A downgrade (the installed agent is newer) is refused.
         $ask();
-        @unlink($upDir($ctx) . '/update-result.json');
         $upRun($ctx);
         $newer = $fakeApp($ctx, 'installed-agent-3', '10.0.0');
         [$code, $out] = $helper($ctx, $newer, $upDir($ctx) . '/release-key.pub');
@@ -146,5 +148,61 @@ return [
         Assert::same(false, $r['ok']);
         Assert::same('', $ctx->db->query("SELECT update_to FROM agents WHERE id = {$agentId}")->fetchColumn(), 'a refusal ends the request (no retry loop)');
         Assert::contains('Update to 9.9.9 refused', $ctx->clientSection($ctx->login('admin', 'Admin-Pass-0001!'), $cid, 'agents'));
+    },
+    'agent updates: root never follows the agent\'s symlinks; a failing self-check, a planted folder and a stuck helper' => function (TestContext $ctx) use ($upSetup, $upRun, $upDir, $fakeApp, $helper, $releaseRoot): void {
+        [$cid, $site] = $upSetup($ctx);
+        $agentId = (int) $ctx->db->query("SELECT id FROM agents WHERE site_id = {$site} AND status = 'active'")->fetchColumn();
+        $state = $upDir($ctx);
+        copy($releaseRoot($ctx) . '/install/release-key.pub', $state . '/release-key.pub'); // the right key again
+        // The agent's user plants symlinks where the old helper wrote: nothing is written through them.
+        $victim = dirname($ctx->configPath) . '/victim.sh';
+        file_put_contents($victim, "# untouched\n");
+        @unlink($state . '/update-result.json');
+        symlink($victim, $state . '/update-result.json');
+        file_put_contents($state . '/update-request', json_encode(['version' => '$(touch${IFS}pwned)', 'request' => 'x']));
+        [$code, $out] = $helper($ctx, $fakeApp($ctx, 'installed-agent-4', '1.22.0'), $state . '/release-key.pub');
+        Assert::same(1, $code);
+        Assert::contains('No valid update request', $out, 'a version that is not x.y.z is never used');
+        Assert::same("# untouched\n", file_get_contents($victim), 'nothing written through the symlink');
+        Assert::true(!str_contains((string) file_get_contents($upDir($ctx) . '-results/result.json'), 'pwned'), 'the bad version is not echoed');
+        unlink($state . '/update-result.json');
+        // A request planted as a folder is removed (no loop).
+        @mkdir($state . '/update-request');
+        $helper($ctx, $fakeApp($ctx, 'installed-agent-5', '1.22.0'), $state . '/release-key.pub');
+        Assert::true(!file_exists($state . '/update-request'), 'a folder request is removed');
+        // A release whose self-check fails on this appliance (signed: 9.9.10) is not installed.
+        $bad = dirname($ctx->configPath) . '/release-bad';
+        @mkdir($bad . '/files/bin', 0700, true);
+        @mkdir($bad . '/files/install', 0700, true);
+        file_put_contents($bad . '/files/VERSION', "9.9.10\n");
+        file_put_contents($bad . '/files/bin/sentinel-agent.php', "<?php echo \"selfcheck failed: needs the made-up extension\\n\"; exit(1);\n");
+        file_put_contents($bad . '/files/install/agent-install.sh', "#!/bin/sh\n");
+        $m = \Sentinel\System\ReleaseManifest::canonical(\Sentinel\System\ReleaseManifest::build($bad . '/files', '9.9.10', ['VERSION', 'bin/sentinel-agent.php', 'install/agent-install.sh']));
+        $secret = (string) file_get_contents(dirname($ctx->feedsLog) . '/test-release.key');
+        \Sentinel\AgentClient\Updater::removeTree($state . '/update');
+        mkdir($state . '/update/files', 0700, true);
+        foreach (['VERSION', 'bin/sentinel-agent.php', 'install/agent-install.sh'] as $f) {
+            @mkdir(dirname($state . '/update/files/' . $f), 0700, true);
+            copy($bad . '/files/' . $f, $state . '/update/files/' . $f);
+        }
+        file_put_contents($state . '/update/agent-manifest.json', $m);
+        file_put_contents($state . '/update/agent-manifest.sig', \Sentinel\System\ReleaseManifest::sign($m, $secret));
+        file_put_contents($state . '/update-request', json_encode(['version' => '9.9.10', 'request' => '2026-01-01 00:00:00']));
+        $app = $fakeApp($ctx, 'installed-agent-6', '1.22.0');
+        [$code, $out] = $helper($ctx, $app, $state . '/release-key.pub');
+        Assert::same(1, $code);
+        Assert::contains('did not pass its self-check', $out);
+        Assert::same("1.22.0\n", file_get_contents($app . '/VERSION'), 'not installed');
+        Assert::true(!is_dir($app . '.new'), 'the new folder was removed');
+        // A helper that never answers: after 3 hand-outs the request ends, and scans flow in between.
+        $ctx->db->exec("UPDATE agents SET update_to = '9.9.9', update_requested_at = UTC_TIMESTAMP(), update_handouts = 3, update_handed_at = UTC_TIMESTAMP() - INTERVAL 31 MINUTE WHERE id = {$agentId}");
+        $upRun($ctx);
+        Assert::same('', $ctx->db->query("SELECT update_to FROM agents WHERE id = {$agentId}")->fetchColumn(), 'ended');
+        Assert::contains('No result from the agent', (string) $ctx->db->query("SELECT update_result FROM agents WHERE id = {$agentId}")->fetchColumn());
+        $ctx->db->exec("UPDATE agents SET update_to = '9.9.9', update_requested_at = UTC_TIMESTAMP(), update_handouts = 1, update_handed_at = UTC_TIMESTAMP() - INTERVAL 5 MINUTE WHERE id = {$agentId}");
+        $ctx->login('admin', 'Admin-Pass-0001!')->submit('/clients/' . $cid, '/clients/' . $cid . '/sites/' . $site . '/scan', ['reason' => 'While an update waits']);
+        $job = (int) $ctx->db->query("SELECT MAX(id) FROM agent_jobs WHERE site_id = {$site}")->fetchColumn();
+        $upRun($ctx);
+        Assert::true(in_array($ctx->db->query("SELECT status FROM agent_jobs WHERE id = {$job}")->fetchColumn(), ['done', 'partial'], true), 'a scan runs while the update waits for its next attempt');
     },
 ];

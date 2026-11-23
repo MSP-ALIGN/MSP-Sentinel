@@ -2,6 +2,23 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.22.1 (2026-11-23): agent updates, security fixes from review
+
+- **Security fix:** the root update helper no longer reads, writes or deletes anything in the agent's own folder.
+  The agent's user could plant symlinks there and get a root-owned file overwritten. A collector running as the
+  agent's user now hands the staged release to the helper, which checks it in memory. Results go to a root-owned
+  folder the agent can only read, and the agent cleans up its own staging. Versions that aren't x.y.z are never used.
+- **Pre-flight and rollback:** the new release's self-check runs as the agent's user before anything is swapped. If
+  the updated agent doesn't stay running, the previous version is put back automatically.
+- **A stuck update can't stop scans.** A request is handed out at most 3 times, 30 minutes apart, with scans in
+  between, then ends with a clear message.
+- **Releases are signed exactly as the release archive ships them**, so Sentinels installed from the tarball can hand
+  out every file.
+- **Smaller fixes:**
+  - The helper's systemd service is hardened, and limited to 5 starts in 10 minutes.
+  - An unreadable installed version is refused.
+  - "Update to" can be pressed again for a newer release.
+
 ### 1.22.0 (2026-11-23): agent updates from Sentinel
 
 - **Update agents from Sentinel.** Use **Update to x.y.z** per agent, **Update all agents** per client, or **Update all

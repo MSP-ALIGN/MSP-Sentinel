@@ -25,7 +25,8 @@ final class Updater
      * @param string $serverKey  the pinned server key (update requests from Sentinel are signed with it)
      */
     public function __construct(private readonly Http $http, private readonly string $releaseKeyFile, private readonly string $stateDir, private $log,
-        private readonly string $serverKey = '', private readonly int $agentId = 0, private readonly int $siteId = 0, private readonly int $clientId = 0)
+        private readonly string $serverKey = '', private readonly int $agentId = 0, private readonly int $siteId = 0, private readonly int $clientId = 0,
+        private readonly string $resultDir = '/var/lib/sentinel-agent-update')
     {
     }
 
@@ -57,10 +58,16 @@ final class Updater
         return is_file($this->stateDir . '/update-request');
     }
 
-    /** Forget the helper's result once Sentinel has it. */
-    public function clearResult(): void
+    /**
+     * Sentinel has this result now: don't send it again, and clean up the staged files (the agent's own folder: the
+     * root helper never deletes anything there).
+     *
+     * @param array<string,mixed> $result
+     */
+    public function markReported(array $result): void
     {
-        @unlink($this->stateDir . '/update-result.json');
+        file_put_contents($this->stateDir . '/update-reported', self::resultId($result));
+        self::removeTree($this->stateDir . '/update');
     }
 
     /** Whether this agent can be updated remotely (a release key is pinned). */
@@ -114,7 +121,6 @@ final class Updater
         }
         file_put_contents($dir . '/agent-manifest.json', $json);
         file_put_contents($dir . '/agent-manifest.sig', $sig);
-        @unlink($this->stateDir . '/update-result.json');
         // The request the root helper watches for (systemd path unit). Written last, atomically.
         file_put_contents($this->stateDir . '/update-request.tmp', json_encode(['version' => $m['version'], 'request' => $request]));
         rename($this->stateDir . '/update-request.tmp', $this->stateDir . '/update-request');
@@ -122,11 +128,20 @@ final class Updater
         return '';
     }
 
-    /** The helper's last result (version, ok, message), if any. @return array<string,mixed>|null */
-    public function lastResult(): ?array
+    /** The helper's last result (version, ok, message, request, at) when not reported yet. @return array<string,mixed>|null */
+    public function unreportedResult(): ?array
     {
-        $r = json_decode((string) @file_get_contents($this->stateDir . '/update-result.json'), true);
-        return is_array($r) ? $r : null;
+        $r = json_decode((string) @file_get_contents($this->resultDir . '/result.json', false, null, 0, 8192), true);
+        if (!is_array($r) || !is_string($r['version'] ?? null)) {
+            return null;
+        }
+        return trim((string) @file_get_contents($this->stateDir . '/update-reported')) === self::resultId($r) ? null : $r;
+    }
+
+    /** @param array<string,mixed> $r */
+    private static function resultId(array $r): string
+    {
+        return hash('sha256', (string) ($r['version'] ?? '') . '|' . (string) ($r['request'] ?? '') . '|' . (string) ($r['at'] ?? ''));
     }
 
     /** Remove a folder this class made (no symlinks followed). */

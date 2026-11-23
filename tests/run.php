@@ -216,7 +216,8 @@ try {
         @mkdir($releaseRoot . '/' . $d, 0755, true);
     }
     file_put_contents($releaseRoot . '/VERSION', "9.9.9\n");
-    file_put_contents($releaseRoot . '/bin/sentinel-agent.php', "<?php\n// Made-up agent release 9.9.9 for the test suite.\n");
+    file_put_contents($releaseRoot . '/bin/sentinel-agent.php', "<?php\n// Made-up agent release 9.9.9 for the test suite: it only answers the update helper's self-check.\n"
+        . "if ((\$argv[1] ?? '') === 'selfcheck') { echo \"selfcheck ok 9.9.9\\n\"; exit(0); }\nexit(1);\n");
     file_put_contents($releaseRoot . '/install/agent-install.sh', "#!/bin/sh\necho made-up\n");
     file_put_contents($releaseRoot . '/src/marker.txt', "release 9.9.9\n");
     $releasePair = sodium_crypto_sign_keypair();

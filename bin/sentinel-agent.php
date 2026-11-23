@@ -71,6 +71,22 @@ $load = static function () use ($configFile): array {
 };
 
 switch ($command) {
+    case 'selfcheck':
+        // Used by the update helper before switching to a new release (run as the agent's user): can this release run
+        // on this appliance? Prints "selfcheck ok <version>" and exits 0, or says what is missing.
+        $missing = array_values(array_filter(['curl', 'json', 'openssl', 'sodium', 'mbstring'], static fn (string $e): bool => !extension_loaded($e)));
+        if (PHP_VERSION_ID < 80200 || $missing !== []) {
+            fwrite(STDOUT, 'selfcheck failed: ' . (PHP_VERSION_ID < 80200 ? 'PHP 8.2 or later needed. ' : '') . ($missing !== [] ? 'Missing PHP extensions: ' . implode(', ', $missing) . '.' : '') . "\n");
+            exit(1);
+        }
+        foreach ([Runner::class, JobVerifier::class, Updater::class, State::class] as $class) {
+            if (!class_exists($class)) {
+                fwrite(STDOUT, "selfcheck failed: {$class} is missing.\n");
+                exit(1);
+            }
+        }
+        fwrite(STDOUT, 'selfcheck ok ' . Runner::version() . "\n");
+        exit(0);
     case 'enrol':
         $server = is_string($opts['server'] ?? null) ? rtrim($opts['server'], '/') : '';
         $code = is_string($opts['code'] ?? null) ? $opts['code'] : (isset($opts['code-stdin']) ? trim((string) fgets(STDIN, 200)) : '');
@@ -143,7 +159,9 @@ switch ($command) {
                 : new NameListener(),
             // Updates: only code signed with the release key pinned at install (test suite: testing.release_key).
             new Updater($http, $testMode && is_string($c['testing']['release_key'] ?? null) ? $c['testing']['release_key'] : '/etc/sentinel-agent/release-key.pub',
-                $stateDir, $say, (string) $c['server_public_key'], (int) $c['agent_id'], (int) $c['site_id'], (int) $c['client_id']));
+                $stateDir, $say, (string) $c['server_public_key'], (int) $c['agent_id'], (int) $c['site_id'], (int) $c['client_id'],
+                // The helper's results: a root-owned folder the agent can read but not change.
+                $testMode && is_string($c['testing']['update_result_dir'] ?? null) ? $c['testing']['update_result_dir'] : '/var/lib/sentinel-agent-update'));
         $say('Agent #' . $c['agent_id'] . ' started (version ' . Runner::version() . ').');
         do {
             try {

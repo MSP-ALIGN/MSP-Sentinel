@@ -225,6 +225,14 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.22.1',
+            'date' => '2026-11-23',
+            'items' => [
+                'Security fix for agent updates: the root update helper no longer touches the agent\'s own folder.',
+                'A new agent release is self-checked before it is installed and rolled back if it does not stay running; a stuck update never stops scans.',
+            ],
+        ],
+        [
             'version' => '1.22.0',
             'date' => '2026-11-23',
             'items' => [

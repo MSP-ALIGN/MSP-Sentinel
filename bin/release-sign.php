@@ -11,7 +11,8 @@ declare(strict_types=1);
  *       install/release-key.pub and commit that. Agents installed (or upgraded by hand) after that pin it.
  *   php bin/release-sign.php sign --key ~/sentinel-release.key
  *       For each release, after the last code change: writes release/agent-manifest.json (every agent file and its
- *       SHA-256, from `git ls-files`) and release/agent-manifest.sig. Commit both with the release.
+ *       SHA-256: what `git archive HEAD` contains, without config/, tests/ and the like) and release/agent-manifest.sig.
+ *       Commit both with the release.
  *   php bin/release-sign.php verify
  *       Checks release/agent-manifest.* against install/release-key.pub and the files in this folder.
  *
@@ -19,7 +20,8 @@ declare(strict_types=1);
  * vouch for code, so a compromised Sentinel server can't push code to client networks.
  *
  * Security assumptions: the secret key is read from a file you choose and only used in memory; it is never printed or
- * written anywhere else. The manifest only lists files git tracks (no untracked or ignored files).
+ * written anywhere else. The manifest only lists files of the release archive (no untracked, ignored or export-ignore
+ * files).
  */
 
 require dirname(__DIR__) . '/src/System/ReleaseManifest.php';
@@ -75,16 +77,18 @@ switch ($command) {
         }
         $secret = trim((string) file_get_contents($keyFile));
         $version = trim((string) file_get_contents($root . '/VERSION'));
-        exec('git -C ' . escapeshellarg($root) . ' ls-files -z', $lines, $code);
+        // Exactly what a release archive contains (`git archive HEAD`: committed files, export-ignore left out), so
+        // every Sentinel, installed from a tarball or a checkout, holds every signed file.
+        exec('git -C ' . escapeshellarg($root) . ' archive --format=tar HEAD | tar -tf -', $lines, $code);
         if ($code !== 0) {
-            $fail('git ls-files failed: run this inside the repository.');
+            $fail('git archive failed: run this inside the repository.');
         }
         exec('git -C ' . escapeshellarg($root) . ' status --porcelain --untracked-files=no', $dirty);
         $dirty = array_values(array_filter($dirty, static fn (string $l): bool => !str_contains($l, 'release/agent-manifest')));
         if ($dirty !== []) {
             $fail("Commit your changes first (the manifest must match committed files):\n" . implode("\n", array_slice($dirty, 0, 10)));
         }
-        $paths = array_values(array_filter(explode("\0", implode("\0", $lines))));
+        $paths = array_values(array_filter($lines, static fn (string $l): bool => $l !== '' && !str_ends_with($l, '/')));
         $manifest = ReleaseManifest::build($root, $version, $paths);
         $json = ReleaseManifest::canonical($manifest);
         $sig = ReleaseManifest::sign($json, $secret);
