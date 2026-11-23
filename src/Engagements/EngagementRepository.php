@@ -131,6 +131,49 @@ final class EngagementRepository
         return $stmt->rowCount() === 1;
     }
 
+    /**
+     * Record what a test found on one host (evidence for the report). Values came from the tested host: untrusted.
+     *
+     * @param list<array<string,mixed>> $ports open ports with service details and script results
+     * @param array<string,mixed> $checks other checks (host scripts, UDP probes, anonymous access)
+     */
+    public function addResult(int $engagementId, string $origin, ?int $siteId, string $jobRef, string $ip, array $hostnames, array $ports, array $checks, bool $complete): void
+    {
+        $this->db->prepare('INSERT INTO engagement_results (engagement_id, origin, site_id, job_ref, ip, hostnames, ports, checks, complete, scanned_at)
+            VALUES (:e, :o, :s, :j, :ip, :h, :p, :c, :ok, UTC_TIMESTAMP())')->execute([
+            'e' => $engagementId, 'o' => $origin, 's' => $siteId, 'j' => mb_substr($jobRef, 0, 40), 'ip' => $ip, 'h' => mb_substr(implode(', ', $hostnames), 0, 500),
+            'p' => (string) json_encode($ports, JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE), 'c' => (string) json_encode($checks, JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE),
+            'ok' => $complete ? 1 : 0,
+        ]);
+    }
+
+    /**
+     * The latest result per host and origin (a host tested again, e.g. a retest, shows its newest result).
+     *
+     * @return list<array<string,mixed>> with 'ports_list' and 'checks_list' decoded
+     */
+    public function results(int $engagementId): array
+    {
+        $stmt = $this->db->prepare('SELECT r.* FROM engagement_results r JOIN (SELECT origin, ip, MAX(id) AS id FROM engagement_results WHERE engagement_id = :e GROUP BY origin, ip) l
+            ON l.id = r.id ORDER BY r.origin, INET6_ATON(r.ip), r.ip');
+        $stmt->execute(['e' => $engagementId]);
+        $rows = $stmt->fetchAll();
+        foreach ($rows as &$r) {
+            $r['ports_list'] = (array) (json_decode((string) $r['ports'], true) ?: []);
+            $r['checks_list'] = (array) (json_decode((string) $r['checks'], true) ?: []);
+        }
+        return $rows;
+    }
+
+    /** The engagement's scan jobs (external tests), newest first. @return list<array<string,mixed>> */
+    public function externalJobs(int $engagementId): array
+    {
+        $stmt = $this->db->prepare("SELECT id, status, created_at, started_at, finished_at, summary FROM scan_jobs WHERE job_type = 'engagement'
+            AND JSON_UNQUOTE(JSON_EXTRACT(payload, '$.engagement_id')) = :e ORDER BY id DESC");
+        $stmt->execute(['e' => (string) $engagementId]);
+        return $stmt->fetchAll();
+    }
+
     /** The engagement's state at $now (UTC 'Y-m-d H:i:s'). @param array<string,mixed> $e */
     public static function state(array $e, string $now): string
     {

@@ -72,12 +72,13 @@ final class NmapXmlParser
     /**
      * @param string $xml       nmap -oX output for one host.
      * @param string $expectIp  The address that was scanned. Hosts with any other address are ignored.
-     * @return array{complete:bool, open:list<array{port:int,service:string,product:string,version:string,extra:string,cpe:string}>}
+     * @return array{complete:bool, open:list<array{port:int,service:string,product:string,version:string,extra:string,cpe:string,scripts:list<array{id:string,output:string}>}>,
+     *               hostscripts:list<array{id:string,output:string}>}  scripts: nmap script results (engagements only), untrusted text
      * @throws \RuntimeException if the XML can't be parsed at all.
      */
-    public static function parse(string $xml, string $expectIp): array
+    public static function parse(string $xml, string $expectIp, int $maxBytes = self::MAX_BYTES): array
     {
-        if ($xml === '' || strlen($xml) > self::MAX_BYTES) {
+        if ($xml === '' || strlen($xml) > $maxBytes) {
             throw new \RuntimeException('nmap produced no usable output.');
         }
         $previous = libxml_use_internal_errors(true);
@@ -96,12 +97,14 @@ final class NmapXmlParser
         // missing from the output be treated as closed. A timeout must never "close" open services.
         $hostComplete = false;
         $open = [];
+        $hostScripts = [];
         foreach ($doc->host as $host) {
             $addr = (string) ($host->address['addr'] ?? '');
             if ($addr === '' || @inet_pton($addr) !== @inet_pton($expectIp)) {
                 continue;
             }
             $hostComplete = (string) ($host['timedout'] ?? '') !== 'true' && isset($host->ports);
+            $hostScripts = self::scripts($host->hostscript->script ?? []);
             foreach ($host->ports->port ?? [] as $port) {
                 if ((string) $port['protocol'] !== 'tcp' || (string) ($port->state['state'] ?? '') !== 'open') {
                     continue;
@@ -119,10 +122,36 @@ final class NmapXmlParser
                     'version' => self::clean((string) ($svc['version'] ?? ''), 100),
                     'extra' => self::clean((string) ($svc['extrainfo'] ?? ''), 200),
                     'cpe' => str_starts_with($cpe, 'cpe:/') ? self::clean($cpe, 255) : '',
+                    'scripts' => self::scripts($port->script ?? []),
                 ];
             }
         }
-        return ['complete' => $runFinished && $hostComplete, 'open' => $open];
+        return ['complete' => $runFinished && $hostComplete, 'open' => $open, 'hostscripts' => $hostScripts];
+    }
+
+    /**
+     * nmap script results: id and output (lines kept, control characters removed, at most 4,000 characters each,
+     * 40 scripts). Untrusted text from the scanned host.
+     *
+     * @param iterable<\SimpleXMLElement> $nodes
+     * @return list<array{id:string,output:string}>
+     */
+    private static function scripts(iterable $nodes): array
+    {
+        $out = [];
+        foreach ($nodes as $sc) {
+            $id = (string) ($sc['id'] ?? '');
+            if (preg_match('/^[a-z0-9][a-z0-9-]{0,60}$/', $id) !== 1) {
+                continue;
+            }
+            $text = mb_convert_encoding((string) ($sc['output'] ?? ''), 'UTF-8', 'UTF-8');
+            $text = (string) preg_replace('/[\x00-\x08\x0B-\x1F\x7F]/u', ' ', $text);
+            $out[] = ['id' => $id, 'output' => mb_substr(trim($text), 0, 4000)];
+            if (count($out) >= 40) {
+                break;
+            }
+        }
+        return $out;
     }
 
     /** Remove control characters and invalid UTF-8, then cut to $max characters. */

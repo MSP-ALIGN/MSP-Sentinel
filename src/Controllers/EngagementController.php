@@ -232,6 +232,7 @@ final class EngagementController extends Controller
             $siteNames[(int) $s['id']] = (string) $s['name'];
         }
         return $this->page('engagements/show', (string) $e['name'], ['client' => $client, 'engagement' => $e, 'siteNames' => $siteNames,
+            'results' => App::engagements()->results((int) $e['id']), 'externalJobs' => App::engagements()->externalJobs((int) $e['id']),
             'state' => EngagementRepository::state($e, gmdate('Y-m-d H:i:s')), 'testLabels' => self::testLabels(),
             'clientNav' => ClientController::nav($client, 'engagements', App::findings()->counts((int) $client['id']))]);
     }
@@ -274,6 +275,35 @@ final class EngagementController extends Controller
             Session::flash('warning', __('Engagement stopped. Running tests stop at their next check (within a minute); nothing more runs for it.'));
         }
         return Response::redirect('/engagements/' . (int) $e['id']);
+    }
+
+    /**
+     * POST /engagements/{id}/run-external (technicians and admins): queue the external tests. Only while the engagement
+     * is active and has external targets; one queued or running job at a time. The worker checks everything again
+     * for every host while it runs.
+     */
+    public function runExternal(Request $request, array $params): Response
+    {
+        $e = $this->engagementOr404($params);
+        $back = Response::redirect('/engagements/' . (int) $e['id']);
+        if (!App::engagements()->isActive((int) $e['id'])) {
+            Session::flash('danger', __('Tests run only while the engagement is active: approved, inside its window and not stopped (and scanning not paused).'));
+            return $back;
+        }
+        if (!array_filter($e['targets'], static fn (array $t): bool => $t['kind'] === 'external')) {
+            Session::flash('warning', __('This engagement has no external targets.'));
+            return $back;
+        }
+        foreach (App::engagements()->externalJobs((int) $e['id']) as $j) {
+            if (in_array($j['status'], ['queued', 'running'], true)) {
+                Session::flash('info', __('The external tests are already queued or running.'));
+                return $back;
+            }
+        }
+        $job = App::scans()->queue((int) $e['client_id'], 'manual', (int) $this->user()['id'], true, __('Engagement window'), ['engagement_id' => (int) $e['id']], 'engagement');
+        $this->audit($request, 'engagement.external_started', 'engagement', (int) $e['id'], ['client_id' => (int) $e['client_id'], 'scan_job' => $job]);
+        Session::flash('success', __('External tests queued (scan #{id}). They start within a minute and stop at once if the engagement is stopped.', ['id' => $job]));
+        return $back;
     }
 
     /** POST /engagements/{id}/cancel (before approval) */

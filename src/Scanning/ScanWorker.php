@@ -310,6 +310,9 @@ final class ScanWorker
         if (($job['job_type'] ?? 'ports') === 'tls') {
             return $this->runTlsJob($job);
         }
+        if (($job['job_type'] ?? 'ports') === 'engagement') {
+            return $this->runEngagementJob($job);
+        }
         if (($job['job_type'] ?? 'ports') === 'verify' && isset($job['payload']['email_domain'])) {
             return $this->runEmailVerify($job);
         }
@@ -495,6 +498,191 @@ final class ScanWorker
             }
         }
         return "Job {$jobId} {$status}: {$summary['hosts_scanned']} scanned, {$summary['hosts_skipped']} skipped, {$summary['hosts_failed']} failed.";
+    }
+
+    /**
+     * A pen-test engagement's external tests (job type 'engagement', payload {engagement_id, ips?}): deeper scans of
+     * the engagement's external targets: all TCP ports or the usual list, nmap's safe scripts and anonymous-access
+     * scripts, at the engagement's intensity. Results go to engagement_results (evidence) and, like a port scan, to the
+     * client's services, certificates and web pages.
+     *
+     * Every host, right before and while it is scanned (polled every second): the engagement is ACTIVE (approved, in
+     * its window, not stopped: EngagementRepository::isActive), the address is one of its targets and not excluded,
+     * and it is in the client's live authorised scope (ScopeService::isInScope). Names are resolved now; each address
+     * they give is checked the same way. The client's daily scan window does not apply (the engagement's does).
+     * A job runs for at most 20 minutes, then queues the rest as a new job, so other clients' scans are not held up.
+     *
+     * @param array<string,mixed> $job Already claimed.
+     */
+    private function runEngagementJob(array $job): string
+    {
+        $jobId = (int) $job['id'];
+        $clientId = (int) $job['client_id'];
+        $engagements = new \Sentinel\Engagements\EngagementRepository($this->db);
+        $eid = (int) ($job['payload']['engagement_id'] ?? 0);
+        $e = $engagements->find($eid);
+        $summary = ['hosts_scanned' => 0, 'hosts_skipped' => 0, 'hosts_failed' => 0, 'open_ports' => 0, 'messages' => [], 'engagement_id' => $eid];
+        if ($e === null || (int) $e['client_id'] !== $clientId || !$engagements->isActive($eid)) {
+            $summary['messages'][] = __('The engagement is not active (not approved, outside its window, or stopped).');
+            $this->scans->finish($jobId, 'cancelled', $summary);
+            return "Engagement job {$jobId} cancelled: engagement not active.";
+        }
+        $tests = $e['tests_list'];
+        $ports = in_array('tcp_full', $tests, true) ? null : PortProfile::forClient($this->clients->find($clientId) ?? []);
+        $scripts = array_values(array_filter([in_array('nse_safe', $tests, true) ? NmapRunner::SAFE_SCRIPTS : null,
+            in_array('anon_access', $tests, true) ? NmapRunner::ANON_SCRIPTS : null]));
+        $nmap = $this->nmap->withProfile($e['intensity'] === 'normal' ? 'normal' : 'gentle');
+
+        // Targets: listed addresses (a continuation), or the engagement's external entries: addresses and ranges
+        // expanded, names resolved now. Each must pass the engagement's own target check (exclusions included).
+        $targets = [];
+        if (is_array($job['payload']['ips'] ?? null)) {
+            foreach ($job['payload']['ips'] as $ip => $names) {
+                $c = ScopeService::canonicalTarget((string) $ip);
+                if ($c !== null && filter_var($c, FILTER_VALIDATE_IP) !== false) {
+                    $targets[$c] = array_values(array_filter((array) $names, 'is_string'));
+                }
+            }
+        } else {
+            foreach ($e['targets'] as $t) {
+                if ($t['kind'] !== 'external') {
+                    continue;
+                }
+                if ($t['entry_type'] === 'domain') {
+                    if (!str_starts_with((string) $t['value'], '*.')) {
+                        foreach ($this->resolve((string) $t['value'], $summary) as $ip) {
+                            $targets[$ip][] = (string) $t['value'];
+                        }
+                    }
+                    continue;
+                }
+                foreach (self::expand((string) $t['range_start'], (string) $t['range_end']) as $ip) {
+                    $targets[$ip] ??= [];
+                }
+            }
+        }
+        $allowed = static function (string $ip, array $names) use ($e): bool {
+            // The address itself is a target, or it is the address of a target name; and neither is excluded.
+            $excluded = array_values(array_filter($e['targets'], static fn (array $t): bool => $t['kind'] === 'exclude'));
+            if (ScopeService::matches($excluded, $ip)) {
+                return false;
+            }
+            foreach ($names as $n) {
+                if (ScopeService::matches($excluded, $n)) {
+                    return false;
+                }
+            }
+            if (\Sentinel\Engagements\EngagementRepository::externalAllows($e['targets'], $ip)) {
+                return true;
+            }
+            foreach ($names as $n) {
+                if (\Sentinel\Engagements\EngagementRepository::externalAllows($e['targets'], $n)) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        $targets = array_slice($targets, 0, self::MAX_TARGETS, true);
+        $portText = $ports === null ? '1-65535' : PortProfile::toNmapArg($ports);
+        ($this->log)("Engagement job {$jobId} (engagement {$eid}): " . count($targets) . " address(es), ports {$portText}");
+
+        $stopReason = null;
+        $hostOut = false;
+        $shouldStop = function (?string $ip = null) use ($jobId, $clientId, $eid, $engagements, &$stopReason, &$hostOut): bool {
+            $stopReason = $this->stopReason($jobId, $clientId, true);
+            if ($stopReason === null && !$engagements->isActive($eid)) {
+                $stopReason = __('Stopped: the engagement is no longer active (stopped, or its window ended).');
+            }
+            if ($stopReason !== null) {
+                return true;
+            }
+            if ($ip !== null && !$this->scope->isInScope($clientId, $ip)) {
+                $hostOut = true;
+                return true;
+            }
+            return false;
+        };
+        $started = microtime(true);
+        $remaining = $targets;
+        foreach ($targets as $ip => $names) {
+            $ip = (string) $ip;
+            if ($shouldStop()) {
+                break;
+            }
+            if (microtime(true) - $started > 1200) {
+                break; // the rest in a new job (below)
+            }
+            unset($remaining[$ip]);
+            $label = $names === [] ? null : mb_substr(implode(',', array_unique($names)), 0, 260);
+            if (!$allowed($ip, $names) || !$this->scope->isInScope($clientId, $ip)) {
+                $this->scans->logStart($jobId, $clientId, $ip, $label, $portText, 'skipped_out_of_scope', __('Not an engagement target, excluded, or not in an active authorisation.'));
+                $summary['hosts_skipped']++;
+                continue;
+            }
+            $hostOut = false;
+            $logId = $this->scans->logStart($jobId, $clientId, $ip, $label, $portText, 'running', __('Engagement #{id}', ['id' => $eid]));
+            try {
+                $result = $nmap->deepScan($ip, $ports, $scripts, fn (): bool => $shouldStop($ip));
+            } catch (\Throwable $ex) {
+                $this->scans->logFinish($logId, 'error', mb_substr($ex->getMessage(), 0, 300));
+                $summary['hosts_failed']++;
+                $summary['messages'][] = __('Could not run nmap: {e}', ['e' => $ex->getMessage()]);
+                break;
+            }
+            if ($result['stopped']) {
+                $this->scans->logFinish($logId, 'stopped', (string) ($stopReason ?? __('Stopped because this address is no longer in scope.')));
+                if ($stopReason !== null) {
+                    break;
+                }
+                $summary['hosts_skipped']++;
+                continue;
+            }
+            if ($result['overflow'] || $result['timed_out']) {
+                $this->scans->logFinish($logId, $result['timed_out'] ? 'timeout' : 'error', $result['timed_out'] ? __('The host took too long and was stopped.') : __('nmap produced far too much output for one host and was stopped.'));
+                $summary['hosts_failed']++;
+                continue;
+            }
+            try {
+                $parsed = NmapXmlParser::parse($result['xml'], $ip, 20_000_000);
+            } catch (\RuntimeException $ex) {
+                $this->scans->logFinish($logId, 'error', mb_substr($ex->getMessage(), 0, 300) . ' (exit ' . $result['exit'] . ')');
+                $summary['hosts_failed']++;
+                continue;
+            }
+            $complete = $parsed['complete'] && $result['exit'] === 0;
+            $engagements->addResult($eid, 'external', null, 'scan:' . $jobId, $ip, array_values(array_unique($names)), $parsed['open'], ['hostscripts' => $parsed['hostscripts']], $complete);
+            // Like a port scan: the client's services, certificates and web pages (only the ports this scan covered).
+            $default = null;
+            foreach ($this->clients->sites($clientId) as $site) {
+                if ((int) $site['is_default'] === 1) {
+                    $default = (int) $site['id'];
+                }
+            }
+            $covered = $ports ?? array_column($parsed['open'], 'port');
+            if ($covered !== []) {
+                $this->scans->recordHost($clientId, $default, $ip, array_values(array_unique($names)), $covered, $parsed['open'], $complete && $ports !== null, $jobId);
+            }
+            $this->scans->logFinish($logId, 'scanned', __('{n} open port(s)', ['n' => count($parsed['open'])]) . ($complete ? '' : ' ' . __('(incomplete)')));
+            $summary['hosts_scanned']++;
+            $summary['open_ports'] += count($parsed['open']);
+            $services = array_map(static fn (array $sv): array => ['port' => $sv['port'], 'service' => $sv['service']], $parsed['open']);
+            $this->checkEndpoints($jobId, $clientId, $ip, array_values(array_unique($names)), $services, $shouldStop, $summary);
+        }
+        $status = 'done';
+        if ($stopReason !== null) {
+            $status = $this->scans->cancelRequested($jobId) ? 'cancelled' : 'partial';
+            $summary['messages'][] = $stopReason;
+        } elseif ($remaining !== []) {
+            $next = $this->scans->queue($clientId, 'manual', $job['requested_by'] === null ? null : (int) $job['requested_by'], true, __('Engagement window'),
+                ['engagement_id' => $eid, 'ips' => $remaining], 'engagement');
+            $summary['messages'][] = __('{n} address(es) continue in scan #{id}.', ['n' => count($remaining), 'id' => $next]);
+        } elseif ($summary['hosts_failed'] > 0) {
+            $status = 'partial';
+        }
+        $this->refreshFindings($clientId, $summary);
+        $this->scans->finish($jobId, $status, $summary);
+        $this->publishFinished($jobId, $clientId, 'ports', $status);
+        return "Engagement job {$jobId} {$status}: {$summary['hosts_scanned']} scanned, {$summary['hosts_skipped']} skipped, {$summary['hosts_failed']} failed.";
     }
 
     /**

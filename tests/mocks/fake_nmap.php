@@ -72,6 +72,36 @@ if (in_array('-sn', $args, true)) {
     exit(0);
 }
 
+// Engagement scans (NmapRunner::engagementArguments): the same base arguments, but "normal" timing may be used, the
+// host timeout is 180m, and exactly the fixed script selections are allowed (nothing else). Normalised here, then
+// checked like any scan; the fixture's script results are printed.
+$engagement = false;
+$si = array_search('--script', $args, true);
+$ti = array_search('--host-timeout', $args, true);
+if ($si !== false || ($ti !== false && ($args[$ti + 1] ?? '') === '180m')) {
+    $safe = 'safe and not (broadcast or external or brute or dos or exploit or intrusive or fuzzer or malware)';
+    $anon = 'ftp-anon or nfs-showmount or smb-enum-shares';
+    if ($si !== false) {
+        if (!in_array($args[$si + 1] ?? '', ['(' . $safe . ')', '(' . $anon . ')', '(' . $safe . ') or (' . $anon . ')'], true)
+            || ($args[$si + 2] ?? '') !== '--script-timeout' || ($args[$si + 3] ?? '') !== '3m') {
+            fwrite(STDERR, "fake nmap: script selection not as promised\n");
+            exit(2);
+        }
+        array_splice($args, $si, 4);
+    }
+    if ($ti === false || ($args[array_search('--host-timeout', $args, true) + 1] ?? '') !== '180m') {
+        fwrite(STDERR, "fake nmap: engagement host timeout not as promised\n");
+        exit(2);
+    }
+    $args[array_search('--host-timeout', $args, true) + 1] = '20m';
+    for ($i = 0; $i + 3 <= count($args); $i++) {
+        if (array_slice($args, $i, 3) === ['-T3', '--max-rate', '200']) {
+            array_splice($args, $i, 3, ['-T2', '--max-rate', '50']);
+            break;
+        }
+    }
+    $engagement = true;
+}
 $required = ['-sT', '--unprivileged', '-Pn', '-n', '-T2', '--max-rate', '50', '--max-retries', '2', '--host-timeout', '20m', '-sV', '--version-light', '--noninteractive', '-oX', '-'];
 $pos = 0;
 foreach ($required as $want) {
@@ -132,8 +162,20 @@ foreach ($host['open'] as $svc) {
     if (isset($svc['cpe'])) {
         echo "<cpe>{$e($svc['cpe'])}</cpe>";
     }
-    echo "</service></port>\n";
+    echo "</service>";
+    foreach ($engagement ? ($svc['scripts'] ?? []) : [] as $sc) {
+        echo "<script id=\"{$e($sc['id'])}\" output=\"{$e($sc['output'])}\"/>";
+    }
+    echo "</port>\n";
 }
 // A host with a different address must be ignored by the parser.
-echo "</ports></host>\n<host><address addr=\"192.0.2.250\" addrtype=\"ipv4\"/><ports><port protocol=\"tcp\" portid=\"1\"><state state=\"open\"/></port></ports></host>\n";
+echo "</ports>";
+if ($engagement && ($host['hostscripts'] ?? []) !== []) {
+    echo "<hostscript>";
+    foreach ($host['hostscripts'] as $sc) {
+        echo "<script id=\"{$e($sc['id'])}\" output=\"{$e($sc['output'])}\"/>";
+    }
+    echo "</hostscript>";
+}
+echo "</host>\n<host><address addr=\"192.0.2.250\" addrtype=\"ipv4\"/><ports><port protocol=\"tcp\" portid=\"1\"><state state=\"open\"/></port></ports></host>\n";
 echo "<runstats><finished time=\"0\" exit=\"success\"/></runstats></nmaprun>\n";

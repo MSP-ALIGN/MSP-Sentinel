@@ -115,6 +115,58 @@ final class NmapRunner
     }
 
     /**
+     * nmap script selection for engagements (fixed strings; nothing from a form reaches nmap):
+     * - SAFE_SCRIPTS: nmap's "safe" scripts, minus anything that broadcasts on the local network, contacts third
+     *   parties, guesses passwords, may crash a service, exploits, fuzzes or checks for malware;
+     * - ANON_SCRIPTS: anonymous-access checks over TCP: anonymous FTP, NFS exports, SMB shares readable without a
+     *   password (guest/null session: it lists shares, never writes). (SNMP is UDP, which an unprivileged nmap can't
+     *   scan: Sentinel's own UDP probes check it.)
+     */
+    public const SAFE_SCRIPTS = 'safe and not (broadcast or external or brute or dos or exploit or intrusive or fuzzer or malware)';
+    public const ANON_SCRIPTS = 'ftp-anon or nfs-showmount or smb-enum-shares';
+
+    /**
+     * The command line for an engagement's deeper scan of ONE host: all TCP ports or a list, and optional scripts.
+     * Same unprivileged TCP connect scan and timing profiles as above (never faster than "normal" -T3), a longer host
+     * timeout, and a time limit per script.
+     *
+     * @param list<int>|null $ports null: all 65,535 TCP ports
+     * @param list<string> $scripts each one of SAFE_SCRIPTS or ANON_SCRIPTS
+     * @return list<string>
+     */
+    public function engagementArguments(string $ip, ?array $ports, array $scripts): array
+    {
+        $args = $this->arguments($ip, $ports ?? [1]);
+        foreach ($scripts as $sc) {
+            if (!in_array($sc, [self::SAFE_SCRIPTS, self::ANON_SCRIPTS], true)) {
+                throw new \InvalidArgumentException('Unknown script selection.');
+            }
+        }
+        $i = array_search('-p', $args, true);
+        $args[$i + 1] = $ports === null ? '1-65535' : PortProfile::toNmapArg($ports);
+        $t = array_search('--host-timeout', $args, true);
+        $args[$t + 1] = '180m';
+        if ($scripts !== []) {
+            $at = array_search('-oX', $args, true);
+            array_splice($args, $at, 0, ['--script', '(' . implode(') or (', $scripts) . ')', '--script-timeout', '3m']);
+        }
+        return $args;
+    }
+
+    /**
+     * An engagement's deeper scan of one host (see engagementArguments()). Up to 3.5 hours and 20 MB of output.
+     *
+     * @param list<int>|null $ports
+     * @param list<string> $scripts
+     * @param callable():bool $shouldStop
+     * @return array{exit:int, xml:string, stderr:string, stopped:bool, timed_out:bool, overflow:bool}
+     */
+    public function deepScan(string $ip, ?array $ports, array $scripts, callable $shouldStop): array
+    {
+        return $this->run($this->engagementArguments($ip, $ports, $scripts), $shouldStop, 12600, 20_000_000);
+    }
+
+    /**
      * Scan one host.
      *
      * @param list<int>      $ports

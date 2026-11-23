@@ -33,7 +33,7 @@ final class ScanRepository
      */
     public function queue(int $clientId, string $trigger, ?int $userId, bool $outsideWindow, ?string $reason, array $payload, string $type = 'ports'): int
     {
-        if (!in_array($type, ['ports', 'tls', 'verify'], true)) {
+        if (!in_array($type, ['ports', 'tls', 'verify', 'engagement'], true)) {
             throw new \InvalidArgumentException('Unknown job type.');
         }
         // Last line of defence: demo clients hold made-up addresses and are never scanned, whoever asks.

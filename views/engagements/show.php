@@ -2,8 +2,9 @@
 /**
  * One pen-test engagement: state, window, tests, scope, the signed authorisation, and the actions (approve by a
  * different admin, stop, cancel).
- * Expects: $client, $engagement (with 'targets', 'tests_list'), $state, $siteNames, $testLabels, $currentUser.
- * Every value is escaped. Actions are shown only to roles allowed to use them (the routes enforce it too).
+ * Expects: $client, $engagement (with 'targets', 'tests_list'), $state, $siteNames, $testLabels, $currentUser, $results
+ * (latest per host), $externalJobs.
+ * Every value is escaped; results came from the tested hosts and are untrusted. Actions are shown only to roles allowed to use them (the routes enforce it too).
  */
 use Sentinel\Auth\Role;
 use Sentinel\Core\Csrf;
@@ -77,5 +78,37 @@ foreach ($e['targets'] as $t) {
                 <?php endif; ?>
             </div>
         </div>
+    </div>
+</div>
+<div class="card mb-3">
+    <div class="card-header d-flex align-items-center flex-wrap gap-2"><h2 class="card-title h5 mb-0"><?= e(__('Tests and results')) ?></h2>
+        <?php if ($state === ER::STATE_ACTIVE && $isTech && $byKind['external'] !== []): ?>
+        <form method="post" action="<?= e(url('/engagements/' . (int) $e['id'] . '/run-external')) ?>" class="ms-auto" data-confirm="<?= e(__('Start the external tests now?')) ?>"><?= Csrf::field() ?>
+            <button class="btn btn-sm btn-danger" type="submit"><i class="bi bi-play-circle me-1" aria-hidden="true"></i><?= e(__('Run external tests')) ?></button></form>
+        <?php endif; ?>
+    </div>
+    <div class="card-body">
+        <?php if ($externalJobs !== []): ?>
+        <p class="small mb-2"><?= e(__('External test runs:')) ?>
+            <?php foreach (array_slice($externalJobs, 0, 5) as $j): ?><span class="badge text-bg-light border me-1">#<?= (int) $j['id'] ?> <?= e((string) $j['status']) ?></span><?php endforeach; ?></p>
+        <?php endif; ?>
+        <?php if ($results === []): ?>
+        <p class="text-body-secondary mb-0"><?= e(__('No results yet.')) ?></p>
+        <?php else: ?>
+        <div class="table-responsive"><table class="table table-sm align-middle mb-0">
+            <thead><tr><th><?= e(__('Host')) ?></th><th><?= e(__('Open ports')) ?></th><th><?= e(__('Script results')) ?></th><th><?= e(__('Tested ({tz})', ['tz' => $client['timezone']])) ?></th></tr></thead>
+            <tbody>
+            <?php foreach ($results as $r): $scriptCount = 0; foreach ($r['ports_list'] as $p) { $scriptCount += count((array) ($p['scripts'] ?? [])); } $scriptCount += count((array) ($r['checks_list']['hostscripts'] ?? [])); ?>
+                <tr>
+                    <td class="font-monospace small"><?= e($r['ip']) ?><?php if ($r['hostnames'] !== ''): ?><div class="text-body-secondary"><?= e($r['hostnames']) ?></div><?php endif; ?>
+                        <span class="badge text-bg-light border"><?= e($r['origin'] === 'external' ? __('external') : __('internal')) ?></span><?php if ((int) $r['complete'] !== 1): ?> <span class="badge text-bg-warning"><?= e(__('incomplete')) ?></span><?php endif; ?></td>
+                    <td class="small"><?= e($r['ports_list'] === [] ? '–' : implode(', ', array_map(static fn (array $p): string => (int) ($p['port'] ?? 0) . '/' . (string) ($p['service'] ?? '') . ((string) ($p['product'] ?? '') !== '' ? ' (' . $p['product'] . ' ' . ($p['version'] ?? '') . ')' : ''), $r['ports_list']))) ?></td>
+                    <td class="small"><?= e((string) $scriptCount) ?></td>
+                    <td class="small"><?= e($local((string) $r['scanned_at'])) ?></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table></div>
+        <?php endif; ?>
     </div>
 </div>

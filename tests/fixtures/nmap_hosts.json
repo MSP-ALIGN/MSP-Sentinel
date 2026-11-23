@@ -220,5 +220,51 @@
         "product": "Example RDP"
       }
     ]
+  },
+  "203.0.113.3": {
+    "open": [
+      {
+        "port": 21,
+        "name": "ftp",
+        "product": "ExampleFTPd",
+        "version": "3.0",
+        "scripts": [
+          {
+            "id": "ftp-anon",
+            "output": "Anonymous FTP login allowed (FTP code 230)\n-rw-r--r--   1 ftp ftp   1024 Jan 01 2026 backup-made-up.zip"
+          }
+        ]
+      },
+      {
+        "port": 22,
+        "name": "ssh",
+        "product": "OpenSSH",
+        "version": "9.6p1",
+        "scripts": [
+          {
+            "id": "ssh-hostkey",
+            "output": "256 SHA256:made-up (ED25519)"
+          }
+        ]
+      },
+      {
+        "port": 50080,
+        "name": "http",
+        "product": "ExampleAdmin",
+        "version": "1.0",
+        "scripts": [
+          {
+            "id": "http-title",
+            "output": "Example Admin Console"
+          }
+        ]
+      }
+    ],
+    "hostscripts": [
+      {
+        "id": "smb-enum-shares",
+        "output": "account_used: guest\n\\\\203.0.113.3\\Public:\n  Type: STYPE_DISKTREE\n  Anonymous access: READ"
+      }
+    ]
   }
 }

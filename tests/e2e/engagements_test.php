@@ -147,4 +147,48 @@ return [
             Assert::contains($a, $audit);
         }
     },
+    'engagements: external tests run only while active, scan deeper with the fixed scripts, honour exclusions and stop' => function (TestContext $ctx) use ($engSetup, $fields, $lastId): void {
+        [$cid, $site, $pdf] = $engSetup($ctx);
+        $admin2 = $ctx->login('engadmin2', 'Engadmin2-Pass-0001!');
+        $tech = $ctx->login('engtech', 'Engtech-Pass-0001!');
+        $tech->upload('/clients/' . $cid . '/engagements/new', '/clients/' . $cid . '/engagements', $fields($site, ['name' => 'External test',
+            'external' => '203.0.113.0/29', 'internal_' . $site => '', 'exclusions' => '203.0.113.5']), 'document', $pdf, 'application/pdf');
+        $id = $lastId($ctx, $cid);
+        // Not approved yet: nothing can be started.
+        $tech->post('/engagements/' . $id . '/run-external', ['_csrf' => $tech->get('/engagements/' . $id)->csrf()]);
+        Assert::same([], App::engagements()->externalJobs($id), 'not before approval');
+        $admin2->post('/engagements/' . $id . '/approve', ['_csrf' => $admin2->get('/engagements/' . $id)->csrf(), 'password' => 'Engadmin2-Pass-0001!']);
+        $tech->post('/engagements/' . $id . '/run-external', ['_csrf' => $tech->get('/engagements/' . $id)->csrf()]);
+        $jobs = App::engagements()->externalJobs($id);
+        Assert::same(1, count($jobs), 'queued once');
+        $tech->post('/engagements/' . $id . '/run-external', ['_csrf' => $tech->get('/engagements/' . $id)->csrf()]);
+        Assert::same(1, count(App::engagements()->externalJobs($id)), 'not twice while queued');
+        @unlink($ctx->nmapLog);
+        [$code, $out] = $ctx->cli('bin/worker.php', ['--no-schedule', '--job=' . (int) $jobs[0]['id']]);
+        Assert::same(0, $code, 'worker: ' . $out);
+        $calls = array_map(static fn (string $l): array => json_decode($l, true), file($ctx->nmapLog, FILE_IGNORE_NEW_LINES));
+        $scanned = array_map(static fn (array $c): string => (string) end($c), $calls);
+        sort($scanned);
+        Assert::same(['203.0.113.0', '203.0.113.1', '203.0.113.2', '203.0.113.3', '203.0.113.4', '203.0.113.6', '203.0.113.7'], $scanned, 'the /29 without the excluded address');
+        $first = $calls[0];
+        Assert::true(in_array('1-65535', $first, true) && in_array('-T3', $first, true) && in_array('--script', $first, true), 'all ports, normal timing, scripts: ' . implode(' ', $first));
+        Assert::true(!in_array('-sU', $first, true) && !in_array('-A', $first, true) && !in_array('-O', $first, true), 'nothing outside the fixed set');
+        $results = App::engagements()->results($id);
+        $host = array_values(array_filter($results, static fn (array $r): bool => $r['ip'] === '203.0.113.3'))[0] ?? null;
+        Assert::true($host !== null, 'results recorded');
+        Assert::same([21, 22, 50080], array_column($host['ports_list'], 'port'), 'a high port found by the full scan');
+        Assert::contains('Anonymous FTP login allowed', json_encode($host['ports_list']));
+        Assert::contains('Anonymous access: READ', json_encode($host['checks_list']));
+        $page = $tech->get('/engagements/' . $id)->body;
+        Assert::contains('50080/http', $page);
+        // Stopped: a new run is refused, and a queued job is cancelled by the worker without scanning.
+        $q = App::scans()->queue($cid, 'manual', null, true, 'test', ['engagement_id' => $id], 'engagement');
+        $tech->post('/engagements/' . $id . '/stop', ['_csrf' => $tech->get('/engagements/' . $id)->csrf(), 'reason' => 'Test stop']);
+        @unlink($ctx->nmapLog);
+        $ctx->cli('bin/worker.php', ['--no-schedule', '--job=' . $q]);
+        Assert::same('cancelled', (string) $ctx->db->query('SELECT status FROM scan_jobs WHERE id = ' . $q)->fetchColumn());
+        Assert::true(!is_file($ctx->nmapLog) || trim((string) file_get_contents($ctx->nmapLog)) === '', 'nothing scanned after the stop');
+        $tech->post('/engagements/' . $id . '/run-external', ['_csrf' => $tech->get('/engagements/' . $id)->csrf()]);
+        Assert::same(2, count(App::engagements()->externalJobs($id)), 'no new run once stopped');
+    },
 ];
