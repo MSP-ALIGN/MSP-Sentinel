@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.21.1](https://img.shields.io/badge/version-1.21.1-ff5a1f?style=flat-square)
+![Version 1.22.0](https://img.shields.io/badge/version-1.22.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -148,6 +148,20 @@ curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install
 The same help is built into the app (**Help** in the menu), with a "What's new" page for every release.
 
 ## What's new
+
+### 1.22.0 (2026-11-23): agent updates from Sentinel
+
+- **Update agents from Sentinel.** Use **Update to x.y.z** per agent, **Update all agents** per client, or **Update all
+  agents** under Administration → System. Agents update at their next check-in between scans, download the release
+  from Sentinel (no GitHub access needed at client sites) and report the result.
+- **Only code signed with your release key is installed.** The key is pinned on each agent at install and never
+  changed by an update. A root helper on the appliance checks the signature, the version (no downgrades) and every
+  file again before installing. Sentinel can ask for an update but can't vouch for code, so a compromised Sentinel
+  server can't push code to client networks.
+- **New `bin/release-sign.php`** (for you only): `keygen` once, then `sign` for each release (see
+  [docs/agent.md](docs/agent.md#updates-from-sentinel-122)). Until the release key is set up and a release is signed,
+  no updates are offered.
+- **Upgrade existing agents once by hand** (`agent-install.sh --upgrade`) to get the update helper and the pinned key.
 
 ### 1.21.1 (2026-11-23): agent settings, fixes from review
 

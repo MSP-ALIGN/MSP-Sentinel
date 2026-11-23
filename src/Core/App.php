@@ -434,6 +434,13 @@ final class App
         return new \Sentinel\Agent\AgentRepository(self::db(), self::crypto(), self::agentSigner());
     }
 
+    /** The signed agent release this installation can hand to agents (test suite: testing.release_root). */
+    public static function agentRelease(): \Sentinel\Agent\AgentRelease
+    {
+        $test = self::config()->get('testing.allow_documentation_ranges', false) === true ? (string) self::config()->get('testing.release_root', '') : '';
+        return $test !== '' ? new \Sentinel\Agent\AgentRelease($test, self::version(), true) : new \Sentinel\Agent\AgentRelease(dirname(__DIR__, 2), self::version());
+    }
+
     /** Active Directory settings per site and the sealed password relay to agents. */
     public static function directory(): \Sentinel\Agent\DirectoryRepository
     {

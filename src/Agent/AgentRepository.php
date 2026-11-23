@@ -240,6 +240,66 @@ final class AgentRepository
         return $out;
     }
 
+    /** The first agent version that can update itself from Sentinel. */
+    public const REMOTE_UPDATE_SINCE = '1.22.0';
+
+    /**
+     * Ask every active agent (of one client, or all) that runs an older version that can update itself to update to
+     * $version. Demo clients' agents are left alone. Returns how many were asked, and how many need a manual upgrade
+     * first (older than REMOTE_UPDATE_SINCE).
+     *
+     * @return array{asked:int, manual:int}
+     */
+    public function requestUpdates(?int $clientId, string $version, int $userId): array
+    {
+        $stmt = $this->db->prepare("SELECT a.id, a.version FROM agents a JOIN clients c ON c.id = a.client_id
+                                    WHERE a.status = 'active' AND c.is_demo = 0" . ($clientId !== null ? ' AND a.client_id = :c' : ''));
+        $stmt->execute($clientId !== null ? ['c' => $clientId] : []);
+        $out = ['asked' => 0, 'manual' => 0];
+        foreach ($stmt->fetchAll() as $a) {
+            if (!\Sentinel\System\ReleaseManifest::newer($version, (string) $a['version'])) {
+                continue;
+            }
+            if (!self::canUpdateRemotely((string) $a['version'])) {
+                $out['manual']++;
+                continue;
+            }
+            $this->requestUpdate((int) $a['id'], $version, $userId);
+            $out['asked']++;
+        }
+        return $out;
+    }
+
+    /** Whether an agent of this version can update itself from Sentinel. */
+    public static function canUpdateRemotely(string $version): bool
+    {
+        return preg_match('/^\d+\.\d+\.\d+$/', $version) === 1 && version_compare($version, self::REMOTE_UPDATE_SINCE, '>=');
+    }
+
+    /** Ask an agent to update to $version at its next idle check-in. */
+    public function requestUpdate(int $agentId, string $version, int $userId): void
+    {
+        $this->db->prepare("UPDATE agents SET update_to = :v, update_requested_at = UTC_TIMESTAMP(), update_requested_by = :u WHERE id = :id AND status = 'active'")
+            ->execute(['v' => $version, 'u' => $userId, 'id' => $agentId]);
+    }
+
+    /**
+     * Record what an agent (or its root update helper) reported about an update (untrusted: shortened). A refusal, the
+     * helper reporting the version asked for as installed, or the agent running it, ends the request: nothing is
+     * handed out again in a loop.
+     */
+    public function saveUpdateResult(int $agentId, string $version, bool $ok, string $message, string $running, string $request = ''): void
+    {
+        // Only a result for the CURRENT request (the request's own identifier: when it was made) can end it; one left
+        // over from an earlier request is shown but changes nothing.
+        $result = json_encode(['version' => mb_substr($version, 0, 20), 'ok' => $ok, 'message' => mb_substr($message, 0, 300)], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        // The request ends with a refusal, with the helper reporting that version installed, or with the agent running it.
+        $this->db->prepare("UPDATE agents SET update_result = :r, update_result_at = UTC_TIMESTAMP(),
+                            update_to = IF(update_to = :running OR (DATE_FORMAT(update_requested_at, '%Y-%m-%d %H:%i:%s') = :req AND (:ok = 0 OR update_to = :v)), '', update_to)
+                            WHERE id = :id")
+            ->execute(['r' => $result, 'req' => $request, 'ok' => $ok ? 1 : 0, 'v' => $ok ? $version : '', 'running' => $running, 'id' => $agentId]);
+    }
+
     /** Ask an agent to restart, or to send diagnostics, at its next check-in. */
     public function request(int $agentId, string $what): void
     {

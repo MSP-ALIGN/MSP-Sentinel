@@ -10,6 +10,7 @@ use Sentinel\Core\Csrf;
 
 $isAdmin = Role::atLeast((string) $currentUser['role'], Role::ADMIN);
 $isTech = Role::atLeast((string) $currentUser['role'], Role::TECHNICIAN);
+$agentRelease = \Sentinel\Core\App::agentRelease()->version(); // the signed agent release this Sentinel can hand out
 $cid = (int) $client['id'];
 $jobLabel = static fn (array $j): string => match ($j['status']) {
     'done' => __('done'), 'partial' => __('partial'), 'failed' => __('failed'), 'cancelled' => __('cancelled'), 'expired' => __('expired (agent offline?)'),
@@ -19,6 +20,10 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
 <div class="card mb-3" id="agents">
     <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('On-premises agents (internal scans)')) ?></h2></div>
     <div class="card-body">
+        <?php if ($isAdmin && $agentRelease !== null): ?>
+        <form method="post" action="<?= e(url('/clients/' . $cid . '/agents-update')) ?>" class="float-end ms-2" data-confirm="<?= e(__('Update every agent of this client that runs an older version to {v}?', ['v' => $agentRelease])) ?>"><?= Csrf::field() ?>
+            <button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-cloud-arrow-down me-1" aria-hidden="true"></i><?= e(__('Update all agents to {v}', ['v' => $agentRelease])) ?></button></form>
+        <?php endif; ?>
         <p class="small text-body-secondary"><?= e(__('An agent is a small Linux appliance at the client\'s site. It connects out to Sentinel, scans only the internal networks approved in a signed internal authorisation, and reports devices, open services and certificates. A full scan runs weekly and a light sweep daily, inside the scan window.')) ?></p>
         <?php foreach ($agentSites as $s): $site = $s['site']; $sid = (int) $site['id']; ?>
         <div class="border rounded p-3 mb-3">
@@ -66,13 +71,19 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                         <?php endif; ?></td>
                     <td class="font-monospace"><?= e($a['version'] ?: '?') ?>
                         <?php if ($a['status'] === 'active' && preg_match('/^\d+\.\d+\.\d+$/', (string) $a['version']) === 1 && version_compare((string) $a['version'], '1.21.0', '<')): ?>
-                        <div class="small text-warning font-sans-serif"><?= e(__('Upgrade this agent: before 1.21.0 it ignores the gentleness setting, Restart and Diagnostics.')) ?></div><?php endif; ?></td>
+                        <div class="small text-warning font-sans-serif"><?= e(__('Upgrade this agent: before 1.21.0 it ignores the gentleness setting, Restart and Diagnostics.')) ?></div><?php endif; ?>
+                        <?php if ($a['status'] === 'active' && (string) ($a['update_to'] ?? '') !== ''): ?><div class="small text-body-secondary"><?= e(__('update to {v} requested', ['v' => $a['update_to']])) ?></div><?php endif; ?>
+                        <?php $ur = json_decode((string) ($a['update_result'] ?? ''), true); if ($a['status'] === 'active' && is_array($ur)): ?>
+                        <div class="small <?= ($ur['ok'] ?? false) ? 'text-success' : 'text-danger' ?>"><?= e(($ur['ok'] ?? false) ? __('Updated to {v} ({t} UTC)', ['v' => $ur['version'] ?? '?', 't' => $a['update_result_at']]) : __('Update to {v} refused: {why}', ['v' => $ur['version'] ?? '?', 'why' => $ur['message'] ?? ''])) ?></div><?php endif; ?></td>
                     <td><?= e((string) ($a['last_seen_at'] ?? '-')) ?></td>
                     <td><?php if ($a['status'] === 'revoked'): ?><span class="badge text-bg-secondary"><?= e(__('Revoked')) ?></span>
                         <?php elseif ($online): ?><span class="badge text-bg-success"><i class="bi bi-wifi me-1" aria-hidden="true"></i><?= e(__('Online')) ?></span>
                         <?php else: ?><span class="badge text-bg-warning"><i class="bi bi-wifi-off me-1" aria-hidden="true"></i><?= e(__('Offline')) ?></span><?php endif; ?></td>
                     <td class="text-end"><?php if ($isAdmin && $a['status'] === 'active'): ?>
                         <div class="d-flex flex-wrap gap-1 justify-content-end">
+                        <?php if ($agentRelease !== null && \Sentinel\System\ReleaseManifest::newer($agentRelease, (string) $a['version']) && \Sentinel\Agent\AgentRepository::canUpdateRemotely((string) $a['version']) && (string) ($a['update_to'] ?? '') === ''): ?>
+                        <form method="post" action="<?= e(url('/clients/' . $cid . '/agents/' . (int) $a['id'] . '/update')) ?>" data-confirm="<?= e(__('Update this agent to {v} at its next check-in between scans?', ['v' => $agentRelease])) ?>"><?= Csrf::field() ?><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-cloud-arrow-down me-1" aria-hidden="true"></i><?= e(__('Update to {v}', ['v' => $agentRelease])) ?></button></form>
+                        <?php endif; ?>
                         <form method="post" action="<?= e(url('/clients/' . $cid . '/agents/' . (int) $a['id'] . '/diagnostics')) ?>"><?= Csrf::field() ?><button class="btn btn-sm btn-outline-secondary" type="submit"><i class="bi bi-clipboard-pulse me-1" aria-hidden="true"></i><?= e(__('Diagnostics')) ?></button></form>
                         <form method="post" action="<?= e(url('/clients/' . $cid . '/agents/' . (int) $a['id'] . '/restart')) ?>" data-confirm="<?= e(__('Restart this agent at its next check-in? A running scan finishes first.')) ?>"><?= Csrf::field() ?><button class="btn btn-sm btn-outline-secondary" type="submit"><i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i><?= e(__('Restart')) ?></button></form>
                         <form method="post" action="<?= e(url('/clients/' . $cid . '/agents/' . (int) $a['id'] . '/revoke')) ?>" data-confirm="<?= e(__('Revoke this agent? Its token stops working immediately.')) ?>"><?= Csrf::field() ?><button class="btn btn-sm btn-outline-secondary" type="submit"><?= e(__('Revoke')) ?></button></form>

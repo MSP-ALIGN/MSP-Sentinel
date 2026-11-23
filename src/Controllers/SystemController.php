@@ -39,7 +39,24 @@ final class SystemController extends Controller
             'retention' => ['scans' => $s->get('retention_scans_months'), 'findings' => $s->get('retention_findings_months'), 'reports' => $s->get('retention_reports_months')],
             'retentionLast' => $s->get('retention_last_run'),
             'sourceUrl' => $s->get('source_url'),
+            'agentRelease' => App::agentRelease(),
+            'agentVersions' => App::db()->query("SELECT a.version, COUNT(*) AS n FROM agents a JOIN clients c ON c.id = a.client_id WHERE a.status = 'active' AND c.is_demo = 0 GROUP BY a.version ORDER BY a.version")->fetchAll(),
         ]);
+    }
+
+    /** POST /admin/system/agents-update (admins): every agent of every client that can and needs to update. */
+    public function updateAgents(Request $request): Response
+    {
+        $release = App::agentRelease()->version();
+        if ($release === null) {
+            Session::flash('warning', __('This Sentinel has no signed agent release to hand out: {why}.', ['why' => App::agentRelease()->why()]));
+            return Response::redirect('/admin/system#agents');
+        }
+        $n = App::agents()->requestUpdates(null, $release, (int) $this->user()['id']);
+        $this->audit($request, 'agent.update_requested', null, null, ['version' => $release, 'scope' => 'all'] + $n);
+        Session::flash('success', __('{n} agent(s) will update to {v}.', ['n' => $n['asked'], 'v' => $release])
+            . ($n['manual'] > 0 ? ' ' . __('{m} must be upgraded once by hand first.', ['m' => $n['manual']]) : ''));
+        return Response::redirect('/admin/system#agents');
     }
 
     /**

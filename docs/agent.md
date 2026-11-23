@@ -110,7 +110,44 @@ After the one-time install with an enrolment code, these are set on the client's
 - Agents older than 1.21.0 ignore the gentleness setting, Restart and Diagnostics; the Agents page says so. Upgrade
   them once by hand.
 
-Agent updates and moving agents to a new Sentinel address follow in the next releases.
+Moving agents to a new Sentinel address follows in a next release.
+
+## Updates from Sentinel (1.22)
+
+Agents can be updated from Sentinel: **Update to x.y.z** per agent and **Update all agents** on the client's Agents
+page, or **Update all agents** under Administration → System. An agent updates at its next check-in between scans.
+
+**It only installs code signed with your release key.** Sentinel can ask an agent to update, but it can't vouch for
+code: a compromised Sentinel server can't push code to client networks.
+
+1. The agent downloads the release from Sentinel (client sites need no access to GitHub) and checks it against the
+   release public key pinned at install (`/etc/sentinel-agent/release-key.pub`, root-owned, never changed by an
+   update): the signature, that it is the version asked for and newer than its own, and every file's SHA-256.
+2. It stages the files in its state folder and asks the root update helper (`sentinel-agent-update.path` starts
+   `bin/agent-update-runner.php`) to install them. The agent itself can't change its code.
+3. The helper checks everything again itself: the signature with the pinned key, the version (no downgrades), and
+   every file, by copying it into a new root-owned folder and hashing the copy (so the agent's user can't swap a file
+   after the check). Then it puts the new folder in place (the previous one stays as `/opt/sentinel-agent.old`),
+   writes the systemd units from the new release and restarts the agent.
+4. The Agents page shows the result: "Updated to x.y.z", or why it was refused.
+
+Agents older than 1.22.0 (no helper, no pinned key) must be upgraded once by hand (`agent-install.sh --upgrade`).
+New PHP extensions or system packages are not installed by a remote update; release notes will say when a release
+needs a manual upgrade.
+
+**For the maintainer: signing releases.** Only you hold the release key.
+
+1. Once, on your own computer: `php bin/release-sign.php keygen --out ~/sentinel-release.key`. Keep that file safe
+   and offline (it refuses to write inside the repository). Put the printed public key in `install/release-key.pub`
+   and commit it. Agents installed or upgraded by hand after that pin it.
+2. For each release, after the last code change is committed: `php bin/release-sign.php sign --key
+   ~/sentinel-release.key`, then commit `release/agent-manifest.json` and `release/agent-manifest.sig` with the
+   release. `php bin/release-sign.php verify` checks it.
+3. Sentinel offers an update only when its own version is signed. An unsigned build (for example a development
+   branch) offers none; agents there are upgraded by hand.
+
+If the release key is ever lost, make a new one and upgrade every agent by hand once (they pin the new key). If it
+leaks, do the same at once: agents trust whatever it signs.
 
 ## What is graded
 

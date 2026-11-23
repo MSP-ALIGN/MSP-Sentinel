@@ -30,6 +30,7 @@ use Sentinel\AgentClient\Http;
 use Sentinel\AgentClient\JobVerifier;
 use Sentinel\AgentClient\Runner;
 use Sentinel\AgentClient\State;
+use Sentinel\AgentClient\Updater;
 use Sentinel\Directory\DirectoryChecks;
 use Sentinel\Directory\NameListener;
 use Sentinel\Scanning\Connector;
@@ -139,7 +140,10 @@ switch ($command) {
             // Test mode: listen on 127.0.0.1 and high ports, without joining the multicast group (no ports given: don't listen).
             $testMode ? (is_array($c['testing']['names'] ?? null)
                 ? new NameListener('127.0.0.1', (int) $c['testing']['names']['llmnr_port'], (int) $c['testing']['names']['nbns_port'], false, (string) ($c['testing']['names']['loopback_as'] ?? '')) : null)
-                : new NameListener());
+                : new NameListener(),
+            // Updates: only code signed with the release key pinned at install (test suite: testing.release_key).
+            new Updater($http, $testMode && is_string($c['testing']['release_key'] ?? null) ? $c['testing']['release_key'] : '/etc/sentinel-agent/release-key.pub',
+                $stateDir, $say, (string) $c['server_public_key'], (int) $c['agent_id'], (int) $c['site_id'], (int) $c['client_id']));
         $say('Agent #' . $c['agent_id'] . ' started (version ' . Runner::version() . ').');
         do {
             try {

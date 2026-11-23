@@ -101,6 +101,8 @@ $router->add('POST', '/clients/{id}/sites/{site}/enrol', [AgentController::class
 $router->add('POST', '/clients/{id}/agents/{agent}/revoke', [AgentController::class, 'revokeAgent'], $admin);
 $router->add('POST', '/clients/{id}/agents/{agent}/approve-key', [AgentController::class, 'approveKey'], $admin);
 $router->add('POST', '/clients/{id}/agents/{agent}/restart', [AgentController::class, 'restartAgent'], $admin);
+$router->add('POST', '/clients/{id}/agents/{agent}/update', [AgentController::class, 'updateAgent'], $admin);
+$router->add('POST', '/clients/{id}/agents-update', [AgentController::class, 'updateClientAgents'], $admin);
 $router->add('POST', '/clients/{id}/agents/{agent}/diagnostics', [AgentController::class, 'diagnosticsAgent'], $admin);
 $router->add('POST', '/clients/{id}/sites/{site}/agent-settings', [AgentController::class, 'siteSettings'], $admin);
 $router->add('POST', '/clients/{id}/sites/{site}/pause', [AgentController::class, 'pause'], $technician);
@@ -175,6 +177,7 @@ $router->add('POST', '/admin/system/retention', [SystemController::class, 'reten
 $router->add('POST', '/admin/system/updates', [SystemController::class, 'updates'], $admin);
 $router->add('POST', '/admin/system/demo', [SystemController::class, 'demo'], $admin);
 $router->add('POST', '/admin/system/update', [SystemController::class, 'update'], $admin);
+$router->add('POST', '/admin/system/agents-update', [SystemController::class, 'updateAgents'], $admin);
 $router->add('GET', '/admin/api', [ApiAdminController::class, 'index'], $admin);
 $router->add('POST', '/admin/api/tokens', [ApiAdminController::class, 'create'], $admin);
 $router->add('POST', '/admin/api/tokens/{id}/revoke', [ApiAdminController::class, 'revoke'], $admin);

@@ -20,9 +20,47 @@ use Sentinel\System\ReleaseManifest;
  */
 final class Updater
 {
-    /** @param callable(string):void $log */
-    public function __construct(private readonly Http $http, private readonly string $releaseKeyFile, private readonly string $stateDir, private $log)
+    /**
+     * @param callable(string):void $log
+     * @param string $serverKey  the pinned server key (update requests from Sentinel are signed with it)
+     */
+    public function __construct(private readonly Http $http, private readonly string $releaseKeyFile, private readonly string $stateDir, private $log,
+        private readonly string $serverKey = '', private readonly int $agentId = 0, private readonly int $siteId = 0, private readonly int $clientId = 0)
     {
+    }
+
+    /**
+     * The version and request identifier a signed update request (from a check-in answer) asks for, or null when it
+     * isn't one for this agent. Sentinel's signature only says "this server asks"; the code itself is checked against
+     * the release key later. The identifier travels with the result, so Sentinel can tell which request it answers.
+     *
+     * @param array<string,mixed> $signed
+     * @return array{0:string, 1:string}|null
+     */
+    public function requested(array $signed): ?array
+    {
+        if (!is_string($signed['payload'] ?? null) || !is_string($signed['signature'] ?? null) || !\Sentinel\Agent\Signer::verify($signed['payload'], $signed['signature'], $this->serverKey)) {
+            return null;
+        }
+        $d = json_decode($signed['payload'], true);
+        $issued = is_array($d) ? strtotime((string) ($d['issued_at'] ?? '')) : false;
+        if (!is_array($d) || ($d['type'] ?? null) !== 'agent_update' || ($d['agent_id'] ?? null) !== $this->agentId || ($d['site_id'] ?? null) !== $this->siteId
+            || ($d['client_id'] ?? null) !== $this->clientId || !is_string($d['version'] ?? null) || $issued === false || abs(time() - $issued) > 3600) {
+            return null;
+        }
+        return [$d['version'], is_string($d['request'] ?? null) ? mb_substr($d['request'], 0, 30) : ''];
+    }
+
+    /** Whether an update is staged and waiting for the helper (don't stage again meanwhile). */
+    public function pending(): bool
+    {
+        return is_file($this->stateDir . '/update-request');
+    }
+
+    /** Forget the helper's result once Sentinel has it. */
+    public function clearResult(): void
+    {
+        @unlink($this->stateDir . '/update-result.json');
     }
 
     /** Whether this agent can be updated remotely (a release key is pinned). */
@@ -34,7 +72,7 @@ final class Updater
     /**
      * Stage version $target and ask the helper to install it. Returns '' when staged, else why not.
      */
-    public function stage(string $target, string $current): string
+    public function stage(string $target, string $current, string $request = ''): string
     {
         if (!$this->available()) {
             return 'No release key is pinned on this agent: upgrade it once by hand (agent-install.sh --upgrade).';
@@ -78,7 +116,7 @@ final class Updater
         file_put_contents($dir . '/agent-manifest.sig', $sig);
         @unlink($this->stateDir . '/update-result.json');
         // The request the root helper watches for (systemd path unit). Written last, atomically.
-        file_put_contents($this->stateDir . '/update-request.tmp', json_encode(['version' => $m['version'], 'requested_at' => gmdate('Y-m-d\TH:i:s\Z')]));
+        file_put_contents($this->stateDir . '/update-request.tmp', json_encode(['version' => $m['version'], 'request' => $request]));
         rename($this->stateDir . '/update-request.tmp', $this->stateDir . '/update-request');
         ($this->log)('Update to ' . $m['version'] . ' staged (' . count($m['files']) . ' files, signature and hashes checked); the update helper installs it.');
         return '';

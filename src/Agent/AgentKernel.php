@@ -18,6 +18,11 @@ use Sentinel\Core\Response;
  * - POST /agent/v1/jobs/{id}/results  results of one job
  * - POST /agent/v1/secrets/{id}/ack   {ok, error}: the agent opened and kept (or refused) a sealed directory password
  * - POST /agent/v1/diagnostics        the agent's diagnostics report, when an admin asked for one
+ * - POST /agent/v1/update/manifest    {version}: the signed agent release manifest (only to an agent asked to update)
+ * - POST /agent/v1/update/file        {version, path}: one file of that release, base64
+ * - POST /agent/v1/update/result      {version, ok, message}: the agent couldn't stage the update
+ *   (Sentinel only relays the release; the agent and its root helper accept it only when it is signed with the
+ *   maintainer's release key they pinned at install.)
  *
  * The poll answer also carries the site's check-in interval and one-off requests from the Agents page ("restart":
  * the agent exits and its service starts it again; "diagnostics": send a report). Neither can make the agent scan or
@@ -68,6 +73,9 @@ final class AgentKernel
             }
             if (preg_match('#^/agent/v1/secrets/([1-9][0-9]{0,9})/ack$#', $request->path, $m)) {
                 return self::ackSecret($agent, (int) $m[1]);
+            }
+            if (in_array($request->path, ['/agent/v1/update/manifest', '/agent/v1/update/file', '/agent/v1/update/result'], true)) {
+                return self::update($request->path, $agent);
             }
             if ($request->path === '/agent/v1/diagnostics') {
                 $body = self::body(65536);
@@ -144,8 +152,24 @@ final class AgentKernel
         if ($requests !== []) {
             App::audit()->log('agent.requests_handed_out', null, null, 'agent', (int) $agent['id'], ['client_id' => (int) $agent['client_id'], 'requests' => array_keys($requests)], $request->ip());
         }
-        // A restart goes out alone: jobs in the same answer would be marked sent and never run.
-        $giveJobs = !$paused && !isset($requests['restart']) && ($idle === true || ($idle === null && $running === []));
+        // An update request the agent reports back on: the helper's result (what it installed, or why not).
+        if (is_array($body['update_result'] ?? null) && is_string($body['update_result']['version'] ?? null)) {
+            $r = $body['update_result'];
+            App::agents()->saveUpdateResult((int) $agent['id'], self::short($r['version'], 20), ($r['ok'] ?? false) === true, self::short($r['message'] ?? '', 300),
+                self::short($body['version'] ?? '', 20), self::short($r['request'] ?? '', 30));
+        }
+        // Update: at an idle check-in, when an admin asked and the agent isn't on that version yet (signed by Sentinel's
+        // key only to say "this server asks"; the code itself must carry the release key's signature). Alone, like a restart.
+        $update = null;
+        // Read again: the result just reported may have ended the request.
+        $now = App::db()->query('SELECT update_to, update_requested_at FROM agents WHERE id = ' . (int) $agent['id'])->fetch();
+        $updateTo = (string) ($now['update_to'] ?? '');
+        if ($idle === true && !isset($requests['restart']) && $updateTo !== '' && $updateTo !== (string) ($body['version'] ?? '')) {
+            $update = App::agentSigner()->sign(['v' => 1, 'type' => 'agent_update', 'agent_id' => (int) $agent['id'], 'site_id' => (int) $agent['site_id'],
+                'client_id' => (int) $agent['client_id'], 'version' => $updateTo, 'request' => (string) $now['update_requested_at'], 'issued_at' => gmdate('Y-m-d\TH:i:s\Z')]);
+        }
+        // A restart or an update goes out alone: jobs in the same answer would be marked sent and never run.
+        $giveJobs = !$paused && !isset($requests['restart']) && $update === null && ($idle === true || ($idle === null && $running === []));
         if ($giveJobs) {
             foreach (App::agents()->jobsFor((int) $agent['id']) as $job) {
                 if (!AgentService::inWindow($job, $agent)) {
@@ -161,7 +185,7 @@ final class AgentKernel
             }
         }
         return ApiKernel::json(['jobs' => $jobs, 'stop' => array_values(array_unique($stop)), 'paused' => $paused,
-                                'poll_seconds' => max(30, min(600, (int) ($agent['agent_poll_seconds'] ?? self::POLL_SECONDS)))] + $requests
+                                'poll_seconds' => max(30, min(600, (int) ($agent['agent_poll_seconds'] ?? self::POLL_SECONDS)))] + $requests + ($update !== null ? ['update' => $update] : [])
             + self::secrets($agent, ($body['holds_directory'] ?? false) === true, is_string($body['directory_username'] ?? null) ? $body['directory_username'] : null));
     }
 
@@ -216,6 +240,33 @@ final class AgentKernel
                 'site_id' => (int) $agent['site_id'], 'client_id' => (int) $agent['client_id'], 'issued_at' => gmdate('Y-m-d\TH:i:s\Z')]);
         }
         return $out;
+    }
+
+    /**
+     * The update endpoints. Only an agent an admin asked to update gets the release, and only that version.
+     *
+     * @param array<string,mixed> $agent
+     */
+    private static function update(string $path, array $agent): Response
+    {
+        $body = self::body(8192) ?? [];
+        $version = is_string($body['version'] ?? null) ? $body['version'] : '';
+        if ($path === '/agent/v1/update/result') {
+            App::agents()->saveUpdateResult((int) $agent['id'], self::short($version, 20), ($body['ok'] ?? false) === true, self::short($body['message'] ?? '', 300),
+                (string) $agent['version'], self::short($body['request'] ?? '', 30));
+            App::audit()->log('agent.update_reported', null, null, 'agent', (int) $agent['id'], ['client_id' => (int) $agent['client_id'], 'version' => self::short($version, 20), 'ok' => ($body['ok'] ?? false) === true]);
+            return ApiKernel::json(['ok' => true]);
+        }
+        if ($version === '' || $version !== (string) ($agent['update_to'] ?? '')) {
+            return ApiKernel::error(404, 'No update was asked for this agent.');
+        }
+        $release = App::agentRelease();
+        if ($path === '/agent/v1/update/manifest') {
+            $m = $release->manifestFor($version);
+            return $m === null ? ApiKernel::error(404, 'No signed release of that version here.') : ApiKernel::json($m);
+        }
+        $file = is_string($body['path'] ?? null) ? $release->file($version, $body['path']) : null;
+        return $file === null ? ApiKernel::error(404, 'Not part of the signed release.') : ApiKernel::json(['content' => base64_encode($file)]);
     }
 
     /**

@@ -48,6 +48,8 @@ final class Runner
     /** @var callable(string):void */
     private $log;
     private float $lastCheck = 0.0;
+    /** @var array<string,mixed>|null the update result sent with the last idle check-in */
+    private ?array $reportedResult = null;
     private bool $stopNow = false;
 
     /** @param callable(string):void $log Progress lines (journal). */
@@ -65,6 +67,7 @@ final class Runner
         private readonly ?Credentials $credentials = null,
         private readonly ?\Sentinel\Directory\DirectoryChecks $directory = null,
         private readonly ?\Sentinel\Directory\NameListener $listener = null,
+        private readonly ?Updater $updater = null,
     ) {
         $this->log = $log;
     }
@@ -94,6 +97,29 @@ final class Runner
         if (($res['data']['restart'] ?? false) === true) {
             ($this->log)('Sentinel asked for a restart. Exiting; the service starts the agent again.');
             return -2;
+        }
+        if ($this->updater !== null && $this->reportedResult !== null) {
+            $this->updater->clearResult(); // Sentinel has the helper's result now
+            $this->reportedResult = null;
+        }
+        if ($this->updater !== null && is_array($res['data']['update'] ?? null) && !$this->updater->pending()) {
+            $asked = $this->updater->requested($res['data']['update']);
+            if ($asked !== null) {
+                [$version, $request] = $asked;
+                try {
+                    $why = $this->updater->stage($version, self::version(), $request);
+                } catch (\Throwable $ex) {
+                    $why = 'The update could not be prepared: ' . mb_substr($ex->getMessage(), 0, 200);
+                }
+                if ($why !== '') {
+                    ($this->log)('Update to ' . $version . ' not staged: ' . $why);
+                    try {
+                        $this->http->post('/agent/v1/update/result', ['version' => $version, 'ok' => false, 'message' => $why, 'request' => $request]);
+                    } catch (\Throwable) {
+                        // reported again if Sentinel asks again
+                    }
+                }
+            }
         }
         foreach ((array) ($res['data']['jobs'] ?? []) as $signed) {
             if (!is_array($signed) || !is_string($signed['payload'] ?? null) || !is_string($signed['signature'] ?? null)) {
@@ -131,7 +157,10 @@ final class Runner
     private function pollBody(array $running, bool $idle): array
     {
         $holds = $this->credentials?->holds() ?? false;
+        $result = $idle ? $this->updater?->lastResult() : null; // the update helper's last result, until Sentinel has it
+        $this->reportedResult = $result;
         return ['hostname' => (string) gethostname(), 'version' => self::version(), 'running' => $running, 'idle' => $idle]
+            + ($result !== null ? ['update_result' => $result] : [])
             + ($this->key !== null ? ['box_public_key' => $this->key->publicKey(), 'holds_directory' => $holds,
                                       'directory_username' => $holds ? $this->credentials?->username() : ''] : []);
     }

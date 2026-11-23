@@ -208,6 +208,25 @@ try {
         $redirects[$target] = $p;
     }
     $cfg['testing']['redirect_connections'] = $redirects;
+    // Agent updates: a tiny made-up agent release (version 9.9.9), signed with a release key made for this run only.
+    // Sentinel hands it out (testing.release_root); agents check it against the public key (testing.release_key in
+    // the agent's own test config). The secret key stays in the run folder for tests that sign a bad release.
+    $releaseRoot = $outDir . '/release-src';
+    foreach (['bin', 'install', 'release', 'src'] as $d) {
+        @mkdir($releaseRoot . '/' . $d, 0755, true);
+    }
+    file_put_contents($releaseRoot . '/VERSION', "9.9.9\n");
+    file_put_contents($releaseRoot . '/bin/sentinel-agent.php', "<?php\n// Made-up agent release 9.9.9 for the test suite.\n");
+    file_put_contents($releaseRoot . '/install/agent-install.sh', "#!/bin/sh\necho made-up\n");
+    file_put_contents($releaseRoot . '/src/marker.txt', "release 9.9.9\n");
+    $releasePair = sodium_crypto_sign_keypair();
+    file_put_contents($outDir . '/test-release.key', base64_encode(sodium_crypto_sign_secretkey($releasePair)));
+    file_put_contents($releaseRoot . '/install/release-key.pub', base64_encode(sodium_crypto_sign_publickey($releasePair)) . "\n");
+    $releaseManifest = \Sentinel\System\ReleaseManifest::canonical(\Sentinel\System\ReleaseManifest::build($releaseRoot, '9.9.9',
+        ['VERSION', 'bin/sentinel-agent.php', 'install/agent-install.sh', 'install/release-key.pub', 'src/marker.txt']));
+    file_put_contents($releaseRoot . '/release/agent-manifest.json', $releaseManifest);
+    file_put_contents($releaseRoot . '/release/agent-manifest.sig', \Sentinel\System\ReleaseManifest::sign($releaseManifest, base64_encode(sodium_crypto_sign_secretkey($releasePair))));
+    $cfg['testing']['release_root'] = $releaseRoot;
     // Agent full scans listen for LLMNR/NetBIOS name requests for 2 seconds here (120 in production).
     $cfg['testing']['agent_listen_seconds'] = 2;
     // Inventory source (NinjaOne stand-in): tests write this file with dates relative to now.

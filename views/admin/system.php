@@ -94,6 +94,25 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
         <?php endif; ?>
     </div>
 </div>
+<div class="card mb-3" id="agents">
+    <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('On-premises agent updates')) ?></h2></div>
+    <div class="card-body small">
+        <?php $rel = $agentRelease->version(); ?>
+        <?php if ($rel !== null): ?>
+            <p><?= e(__('This Sentinel can hand agents version {v}, signed with your release key. Agents install it only when the signature checks with the key they pinned at install.', ['v' => $rel])) ?></p>
+        <?php else: ?>
+            <p class="text-body-secondary"><?= e(__('No signed agent release to hand out: {why}. Agents can still be upgraded by hand.', ['why' => $agentRelease->why()])) ?></p>
+        <?php endif; ?>
+        <p class="mb-2"><?= e(__('Agents by version:')) ?>
+            <?php foreach ($agentVersions as $v): ?><span class="badge text-bg-light border font-monospace me-1"><?= e(($v['version'] ?: '?') . ' × ' . (int) $v['n']) ?></span><?php endforeach; ?>
+            <?php if ($agentVersions === []): ?><span class="text-body-secondary"><?= e(__('none yet')) ?></span><?php endif; ?></p>
+        <?php if ($rel !== null): ?>
+        <form method="post" action="<?= e(url('/admin/system/agents-update')) ?>" data-confirm="<?= e(__('Update every agent that runs an older version to {v}, at each one\'s next check-in between scans?', ['v' => $rel])) ?>"><?= \Sentinel\Core\Csrf::field() ?>
+            <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-cloud-arrow-down me-1" aria-hidden="true"></i><?= e(__('Update all agents to {v}', ['v' => $rel])) ?></button></form>
+        <?php endif; ?>
+    </div>
+</div>
+
 <div class="card mb-3" id="demo">
     <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Demo data')) ?></h2></div>
     <div class="card-body small">

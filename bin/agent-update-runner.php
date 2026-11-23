@@ -45,9 +45,12 @@ $state = $test && $opt('state') ? rtrim((string) $opt('state'), '/') : '/var/lib
 $keyFile = $test && $opt('key') ? (string) $opt('key') : '/etc/sentinel-agent/release-key.pub';
 $systemd = !($test && in_array('--no-systemd', $argv, true));
 $say = static fn (string $m) => fwrite(STDOUT, '[' . gmdate('Y-m-d H:i:s') . '] ' . $m . "\n");
-$result = static function (string $version, bool $ok, string $message) use ($state, $say, $test): never {
+$requestId = '';
+$result = static function (string $version, bool $ok, string $message) use ($state, $say, $test, &$requestId): never {
     $say(($ok ? 'Updated: ' : 'Update refused: ') . $message);
-    file_put_contents($state . '/update-result.json', json_encode(['version' => $version, 'ok' => $ok, 'message' => mb_substr($message, 0, 300), 'at' => gmdate('Y-m-d\TH:i:s\Z')]));
+    // "request" names the request this answers, so Sentinel ignores a result left over from an earlier one.
+    file_put_contents($state . '/update-result.json', json_encode(['version' => $version, 'ok' => $ok, 'message' => mb_substr($message, 0, 300), 'request' => $requestId,
+        'at' => gmdate('Y-m-d\TH:i:s\Z')]));
     if (!$test && function_exists('posix_getpwnam') && ($u = posix_getpwnam('sentinel-agent')) !== false) {
         @chown($state . '/update-result.json', $u['uid']);
     }
@@ -58,6 +61,7 @@ $result = static function (string $version, bool $ok, string $message) use ($sta
 $request = json_decode((string) @file_get_contents($state . '/update-request'), true);
 @unlink($state . '/update-request');
 $wanted = is_array($request) && is_string($request['version'] ?? null) ? $request['version'] : '';
+$requestId = is_array($request) && is_string($request['request'] ?? null) ? mb_substr($request['request'], 0, 30) : '';
 if ($wanted === '') {
     $result('', false, 'No valid update request.');
 }

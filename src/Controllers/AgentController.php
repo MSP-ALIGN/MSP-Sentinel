@@ -215,6 +215,53 @@ final class AgentController extends Controller
         return $this->agentRequest($request, $params, 'restart', __('The agent restarts at its next check-in between scans (up to the site\'s check-in interval, or after a running scan); its service starts it again a minute later.'));
     }
 
+    /**
+     * POST /clients/{id}/agents/{agent}/update (admins): the agent updates to the signed release this Sentinel holds,
+     * at its next check-in between scans. The agent installs it only if it carries the release key's signature.
+     */
+    public function updateAgent(Request $request, array $params): Response
+    {
+        $client = $this->client($params);
+        $stmt = App::db()->prepare("SELECT id, version FROM agents WHERE id = :a AND client_id = :c AND status = 'active'");
+        $stmt->execute(['a' => (int) ($params['agent'] ?? 0), 'c' => (int) $client['id']]);
+        $agent = $stmt->fetch();
+        if ($agent === false) {
+            throw new HttpException(404);
+        }
+        $release = App::agentRelease()->version();
+        $error = match (true) {
+            (int) ($client['is_demo'] ?? 0) === 1 => __('This is a demo client with made-up data.'),
+            $release === null => __('This Sentinel has no signed agent release to hand out: {why}.', ['why' => App::agentRelease()->why()]),
+            !\Sentinel\System\ReleaseManifest::newer($release, (string) $agent['version']) => __('This agent already runs {v} or newer.', ['v' => $release]),
+            !\Sentinel\Agent\AgentRepository::canUpdateRemotely((string) $agent['version']) => __('Agents older than {v} must be upgraded once by hand (agent-install.sh --upgrade).', ['v' => \Sentinel\Agent\AgentRepository::REMOTE_UPDATE_SINCE]),
+            default => null,
+        };
+        if ($error !== null) {
+            Session::flash('warning', $error);
+            return Response::redirect('/clients/' . (int) $client['id'] . '/agents');
+        }
+        App::agents()->requestUpdate((int) $agent['id'], $release, (int) $this->user()['id']);
+        $this->audit($request, 'agent.update_requested', 'agent', (int) $agent['id'], ['client_id' => (int) $client['id'], 'version' => $release]);
+        Session::flash('success', __('The agent updates to {v} at its next check-in between scans. It installs the release only if it is signed with your release key.', ['v' => $release]));
+        return Response::redirect('/clients/' . (int) $client['id'] . '/agents');
+    }
+
+    /** POST /clients/{id}/agents-update (admins): every agent of this client that can and needs to. */
+    public function updateClientAgents(Request $request, array $params): Response
+    {
+        $client = $this->client($params);
+        $release = App::agentRelease()->version();
+        if ($release === null || (int) ($client['is_demo'] ?? 0) === 1) {
+            Session::flash('warning', __('This Sentinel has no signed agent release to hand out: {why}.', ['why' => App::agentRelease()->why()]));
+            return Response::redirect('/clients/' . (int) $client['id'] . '/agents');
+        }
+        $n = App::agents()->requestUpdates((int) $client['id'], $release, (int) $this->user()['id']);
+        $this->audit($request, 'agent.update_requested', 'client', (int) $client['id'], ['version' => $release] + $n);
+        Session::flash('success', __('{n} agent(s) will update to {v}.', ['n' => $n['asked'], 'v' => $release])
+            . ($n['manual'] > 0 ? ' ' . __('{m} must be upgraded once by hand first.', ['m' => $n['manual']]) : ''));
+        return Response::redirect('/clients/' . (int) $client['id'] . '/agents');
+    }
+
     /** POST /clients/{id}/agents/{agent}/diagnostics (admins): the agent sends a diagnostics report at its next check-in. */
     public function diagnosticsAgent(Request $request, array $params): Response
     {

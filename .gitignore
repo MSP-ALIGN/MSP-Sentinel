@@ -8,3 +8,6 @@
 .DS_Store
 # Written by the one-line installer and msp-sentinel-update (branch and commit of this install)
 /BUILD
+
+# Release signing keys never belong in the repository (bin/release-sign.php refuses to write them here too).
+*release.key
