@@ -2,6 +2,30 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.27.0 (2026-11-23): pen-test engagements
+
+- **Pen-test engagements** (Client → Pen-test engagements): time-boxed, deeper tests the client authorises in
+  writing. You attach the signed PDF; Sentinel keeps its SHA-256.
+- **Only inside the authorised scope.** Each engagement has its own exclusions and a window of at most 14 days.
+- **A different admin approves it**, with their password. **Stop engagement** is a kill switch that ends it for good.
+- **Tests, chosen per engagement:**
+  - all 65,535 TCP ports;
+  - common UDP services (SNMP, NTP, SSDP; one read-only request each);
+  - nmap's safe scripts;
+  - anonymous-access checks (FTP, NFS, SMB shares).
+
+  The pace is gentle or normal (never faster). No password guessing, no exploits, nothing that changes the systems.
+- **External tests run from Sentinel.** They run in 20-minute slices, and every host is checked against the
+  engagement, its exclusions and the live scope before and during the test.
+- **Internal tests run through the site agents** (agents must be 1.27.0 or later). The job is signed with the
+  targets, exclusions, tests and end time. Agents stop on their own at the end time.
+- **Findings come from the evidence:** anonymous FTP, SMBv1, open shares, SMB signing, NFS exports, SNMP default
+  communities, UPnP and services exposed to the internet.
+- **Penetration test report** (branded, frozen): summary, how the findings chain together, scope and authorisation,
+  method, findings with evidence and fixes, systems tested. CSV export.
+- **Retest letter** from a retest engagement: each earlier finding is marked fixed, still open or not retested.
+- **New authorisation template annex** for engagements. See [docs/engagements.md](docs/engagements.md).
+
 ### 1.26.2 (2026-11-23): Windows agent, fixes from re-review
 
 - **A fresh install creates its ProgramData folder itself.** It fails if someone recreated the folder in between,

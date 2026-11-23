@@ -11,11 +11,20 @@ delegation, Domain Admins, stale admins, never-expiring admin passwords, krbtgt 
 LLMNR/NetBIOS name poisoning (listen only). The password is sealed in the browser for the agent; Sentinel can never
 read it. See [agent.md](agent.md#active-directory-checks-120).
 
-## 2. Pen-test engagement mode (next)
+## 2. Pen-test engagement mode (1.27.0, done)
 
-A time-boxed, deeper scan an admin explicitly authorises in the client's written authorisation: all TCP ports, the
-common UDP ports and nmap's safe service scripts, ending with a pen-test style report (executive summary, how the
-findings chain together, retest results). Day-to-day scanning stays gentle.
+Time-boxed, deeper tests the client authorises in writing and a second admin approves:
+
+- all TCP ports;
+- common UDP services;
+- nmap's safe scripts;
+- anonymous-access checks.
+
+They run externally from Sentinel and internally through the agents. Each engagement ends with a penetration test
+report (summary, how the findings chain together, evidence) and, after fixes, a retest letter. Day-to-day scanning
+stays gentle. See [engagements.md](engagements.md).
+
+Next steps: default credentials against a short vetted list, with lockout-aware limits.
 
 ## 3. External attack surface additions
 

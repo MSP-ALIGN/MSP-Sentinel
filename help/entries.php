@@ -121,6 +121,15 @@ return [
             ],
         ],
         [
+            'title' => 'Pen-test engagements',
+            'paragraphs' => [
+                'An engagement is a time-boxed, deeper test the client authorises in writing: all 65,535 TCP ports, common UDP services (one read-only request each to SNMP, NTP and SSDP), nmap\'s safe service scripts and anonymous-access checks (FTP, NFS exports, SMB shares). Never password guessing, exploits or anything that changes the systems tested.',
+                'Create one under the client, Pen-test engagements: name, window (at most 14 days), tests, pace (gentle or normal), targets inside the authorised scope, exclusions, and the client\'s signed PDF. A different admin approves it with their password; nothing runs before. Stop engagement ends it for good, within a minute.',
+                'Run external tests (from Sentinel) and internal tests (through each site\'s agent, version 1.27.0 or later) inside the window. The engagement page lists the findings with evidence and fixes; they do not change the client\'s day-to-day findings or inventory.',
+                'Issue penetration test report for a branded, frozen report (summary, how findings chain together, scope and authorisation, method, findings, systems tested). After fixes, create a retest engagement (This is a retest of) and issue its retest letter: each earlier finding marked fixed, still open or not retested.',
+            ],
+        ],
+        [
             'title' => 'Internal devices and NinjaOne',
             'paragraphs' => [
                 'Internal devices come from the on-premises agent and, once it is connected, from NinjaOne. Each client page shows them under Internal devices; a device page lists its open services, installed software with known vulnerabilities, and missing updates.',
@@ -226,6 +235,13 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.27.0',
+            'date' => '2026-11-23',
+            'items' => [
+                'Pen-test engagements: time-boxed, deeper tests the client signs for (PDF attached), only inside the authorised scope, approved by a different admin, with a kill switch. All TCP ports, common UDP services, safe scripts and anonymous-access checks, externally and through agents (1.27.0+). Ends with a penetration test report and, after fixes, a retest letter.',
+            ],
+        ],
         [
             'version' => '1.26.2',
             'date' => '2026-11-23',
