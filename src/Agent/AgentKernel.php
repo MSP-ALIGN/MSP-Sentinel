@@ -89,8 +89,9 @@ final class AgentKernel
             if ($request->path === '/agent/v1/move/check') {
                 // A moved agent asks its configured (original) address now and then what it should use: the signed
                 // current move address, '' for none. Lets Sentinel recall agents from an address that took them over.
+                $mv = App::agentMove();
                 return ApiKernel::json(App::agentSigner()->sign(['v' => 1, 'type' => 'agent_move_status', 'agent_id' => (int) $agent['id'],
-                    'server' => App::agentMove()['url'], 'issued_at' => gmdate('Y-m-d\TH:i:s\Z')]));
+                    'server' => $mv['url'], 'move_id' => $mv['id'], 'issued_at' => gmdate('Y-m-d\TH:i:s\Z')]));
             }
             if ($request->path === '/agent/v1/move/result') {
                 $body = self::body(8192) ?? [];
@@ -213,11 +214,14 @@ final class AgentKernel
         }
         $move = null;
         $mv = App::agentMove();
-        if ($idle === true && $update === null && !isset($requests['restart']) && $mv['url'] !== '' && is_string($body['server'] ?? null)
+        // Only to agents that prove a new address safely (1.23.1+: no token before the proof, proof bound to the address).
+        $agentVersion = (string) ($body['version'] ?? '');
+        $safeMover = preg_match('/^\d+\.\d+\.\d+$/', $agentVersion) === 1 && version_compare($agentVersion, '1.23.1', '>=');
+        if ($idle === true && $update === null && !isset($requests['restart']) && $mv['url'] !== '' && !$mv['complete'] && $safeMover && is_string($body['server'] ?? null)
             && rtrim($body['server'], '/') !== rtrim($mv['url'], '/') && !App::agents()->moveFailedSince((int) $agent['id'], $mv['url'], $mv['requested_at'])
             && App::agents()->takeMoveHandout((int) $agent['id'], $mv['id'])) {
             $move = App::agentSigner()->sign(['v' => 1, 'type' => 'agent_move', 'agent_id' => (int) $agent['id'], 'site_id' => (int) $agent['site_id'], 'client_id' => (int) $agent['client_id'],
-                'server' => $mv['url'], 'ca_pem' => $mv['ca'], 'issued_at' => gmdate('Y-m-d\TH:i:s\Z')]);
+                'server' => $mv['url'], 'ca_pem' => $mv['ca'], 'move_id' => $mv['id'], 'issued_at' => gmdate('Y-m-d\TH:i:s\Z')]);
         }
         // A restart, an update or a move goes out alone: jobs in the same answer would be marked sent and never run.
         $giveJobs = !$paused && !isset($requests['restart']) && $update === null && $move === null && ($idle === true || ($idle === null && $running === []));

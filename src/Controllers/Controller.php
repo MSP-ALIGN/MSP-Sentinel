@@ -77,4 +77,32 @@ abstract class Controller
         App::audit()->log($action, $user === null ? null : (int) $user['id'], $user === null ? null : (string) $user['username'],
             $targetType, $targetId, $details, $request->ip());
     }
+
+    /**
+     * Re-authenticate the signed-in user with their current password before a sensitive action (profile changes,
+     * moving agents), with throttling (REAUTH_MAX_FAILS per REAUTH_WINDOW seconds, shared by every such form) and an
+     * audit entry for each failure. $password is untrusted.
+     *
+     * @param array<string,mixed> $user the signed-in user's row (with password_hash)
+     * @return string|null Error message, or null when the password is right.
+     */
+    protected function checkCurrentPassword(Request $request, array $user, string $password): ?string
+    {
+        $bucket = 'reauth-user:' . (int) $user['id'];
+        $limiter = App::limiter();
+        if ($limiter->tooMany($bucket, self::REAUTH_MAX_FAILS, self::REAUTH_WINDOW)) {
+            return __('Too many failed attempts. Please wait 15 minutes and try again.');
+        }
+        if ($password === '' || !\Sentinel\Auth\Passwords::verify($password, (string) ($user['password_hash'] ?? ''))) {
+            $limiter->hit($bucket);
+            $this->audit($request, 'auth.reauth_failed', 'user', (int) $user['id']);
+            return __('Your current password is not correct.');
+        }
+        $limiter->clear($bucket);
+        return null;
+    }
+
+    /** Failed password re-checks allowed per window, and the window (seconds). */
+    protected const REAUTH_MAX_FAILS = 5;
+    protected const REAUTH_WINDOW = 900;
 }

@@ -438,13 +438,15 @@ final class App
      * The agent move an admin set (Administration, System): url, ca, requested_at; url '' when none. Stored encrypted and
      * authenticated with the app key (config file), so a database write alone can't produce one.
      *
-     * @return array{url:string, ca:string, requested_at:string, id:string} id: this move's own identifier
+     * @return array{url:string, ca:string, requested_at:string, id:string, complete:bool} id: this move's own identifier;
+     *         complete: no more move instructions, but moved agents keep the address
      */
     public static function agentMove(): array
     {
         $m = json_decode(self::settings()->getSecret('agent_move'), true);
         return is_array($m) && is_string($m['url'] ?? null) && is_string($m['ca'] ?? null) && is_string($m['requested_at'] ?? null) && is_string($m['id'] ?? null)
-            ? ['url' => $m['url'], 'ca' => $m['ca'], 'requested_at' => $m['requested_at'], 'id' => $m['id']] : ['url' => '', 'ca' => '', 'requested_at' => '', 'id' => ''];
+            ? ['url' => $m['url'], 'ca' => $m['ca'], 'requested_at' => $m['requested_at'], 'id' => $m['id'], 'complete' => ($m['complete'] ?? false) === true]
+            : ['url' => '', 'ca' => '', 'requested_at' => '', 'id' => '', 'complete' => false];
     }
 
     /** The signed agent release this installation can hand to agents (test suite: testing.release_root). */

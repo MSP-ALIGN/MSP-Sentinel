@@ -40,7 +40,7 @@ final class SystemController extends Controller
             'retentionLast' => $s->get('retention_last_run'),
             'sourceUrl' => $s->get('source_url'),
             'agentRelease' => App::agentRelease(),
-            'agentMove' => ['url' => App::agentMove()['url'], 'ca' => App::agentMove()['ca'] !== '', 'since' => App::agentMove()['requested_at'],
+            'agentMove' => ['url' => App::agentMove()['url'], 'ca' => App::agentMove()['ca'] !== '', 'since' => App::agentMove()['requested_at'], 'complete' => App::agentMove()['complete'],
                 'agents' => App::db()->query("SELECT a.id, a.name, a.server_url, a.version, a.move_result, a.move_result_at, c.name AS client_name FROM agents a JOIN clients c ON c.id = a.client_id
                                               WHERE a.status = 'active' AND c.is_demo = 0 ORDER BY c.name, a.name")->fetchAll()],
             'agentVersions' => App::db()->query("SELECT a.version, COUNT(*) AS n FROM agents a JOIN clients c ON c.id = a.client_id WHERE a.status = 'active' AND c.is_demo = 0 GROUP BY a.version ORDER BY a.version")->fetchAll(),
@@ -56,19 +56,31 @@ final class SystemController extends Controller
     {
         $s = App::settings();
         $back = Response::redirect('/admin/system#agents');
+        // Moving (or recalling) every agent is powerful: the signed-in admin confirms it with their password (throttled,
+        // failures audited), so a stolen session alone can't do it.
+        $user = App::db()->query('SELECT id, password_hash FROM users WHERE id = ' . (int) $this->user()['id'])->fetch() ?: [];
+        if (($reauth = $this->checkCurrentPassword($request, $user, $request->raw('password'))) !== null) {
+            Session::flash('danger', __('Enter your password to confirm.') . ' ' . $reauth);
+            return $back;
+        }
+        $current = App::agentMove();
         if ($request->input('cancel') === '1') {
+            // Cancel = recall: moved agents ask their original address every few hours and come back.
             $s->setSecret('agent_move', '');
             $this->audit($request, 'agent.move_cancelled');
-            Session::flash('success', __('Agent move cancelled. Agents that already moved stay on the new address.'));
+            Session::flash('success', __('Agent move cancelled: agents that moved come back to their original address within about 6 hours (keep it working).'));
+            return $back;
+        }
+        if ($request->input('complete') === '1' && $current['url'] !== '') {
+            // Complete: no more move instructions, but moved agents keep the new address (recall keeps confirming it).
+            $s->setSecret('agent_move', (string) json_encode(['complete' => true] + $current, JSON_UNESCAPED_SLASHES));
+            $this->audit($request, 'agent.move_completed', null, null, ['url' => $current['url']]);
+            Session::flash('success', __('Move marked complete: moved agents stay on {url}; no more agents are asked to move.', ['url' => $current['url']]));
             return $back;
         }
         $url = rtrim($request->input('url'), '/');
         $ca = trim($request->raw('ca'));
-        // Moving every agent is powerful: the signed-in admin confirms it with their password (a stolen session alone
-        // can't do it).
-        $hash = (string) App::db()->query('SELECT password_hash FROM users WHERE id = ' . (int) $this->user()['id'])->fetchColumn();
         $error = match (true) {
-            !\Sentinel\Auth\Passwords::verify($request->raw('password'), $hash) => __('Enter your password to confirm moving the agents.'),
             !\Sentinel\AgentClient\Mover::validServer($url, App::webhookTestMode()) => __('Enter the new address as https://host or https://host:port.'),
             $ca !== '' && (strlen($ca) > 32768 || preg_match_all('/-----BEGIN CERTIFICATE-----.+?-----END CERTIFICATE-----/s', $ca, $m) < 1) => __('The CA must be one or more PEM certificates.'),
             default => null,

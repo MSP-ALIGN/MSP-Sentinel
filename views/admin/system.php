@@ -109,7 +109,9 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
         <h3 class="h6 mt-3"><?= e(__('Move agents to a new Sentinel address')) ?></h3>
         <p class="text-body-secondary"><?= e(__('When Sentinel gets a new address or certificate authority: agents switch at their next check-in between scans, only after the new address proves it is this Sentinel (it signs a challenge for that address with this Sentinel\'s key; nothing is sent to it before). Shortly after a move, an agent goes back on its own if the new address keeps failing; while moved, it checks with its original address every 6 hours so it can always be recalled. Keep the old address working. Agents need version 1.23.1 or later.')) ?></p>
         <?php if ($agentMove['url'] !== ''): ?>
-            <p><?= e(__('Moving agents to {url}{ca}, since {t} UTC.', ['url' => $agentMove['url'], 'ca' => $agentMove['ca'] ? ' ' . __('(with its CA)') : '', 't' => $agentMove['since']])) ?></p>
+            <?php $mvVars = ['url' => $agentMove['url'], 'ca' => $agentMove['ca'] ? ' ' . __('(with its CA)') : '', 't' => $agentMove['since']]; ?>
+            <p><?= e($agentMove['complete'] ? __('Move to {url}{ca} complete (since {t} UTC): moved agents stay there; no more agents are asked to move.', $mvVars)
+                                           : __('Moving agents to {url}{ca}, since {t} UTC.', $mvVars)) ?></p>
             <ul class="list-unstyled">
             <?php foreach ($agentMove['agents'] as $ag): $mr = json_decode((string) ($ag['move_result'] ?? ''), true); $there = rtrim((string) $ag['server_url'], '/') === rtrim($agentMove['url'], '/'); ?>
                 <li><?= e($ag['client_name'] . ' · ' . $ag['name']) ?>:
@@ -119,8 +121,11 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
                     <?php else: ?><span class="text-body-secondary"><?= e(__('waiting for its next check-in')) ?></span><?php endif; ?></li>
             <?php endforeach; ?>
             </ul>
-            <form method="post" action="<?= e(url('/admin/system/agents-move')) ?>" class="mb-2"><?= \Sentinel\Core\Csrf::field() ?><input type="hidden" name="cancel" value="1">
-                <button class="btn btn-sm btn-outline-secondary" type="submit"><?= e(__('Cancel the move')) ?></button></form>
+            <form method="post" action="<?= e(url('/admin/system/agents-move')) ?>" class="d-flex flex-wrap gap-2 align-items-end mb-3"><?= \Sentinel\Core\Csrf::field() ?>
+                <div><label class="form-label mb-0" for="move-confirm"><?= e(__('Your password')) ?></label>
+                    <input class="form-control form-control-sm" id="move-confirm" name="password" type="password" autocomplete="current-password" required></div>
+                <?php if (!$agentMove['complete']): ?><button class="btn btn-sm btn-outline-primary" type="submit" name="complete" value="1"><?= e(__('Move complete (stop asking agents)')) ?></button><?php endif; ?>
+                <button class="btn btn-sm btn-outline-danger" type="submit" name="cancel" value="1" data-confirm="<?= e(__('Cancel the move? Agents that moved come BACK to their original address within about 6 hours.')) ?>"><?= e(__('Cancel and recall agents')) ?></button></form>
         <?php endif; ?>
         <form method="post" action="<?= e(url('/admin/system/agents-move')) ?>" class="row g-2 mb-3" data-confirm="<?= e(__('Move every agent to this address? Each switches only after the address proves it is this Sentinel.')) ?>"><?= \Sentinel\Core\Csrf::field() ?>
             <div class="col-md-5"><label class="form-label" for="move-url"><?= e(__('New Sentinel address')) ?></label>

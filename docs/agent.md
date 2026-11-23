@@ -116,8 +116,8 @@ When Sentinel gets a new address (or a certificate from a private CA): Administr
 new Sentinel address**. Enter the new `https://` address, for a private CA only its certificate (PEM), and **your
 password** (moving every agent is too powerful for a stolen session alone).
 
-- The move is stored as one setting encrypted and authenticated with the app key from the config file: a database
-  write alone can't set one.
+- The move is stored as one setting encrypted and authenticated with the app key from the config file, so it can't
+  be edited in the database directly. Only agents at version 1.23.1 or later are asked to move.
 - At their next check-in between scans, agents get the new address, signed with Sentinel's key (each agent at most 5
   times per move, 10 minutes apart; scans go on in between).
 - **Each agent first asks the new address to prove it is this Sentinel, without sending it anything secret** (not
@@ -129,19 +129,25 @@ password** (moving every agent is too powerful for a stolen session alone).
   config file is read-only and never changes. It restarts onto the new address.
 - **Probation:** in the first 24 hours after a move (until 20 good check-ins), 10 failed check-ins in a row (about
   10 minutes) or a refusal of its token at the new address send the agent back to its configured address, and it
-  tells Sentinel there. After probation the move is permanent: an outage at the new address doesn't strand agents at
-  an old one.
+  tells Sentinel there. After probation the move is permanent: an outage (or a refusal from a misrouted proxy) at the
+  new address doesn't strand agents at an old one.
 - **Recall:** while moved, an agent asks its configured (original) address every 6 hours which address to use (a signed
   answer). If the move was cancelled or changed, it goes back. So keep the old address working (or pointing at this
   Sentinel): it is how Sentinel can always reach its agents again.
-- The System page lists each agent: moved, waiting, not moved (why), or needing version 1.23.1 first. Cancel the move
-  there.
+- The System page lists each agent: moved, waiting, not moved (why), or needing version 1.23.1 first. When every agent
+  has moved, press **Move complete**: no more agents are asked, and moved agents stay (recall keeps confirming the new
+  address). **Cancel and recall agents** brings moved agents back to their original address within about 6 hours.
+  Both need your password.
+- Moves made by 1.23.0 agents are kept when they update.
 
 Re-enrolling is never needed: the agent's token and pinned key stay valid, because it is the same Sentinel. If the
 new address uses the same private CA as before, the agent uses its configured CA when none is given.
 
-Limit: someone with both the app key (config file) and an admin password could still move agents to a host they
-control; protect the config file and admin accounts like the rest of the server.
+Limit: anyone who can sign in as an admin (password and second factor), or who can write to the database AND reach the
+web interface (by resetting an admin's password), can set a move to a host they control. The new address still has
+to prove itself for that address, and the backstop is recall: as long as the original address answers for this
+Sentinel, cancelling the move brings agents back. Protect admin accounts, the database and the config file like the
+rest of the server.
 
 ## Updates from Sentinel (1.22)
 

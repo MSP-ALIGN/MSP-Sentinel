@@ -109,6 +109,29 @@ return [
             // No move instruction once there.
             [$code, $out] = $mvRun($ctx);
             Assert::same(0, $code);
+            // Agents older than 1.23.1 are never sent a move (they would send their token before any proof).
+            $cfg = json_decode((string) file_get_contents($mvDir($ctx) . '/agent.json'), true);
+            $answer = json_decode((string) @file_get_contents($ctx->baseUrl . '/agent/v1/poll', false, stream_context_create(['http' => ['method' => 'POST',
+                'header' => "Authorization: Bearer {$cfg['token']}\r\nContent-Type: application/json\r\n",
+                'content' => json_encode(['idle' => true, 'version' => '1.23.0', 'server' => $ctx->baseUrl, 'running' => []]), 'ignore_errors' => true]])), true);
+            Assert::true(is_array($answer) && !isset($answer['move']), 'no move for a 1.23.0 agent');
+            $ctx->db->exec("UPDATE agents SET server_url = " . $ctx->db->quote($newUrl) . " WHERE id = {$agentId}"); // that test poll changed it
+            // "Move complete": no more instructions, and recall keeps moved agents where they are.
+            $admin->submit('/admin/system', '/admin/system/agents-move', ['complete' => '1', 'password' => $pw]);
+            Assert::contains('complete', $admin->get('/admin/system')->body);
+            $o = json_decode((string) file_get_contents($mvDir($ctx) . '/server-override.json'), true);
+            $o['recall_checked_at'] = gmdate('Y-m-d\TH:i:s\Z', time() - 7 * 3600);
+            file_put_contents($mvDir($ctx) . '/server-override.json', json_encode($o));
+            [$code, $out] = $mvRun($ctx);
+            Assert::same(0, $code, 'still moved after recall check: ' . $out);
+            Assert::same($newUrl, json_decode((string) file_get_contents($mvDir($ctx) . '/server-override.json'), true)['server']);
+            // A move file left by a 1.23.0 agent (no enrolment binding) is adopted, not dropped.
+            $legacy = json_decode((string) file_get_contents($mvDir($ctx) . '/server-override.json'), true);
+            unset($legacy['agent_id'], $legacy['key']);
+            file_put_contents($mvDir($ctx) . '/server-override.json', json_encode($legacy));
+            [$code, $out] = $ctx->cli('bin/sentinel-agent.php', ['status', '--config', $mvDir($ctx) . '/agent.json']);
+            Assert::contains('→ ' . $newUrl . ' (moved from', $out, 'legacy move kept');
+            Assert::same($agentId, json_decode((string) file_get_contents($mvDir($ctx) . '/server-override.json'), true)['agent_id'] ?? null, 'and bound now');
 
             // An impostor (a service that can't sign with Sentinel's key) gets nothing; the agent stays where it is.
             $feeds = parse_url((string) (require $ctx->configPath)['testing']['ninjaone_base_url']);
@@ -122,7 +145,7 @@ return [
             Assert::notContains('did not prove', $out, 'not asked again after it failed');
 
             // Recall: cancelling the move brings moved agents back (they ask their configured address every few hours).
-            $admin->submit('/admin/system', '/admin/system/agents-move', ['cancel' => '1']);
+            $admin->submit('/admin/system', '/admin/system/agents-move', ['cancel' => '1', 'password' => $pw]);
             $o = json_decode((string) file_get_contents($mvDir($ctx) . '/server-override.json'), true);
             $o['recall_checked_at'] = gmdate('Y-m-d\TH:i:s\Z', time() - 7 * 3600);
             file_put_contents($mvDir($ctx) . '/server-override.json', json_encode($o));
@@ -139,6 +162,13 @@ return [
             Assert::contains('Going back to the configured address', $out);
             Assert::true(!is_file($mvDir($ctx) . '/server-override.json'), 'override removed');
             Assert::contains('went back to its configured address', (string) $ctx->db->query("SELECT move_result FROM agents WHERE id = {$agentId}")->fetchColumn(), 'reported (no loop)');
+            // A 200 that isn't Sentinel's answer (a web page) is a failed check-in, never a good one.
+            $page = 'http://127.0.0.1:' . (require $ctx->configPath)['testing']['redirect_connections']['10.90.0.20:80'];
+            file_put_contents($mvDir($ctx) . '/server-override.json', json_encode($base + ['server' => $page, 'ca_file' => null, 'failures' => 0, 'good' => 0,
+                'moved_at' => gmdate('Y-m-d\TH:i:s\Z'), 'recall_checked_at' => gmdate('Y-m-d\TH:i:s\Z')]));
+            $mvRun($ctx);
+            $o = json_decode((string) file_get_contents($mvDir($ctx) . '/server-override.json'), true);
+            Assert::same([1, 0], [(int) $o['failures'], (int) $o['good']], 'counted as a failure only');
             // After probation the move is permanent: an outage at the new address doesn't send it back.
             $dead = 'http://127.0.0.1:' . $freePort();
             file_put_contents($mvDir($ctx) . '/server-override.json', json_encode($base + ['server' => $dead, 'ca_file' => null, 'failures' => 9, 'good' => 50,

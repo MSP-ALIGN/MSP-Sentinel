@@ -95,15 +95,14 @@ final class Runner
             throw $ex;
         }
         if ($moved && $res['status'] === 401) {
-            // Refused at the moved-to address: never wipe or stop because of THAT address; go back to the configured one.
-            $this->mover->refusedAtNewAddress();
-            return -2;
+            // Refused at the moved-to address: never wipe or stop because of THAT address (during probation: go back).
+            return $this->mover->refusedAtNewAddress() ? -2 : 60;
         }
-        // Any other non-answer (an error page, a 404, a 200 that isn't Sentinel's) counts as a failure at a new address.
+        // Any other non-answer (an error page, a 404, a 200 that isn't Sentinel's) is a failed check-in at a new address:
+        // never also counted as a good one.
         if ($moved && ($res['status'] !== 200 || !is_array($res['data']['jobs'] ?? null) || !is_int($res['data']['poll_seconds'] ?? null))) {
-            if ($this->mover->checkInFailed()) {
-                return -2;
-            }
+            ($this->log)('Check-in at the new address failed (HTTP ' . $res['status'] . ').');
+            return $this->mover->checkInFailed() ? -2 : 60;
         }
         if ($res['status'] === 401) {
             ($this->log)('Sentinel no longer accepts this agent (revoked?). Deleting the directory password and stopping.');
@@ -127,7 +126,7 @@ final class Runner
         }
         if ($this->mover !== null && is_array($res['data']['move'] ?? null)) {
             $move = $this->mover->requested($res['data']['move']);
-            if ($move !== null && $move['server'] !== $this->http->server() && $this->mover->tryMove($move['server'], $move['ca_pem'], $this->http) === '') {
+            if ($move !== null && $move['server'] !== $this->http->server() && $this->mover->tryMove($move['server'], $move['ca_pem'], $this->http, $move['move_id']) === '') {
                 return -2; // restart: the agent program starts on the new address
             }
         }

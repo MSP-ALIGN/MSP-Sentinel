@@ -57,6 +57,13 @@ final class Mover
     public function override(): ?array
     {
         $o = $this->read();
+        if ($o !== null && !isset($o['agent_id']) && !isset($o['key']) && is_string($o['server'] ?? null) && self::validServer($o['server'], $this->testMode)) {
+            // A move made by a 1.23.0 agent (its file has no enrolment binding): adopt it once, as past probation, so the
+            // upgrade never sends agents back to an address that may be gone.
+            $o += ['agent_id' => $this->agentId, 'key' => $this->keyId(), 'good' => self::PROBATION_CHECKINS, 'recall_checked_at' => gmdate('Y-m-d\TH:i:s\Z')];
+            $o['moved_at'] = gmdate('Y-m-d\TH:i:s\Z', time() - (self::PROBATION_HOURS + 1) * 3600);
+            $this->write($o);
+        }
         if ($o === null || !is_string($o['server'] ?? null) || !self::validServer($o['server'], $this->testMode)
             || ($o['agent_id'] ?? null) !== $this->agentId || ($o['key'] ?? null) !== $this->keyId()) {
             return null; // none, or written for another enrolment
@@ -76,7 +83,7 @@ final class Mover
      * The new address and CA a signed move instruction asks for, or null when it isn't one for this agent.
      *
      * @param array<string,mixed> $signed
-     * @return array{server:string, ca_pem:string}|null
+     * @return array{server:string, ca_pem:string, move_id:string}|null
      */
     public function requested(array $signed): ?array
     {
@@ -90,16 +97,16 @@ final class Mover
             || !is_string($d['server'] ?? null) || !self::validServer($d['server'], $this->testMode) || !is_string($d['ca_pem'] ?? null)) {
             return null;
         }
-        return ['server' => rtrim($d['server'], '/'), 'ca_pem' => $d['ca_pem']];
+        return ['server' => rtrim($d['server'], '/'), 'ca_pem' => $d['ca_pem'], 'move_id' => is_string($d['move_id'] ?? null) ? mb_substr($d['move_id'], 0, 32) : ''];
     }
 
     /**
      * Prove and switch. Returns '' when the agent moved (restart it to use the new address), else why not. The result
      * is reported to Sentinel (at the new address when it worked, else at the current one).
      */
-    public function tryMove(string $server, string $caPem, Http $current): string
+    public function tryMove(string $server, string $caPem, Http $current, string $moveId = ''): string
     {
-        $why = $this->prove($server, $caPem);
+        $why = $this->prove($server, $caPem, $moveId);
         if ($why === '') {
             $this->report($this->http($server, $this->stateDir . '/ca-override.pem'), $server, true, 'Moved to ' . $server . '.');
             ($this->log)('Moved to ' . $server . ' (it proved it holds this Sentinel\'s key). Restarting to use it.');
@@ -141,11 +148,15 @@ final class Mover
         }
     }
 
-    /** Whether a moved agent's token refusal (401) at the new address should send it back (during probation). */
+    /**
+     * A token refusal (401) at the moved-to address: during probation the agent goes back (true: restart). After
+     * probation it stays (a misrouted proxy shouldn't undo a finished move; recall still works). Never wiped either way.
+     */
     public function refusedAtNewAddress(): bool
     {
         $o = $this->read();
-        if ($o === null) {
+        if ($o === null || !$this->inProbation($o)) {
+            ($this->log)('The new address refused the agent\'s token; staying (the move is past its trial period). Sentinel can recall the agent.');
             return false;
         }
         $this->fallBack('The new address refused the agent\'s token.');
@@ -198,7 +209,9 @@ final class Mover
             || $issued === false || abs(time() - $issued) > 3600) {
             return false;
         }
-        if (rtrim($d['server'], '/') === rtrim((string) $o['server'], '/')) {
+        $sameMove = rtrim($d['server'], '/') === rtrim((string) $o['server'], '/')
+            && (!is_string($d['move_id'] ?? null) || $d['move_id'] === '' || (string) ($o['move_id'] ?? '') === '' || $d['move_id'] === $o['move_id']);
+        if ($sameMove) {
             return false; // still the move Sentinel wants
         }
         @unlink($this->stateDir . '/server-override.json');
@@ -225,7 +238,7 @@ final class Mover
         return substr(hash('sha256', $this->serverKey), 0, 16);
     }
 
-    private function prove(string $server, string $caPem): string
+    private function prove(string $server, string $caPem, string $moveId = ''): string
     {
         $caFile = null;
         if (trim($caPem) !== '') {
@@ -285,7 +298,7 @@ final class Mover
             @unlink($caTarget);
         }
         if (!$this->write(['server' => $server, 'ca_file' => $caInUse, 'moved_at' => gmdate('Y-m-d\TH:i:s\Z'), 'failures' => 0, 'good' => 0,
-                           'agent_id' => $this->agentId, 'key' => $this->keyId()])) {
+                           'agent_id' => $this->agentId, 'key' => $this->keyId(), 'move_id' => $moveId])) {
             return 'Could not save the new address in the agent\'s folder.';
         }
         return '';

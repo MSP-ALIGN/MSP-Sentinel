@@ -226,6 +226,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.23.2',
+            'date' => '2026-11-23',
+            'items' => [
+                'Agent moves: "Move complete" (moved agents stay) and "Cancel and recall agents" are separate; agents older than 1.23.1 are never asked to move; moves made by 1.23.0 agents are kept.',
+            ],
+        ],
+        [
             'version' => '1.23.1',
             'date' => '2026-11-23',
             'items' => [

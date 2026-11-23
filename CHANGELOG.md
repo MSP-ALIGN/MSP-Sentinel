@@ -2,14 +2,27 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.23.2 (2026-11-23): agent moves, fixes from re-review
+
+- **Older agents are never asked to move.** Only agents at 1.23.1 or later get move instructions, because 1.23.0
+  agents sent their token before the proof.
+- **Moves made by 1.23.0 agents are kept** when those agents update, instead of being dropped.
+- **"Move complete" and "Cancel and recall agents" are now separate.** Move complete stops asking agents and keeps
+  moved agents where they are. Cancel brings them back. Both need your password, and the page says what each does.
+- **Password re-entry is throttled and failures are audited,** the same as on the profile page.
+- **A 200 that isn't Sentinel's answer** counts only as a failed check-in at a new address.
+- **After probation, a refusal at the new address no longer sends the agent back.**
+- **Recall also notices a changed CA for the same address.**
+- **Docs:** the limit on who can set a move is corrected.
+
 ### 1.23.1 (2026-11-23): agent moves, security fixes from review
 
 - **No secrets go to an unproven address.** The new address is asked for its proof without the agent's token.
   1.23.0 sent the token first, so a mistyped or rogue address could collect agents' tokens.
 - **The proof names the address.** Sentinel only signs proofs for the address an admin set, so a host that relays the
   challenge to the real Sentinel can't pass.
-- **Starting a move needs your password**, and the move setting is encrypted and authenticated with the app key, so a
-  database write alone can't set one.
+- **Starting a move needs your password**, and the move setting is encrypted and authenticated with the app key, so it
+  can't be edited in the database directly (see the limit in docs/agent.md).
 - **Agents can always be recalled.** While moved, an agent asks its original address every 6 hours, and comes back
   when the move was cancelled or changed.
 - **Fallback only right after a move:** within 24 hours or the first 20 good check-ins. After that the move is

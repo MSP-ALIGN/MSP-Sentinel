@@ -23,8 +23,6 @@ use Sentinel\Core\Session;
  */
 final class ProfileController extends Controller
 {
-    private const REAUTH_MAX_FAILS = 5;
-    private const REAUTH_WINDOW = 900;
 
     /** GET /profile */
     public function index(Request $request): Response
@@ -84,27 +82,5 @@ final class ProfileController extends Controller
         $this->audit($request, 'user.recovery_codes_regenerated', 'user', $id);
         Session::set('show_recovery_codes', $codes);
         return Response::redirect('/recovery-codes');
-    }
-
-    /**
-     * Re-authenticate with the current password, with throttling.
-     *
-     * @param array<string,mixed> $user
-     * @return string|null Error message, or null when the password is right.
-     */
-    private function checkCurrentPassword(Request $request, array $user, string $password): ?string
-    {
-        $bucket = 'reauth-user:' . (int) $user['id'];
-        $limiter = App::limiter();
-        if ($limiter->tooMany($bucket, self::REAUTH_MAX_FAILS, self::REAUTH_WINDOW)) {
-            return __('Too many failed attempts. Please wait 15 minutes and try again.');
-        }
-        if ($password === '' || !Passwords::verify($password, (string) $user['password_hash'])) {
-            $limiter->hit($bucket);
-            $this->audit($request, 'auth.reauth_failed', 'user', (int) $user['id']);
-            return __('Your current password is not correct.');
-        }
-        $limiter->clear($bucket);
-        return null;
     }
 }
