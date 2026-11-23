@@ -666,7 +666,13 @@ final class ScanWorker
             // Vendor default passwords (signed test, explicit authorisation): the open services nmap identified; the stop
             // callback re-checks the engagement and this host's scope before every attempt.
             if (in_array('default_creds', $tests, true) && $this->creds !== null && !$shouldStop($ip)) {
-                $checks['creds'] = $this->creds->check($ip, $parsed['open'], fn (): bool => $shouldStop($ip) || !$allowed($ip, $names));
+                $plan = $engagements->credsPlan($e); // re-read: another run may have finished meanwhile
+                if (isset($plan['done'][$ip])) {
+                    $checks['creds'] = $plan['done'][$ip]; // already tested in this engagement: never again
+                } else {
+                    $checks['creds'] = $this->creds->check($ip, $parsed['open'], fn (): bool => $shouldStop($ip) || !$allowed($ip, $names),
+                        $plan['retest'] === null ? null : ($plan['retest'][$ip] ?? []));
+                }
             }
             $engagements->addResult($eid, 'external', null, 'scan:' . $jobId, $ip, array_values(array_unique($names)), $parsed['open'], $checks, $complete);
             $this->scans->logFinish($logId, 'scanned', __('{n} open port(s)', ['n' => count($parsed['open'])]) . ($complete ? '' : ' ' . __('(incomplete)')));

@@ -165,6 +165,38 @@ final class EngagementRepository
         return $rows;
     }
 
+    /**
+     * What the default-credential test may still do (1.29.1), so no account ever sees a second failed attempt from
+     * re-runs: 'done' holds, per address, the credential results already recorded in THIS engagement (that host isn't
+     * tried again; its earlier result is carried into the new evidence). 'retest' (a retest engagement only) holds,
+     * per address, the logins that worked in the engagement it retests ("service:port" => username): only those are
+     * tried again, one attempt each. Null when it isn't a retest.
+     *
+     * @param array<string,mixed> $e find()
+     * @return array{done:array<string,list<array<string,mixed>>>, retest:?array<string,array<string,string>>}
+     */
+    public function credsPlan(array $e): array
+    {
+        $done = [];
+        foreach ($this->results((int) $e['id']) as $r) {
+            if (is_array($r['checks_list']['creds'] ?? null)) {
+                $done[(string) $r['ip']] = array_merge($done[(string) $r['ip']] ?? [], $r['checks_list']['creds']);
+            }
+        }
+        $retest = null;
+        if (!empty($e['retest_of'])) {
+            $retest = [];
+            foreach ($this->results((int) $e['retest_of']) as $r) {
+                foreach ((array) ($r['checks_list']['creds'] ?? []) as $c) {
+                    if (($c['result'] ?? '') === 'login' && is_string($c['user'] ?? null)) {
+                        $retest[(string) $r['ip']][(string) $c['service'] . ':' . (int) $c['port']] = $c['user'];
+                    }
+                }
+            }
+        }
+        return ['done' => $done, 'retest' => $retest];
+    }
+
     /** The engagement's scan jobs (external tests), newest first. @return list<array<string,mixed>> */
     public function externalJobs(int $engagementId): array
     {

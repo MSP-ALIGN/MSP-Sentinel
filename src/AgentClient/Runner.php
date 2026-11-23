@@ -414,7 +414,7 @@ final class Runner
      * the engagement).
      *
      * @param array<string,mixed> $job
-     * @param array{id:int, tests:list<string>, exclusions:list<string>, ends_at:int} $engagement
+     * @param array{id:int, tests:list<string>, exclusions:list<string>, ends_at:int, creds_done?:array<string,true>, creds_retest?:?array<string,array<string,string>>} $engagement
      * @param array<string,array<string,mixed>> $found
      * @param callable():bool $shouldStop
      * @param list<string> $messages
@@ -456,8 +456,10 @@ final class Runner
                 $h['udp'] = $this->probes->udpChecks((string) $ip); // SNMP, NTP, SSDP: signed in the job
             }
             // Vendor default passwords: only when signed in the job's tests, on the services found on this host.
-            if ($this->creds !== null && in_array('default_creds', $tests, true) && $h['ports'] !== [] && !$shouldStop()) {
-                $h['creds'] = $this->creds->check((string) $ip, $h['ports'], $shouldStop);
+            if ($this->creds !== null && in_array('default_creds', $tests, true) && $h['ports'] !== [] && !$shouldStop()
+                && !isset($engagement['creds_done'][(string) $ip])) { // already tested in this engagement: never again
+                $retest = $engagement['creds_retest'] ?? null;
+                $h['creds'] = $this->creds->check((string) $ip, $h['ports'], $shouldStop, $retest === null ? null : ($retest[(string) $ip] ?? []));
             }
             $hosts[] = $h;
         }

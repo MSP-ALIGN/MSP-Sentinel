@@ -95,9 +95,9 @@ It only covers systems already in the authorised scope above.
   contacts third parties, guesses passwords, may crash a service or exploits).
 - [ ] Anonymous access: anonymous FTP login (the top folder is listed) and NFS exports. Read only.
 - [ ] Vendor default passwords: the Client explicitly allows trying published vendor default passwords on FTP, web
-  admin pages with Basic login, MySQL/MariaDB and PostgreSQL: at most three attempts per service, each with a
-  different account (so no account sees more than one failed attempt), five seconds apart, stopping at any lockout
-  or block. A login that works is closed at once; nothing is read. Also checks whether Redis, MongoDB,
+  admin pages with Basic login, MySQL/MariaDB and PostgreSQL: at most three attempts per service, and no username
+  is tried twice on one device (so no account sees more than one failed attempt), five seconds apart, stopping at any
+  lockout or block. A retest tries only the accounts that worked before, once each. A login that works is closed at once; nothing is read. Also checks whether Redis, MongoDB,
   Elasticsearch/OpenSearch and Memcached answer without any password. Never SSH, Windows, Remote Desktop or
   directory accounts.
 

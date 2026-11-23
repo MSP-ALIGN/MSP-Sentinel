@@ -11,15 +11,20 @@ namespace Sentinel\Scanning;
  *
  * What it does, per open service that nmap identified:
  * - Logins with a short, fixed list of vendor defaults: FTP, HTTP Basic authentication (only where the start page
- *   asks for it), MySQL/MariaDB and PostgreSQL. At most THREE attempts per service per host, each with a DIFFERENT
- *   account (so no account ever sees more than one failed attempt), one at a time, SPACING seconds apart. It stops at
- *   the first success, at any "locked" / "too many attempts" / "blocked" answer, and when the caller says stop.
+ *   asks for it), MySQL/MariaDB and PostgreSQL. At most THREE attempts per service, and NO USERNAME IS EVER TRIED
+ *   TWICE ON ONE HOST (whatever the port or service: one device often serves the same accounts on several ports), so
+ *   no account sees more than one failed attempt. Attempts on a host run one at a time, SPACING seconds apart (also
+ *   between services). It stops at the first success, at any "locked" / "too many attempts" / "blocked" answer, at
+ *   the per-host time budget, and when the caller says stop. Re-runs: the caller passes $only so a host already
+ *   tested in the engagement isn't tried again, and a retest tries only the account that worked before (one attempt).
  * - "Open without any password" checks (no guessing): Redis (PING), MongoDB (one command that needs a login; its
  *   answer is discarded), Elasticsearch/OpenSearch (the start page), Memcached (VERSION).
  * After a successful login it disconnects at once: no commands, nothing read.
  *
- * Never: SSH, SMB, RDP, WinRM, LDAP or anything tied to Windows or directory accounts (lockout risk); brute force;
- * more than the fixed list; anything that writes.
+ * Never: SSH, SMB, RDP, WinRM, LDAP or anything tied to Windows or directory accounts (lockout risk): Microsoft
+ * products (IIS, HTTP.sys/WinRM, IIS FTP) are skipped by name and port, and a web page that also offers Negotiate or
+ * NTLM sign-in is never tried (its Basic login checks Windows accounts). No brute force; nothing beyond the fixed
+ * list; nothing that writes.
  *
  * Evidence: the service, the username and which list entry worked; the password only MASKED (first and last
  * character). The full password never leaves this class.
@@ -35,6 +40,10 @@ final class DefaultCredentials
     private const TIMEOUT = 5.0;
     private const MAX_READ = 65536;
     private const MAX_SCRAM_ITERATIONS = 100_000;
+    /** Ports of Windows' own HTTP services (WinRM, HTTP.sys): never tried. */
+    private const WINDOWS_PORTS = [5985, 5986, 47001];
+    /** Longest the checks may take on one host (seconds); later services are left untried. */
+    public const HOST_BUDGET = 600.0;
 
     /**
      * The vetted list: service => up to three [username, password] pairs, each a different account. Generic vendor
@@ -51,9 +60,12 @@ final class DefaultCredentials
     public const NAMES = ['ftp' => 'FTP', 'http_basic' => 'Web admin page (HTTP Basic)', 'mysql' => 'MySQL/MariaDB', 'postgresql' => 'PostgreSQL',
         'redis' => 'Redis', 'mongodb' => 'MongoDB', 'elasticsearch' => 'Elasticsearch/OpenSearch', 'memcached' => 'Memcached'];
 
-    /** @param float $spacing seconds between two attempts on the same service (5; shorter only in the test suite) */
-    public function __construct(private readonly Connector $connector, private readonly float $spacing = 5.0)
+    private readonly float $spacing;
+
+    /** @param float $spacing seconds between two attempts on a host (5; shorter only in the test suite; never above 5) */
+    public function __construct(private readonly Connector $connector, float $spacing = 5.0)
     {
+        $this->spacing = is_finite($spacing) && $spacing >= 0 ? min(5.0, $spacing) : 5.0;
     }
 
     /**
@@ -61,25 +73,37 @@ final class DefaultCredentials
      *
      * @param list<array<string,mixed>> $ports NmapXmlParser 'open' entries (port, service, product, ...)
      * @param callable():bool $shouldStop true when the engagement must stop (checked before every attempt)
+     * @param array<string,string>|null $only null: the full list; otherwise only these logins ("service:port" =>
+     *        username), one attempt each (a retest re-checks the account that worked; [] tries no logins at all).
+     *        The no-password checks always run (they guess nothing).
      * @return list<array{port:int, service:string, result:string, user:string, masked:string, tried:int}>
      *         result: 'login' (a default worked), 'no_auth' (open without a password), 'denied' (every default
      *         refused / a password is required), 'locked' (it signalled a lockout or block: stopped), 'error' (no
      *         usable answer)
      */
-    public function check(string $ip, array $ports, callable $shouldStop): array
+    public function check(string $ip, array $ports, callable $shouldStop, ?array $only = null, float $budget = self::HOST_BUDGET): array
     {
         $out = [];
+        $this->usedUsers = [];
+        $this->lastAttempt = 0.0;
+        $this->deadline = microtime(true) + max(0.0, min(self::HOST_BUDGET, $budget));
         foreach (array_slice($ports, 0, 200) as $p) {
             $port = (int) ($p['port'] ?? 0);
             $kind = self::kindFor($port, strtolower((string) ($p['service'] ?? '')), strtolower((string) ($p['product'] ?? '')));
-            if ($kind === null || $port < 1 || $port > 65535 || $shouldStop()) {
+            if ($kind === null || $port < 1 || $port > 65535 || $shouldStop() || microtime(true) > $this->deadline) {
                 continue;
             }
+            $login = !in_array($kind, ['redis', 'mongodb', 'elasticsearch', 'memcached'], true);
+            $onlyUser = null;
+            if ($login && $only !== null) {
+                $onlyUser = $only[$kind . ':' . $port] ?? null;
+                if ($onlyUser === null) {
+                    continue; // a re-run: only what worked before is checked again
+                }
+            }
             $tls = $kind === 'http_basic' && self::looksTls($port, strtolower((string) ($p['service'] ?? '')));
-            $r = match ($kind) {
-                'redis', 'mongodb', 'elasticsearch', 'memcached' => ['result' => $this->noAuth($kind, $ip, $port), 'user' => '', 'masked' => '', 'tried' => 0],
-                default => $this->tryList($kind, $ip, $port, $tls, $shouldStop),
-            };
+            $r = $login ? $this->tryList($kind, $ip, $port, $tls, $shouldStop, $onlyUser)
+                : ['result' => $this->noAuth($kind, $ip, $port), 'user' => '', 'masked' => '', 'tried' => 0];
             if ($r !== null) {
                 $out[] = ['port' => $port, 'service' => $kind] + $r;
             }
@@ -107,7 +131,7 @@ final class DefaultCredentials
             }
             $masked = $text($r['masked'] ?? '');
             // A mask shows at most the first and last character: anything else is not a mask and isn't kept.
-            if ($masked !== '' && $masked !== '(blank)' && preg_match('/^(.?)•*(.?)$/u', $masked) !== 1) {
+            if ($masked !== '' && $masked !== '(blank)' && preg_match('/^.?•+.?$/u', $masked) !== 1) {
                 $masked = '•••';
             }
             $out[] = ['port' => $port, 'service' => $service, 'result' => $result, 'user' => $result === 'login' ? $text($r['user'] ?? '') : '',
@@ -119,6 +143,9 @@ final class DefaultCredentials
     /** Which check fits an open port (nmap's service name first, the usual port second). */
     public static function kindFor(int $port, string $service, string $product): ?string
     {
+        if (in_array($port, self::WINDOWS_PORTS, true) || preg_match('/microsoft|\biis\b|httpapi|windows/i', $product) === 1) {
+            return null; // Windows services check Windows/directory accounts: never tried
+        }
         if (str_contains($product, 'elasticsearch') || str_contains($product, 'opensearch') || $port === 9200) {
             return 'elasticsearch';
         }
@@ -150,36 +177,48 @@ final class DefaultCredentials
         return str_contains($service, 'https') || str_starts_with($service, 'ssl/') || in_array($port, [443, 8443, 9443, 4443, 10443], true);
     }
 
+    /** Usernames already tried on the current host (any service): never tried twice. @var array<string,true> */
+    private array $usedUsers = [];
+    private float $lastAttempt = 0.0;
+    private float $deadline = 0.0;
+
     /**
-     * Up to three accounts from the list, one at a time, spaced; stop at the first success or lockout.
+     * Up to three accounts from the list (or the one in $onlyUser), one at a time, spaced from the host's previous
+     * attempt; a username already tried on this host is skipped. Stops at the first success or lockout.
      *
-     * @return array{result:string, user:string, masked:string, tried:int}|null null: nothing to try (e.g. a web
-     *         page that doesn't ask for Basic authentication)
+     * @return array{result:string, user:string, masked:string, tried:int}|null null: nothing was tried (a web page that
+     *         doesn't ask for Basic authentication, or offers Windows sign-in; every account already used on this host)
      */
-    private function tryList(string $kind, string $ip, int $port, bool $tls, callable $shouldStop): ?array
+    private function tryList(string $kind, string $ip, int $port, bool $tls, callable $shouldStop, ?string $onlyUser): ?array
     {
         if ($kind === 'http_basic') {
             $tls = $this->asksBasic($ip, $port, $tls);
             if ($tls === null) {
-                return null; // no Basic authentication here: nothing is tried
+                return null; // no Basic authentication here, or Windows sign-in: nothing is tried
             }
         }
         $tried = 0;
         $last = 'error';
-        foreach (self::LIST[$kind] as $i => [$user, $pass]) {
-            if ($i > 0) {
-                usleep((int) ($this->spacing * 1_000_000));
+        foreach (self::LIST[$kind] as [$user, $pass]) {
+            if (($onlyUser !== null && $user !== $onlyUser) || isset($this->usedUsers[$user])) {
+                continue;
             }
-            if ($shouldStop()) {
+            $wait = $this->lastAttempt + $this->spacing - microtime(true);
+            if ($wait > 0) {
+                usleep((int) ($wait * 1_000_000));
+            }
+            if ($shouldStop() || microtime(true) > $this->deadline) {
                 break;
             }
             $tried++;
+            $this->usedUsers[$user] = true;
             $r = match ($kind) {
                 'ftp' => $this->ftp($ip, $port, $user, $pass),
                 'http_basic' => $this->httpBasic($ip, $port, $tls, $user, $pass),
                 'mysql' => $this->mysql($ip, $port, $user, $pass),
                 'postgresql' => $this->postgres($ip, $port, $user, $pass),
             };
+            $this->lastAttempt = microtime(true);
             if ($r === 'login') {
                 return ['result' => 'login', 'user' => $user, 'masked' => self::mask($pass), 'tried' => $tried];
             }
@@ -190,10 +229,10 @@ final class DefaultCredentials
                 $last = 'denied';
             }
             if ($r === 'stop') {
-                break; // e.g. this host may not log in at all (not allowed from here): trying others is pointless
+                break; // e.g. this host may not log in at all (not allowed from here), or a Windows FTP server
             }
         }
-        return ['result' => $last, 'user' => '', 'masked' => '', 'tried' => $tried];
+        return $tried === 0 ? null : ['result' => $last, 'user' => '', 'masked' => '', 'tried' => $tried];
     }
 
     // ------------------------------------------------------------------ connections
@@ -250,18 +289,24 @@ final class DefaultCredentials
         }
         $deadline = microtime(true) + self::TIMEOUT * 2;
         try {
-            $reply = static function () use ($fp, $deadline): int {
-                // Multi-line replies: "220-..." lines until "220 ...". At most 50 lines.
+            $text = '';
+            $reply = static function () use ($fp, $deadline, &$text): int {
+                // Multi-line replies: "220-..." lines until "220 ...". At most 50 lines; their text is kept (1 KB).
+                $text = '';
                 for ($i = 0; $i < 50; $i++) {
                     $l = self::line($fp, $deadline);
                     if ($l === null) {
                         return 0;
                     }
+                    $text = mb_substr($text . ' ' . $l, 0, 1024);
                     if (preg_match('/^(\d{3}) /', $l, $m) === 1 || preg_match('/^(\d{3})$/', $l, $m) === 1) {
                         return (int) $m[1];
                     }
                 }
                 return 0;
+            };
+            $lockedText = static function () use (&$text): bool {
+                return preg_match('/lock|too many|blocked|banned/i', $text) === 1;
             };
             $greet = $reply();
             if ($greet === 421) {
@@ -269,6 +314,9 @@ final class DefaultCredentials
             }
             if ($greet !== 220) {
                 return 'error';
+            }
+            if (stripos($text, 'microsoft') !== false) {
+                return 'stop'; // IIS FTP checks Windows accounts: never tried
             }
             fwrite($fp, 'USER ' . $user . "\r\n");
             $u = $reply();
@@ -279,14 +327,14 @@ final class DefaultCredentials
                 return 'locked';
             }
             if ($u !== 331) {
-                return $u === 530 ? 'denied' : 'error';
+                return $u === 530 ? ($lockedText() ? 'locked' : 'denied') : 'error';
             }
             fwrite($fp, 'PASS ' . $pass . "\r\n");
             $p = $reply();
             return match (true) {
                 $p === 230 || $p === 202 => 'login',
                 $p === 421 => 'locked',
-                $p === 530 => 'denied',
+                $p === 530 => $lockedText() ? 'locked' : 'denied',
                 default => 'error',
             };
         } finally {
@@ -329,6 +377,10 @@ final class DefaultCredentials
         foreach ([$tls, !$tls] as $scheme) {
             $r = $this->httpGet($ip, $port, $scheme, null);
             if ($r !== null) {
+                // Windows sign-in on offer (Negotiate/NTLM, or a Microsoft server): its Basic login checks directory accounts.
+                if (preg_match('/^WWW-Authenticate:\s*(Negotiate|NTLM)\b/mi', $r['headers']) === 1 || preg_match('/^Server:\s*Microsoft/mi', $r['headers']) === 1) {
+                    return null;
+                }
                 return $r['status'] === 401 && preg_match('/^WWW-Authenticate:\s*Basic\b/mi', $r['headers']) === 1 ? $scheme : null;
             }
         }
@@ -340,7 +392,7 @@ final class DefaultCredentials
         $r = $this->httpGet($ip, $port, $tls, $user . ':' . $pass);
         return match (true) {
             $r === null => 'error',
-            $r['status'] >= 200 && $r['status'] < 400 => 'login',
+            $r['status'] >= 200 && $r['status'] < 300 => 'login', // a redirect may be the device's "wrong password" page
             $r['status'] === 401 => 'denied',
             in_array($r['status'], [403, 423, 429, 503], true) => 'locked', // blocked or rate-limited: stop here
             default => 'error',
@@ -376,7 +428,7 @@ final class DefaultCredentials
             $code = strlen($b) >= 3 ? unpack('v', substr($b, 1, 2))[1] : 0;
             return match (true) {
                 $code === 1045 => 'denied',
-                in_array($code, [1129, 3118, 3955], true) => 'locked',   // host blocked, account locked, too many failures
+                in_array($code, [1129, 3118, 3955, 4151], true) => 'locked', // host blocked, account locked (MySQL, MariaDB), too many failures
                 in_array($code, [1130, 1040], true) => 'stop',           // host not allowed / too many connections
                 default => 'error',
             };

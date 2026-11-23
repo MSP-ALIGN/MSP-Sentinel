@@ -125,7 +125,7 @@ return [
             'title' => 'Pen-test engagements',
             'paragraphs' => [
                 'An engagement is a time-boxed, deeper test the client authorises in writing: all 65,535 TCP ports, common UDP services (one read-only request each to SNMP, NTP and SSDP), nmap\'s safe service scripts (without vulnerability checks) and read-only anonymous-access checks (FTP, NFS exports). Never password guessing, exploits or anything that changes the systems tested.',
-                'Vendor default passwords (1.29, optional): needs a second tick confirming that the signed authorisation explicitly allows it. At most three published vendor defaults per service (FTP, web admin pages with a Basic login, MySQL/MariaDB, PostgreSQL), each a different account so no account sees more than one failed attempt, 5 seconds apart, stopping at the first success or any lockout. A working login is closed at once and nothing is read; the report shows the username and the password masked (a•••n). It also checks whether Redis, MongoDB, Elasticsearch/OpenSearch and Memcached answer without any password. Never SSH, Windows, Remote Desktop or directory logins. Internal runs need agents 1.29.0 or later.',
+                'Vendor default passwords (1.29, optional): needs a second tick confirming that the signed authorisation explicitly allows it. At most three published vendor defaults per service (FTP, web admin pages with a Basic login, MySQL/MariaDB, PostgreSQL), no username is tried twice on one host (so no account sees more than one failed attempt), 5 seconds apart, stopping at the first success, any lockout, or after 10 minutes per host. Windows services (IIS, WinRM, IIS FTP, and pages that offer Windows sign-in) are never tried. Running the tests again doesn\'t repeat the attempts; a retest tries only the accounts that worked, once each. A working login is closed at once and nothing is read; the report shows the username and the password masked (a•••n). It also checks whether Redis, MongoDB, Elasticsearch/OpenSearch and Memcached answer without any password. Never SSH, Windows, Remote Desktop or directory logins. Internal runs need agents 1.29.1 or later.',
                 'Create one under the client, Pen-test engagements: name, window (at most 14 days), tests, pace (gentle or normal; all ports need normal), targets inside the authorised scope, exclusions by IP address or range, and the client\'s signed PDF. A different admin approves it with their password; nothing runs before. Stop engagement ends it for good, within a minute.',
                 'Run external tests (from Sentinel) and internal tests (through each site\'s agent, version 1.27.0 or later) inside the window. The engagement page lists the findings with evidence and fixes; they do not change the client\'s day-to-day findings or inventory.',
                 'Issue penetration test report for a branded, frozen report (summary, how findings chain together, scope and authorisation, method, findings, systems tested). After fixes, create a retest engagement (This is a retest of) and issue its retest letter: each earlier finding marked fixed, still open or not retested.',
@@ -237,6 +237,13 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.29.1',
+            'date' => '2026-11-23',
+            'items' => [
+                'Default-password test fixes: no username is ever tried twice on one host (several ports often share one login); Windows services and pages offering Windows sign-in are never tried; re-runs don\'t repeat attempts and a retest re-checks only what worked; a redirect no longer counts as a login; a 10-minute limit per host; more lockout answers recognised.',
+            ],
+        ],
         [
             'version' => '1.29.0',
             'date' => '2026-11-23',

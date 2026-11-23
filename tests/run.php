@@ -216,10 +216,11 @@ try {
     // A private nameserver address: would answer (open) if ever contacted; Sentinel must skip it.
     $redirects['10.0.0.53:53'] = $dnsPort;
     // Default-credential tests (engagements): fake login servers, one account each; attempts logged (never passwords).
-    foreach (['203.0.113.72:21' => ['ftp', 'root', 'root'], '203.0.113.72:80' => ['http-basic', 'admin', 'admin'], '203.0.113.72:3306' => ['mysql-native', 'root', ''],
-              '203.0.113.72:3307' => ['mysql-sha2', 'nobody', 'Not-A-Default-1'], '203.0.113.72:5432' => ['pg-md5', 'postgres', 'postgres'],
+    foreach (['203.0.113.72:21' => ['ftp', 'root', 'root'], '203.0.113.72:80' => ['http-basic', 'admin', 'admin'],
               '203.0.113.72:6379' => ['redis-open', '-', '-'], '203.0.113.72:9200' => ['es-open', '-', '-'],
-              '10.89.0.30:21' => ['ftp-locked', 'nobody', 'Not-A-Default-1'], '10.89.0.30:5432' => ['pg-scram', 'admin', 'admin'],
+              '203.0.113.73:3306' => ['mysql-native', 'root', ''], '203.0.113.73:5432' => ['pg-md5', 'postgres', 'postgres'],
+              '203.0.113.74:3307' => ['mysql-sha2', 'nobody', 'Not-A-Default-1'], '203.0.113.74:8080' => ['http-ntlm', 'admin', 'admin'],
+              '10.89.0.30:21' => ['ftp-locked', 'nobody', 'Not-A-Default-1'], '10.89.0.30:5432' => ['pg-scram', 'postgres', 'postgres'],
               '10.89.0.30:6379' => ['redis-auth', '-', '-'], '10.89.0.30:11211' => ['memcached-open', '-', '-'], '10.89.0.30:27017' => ['mongo-open', '-', '-']] as $target => $credArgs) {
         $p = $freePort();
         $mocks[] = proc_open(array_merge([PHP_BINARY, __DIR__ . '/mocks/creds_server.php', (string) $p], $credArgs, [$outDir . '/creds-attempts.log']),

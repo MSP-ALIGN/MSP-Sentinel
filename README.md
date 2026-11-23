@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.29.0](https://img.shields.io/badge/version-1.29.0-ff5a1f?style=flat-square)
+![Version 1.29.1](https://img.shields.io/badge/version-1.29.1-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -149,6 +149,21 @@ curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install
 The same help is built into the app (**Help** in the menu), with a "What's new" page for every release.
 
 ## What's new
+
+### 1.29.1 (2026-11-23): default passwords, fixes from review
+
+- **No username is ever tried twice on one host.** A device often serves the same login on several ports (80, 443,
+  8080, FTP): before, each port got its own three attempts. The 5-second spacing now also applies between services.
+- **Windows accounts are never tried.** IIS, WinRM/HTTP.sys (ports 5985, 5986, 47001) and IIS FTP are skipped, and
+  so is any web page that also offers Windows sign-in (Negotiate/NTLM): its Basic login checks directory accounts.
+- **Re-runs don't repeat attempts.** Running the tests again in the same engagement keeps the earlier result. A
+  retest tries only the accounts that worked before, once each, to confirm they were changed.
+- **A redirect no longer counts as a login.** Some devices answer a wrong password with a redirect.
+- **At most 10 minutes per host** for this test.
+- **More lockout answers recognised:** MariaDB's "account locked", and FTP replies that mention a lock or too many
+  attempts.
+- **Stricter checks on agent results** (a mask must hide something) and on the test-only spacing setting.
+- **Internal runs now need agents 1.29.1** (1.29.0 agents don't have these limits).
 
 ### 1.29.0 (2026-11-23): default passwords in pen-test engagements
 

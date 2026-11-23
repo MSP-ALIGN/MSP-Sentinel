@@ -50,7 +50,7 @@ final class JobVerifier
      * @param list<int> $doneIds Jobs this agent already ran.
      * @return array{job_id:int, kind:string, targets:list<string>, ports:list<int>, udp_ports:list<int>, ranges:list<string>,
      *               directory:?array{domain:string, dc_ip:string, cert_trusted:string}, listen:int, timing:string,
-     *               engagement:?array{id:int, tests:list<string>, exclusions:list<string>, ends_at:int}}|string The job, or why it was refused.
+     *               engagement:?array{id:int, tests:list<string>, exclusions:list<string>, ends_at:int, creds_done:array<string,true>, creds_retest:?array<string,array<string,string>>}}|string The job, or why it was refused.
      */
     public function verify(string $payload, string $signature, array $doneIds, ?int $now = null): array|string
     {
@@ -151,7 +151,36 @@ final class JobVerifier
                 }
                 $exclusions[] = $p['cidr'];
             }
-            $engagement = ['id' => $g['id'], 'tests' => array_values(array_unique($tests)), 'exclusions' => $exclusions, 'ends_at' => $ends];
+            // Default-credential re-run plan (1.29.1): hosts already tested (skip) and, for a retest, the logins to re-check.
+            $credsDone = [];
+            foreach ((array) ($g['creds_done'] ?? []) as $ip) {
+                if (!is_string($ip) || filter_var($ip, FILTER_VALIDATE_IP) === false || count($credsDone) >= 4096) {
+                    return 'invalid engagement credential plan';
+                }
+                $credsDone[$ip] = true;
+            }
+            $credsRetest = null;
+            if (isset($g['creds_retest'])) {
+                if (!is_array($g['creds_retest'])) {
+                    return 'invalid engagement credential plan';
+                }
+                $credsRetest = [];
+                foreach ($g['creds_retest'] as $ip => $logins) {
+                    if (filter_var((string) $ip, FILTER_VALIDATE_IP) === false || !is_array($logins)) {
+                        return 'invalid engagement credential plan';
+                    }
+                    foreach ($logins as $key => $user) {
+                        $kind = explode(':', (string) $key)[0];
+                        if (preg_match('/^[a-z_]+:\d{1,5}$/', (string) $key) !== 1 || !is_string($user)
+                            || !in_array($user, array_column(\Sentinel\Scanning\DefaultCredentials::LIST[$kind] ?? [], 0), true)) {
+                            return 'invalid engagement credential plan';
+                        }
+                        $credsRetest[(string) $ip][(string) $key] = $user;
+                    }
+                }
+            }
+            $engagement = ['id' => $g['id'], 'tests' => array_values(array_unique($tests)), 'exclusions' => $exclusions, 'ends_at' => $ends,
+                'creds_done' => $credsDone, 'creds_retest' => $credsRetest];
         } elseif (isset($job['engagement'])) {
             return 'engagement settings on another job kind';
         }

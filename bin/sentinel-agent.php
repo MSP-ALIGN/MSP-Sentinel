@@ -187,7 +187,8 @@ switch ($command) {
                 is_string($c['release_public_key'] ?? null) ? $c['release_public_key'] : '', $platform->isWindows()),
             $mover,
             // Vendor default passwords (signed engagement test only): 5 seconds between attempts (test suite: shorter).
-            new \Sentinel\Scanning\DefaultCredentials($connector, $testMode && is_numeric($c['testing']['creds_spacing'] ?? null) ? (float) $c['testing']['creds_spacing'] : 5.0));
+            new \Sentinel\Scanning\DefaultCredentials($connector, $testMode && ($c['testing']['allow_documentation_ranges'] ?? false) === true
+                && is_numeric($c['testing']['creds_spacing'] ?? null) ? (float) $c['testing']['creds_spacing'] : 5.0));
         $say('Agent #' . $c['agent_id'] . ' started (version ' . Runner::version() . ').');
         do {
             try {

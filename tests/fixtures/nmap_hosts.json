@@ -327,23 +327,6 @@
         "product": "Example Camera httpd"
       },
       {
-        "port": 3306,
-        "name": "mysql",
-        "product": "MySQL",
-        "version": "8.0.0"
-      },
-      {
-        "port": 3307,
-        "name": "mysql",
-        "product": "MySQL",
-        "version": "8.0.0"
-      },
-      {
-        "port": 5432,
-        "name": "postgresql",
-        "product": "PostgreSQL DB"
-      },
-      {
         "port": 6379,
         "name": "redis",
         "product": "Redis key-value store"
@@ -390,5 +373,41 @@
       }
     ],
     "hostscripts": []
+  },
+  "203.0.113.73": {
+    "open": [
+      {
+        "port": 3306,
+        "name": "mysql",
+        "product": "MySQL",
+        "version": "8.0.0"
+      },
+      {
+        "port": 5432,
+        "name": "postgresql",
+        "product": "PostgreSQL DB"
+      }
+    ]
+  },
+  "203.0.113.74": {
+    "open": [
+      {
+        "port": 3307,
+        "name": "mysql",
+        "product": "MySQL",
+        "version": "8.0.0"
+      },
+      {
+        "port": 8080,
+        "name": "http",
+        "product": "Example httpd"
+      },
+      {
+        "port": 5985,
+        "name": "http",
+        "product": "Microsoft HTTPAPI httpd",
+        "version": "2.0"
+      }
+    ]
   }
 }

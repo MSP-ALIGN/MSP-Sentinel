@@ -26,6 +26,14 @@ return [
         foreach ([[22, 'ssh'], [445, 'microsoft-ds'], [3389, 'ms-wbt-server'], [5985, 'wsman'], [389, 'ldap'], [88, 'kerberos-sec']] as [$port, $svc]) {
             Assert::same(null, DC::kindFor($port, $svc, ''), $svc . ' is never tried');
         }
+        // Windows services check Windows/directory accounts: never tried, by port or product.
+        Assert::same(null, DC::kindFor(5985, 'http', ''), 'WinRM port');
+        Assert::same(null, DC::kindFor(80, 'http', 'microsoft iis httpd'), 'IIS');
+        Assert::same(null, DC::kindFor(8080, 'http', 'microsoft httpapi httpd'), 'HTTP.sys');
+        Assert::same(null, DC::kindFor(21, 'ftp', 'microsoft ftpd'), 'IIS FTP');
+        // Spacing is never above 5 s, and a bad value can't break the checks.
+        $dc = new DC(\Sentinel\Scanning\Connector::direct(), -1.0);
+        Assert::same([], $dc->check('203.0.113.250', [], fn (): bool => false), 'a negative spacing is ignored, no error');
     },
     'default credentials: agent results are cleaned to fixed values and masks' => function (TestContext $ctx): void {
         $clean = DC::cleanResults([
@@ -40,6 +48,8 @@ return [
         Assert::same(3, count($clean), 'unknown services, results and ports dropped');
         Assert::same('root', $clean[0]['user'], 'control characters removed');
         Assert::same('•••', $clean[1]['masked'], 'something that is not a mask is never kept');
+        $short = DC::cleanResults([['port' => 21, 'service' => 'ftp', 'result' => 'login', 'user' => 'a', 'masked' => 'ab']]);
+        Assert::same('•••', $short[0]['masked'], 'a mask must hide at least one character');
         Assert::same(3, $clean[1]['tried'], 'attempts capped at three');
         Assert::same(['', ''], [$clean[2]['user'], $clean[2]['masked']], 'no username or mask unless a login worked');
     },

@@ -7,7 +7,7 @@ declare(strict_types=1);
  *
  * Usage: php tests/mocks/creds_server.php <port> <mode> <user> <password> <attempt-log>
  *
- * Modes: ftp, ftp-locked (421 after the first failed login), http-basic, mysql-native, mysql-sha2, pg-md5,
+ * Modes: ftp, ftp-locked (421 after the first failed login), http-basic, http-ntlm (offers Windows sign-in and Basic), mysql-native, mysql-sha2, pg-md5,
  * pg-scram, redis-open, redis-auth, mongo-open, mongo-auth, es-open, memcached-open.
  * Exactly one account (<user>/<password>) is accepted. Every login attempt is logged as
  * "<unix time with ms> <mode> <user>" (never the password) so tests can count attempts and check the spacing.
@@ -66,6 +66,7 @@ while (true) {
             }
             break;
         case 'http-basic':
+        case 'http-ntlm':
         case 'es-open':
             $req = '';
             while (($l = fgets($c, 4096)) !== false && rtrim($l) !== '') {
@@ -85,7 +86,8 @@ while (true) {
                     break;
                 }
             }
-            fwrite($c, "HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Basic realm=\"Example Camera\"\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+            fwrite($c, "HTTP/1.1 401 Unauthorized\r\n" . ($mode === 'http-ntlm' ? "WWW-Authenticate: Negotiate\r\nWWW-Authenticate: NTLM\r\n" : '')
+                . "WWW-Authenticate: Basic realm=\"Example Camera\"\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
             break;
         case 'mysql-native':
         case 'mysql-sha2':

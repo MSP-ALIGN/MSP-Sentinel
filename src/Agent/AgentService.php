@@ -194,6 +194,14 @@ final class AgentService
             $ends = str_replace(' ', 'T', (string) $e['window_end']) . 'Z';
             $expires = min($expires, $ends);
             $extra['engagement'] = ['id' => (int) $e['id'], 'tests' => $tests, 'exclusions' => $exclusions, 'ends_at' => $ends];
+            if (in_array('default_creds', $tests, true)) {
+                // Re-runs never try an account twice: hosts already tested are skipped; a retest re-checks only what worked.
+                $plan = $engagements->credsPlan($e);
+                $inSite = static fn (string $ip): bool => InternalRanges::allWithin([$ip], $targets);
+                $extra['engagement']['creds_done'] = array_values(array_slice(array_filter(array_map('strval', array_keys($plan['done'])), $inSite), 0, 4096));
+                $extra['engagement']['creds_retest'] = $plan['retest'] === null ? null
+                    : array_slice(array_filter($plan['retest'], static fn ($v, $ip): bool => $inSite((string) $ip), ARRAY_FILTER_USE_BOTH), 0, 4096, true);
+            }
             $extra['timing'] = $e['intensity'] === 'normal' ? 'normal' : 'gentle';
         }
         if ($job['kind'] === 'full') {
@@ -531,8 +539,13 @@ final class AgentService
             }
             // Default-credential results (only when the engagement has that test): fixed values only; the username and the
             // masked password as text, never anything longer (the agent never sends the password itself).
-            if (is_array($h['creds'] ?? null) && in_array('default_creds', $e['tests_list'], true)) {
-                $checks['creds'] = \Sentinel\Scanning\DefaultCredentials::cleanResults($h['creds']);
+            if (in_array('default_creds', $e['tests_list'], true)) {
+                $done = $engagements->credsPlan($e)['done'][$ip] ?? null;
+                if ($done !== null) {
+                    $checks['creds'] = $done; // tested earlier in this engagement: the earlier result stands
+                } elseif (is_array($h['creds'] ?? null)) {
+                    $checks['creds'] = \Sentinel\Scanning\DefaultCredentials::cleanResults($h['creds']);
+                }
             }
             $engagements->addResult((int) $e['id'], 'internal', (int) $job['site_id'], 'agent:' . (int) $job['id'], $ip, [$clean($h['hostname'] ?? '', 255)],
                 $ports, $checks, ($h['scanned'] ?? false) === true);
