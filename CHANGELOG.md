@@ -2,6 +2,15 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.19.2 (2026-11-23): faster ticket lookup, device evidence tested
+
+- **After an unclear answer from ITFlow, Sentinel looks for the ticket from the newest end** of the client's ticket
+  list. It stops at tickets older than the create call, instead of reading the list from the oldest. Clients with
+  thousands of tickets are handled in a few small reads, and no longer fall back to opening the ticket again with a
+  duplicate warning.
+- **New test:** a device finding counts as still there only when device data received after the ticket was closed
+  still shows it. A refresh from stored data doesn't count.
+
 ### 1.19.1 (2026-11-23): two-way ITFlow tickets, fixes from review
 
 - **A ticket is reopened only on clear evidence.** That means a "verify fix" recheck after the close that still sees

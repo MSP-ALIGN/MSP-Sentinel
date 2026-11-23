@@ -303,6 +303,7 @@ return [
         $setStatus($t2, 'resolved');
         App::itflowTickets()->run();
         $recheck();
+        @unlink($dir . '/nmap-closed.json'); // only this recheck sees the port closed (other tests expect it open)
         Assert::same('resolved', $ctx->db->query("SELECT status FROM findings WHERE id = {$f1}")->fetchColumn());
         Assert::contains('1 confirmed fixed', App::itflowTickets()->run());
         Assert::same('done', $row($f1)['state']);
@@ -325,6 +326,31 @@ return [
         $hist = implode("\n", $ctx->db->query("SELECT note FROM finding_events WHERE finding_id = {$f2} AND event = 'itflow_ticket'")->fetchAll(PDO::FETCH_COLUMN));
         Assert::contains('resolved: no longer seen by Sentinel', $hist, 'history on the finding');
 
+        // A device finding (no recheck of its own): only device data received after the close, and processed by the
+        // findings engine since, counts as still there; a refresh from stored data doesn't.
+        $ctx->db->exec("INSERT INTO devices (client_id, source, source_id, name, first_seen, last_seen) VALUES ({$cid}, 'ninjaone', 'tw-1', 'TW-LAPTOP-01', UTC_TIMESTAMP() - INTERVAL 1 DAY, UTC_TIMESTAMP() - INTERVAL 1 HOUR)");
+        $dev = (int) $ctx->db->lastInsertId();
+        $ctx->db->prepare("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, detail, target, evidence, status, first_seen, last_seen, opened_at, device_id, source)
+                           VALUES (:c, :k, 'device', 'fail', 'Antivirus is off', 'Real-time protection is off.', 'TW-LAPTOP-01', 'av_state=off', 'open', UTC_TIMESTAMP(), UTC_TIMESTAMP() - INTERVAL 1 HOUR, UTC_TIMESTAMP(), :d, 'ninjaone')")
+            ->execute(['c' => $cid, 'k' => 'dev:ninjaone:tw-1:av_off', 'd' => $dev]);
+        $fd = (int) $ctx->db->lastInsertId();
+        App::itflowTickets()->run();
+        $td = (int) $row($fd)['itflow_ticket_id'];
+        $setStatus($td, 'resolved');
+        App::itflowTickets()->run();
+        Assert::same('awaiting_check', $row($fd)['state']);
+        Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM scan_jobs WHERE job_type = 'verify' AND JSON_EXTRACT(payload, '$.finding_id') = {$fd}")->fetchColumn(), 'devices are never scanned for this');
+        $ctx->db->exec("UPDATE findings SET last_seen = UTC_TIMESTAMP() + INTERVAL 5 SECOND WHERE id = {$fd}"); // a refresh from stored data
+        App::itflowTickets()->run();
+        Assert::same('awaiting_check', $row($fd)['state'], 'old device data: not still there');
+        $ctx->db->exec("UPDATE devices SET last_seen = UTC_TIMESTAMP() + INTERVAL 10 SECOND WHERE id = {$dev}"); // a sync after the close...
+        App::itflowTickets()->run();
+        Assert::same('awaiting_check', $row($fd)['state'], 'new device data not yet processed by the engine: wait');
+        $ctx->db->exec("UPDATE findings SET last_seen = UTC_TIMESTAMP() + INTERVAL 20 SECOND WHERE id = {$fd}"); // ...and the engine still sees it
+        App::itflowTickets()->run();
+        Assert::same('open', $row($fd)['state'], 'still there: ticket reopened');
+        Assert::contains('reopen:' . $td, json_encode($sent()['log']));
+
         // One refused item never holds up the others; it is retried later.
         file_put_contents($dir . '/itflow-fail.json', json_encode(['refuse_clients' => [821]]));
         $f3 = $finding($cid2, 'port:203.0.113.195:3389', 'Remote Desktop open to the internet');
@@ -343,14 +369,26 @@ return [
         Assert::same('open', $row($f3)['state'], 'retried');
 
         // An unclear answer (ITFlow saved it, then a 502): the run stops, and the next one finds the ticket instead
-        // of opening it twice.
+        // of opening it twice. The client has a long ticket history: the lookup counts it with small probes and
+        // reads from the newest end, never the whole list.
+        $st = $sent();
+        for ($i = 0; $i < 1500; $i++) {
+            $st['tickets'][] = ['id' => 100 + $i, 'status' => 'closed', 'client_id' => 820, 'ticket_subject' => 'Old ticket ' . $i, 'created_at' => '2026-01-01 00:00:00'];
+        }
+        usort($st['tickets'], static fn (array $a, array $b): int => $a['id'] <=> $b['id']);
+        file_put_contents($dir . '/itflow-tickets.json', json_encode($st));
         file_put_contents($dir . '/itflow-fail.json', json_encode(['create_502' => true]));
         $f5 = $finding($cid, 'port:203.0.113.194:21', 'FTP open to the internet');
         Assert::contains('Stopped: ITFlow answered HTTP 502', App::itflowTickets()->run());
         Assert::same('pending', $row($f5)['state']);
         $count = count($sent()['tickets']);
         @unlink($dir . '/itflow-fail.json');
+        $reads = static fn (): int => count(array_filter(array_map(static fn (string $l): mixed => json_decode($l, true), file($ctx->feedsLog) ?: []),
+            static fn (mixed $e): bool => is_array($e) && str_ends_with((string) $e['path'], '/tickets/read.php') && (string) ($e['query']['client_id'] ?? '') === '820'));
+        $readsBefore = $reads();
         App::itflowTickets()->run();
+        $n = $reads() - $readsBefore;
+        Assert::true($n >= 1 && $n <= 30, 'a few small reads, not the whole list (' . $n . ')');
         Assert::same($count, count($sent()['tickets']), 'not opened twice');
         Assert::same('open', $row($f5)['state']);
         Assert::same((int) end($sent()['tickets'])['id'], (int) $row($f5)['itflow_ticket_id'], 'the saved ticket was adopted');

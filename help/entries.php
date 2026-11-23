@@ -214,6 +214,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.19.2',
+            'date' => '2026-11-23',
+            'items' => [
+                'After an unclear answer from ITFlow, Sentinel looks for the ticket from the newest end, so clients with thousands of tickets are checked in a few small reads.',
+            ],
+        ],
+        [
             'version' => '1.19.1',
             'date' => '2026-11-23',
             'items' => [

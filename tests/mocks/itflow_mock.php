@@ -59,7 +59,7 @@ if ($sub === '/api/v1/tickets/create.php' && $_SERVER['REQUEST_METHOD'] === 'POS
         $refuse('Client not found');
     }
     $id = 5000 + count($state['tickets']) + 1;
-    $state['tickets'][] = ['id' => $id, 'status' => 'open'] + $body;
+    $state['tickets'][] = ['id' => $id, 'status' => 'open', 'created_at' => gmdate('Y-m-d H:i:s')] + $body;
     $save();
     if (!empty($fail['create_502'])) {
         http_response_code(502);
@@ -87,6 +87,7 @@ if ($sub === '/api/v1/ticket_replies/create.php' && $_SERVER['REQUEST_METHOD'] =
 if ($sub === '/api/v1/tickets/read.php') {
     $row = static fn (array $t): array => ['ticket_id' => $t['id'], 'ticket_prefix' => 'TCK-', 'ticket_number' => $t['id'], 'ticket_client_id' => (int) $t['client_id'],
         'ticket_subject' => $t['ticket_subject'], 'ticket_vendor_ticket_number' => $t['ticket_vendor_ticket_number'] ?? '',
+        'ticket_created_at' => $t['created_at'] ?? '2026-01-01 00:00:00',
         'ticket_status' => ['open' => 2, 'resolved' => 4, 'closed' => 5][$t['status']] ?? 2,
         'ticket_resolved_at' => in_array($t['status'], ['resolved', 'closed'], true) ? '2026-11-20 10:00:00' : null,
         'ticket_closed_at' => $t['status'] === 'closed' ? '2026-11-20 11:00:00' : null];

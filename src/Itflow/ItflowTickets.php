@@ -151,7 +151,7 @@ final class ItflowTickets
     private function openTicket(int $rowId, int $itflowClient, string $subject, string $html, string $priority): ?array
     {
         $marker = 'sentinel-' . $rowId . '-' . bin2hex(random_bytes(4));
-        $this->setRow($rowId, ['state' => 'pending', 'marker' => $marker]);
+        $this->setRow($rowId, ['state' => 'pending', 'marker' => $marker, 'marker_at' => $this->dbNow()]);
         try {
             $ticket = $this->itflow->createTicket($itflowClient, self::oneLine($subject, 200), $html, $priority, $marker);
         } catch (ItflowException $ex) {
@@ -195,7 +195,7 @@ final class ItflowTickets
                 continue;
             }
             try {
-                $found = $this->itflow->findByMarker((int) $r['itflow_client_id'], (string) $r['marker']);
+                $found = $this->itflow->findByMarker((int) $r['itflow_client_id'], (string) $r['marker'], (string) $r['marker_at']);
             } catch (ItflowException $ex) {
                 if ($ex->kind !== ItflowException::KIND_REFUSED) {
                     throw $ex;

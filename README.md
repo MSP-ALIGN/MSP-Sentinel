@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.19.1](https://img.shields.io/badge/version-1.19.1-ff5a1f?style=flat-square)
+![Version 1.19.2](https://img.shields.io/badge/version-1.19.2-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -148,6 +148,15 @@ curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install
 The same help is built into the app (**Help** in the menu), with a "What's new" page for every release.
 
 ## What's new
+
+### 1.19.2 (2026-11-23): faster ticket lookup, device evidence tested
+
+- **After an unclear answer from ITFlow, Sentinel looks for the ticket from the newest end** of the client's ticket
+  list. It stops at tickets older than the create call, instead of reading the list from the oldest. Clients with
+  thousands of tickets are handled in a few small reads, and no longer fall back to opening the ticket again with a
+  duplicate warning.
+- **New test:** a device finding counts as still there only when device data received after the ticket was closed
+  still shows it. A refresh from stored data doesn't count.
 
 ### 1.19.1 (2026-11-23): two-way ITFlow tickets, fixes from review
 

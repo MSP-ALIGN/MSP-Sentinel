@@ -21,8 +21,9 @@ namespace Sentinel\Itflow;
  *   "ticket_reference":"...","ticket_url":"..."}; a refused request answers 400 {"success":"False","message":"..."}.
  *   Without ticket_notify nobody is emailed. ticket_url is the client's guest link (it carries the ticket's secret
  *   url_key): Sentinel never stores or shows it, and links to the agent view (agent/ticket.php) instead.
- * - GET /api/v1/tickets/read.php?client_id=N&limit=&offset= lists a client's tickets (with
- *   ticket_vendor_ticket_number), used to find a ticket whose create call timed out.
+ * - GET /api/v1/tickets/read.php?client_id=N&limit=&offset= lists a client's tickets oldest first (ORDER BY ticket_id,
+ *   SELECT * so with ticket_vendor_ticket_number and ticket_created_at; no limit cap, no total; an empty page is
+ *   "No resource"), used to find a ticket whose create call timed out.
  * - POST /api/v1/ticket_replies/create.php (client_id, ticket_id, ticket_reply HTML, ticket_reply_type "Internal")
  *   -> {"success":"True","data":[{"insert_id":N}]}; an Internal reply is not emailed to the client. A closed ticket
  *   takes no replies.
@@ -118,27 +119,71 @@ final class ItflowClient
     }
 
     /**
-     * The ticket of a client whose vendor ticket number is $marker, or null when there is none. Reads at most
-     * MARKER_PAGES pages of the client's tickets; more than that throws (unknown, not "none").
+     * The ticket of a client whose vendor ticket number is $marker, or null when there is none.
+     *
+     * ITFlow lists a client's tickets oldest first (ORDER BY ticket_id) with limit/offset and no total, and the ticket
+     * looked for is among the newest. So: count the client's tickets with one-ticket probes (doubling the offset,
+     * then halving the gap: about 2·log2(n) small reads), then read pages backwards from the newest. $notBefore (UTC)
+     * is when Sentinel was about to open it: once a page reaches tickets created more than an hour before that, the
+     * ticket isn't there (the hour allows for the two servers' clocks). More than MARKER_PAGES pages without an
+     * answer throws (unknown, not "none").
      *
      * @return array{id:int, reference:string}|null
      */
-    public function findByMarker(int $clientId, string $marker): ?array
+    public function findByMarker(int $clientId, string $marker, string $notBefore = ''): ?array
     {
-        for ($page = 0; $page < self::MARKER_PAGES; $page++) {
-            $rows = $this->read('/api/v1/tickets/read.php', ['client_id' => $clientId, 'limit' => self::PAGE, 'offset' => $page * self::PAGE]);
+        $count = $this->countTickets($clientId);
+        $cutoff = $notBefore !== '' ? (int) strtotime($notBefore . ' UTC') - 3600 : null;
+        for ($page = 0, $end = $count; $page < self::MARKER_PAGES && $end > 0; $page++, $end -= self::PAGE) {
+            $start = max(0, $end - self::PAGE);
+            $rows = $this->read('/api/v1/tickets/read.php', ['client_id' => $clientId, 'limit' => $end - $start, 'offset' => $start]);
+            $older = false;
             foreach ($rows as $r) {
-                if (is_array($r) && ($r['ticket_vendor_ticket_number'] ?? null) === $marker && is_numeric($r['ticket_id'] ?? null)
-                    && (int) ($r['ticket_client_id'] ?? 0) === $clientId) {
+                if (!is_array($r)) {
+                    continue;
+                }
+                if (($r['ticket_vendor_ticket_number'] ?? null) === $marker && is_numeric($r['ticket_id'] ?? null) && (int) ($r['ticket_client_id'] ?? 0) === $clientId) {
                     $ref = is_scalar($r['ticket_prefix'] ?? null) && is_scalar($r['ticket_number'] ?? null) ? $r['ticket_prefix'] . $r['ticket_number'] : '';
                     return ['id' => (int) $r['ticket_id'], 'reference' => (string) preg_replace('/[^A-Za-z0-9#._-]/', '', mb_substr($ref, 0, 40))];
                 }
+                $created = is_string($r['ticket_created_at'] ?? null) ? strtotime($r['ticket_created_at'] . ' UTC') : false;
+                $older = $older || ($cutoff !== null && $created !== false && $created < $cutoff);
             }
-            if (count($rows) < self::PAGE) {
-                return null;
+            if ($older) {
+                return null; // reached tickets from before it would have been opened
             }
         }
-        throw new ItflowException('The client has too many ITFlow tickets to look through.', ItflowException::KIND_REFUSED);
+        if ($count <= self::MARKER_PAGES * self::PAGE) {
+            return null; // every ticket read
+        }
+        throw new ItflowException('The client has too many recent ITFlow tickets to look through.', ItflowException::KIND_REFUSED);
+    }
+
+    /** How many tickets a client has in ITFlow (the API gives no total): one-ticket probes, doubling then bisecting. */
+    private function countTickets(int $clientId): int
+    {
+        $exists = fn (int $offset): bool => $this->read('/api/v1/tickets/read.php', ['client_id' => $clientId, 'limit' => 1, 'offset' => $offset]) !== [];
+        if (!$exists(0)) {
+            return 0;
+        }
+        $lo = 0; // an offset that exists
+        $hi = 1;
+        while ($exists($hi)) {
+            $lo = $hi;
+            $hi *= 2;
+            if ($hi > 1 << 24) {
+                throw new ItflowException('ITFlow returned more tickets than Sentinel can count.', ItflowException::KIND_REFUSED);
+            }
+        }
+        while ($hi - $lo > 1) { // $lo exists, $hi doesn't
+            $mid = intdiv($lo + $hi, 2);
+            if ($exists($mid)) {
+                $lo = $mid;
+            } else {
+                $hi = $mid;
+            }
+        }
+        return $lo + 1;
     }
 
     /** The agent's view of a ticket in ITFlow (no secret in it), or '' when the address isn't valid. */
