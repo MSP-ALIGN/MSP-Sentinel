@@ -167,6 +167,35 @@ final class AgentService
         }
         $ports = array_values(array_filter(array_map('intval', explode(',', (string) $job['ports'])), static fn (int $p): bool => $p > 0 && $p < 65536));
         $extra = [];
+        $udp = $job['kind'] === 'full' ? [161] : [];
+        $expires = str_replace(' ', 'T', (string) $job['expires_at']) . 'Z';
+        if ($job['kind'] === 'engagement') {
+            // An engagement's internal tests: only while it is active, only its ranges for this site (inside the signed
+            // authorisation, checked above), with its exclusions, tests, intensity and end time, all signed.
+            $engagements = new \Sentinel\Engagements\EngagementRepository($this->db);
+            $e = $engagements->find((int) ($job['engagement_id'] ?? 0));
+            if ($e === null || (int) $e['client_id'] !== (int) $job['client_id'] || !$engagements->isActive((int) $e['id'])) {
+                return null;
+            }
+            foreach ($targets as $t) {
+                if (!\Sentinel\Engagements\EngagementRepository::internalAllows(array_filter($e['targets'], static fn (array $x): bool => $x['kind'] === 'internal'), (int) $job['site_id'], $t)) {
+                    return null;
+                }
+            }
+            $exclusions = [];
+            foreach ($e['targets'] as $x) {
+                if ($x['kind'] === 'exclude' && $x['entry_type'] !== 'domain' && isset(InternalRanges::parse((string) $x['value'])['cidr'])) {
+                    $exclusions[] = (string) InternalRanges::parse((string) $x['value'])['cidr'];
+                }
+            }
+            $tests = $e['tests_list'];
+            $ports = in_array('tcp_full', $tests, true) ? [] : self::PORTS; // [] with tcp_full: all 65,535 TCP ports
+            $udp = in_array('udp_common', $tests, true) ? [161] : [];
+            $ends = str_replace(' ', 'T', (string) $e['window_end']) . 'Z';
+            $expires = min($expires, $ends);
+            $extra['engagement'] = ['id' => (int) $e['id'], 'tests' => $tests, 'exclusions' => $exclusions, 'ends_at' => $ends];
+            $extra['timing'] = $e['intensity'] === 'normal' ? 'normal' : 'gentle';
+        }
         if ($job['kind'] === 'full') {
             // Active Directory checks: only with a domain controller inside the signed ranges (the agent checks again).
             // The password isn't in the job: the agent holds it, sealed. The trusted certificate fingerprint is.
@@ -178,13 +207,13 @@ final class AgentService
         }
         // The site's scan gentleness (an nmap timing profile; never faster than -T3), signed like the targets.
         $timing = (string) ($agent['agent_timing'] ?? 'gentle');
-        $extra['timing'] = isset(\Sentinel\Scanning\NmapRunner::PROFILES[$timing]) ? $timing : 'gentle';
+        $extra['timing'] ??= isset(\Sentinel\Scanning\NmapRunner::PROFILES[$timing]) ? $timing : 'gentle';
         return $this->signer->sign($extra + [
             'v' => 1, 'type' => 'agent_job', 'job_id' => (int) $job['id'], 'agent_id' => (int) $agent['id'], 'site_id' => (int) $job['site_id'], 'client_id' => (int) $job['client_id'],
             'kind' => (string) $job['kind'], 'ports' => $ports, 'targets' => $targets,
             // UDP ports the agent may send to (full scans: SNMP's read of the default communities).
-            'udp_ports' => $job['kind'] === 'full' ? [161] : [],
-            'issued_at' => gmdate('Y-m-d\TH:i:s\Z'), 'expires_at' => str_replace(' ', 'T', (string) $job['expires_at']) . 'Z',
+            'udp_ports' => $udp,
+            'issued_at' => gmdate('Y-m-d\TH:i:s\Z'), 'expires_at' => $expires,
             'authorisation' => ['payload' => (string) $auth['signed_payload'], 'signature' => (string) $auth['signature']],
         ]);
     }
@@ -209,6 +238,9 @@ final class AgentService
         }
         $siteId = (int) $job['site_id'];
         $clientId = (int) $job['client_id'];
+        if ($job['kind'] === 'engagement' && $ranges !== []) {
+            return $this->ingestEngagement($job, $data, $status, $ranges);
+        }
         $full = $job['kind'] === 'full';
         $messages = array_slice(array_map(static fn ($m): string => InventoryRepository::clean($m, 300), (array) ($data['messages'] ?? [])), 0, 10);
         if ($ranges === []) {
@@ -444,6 +476,66 @@ final class AgentService
         )->execute(['c' => $clientId, 'site' => $siteId, 'sid' => $siteId . ':' . $ip, 'n' => $hostname !== '' ? $hostname : $ip, 'dns' => $hostname, 'ip' => $ip, 'mac' => $mac,
                     'full' => $scanned ? gmdate('Y-m-d H:i:s') : null]);
         return [(int) $this->db->lastInsertId(), true];
+    }
+
+    /**
+     * Take in an engagement job's results: evidence only (engagement_results), never the device inventory. Every host
+     * must be inside the signed authorisation, the engagement's ranges for this site and not excluded; values from the
+     * hosts are untrusted (cleaned and length-limited).
+     *
+     * @param array<string,mixed> $job
+     * @param array<string,mixed> $data
+     * @param list<string> $ranges the authorisation's ranges
+     * @return array{accepted:int, rejected:int, new_devices:int, status:string}
+     */
+    private function ingestEngagement(array $job, array $data, string $status, array $ranges): array
+    {
+        $engagements = new \Sentinel\Engagements\EngagementRepository($this->db);
+        $e = $engagements->find((int) ($job['engagement_id'] ?? 0));
+        $stats = ['accepted' => 0, 'rejected' => 0, 'new_devices' => 0, 'status' => $status];
+        if ($e === null || (int) $e['client_id'] !== (int) $job['client_id']) {
+            $this->agents->finishJob((int) $job['id'], 'failed', ['messages' => [__('Results ignored: the engagement does not exist.')]]);
+            return ['status' => 'failed'] + $stats;
+        }
+        $clean = static fn (mixed $v, int $max): string => InventoryRepository::clean(is_scalar($v) ? (string) $v : '', $max);
+        $scripts = static function (mixed $list) use ($clean): array {
+            $out = [];
+            foreach (array_slice(array_values(array_filter((array) $list, 'is_array')), 0, 40) as $sc) {
+                $id = (string) ($sc['id'] ?? '');
+                if (preg_match('/^[a-z0-9][a-z0-9-]{0,60}$/', $id) === 1) {
+                    // Keep line breaks of script output (evidence), drop other control characters.
+                    $text = mb_convert_encoding(is_string($sc['output'] ?? null) ? $sc['output'] : '', 'UTF-8', 'UTF-8');
+                    $out[] = ['id' => $id, 'output' => mb_substr(trim((string) preg_replace('/[\x00-\x08\x0B-\x1F\x7F]/u', ' ', $text)), 0, 4000)];
+                }
+            }
+            return $out;
+        };
+        foreach (array_slice(array_values(array_filter((array) ($data['hosts'] ?? []), 'is_array')), 0, self::MAX_HOSTS) as $h) {
+            $ip = self::canonicalIp($h['ip'] ?? null);
+            if ($ip === null || !InternalRanges::allWithin([$ip], $ranges) || !\Sentinel\Engagements\EngagementRepository::internalAllows($e['targets'], (int) $job['site_id'], $ip)) {
+                $stats['rejected']++; // never store anything outside the authorisation or the engagement, or excluded
+                continue;
+            }
+            $ports = [];
+            foreach (array_slice(array_values(array_filter((array) ($h['ports'] ?? []), 'is_array')), 0, 1000) as $p) {
+                $num = (int) ($p['port'] ?? 0);
+                if ($num < 1 || $num > 65535) {
+                    continue;
+                }
+                $ports[] = ['port' => $num, 'service' => $clean($p['service'] ?? '', 100), 'product' => $clean($p['product'] ?? '', 200), 'version' => $clean($p['version'] ?? '', 100),
+                    'extra' => $clean($p['extra'] ?? '', 200), 'cpe' => $clean($p['cpe'] ?? '', 255), 'scripts' => $scripts($p['scripts'] ?? [])];
+            }
+            $checks = ['hostscripts' => $scripts($h['hostscripts'] ?? []), 'mac' => self::mac((string) ($h['mac'] ?? ''))];
+            if (is_array($h['udp'] ?? null)) {
+                $checks['udp'] = array_slice(array_map(static fn ($v): string => is_scalar($v) ? mb_substr((string) $v, 0, 500) : '', $h['udp']), 0, 20, true);
+            }
+            $engagements->addResult((int) $e['id'], 'internal', (int) $job['site_id'], 'agent:' . (int) $job['id'], $ip, [$clean($h['hostname'] ?? '', 255)],
+                $ports, $checks, ($h['scanned'] ?? false) === true);
+            $stats['accepted']++;
+        }
+        $messages = array_slice(array_map(static fn ($m): string => InventoryRepository::clean($m, 300), (array) ($data['messages'] ?? [])), 0, 10);
+        $this->agents->finishJob((int) $job['id'], $status, ['messages' => $messages, 'hosts' => $stats['accepted'], 'rejected' => $stats['rejected']]);
+        return $stats;
     }
 
     /**

@@ -434,6 +434,37 @@ final class AgentRepository
         return (int) $this->db->lastInsertId();
     }
 
+    /** Agents from this version run engagement jobs (older ones refuse the unknown job kind). */
+    public const ENGAGEMENT_SINCE = '1.27.0';
+
+    /**
+     * Queue an engagement's internal tests for one agent: the engagement's ranges for its site, until the engagement's
+     * window ends (signedJob() checks everything again when the job is handed out).
+     *
+     * @param list<string> $targets
+     */
+    public function queueEngagementJob(int $agentId, int $clientId, int $siteId, int $authorisationId, int $engagementId, ?int $userId, array $targets, string $endsAtUtc): int
+    {
+        $demo = $this->db->prepare('SELECT is_demo FROM clients WHERE id = :c');
+        $demo->execute(['c' => $clientId]);
+        if ((int) $demo->fetchColumn() === 1) {
+            throw new \DomainException('Demo clients are never scanned.');
+        }
+        $this->db->prepare("INSERT INTO agent_jobs (agent_id, client_id, site_id, authorisation_id, kind, engagement_id, trigger_type, requested_by, status, ports, targets, created_at, expires_at)
+                            VALUES (:a, :c, :s, :auth, 'engagement', :e, 'manual', :u, 'queued', '', :tg, UTC_TIMESTAMP(), :x)")
+            ->execute(['a' => $agentId, 'c' => $clientId, 's' => $siteId, 'auth' => $authorisationId, 'e' => $engagementId, 'u' => $userId, 'tg' => implode("\n", $targets), 'x' => $endsAtUtc]);
+        return (int) $this->db->lastInsertId();
+    }
+
+    /** An engagement's agent jobs, newest first. @return list<array<string,mixed>> */
+    public function engagementJobs(int $engagementId): array
+    {
+        $stmt = $this->db->prepare("SELECT j.id, j.site_id, j.status, j.created_at, j.finished_at, j.summary, a.name AS agent_name FROM agent_jobs j
+            LEFT JOIN agents a ON a.id = j.agent_id WHERE j.kind = 'engagement' AND j.engagement_id = :e ORDER BY j.id DESC");
+        $stmt->execute(['e' => $engagementId]);
+        return $stmt->fetchAll();
+    }
+
     /**
      * Queued jobs an agent should start now (handed-out jobs are never sent again: the agent refuses replays anyway).
      * Queued jobs past their expiry, and running jobs whose lease ran out (agent gone), are marked expired first.
@@ -486,7 +517,11 @@ final class AgentRepository
      */
     public function jobsToStop(int $agentId): array
     {
-        $stmt = $this->db->prepare("SELECT id FROM agent_jobs WHERE agent_id = :a AND (cancel_requested = 1 OR status IN ('cancelled','expired')) AND (finished_at IS NULL OR finished_at > UTC_TIMESTAMP() - INTERVAL 1 DAY)");
+        // Also an engagement's jobs once the engagement is no longer active (stopped, cancelled, or its window ended).
+        $stmt = $this->db->prepare("SELECT j.id FROM agent_jobs j LEFT JOIN engagements e ON e.id = j.engagement_id WHERE j.agent_id = :a
+            AND ((j.cancel_requested = 1 OR j.status IN ('cancelled','expired')) AND (j.finished_at IS NULL OR j.finished_at > UTC_TIMESTAMP() - INTERVAL 1 DAY)
+              OR j.kind = 'engagement' AND j.status IN ('queued','sent') AND (e.id IS NULL OR e.approved_at IS NULL OR e.stopped_at IS NOT NULL OR e.cancelled_at IS NOT NULL
+                 OR e.window_end <= UTC_TIMESTAMP()))");
         $stmt->execute(['a' => $agentId]);
         return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
     }

@@ -191,4 +191,57 @@ return [
         $tech->post('/engagements/' . $id . '/run-external', ['_csrf' => $tech->get('/engagements/' . $id)->csrf()]);
         Assert::same(2, count(App::engagements()->externalJobs($id)), 'no new run once stopped');
     },
+    'engagements: internal tests through the agent: signed, excluded hosts untouched, evidence only, stopped by the kill switch' => function (TestContext $ctx) use ($engSetup, $fields, $lastId): void {
+        [$cid, $site, $pdf] = $engSetup($ctx);
+        $admin2 = $ctx->login('engadmin2', 'Engadmin2-Pass-0001!');
+        $tech = $ctx->login('engtech', 'Engtech-Pass-0001!');
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        // An agent for the site (the real agent program, test mode: fake nmap, no packets).
+        $dir = dirname($ctx->configPath) . '/agent-engagement';
+        @mkdir($dir, 0700, true);
+        if (!is_file($dir . '/agent.json')) {
+            preg_match('/SNE(-[A-Z2-9]{5}){4}/', $admin->submit('/clients/' . $cid, '/clients/' . $cid . '/sites/' . $site . '/enrol', [])->body, $m);
+            [$code, $out] = $ctx->cli('bin/sentinel-agent.php', ['enrol', '--server', $ctx->baseUrl, '--code', $m[0] ?? 'missing', '--config', $dir . '/agent.json']);
+            Assert::same(0, $code, 'enrol: ' . $out);
+            $app = require $ctx->configPath;
+            $c = json_decode((string) file_get_contents($dir . '/agent.json'), true);
+            $c['nmap_path'] = $app['testing']['agent_nmap_path'];
+            $c['testing'] = ['allow_documentation_ranges' => true, 'redirect_connections' => $app['testing']['redirect_connections'], 'arp_file' => $dir . '/arp'];
+            file_put_contents($dir . '/agent.json', json_encode($c));
+            file_put_contents($dir . '/arp', "IP address       HW type     Flags       HW address            Mask     Device\n");
+        }
+        $run = static fn (): array => $ctx->cli('bin/sentinel-agent.php', ['run', '--once', '--config', $dir . '/agent.json']);
+        $run(); // reports its version
+        $tech->upload('/clients/' . $cid . '/engagements/new', '/clients/' . $cid . '/engagements', $fields($site, ['name' => 'Internal test',
+            'external' => '', 'internal_' . $site => '10.97.0.0/25', 'exclusions' => '10.97.0.9']), 'document', $pdf, 'application/pdf');
+        $id = $lastId($ctx, $cid);
+        $admin2->post('/engagements/' . $id . '/approve', ['_csrf' => $admin2->get('/engagements/' . $id)->csrf(), 'password' => 'Engadmin2-Pass-0001!']);
+        $tech->post('/engagements/' . $id . '/run-internal', ['_csrf' => $tech->get('/engagements/' . $id)->csrf()]);
+        $jobs = App::agents()->engagementJobs($id);
+        Assert::same(1, count($jobs), 'queued for the site agent');
+        @unlink($ctx->nmapLog);
+        [$code, $out] = $run();
+        Assert::same(0, $code, 'agent: ' . $out);
+        $calls = array_map(static fn (string $l): array => json_decode($l, true), file($ctx->nmapLog, FILE_IGNORE_NEW_LINES));
+        $scanned = array_values(array_filter(array_map(static fn (array $c): string => in_array('-sn', $c, true) ? '' : (string) end($c), $calls)));
+        Assert::same(['10.97.0.20'], $scanned, 'deep scan of the found host, not the excluded one: ' . $out);
+        Assert::true(in_array('1-65535', $calls[1] ?? [], true) && in_array('--script', $calls[1] ?? [], true), 'all ports and the fixed scripts');
+        $results = App::engagements()->results($id);
+        Assert::same(['10.97.0.20'], array_column($results, 'ip'), 'evidence for the tested host only');
+        Assert::same('internal', $results[0]['origin']);
+        Assert::contains("Scans:\n  Anonymous access: READ/WRITE", (string) ($results[0]['checks_list']['hostscripts'][0]['output'] ?? ''), 'script output kept line by line');
+        Assert::same([445, 2049, 40000], array_column($results[0]['ports_list'], 'port'));
+        Assert::same('done', (string) $ctx->db->query('SELECT status FROM agent_jobs WHERE id = ' . (int) $jobs[0]['id'])->fetchColumn());
+        Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE client_id = {$cid} AND ip_addresses LIKE '%10.97.0.20%'")->fetchColumn(), 'engagement results stay out of the inventory');
+        // The kill switch: a queued engagement job is never handed out once the engagement is stopped.
+        $tech->post('/engagements/' . $id . '/run-internal', ['_csrf' => $tech->get('/engagements/' . $id)->csrf()]);
+        $second = App::agents()->engagementJobs($id);
+        Assert::same(2, count($second));
+        $tech->post('/engagements/' . $id . '/stop', ['_csrf' => $tech->get('/engagements/' . $id)->csrf(), 'reason' => 'Test stop']);
+        @unlink($ctx->nmapLog);
+        $run();
+        Assert::true(!is_file($ctx->nmapLog) || trim((string) file_get_contents($ctx->nmapLog)) === '', 'nothing scanned after the stop');
+        $agent = $ctx->db->query("SELECT * FROM agents WHERE site_id = {$site} AND status = 'active'")->fetch();
+        Assert::true(in_array((int) $second[0]['id'], App::agents()->jobsToStop((int) $agent['id']), true), 'listed for the agent to stop');
+    },
 ];

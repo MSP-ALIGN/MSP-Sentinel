@@ -291,7 +291,9 @@ final class Runner
     {
         $this->stopNow = false;
         $this->lastCheck = microtime(true);
-        $shouldStop = fn (): bool => $this->shouldStop($job['job_id']);
+        $engagement = $job['engagement'] ?? null;
+        // An engagement stops at its signed end time on the agent's own clock, even if Sentinel can't be reached.
+        $shouldStop = fn (): bool => $this->shouldStop($job['job_id']) || ($engagement !== null && time() >= (int) $engagement['ends_at'] && ($this->stopNow = true));
         $messages = [];
         $found = [];
         $byFamily = [];
@@ -325,6 +327,9 @@ final class Runner
             }
         }
         $complete = !$this->stopNow && $messages === [];
+        if ($engagement !== null) {
+            return $this->runEngagement($job, $engagement, $found, $nmap, $shouldStop, $messages, $complete);
+        }
         if ($job['kind'] === 'full') {
             foreach ($found as $ip => $host) {
                 if ($shouldStop()) {
@@ -398,6 +403,60 @@ final class Runner
         }
         $status = $this->stopNow ? ($unscanned === [] && $complete ? 'done' : 'partial') : ($complete ? 'done' : 'partial');
         return ['status' => $status, 'messages' => array_slice($messages, 0, 20), 'hosts' => array_values($found), 'unscanned' => $unscanned] + $extra;
+    }
+
+    /**
+     * A pen-test engagement's internal tests on the hosts discovery found: excluded hosts are left alone; every other
+     * host gets the deeper scan (all ports or the job's list, the signed tests' script selections, the signed timing),
+     * and SNMP's default communities when the UDP test is signed. Results are evidence only (Sentinel keeps them with
+     * the engagement).
+     *
+     * @param array<string,mixed> $job
+     * @param array{id:int, tests:list<string>, exclusions:list<string>, ends_at:int} $engagement
+     * @param array<string,array<string,mixed>> $found
+     * @param callable():bool $shouldStop
+     * @param list<string> $messages
+     * @return array<string,mixed>
+     */
+    private function runEngagement(array $job, array $engagement, array $found, NmapRunner $nmap, callable $shouldStop, array $messages, bool $complete): array
+    {
+        $tests = $engagement['tests'];
+        $scripts = array_values(array_filter([in_array('nse_safe', $tests, true) ? NmapRunner::SAFE_SCRIPTS : null, in_array('anon_access', $tests, true) ? NmapRunner::ANON_SCRIPTS : null]));
+        $ports = in_array('tcp_full', $tests, true) && $job['ports'] === [] ? null : $job['ports'];
+        $hosts = [];
+        foreach ($found as $ip => $host) {
+            foreach ($engagement['exclusions'] as $x) {
+                if (InternalRanges::within((string) $ip, $x)) {
+                    continue 2; // excluded: never touched beyond the discovery sweep
+                }
+            }
+            if ($shouldStop()) {
+                $complete = false;
+                break;
+            }
+            $h = ['ip' => (string) $ip, 'mac' => $host['mac'], 'hostname' => '', 'scanned' => false, 'ports' => [], 'hostscripts' => []];
+            try {
+                $scan = $nmap->deepScan((string) $ip, $ports, $scripts, $shouldStop);
+                if ($scan['stopped'] || $scan['timed_out'] || $scan['overflow']) {
+                    $complete = false;
+                    $hosts[] = $h;
+                    continue;
+                }
+                $parsed = NmapXmlParser::parse($scan['xml'], (string) $ip, 20_000_000);
+                $h['ports'] = $parsed['open'];
+                $h['hostscripts'] = $parsed['hostscripts'];
+                $h['scanned'] = $parsed['complete'] && $scan['exit'] === 0;
+            } catch (\Throwable $ex) {
+                $messages[] = $ip . ': ' . mb_substr($ex->getMessage(), 0, 200);
+                $complete = false;
+            }
+            if ($this->probes !== null && in_array(161, $job['udp_ports'] ?? [], true) && !$shouldStop()) {
+                $snmp = $this->probes->snmp((string) $ip); // UDP 161, listed in the signed job
+                $h['udp'] = ['snmp_public' => (string) json_encode($snmp['public'] ?? null), 'snmp_private' => (string) json_encode($snmp['private'] ?? null)];
+            }
+            $hosts[] = $h;
+        }
+        return ['status' => $complete && !$this->stopNow ? 'done' : 'partial', 'messages' => array_slice($messages, 0, 20), 'hosts' => $hosts, 'unscanned' => []];
     }
 
     /** Check in every 30 seconds while a job runs; true when Sentinel says this job must stop. */

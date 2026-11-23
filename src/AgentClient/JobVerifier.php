@@ -22,6 +22,9 @@ use Sentinel\Agent\Signer;
  *   the ports are plain port numbers;
  * - full jobs only: Active Directory checks name a domain and a domain controller address inside the signed ranges
  *   (and a trusted certificate fingerprint, or none yet); listening for name requests lasts at most MAX_LISTEN seconds.
+ * - engagement jobs only (a pen-test engagement's internal tests): the engagement's id, tests from the fixed list,
+ *   exclusions (private networks) and its end time are signed; no ports means all 65,535 (only with the full-port
+ *   test); the agent stops on its own at the end time, even if Sentinel can't be reached.
  *
  * Untrusted: everything in the job (it arrives over the network).
  */
@@ -29,6 +32,8 @@ final class JobVerifier
 {
     public const MAX_PORTS = 1000;
     public const MAX_LISTEN = 300;
+    /** Engagement tests an agent runs (the same fixed list as the server's EngagementRepository::TESTS). */
+    public const ENGAGEMENT_TESTS = ['tcp_full', 'udp_common', 'nse_safe', 'anon_access'];
 
     /**
      * @param string $publicKey Pinned server public key (base64).
@@ -44,7 +49,8 @@ final class JobVerifier
      *
      * @param list<int> $doneIds Jobs this agent already ran.
      * @return array{job_id:int, kind:string, targets:list<string>, ports:list<int>, udp_ports:list<int>, ranges:list<string>,
-     *               directory:?array{domain:string, dc_ip:string, cert_trusted:string}, listen:int, timing:string}|string The job, or why it was refused.
+     *               directory:?array{domain:string, dc_ip:string, cert_trusted:string}, listen:int, timing:string,
+     *               engagement:?array{id:int, tests:list<string>, exclusions:list<string>, ends_at:int}}|string The job, or why it was refused.
      */
     public function verify(string $payload, string $signature, array $doneIds, ?int $now = null): array|string
     {
@@ -77,7 +83,7 @@ final class JobVerifier
         if ($issued === false || $issued > $now + 300) {
             return 'job issued in the future (check the clock)';
         }
-        if (!in_array($job['kind'] ?? null, ['full', 'light'], true)) {
+        if (!in_array($job['kind'] ?? null, ['full', 'light', 'engagement'], true)) {
             return 'unknown job kind';
         }
         $auth = $job['authorisation'] ?? null;
@@ -125,6 +131,30 @@ final class JobVerifier
         if ($job['kind'] === 'full' && $ports === []) {
             return 'full scan without ports';
         }
+        $engagement = null;
+        if ($job['kind'] === 'engagement') {
+            $g = $job['engagement'] ?? null;
+            $tests = is_array($g) ? (array) ($g['tests'] ?? []) : [];
+            $ends = is_array($g) && is_string($g['ends_at'] ?? null) ? strtotime($g['ends_at']) : false;
+            if (!is_array($g) || !is_int($g['id'] ?? null) || $g['id'] < 1 || $tests === [] || array_diff($tests, self::ENGAGEMENT_TESTS) !== []
+                || $ends === false || $ends <= $now || !in_array($job['timing'] ?? '', ['gentle', 'normal'], true)) {
+                return 'invalid engagement';
+            }
+            if ($ports === [] && !in_array('tcp_full', $tests, true)) {
+                return 'engagement without ports';
+            }
+            $exclusions = [];
+            foreach ((array) ($g['exclusions'] ?? []) as $x) {
+                $p = is_string($x) ? InternalRanges::parse($x) : ['error' => 'x'];
+                if (!isset($p['cidr'])) {
+                    return 'invalid engagement exclusion';
+                }
+                $exclusions[] = $p['cidr'];
+            }
+            $engagement = ['id' => $g['id'], 'tests' => array_values(array_unique($tests)), 'exclusions' => $exclusions, 'ends_at' => $ends];
+        } elseif (isset($job['engagement'])) {
+            return 'engagement settings on another job kind';
+        }
         $udp = (array) ($job['udp_ports'] ?? []);
         foreach ($udp as $p) {
             if (!is_int($p) || $p < 1 || $p > 65535) {
@@ -153,6 +183,6 @@ final class JobVerifier
             return 'invalid listening time';
         }
         return ['job_id' => $jobId, 'kind' => (string) $job['kind'], 'targets' => $targets, 'ports' => array_values($ports), 'udp_ports' => array_values($udp), 'ranges' => $ranges,
-                'directory' => $directory, 'listen' => $listen, 'timing' => $timing];
+                'directory' => $directory, 'listen' => $listen, 'timing' => $timing, 'engagement' => $engagement];
     }
 }

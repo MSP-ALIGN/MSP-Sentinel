@@ -149,7 +149,8 @@ switch ($host['behaviour'] ?? '') {
         exit(0);
 }
 
-$e = static fn (string $s): string => htmlspecialchars($s, ENT_XML1 | ENT_QUOTES, 'UTF-8');
+// Like real nmap, line breaks inside attribute values are written as &#xa; (XML would otherwise turn them into spaces).
+$e = static fn (string $s): string => str_replace("\n", '&#xa;', htmlspecialchars($s, ENT_XML1 | ENT_QUOTES, 'UTF-8'));
 $addrType = str_contains($ip, ':') ? 'ipv6' : 'ipv4';
 echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE nmaprun>\n<nmaprun scanner=\"nmap\" args=\"fake\" version=\"7.94SVN\" xmloutputversion=\"1.05\">\n";
 echo "<host><status state=\"up\" reason=\"user-set\"/><address addr=\"{$e($ip)}\" addrtype=\"{$addrType}\"/><ports>\n";

@@ -233,6 +233,7 @@ final class EngagementController extends Controller
         }
         return $this->page('engagements/show', (string) $e['name'], ['client' => $client, 'engagement' => $e, 'siteNames' => $siteNames,
             'results' => App::engagements()->results((int) $e['id']), 'externalJobs' => App::engagements()->externalJobs((int) $e['id']),
+            'agentJobs' => App::agents()->engagementJobs((int) $e['id']),
             'state' => EngagementRepository::state($e, gmdate('Y-m-d H:i:s')), 'testLabels' => self::testLabels(),
             'clientNav' => ClientController::nav($client, 'engagements', App::findings()->counts((int) $client['id']))]);
     }
@@ -303,6 +304,66 @@ final class EngagementController extends Controller
         $job = App::scans()->queue((int) $e['client_id'], 'manual', (int) $this->user()['id'], true, __('Engagement window'), ['engagement_id' => (int) $e['id']], 'engagement');
         $this->audit($request, 'engagement.external_started', 'engagement', (int) $e['id'], ['client_id' => (int) $e['client_id'], 'scan_job' => $job]);
         Session::flash('success', __('External tests queued (scan #{id}). They start within a minute and stop at once if the engagement is stopped.', ['id' => $job]));
+        return $back;
+    }
+
+    /**
+     * POST /engagements/{id}/run-internal (technicians and admins): queue the internal tests with each site's agent
+     * (one per site that has ranges in this engagement), only while the engagement is active, only with agents that
+     * run engagement jobs (1.27.0 or later), one open job per site. The job is signed when handed out (everything
+     * checked again then), stops when the engagement does, and the agent stops by itself at the window's end.
+     */
+    public function runInternal(Request $request, array $params): Response
+    {
+        $e = $this->engagementOr404($params);
+        $back = Response::redirect('/engagements/' . (int) $e['id']);
+        if (!App::engagements()->isActive((int) $e['id'])) {
+            Session::flash('danger', __('Tests run only while the engagement is active: approved, inside its window and not stopped (and scanning not paused).'));
+            return $back;
+        }
+        $client = App::clients()->find((int) $e['client_id']) ?? throw new HttpException(404);
+        $open = [];
+        foreach (App::agents()->engagementJobs((int) $e['id']) as $j) {
+            if (in_array($j['status'], ['queued', 'sent', 'ingesting'], true)) {
+                $open[(int) $j['site_id']] = true;
+            }
+        }
+        $bySite = [];
+        foreach ($e['targets'] as $t) {
+            if ($t['kind'] === 'internal') {
+                $bySite[(int) $t['site_id']][] = (string) $t['value'];
+            }
+        }
+        $queued = [];
+        $notes = [];
+        foreach ($bySite as $siteId => $ranges) {
+            $auth = App::agents()->activeAuthorisation($siteId, ScopeService::today((string) $client['timezone']));
+            if ($auth === null || isset($open[$siteId])) {
+                $notes[] = $auth === null ? __('A site has no valid internal authorisation now.') : __('A site already has internal tests queued or running.');
+                continue;
+            }
+            $agent = null;
+            foreach (App::agents()->agents($siteId) as $a) {
+                if ($a['status'] === 'active' && preg_match('/^\d+\.\d+\.\d+$/', (string) $a['version']) === 1
+                    && version_compare((string) $a['version'], \Sentinel\Agent\AgentRepository::ENGAGEMENT_SINCE, '>=')) {
+                    $agent = $a;
+                    break;
+                }
+            }
+            if ($agent === null) {
+                $notes[] = __('A site has no agent of version {v} or later: update it first.', ['v' => \Sentinel\Agent\AgentRepository::ENGAGEMENT_SINCE]);
+                continue;
+            }
+            $queued[] = App::agents()->queueEngagementJob((int) $agent['id'], (int) $client['id'], $siteId, (int) $auth['id'], (int) $e['id'], (int) $this->user()['id'],
+                $ranges, (string) $e['window_end']);
+        }
+        if ($queued !== []) {
+            $this->audit($request, 'engagement.internal_started', 'engagement', (int) $e['id'], ['client_id' => (int) $e['client_id'], 'agent_jobs' => $queued]);
+            Session::flash('success', __('Internal tests queued with {n} agent(s); each starts at its next check-in.', ['n' => count($queued)]));
+        }
+        if ($notes !== []) {
+            Session::flash('warning', implode(' ', array_unique($notes)));
+        }
         return $back;
     }
 

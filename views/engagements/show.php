@@ -3,7 +3,7 @@
  * One pen-test engagement: state, window, tests, scope, the signed authorisation, and the actions (approve by a
  * different admin, stop, cancel).
  * Expects: $client, $engagement (with 'targets', 'tests_list'), $state, $siteNames, $testLabels, $currentUser, $results
- * (latest per host), $externalJobs.
+ * (latest per host), $externalJobs, $agentJobs.
  * Every value is escaped; results came from the tested hosts and are untrusted. Actions are shown only to roles allowed to use them (the routes enforce it too).
  */
 use Sentinel\Auth\Role;
@@ -82,15 +82,25 @@ foreach ($e['targets'] as $t) {
 </div>
 <div class="card mb-3">
     <div class="card-header d-flex align-items-center flex-wrap gap-2"><h2 class="card-title h5 mb-0"><?= e(__('Tests and results')) ?></h2>
-        <?php if ($state === ER::STATE_ACTIVE && $isTech && $byKind['external'] !== []): ?>
-        <form method="post" action="<?= e(url('/engagements/' . (int) $e['id'] . '/run-external')) ?>" class="ms-auto" data-confirm="<?= e(__('Start the external tests now?')) ?>"><?= Csrf::field() ?>
+        <?php if ($state === ER::STATE_ACTIVE && $isTech): ?><div class="ms-auto d-flex gap-2">
+        <?php if ($byKind['external'] !== []): ?>
+        <form method="post" action="<?= e(url('/engagements/' . (int) $e['id'] . '/run-external')) ?>" data-confirm="<?= e(__('Start the external tests now?')) ?>"><?= Csrf::field() ?>
             <button class="btn btn-sm btn-danger" type="submit"><i class="bi bi-play-circle me-1" aria-hidden="true"></i><?= e(__('Run external tests')) ?></button></form>
+        <?php endif; ?>
+        <?php if ($byKind['internal'] !== []): ?>
+        <form method="post" action="<?= e(url('/engagements/' . (int) $e['id'] . '/run-internal')) ?>" data-confirm="<?= e(__('Start the internal tests with the site agents now?')) ?>"><?= Csrf::field() ?>
+            <button class="btn btn-sm btn-danger" type="submit"><i class="bi bi-router me-1" aria-hidden="true"></i><?= e(__('Run internal tests')) ?></button></form>
+        <?php endif; ?></div>
         <?php endif; ?>
     </div>
     <div class="card-body">
         <?php if ($externalJobs !== []): ?>
         <p class="small mb-2"><?= e(__('External test runs:')) ?>
             <?php foreach (array_slice($externalJobs, 0, 5) as $j): ?><span class="badge text-bg-light border me-1">#<?= (int) $j['id'] ?> <?= e((string) $j['status']) ?></span><?php endforeach; ?></p>
+        <?php endif; ?>
+        <?php if ($agentJobs !== []): ?>
+        <p class="small mb-2"><?= e(__('Internal test runs:')) ?>
+            <?php foreach (array_slice($agentJobs, 0, 5) as $j): ?><span class="badge text-bg-light border me-1"><?= e(($siteNames[(int) $j['site_id']] ?? '?') . ' #' . (int) $j['id'] . ' ' . $j['status']) ?></span><?php endforeach; ?></p>
         <?php endif; ?>
         <?php if ($results === []): ?>
         <p class="text-body-secondary mb-0"><?= e(__('No results yet.')) ?></p>

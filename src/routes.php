@@ -90,6 +90,7 @@ $router->add('GET', '/engagements/{id}/document', [\Sentinel\Controllers\Engagem
 $router->add('POST', '/engagements/{id}/approve', [\Sentinel\Controllers\EngagementController::class, 'approve'], $admin);
 $router->add('POST', '/engagements/{id}/stop', [\Sentinel\Controllers\EngagementController::class, 'stop'], $technician);
 $router->add('POST', '/engagements/{id}/run-external', [\Sentinel\Controllers\EngagementController::class, 'runExternal'], $technician);
+$router->add('POST', '/engagements/{id}/run-internal', [\Sentinel\Controllers\EngagementController::class, 'runInternal'], $technician);
 $router->add('POST', '/engagements/{id}/cancel', [\Sentinel\Controllers\EngagementController::class, 'cancel'], $technician);
 $router->add('GET', '/clients/{id}/authorisations/new', [AuthorisationController::class, 'create'], $admin);
 $router->add('POST', '/clients/{id}/authorisations', [AuthorisationController::class, 'store'], $admin);
