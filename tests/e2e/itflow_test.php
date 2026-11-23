@@ -209,6 +209,7 @@ return [
         $admin->submit('/clients/' . $cid . '/authorisations/new', '/clients/' . $cid . '/authorisations', [
             'approved_by_name' => 'Jo Example', 'approved_by_role' => 'Owner', 'approved_on' => gmdate('Y-m-d'), 'valid_from' => gmdate('Y-m-d', time() - 86400),
             'valid_until' => gmdate('Y-m-d', time() + 86400 * 200), 'document_ref' => '', 'notes' => '', 'scope' => '203.0.113.160', 'confirm' => '1']);
+        $ctx->db->exec("UPDATE clients SET scan_window_start = '00:00', scan_window_end = '23:59' WHERE id = {$cid}"); // rechecks wait for the window
         $finding = static function (int $client, string $key, string $title) use ($ctx): int {
             $ctx->db->prepare("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, detail, target, evidence, status, first_seen, last_seen, opened_at)
                                VALUES (:c, :k, 'port', 'fail', :ti, 'Reachable from the internet.', :tg, 'open', 'open', UTC_TIMESTAMP(), UTC_TIMESTAMP() - INTERVAL 1 HOUR, UTC_TIMESTAMP())")
@@ -230,6 +231,7 @@ return [
         $lastReply = static fn (int $ticket): string => (string) (array_values(array_filter($sent()['replies'], static fn (array $r): bool => (int) $r['ticket_id'] === $ticket))[0] ?? ['ticket_reply' => ''])['ticket_reply'];
         $repliesTo = static fn (int $ticket): array => array_values(array_map(static fn (array $r): string => $r['ticket_reply'], array_filter($sent()['replies'], static fn (array $r): bool => (int) $r['ticket_id'] === $ticket)));
         $recheck = static function () use ($ctx, $cid): int {
+            $ctx->db->exec("UPDATE findings SET verify_requested_at = verify_requested_at - INTERVAL 11 MINUTE WHERE client_id = {$cid} AND verify_requested_at IS NOT NULL");
             $job = (int) $ctx->db->query("SELECT MAX(id) FROM scan_jobs WHERE client_id = {$cid} AND job_type = 'verify' AND status = 'queued'")->fetchColumn();
             if ($job > 0) {
                 $ctx->cli('bin/worker.php', ['--no-schedule', '--job=' . $job]);
@@ -249,14 +251,33 @@ return [
         Assert::contains('/itflow/agent/ticket.php?client_id=820&amp;ticket_id=' . $t1, $page);
         Assert::notContains('SECRETKEY', $page);
 
+        // A findings refresh from stored data, or a recheck that couldn't tell, is no evidence: the ticket stays as it is.
+        $setStatus($t1, 'resolved');
+        App::itflowTickets()->run();
+        Assert::same('awaiting_check', $row($f1)['state']);
+        $ctx->db->exec("UPDATE findings SET last_seen = UTC_TIMESTAMP() + INTERVAL 5 SECOND WHERE id = {$f1}"); // as refreshAll does
+        $vj = (int) $ctx->db->query("SELECT verify_job_id FROM findings WHERE id = {$f1}")->fetchColumn();
+        \Sentinel\Findings\VerifyOutcome::record($ctx->db, $f1, null, 'not_verified', 'Could not tell.');
+        $ctx->db->exec("UPDATE scan_jobs SET status = 'done' WHERE id = {$vj}");
+        App::itflowTickets()->run();
+        Assert::same('awaiting_check', $row($f1)['state'], 'not reopened without a conclusive recheck');
+        Assert::notContains('reopen:', json_encode($sent()['log'] ?? []));
+        $setStatus($t1, 'open');
+        App::itflowTickets()->run();
+        Assert::same('open', $row($f1)['state'], 'reopened by a tech in ITFlow: followed again');
+
         // Resolved in ITFlow while still open here: Sentinel rechecks at once; still there -> reopened with a note.
         $setStatus($t1, 'resolved');
+        App::itflowTickets()->run();
+        Assert::same('open', $row($f1)['state'], 'within 10 minutes of the last recheck: waits');
+        $ctx->db->exec("UPDATE findings SET verify_requested_at = UTC_TIMESTAMP() - INTERVAL 11 MINUTE WHERE id = {$f1}");
         App::itflowTickets()->run();
         Assert::same('awaiting_check', $row($f1)['state']);
         $job = $recheck();
         Assert::true($job > 0, 'a verify-fix recheck was queued');
         $payload = json_decode((string) $ctx->db->query("SELECT payload FROM scan_jobs WHERE id = {$job}")->fetchColumn(), true);
         Assert::same([['203.0.113.160'], [3389]], [$payload['ips'], $payload['ports']], 'only that address and port');
+        Assert::same(0, (int) $ctx->db->query("SELECT outside_window FROM scan_jobs WHERE id = {$job}")->fetchColumn(), 'waits for the scan window');
         Assert::same('still_present', $ctx->db->query("SELECT verify_result FROM findings WHERE id = {$f1}")->fetchColumn());
         $summary = App::itflowTickets()->run();
         Assert::contains('1 reopened', $summary);
@@ -334,10 +355,15 @@ return [
         Assert::same('open', $row($f5)['state']);
         Assert::same((int) end($sent()['tickets'])['id'], (int) $row($f5)['itflow_ticket_id'], 'the saved ticket was adopted');
 
-        // A ticket deleted in ITFlow is no longer followed; demo clients are never touched.
-        $setStatus((int) $row($f4)['itflow_ticket_id'], 'deleted');
+        // A ticket deleted in ITFlow: given up after two answers an hour apart, then a new ticket while it's open.
+        $t4 = (int) $row($f4)['itflow_ticket_id'];
+        $setStatus($t4, 'deleted');
         App::itflowTickets()->run();
-        Assert::same('gone', $row($f4)['state']);
+        Assert::same('open', $row($f4)['state'], 'one "No resource" is not enough');
+        $ctx->db->exec("UPDATE itflow_tickets SET gone_seen_at = gone_seen_at - INTERVAL 2 HOUR, status_checked_at = NULL WHERE itflow_ticket_id = {$t4}");
+        App::itflowTickets()->run();
+        Assert::same(1, (int) $ctx->db->query("SELECT COUNT(*) FROM itflow_tickets WHERE itflow_ticket_id = {$t4} AND state = 'gone' AND history_finding_id = {$f4}")->fetchColumn());
+        Assert::true((int) $row($f4)['itflow_ticket_id'] > $t4, 'a new ticket for the open finding');
         $ctx->db->exec("UPDATE clients SET is_demo = 1 WHERE id = {$cid2}");
         $ctx->db->exec("UPDATE findings SET status = 'resolved', resolved_at = UTC_TIMESTAMP() WHERE id = {$f3}");
         $calls = count($sent()['log'] ?? []);

@@ -89,14 +89,19 @@ has no webhooks):
 - **Fixed in Sentinel** (a later check no longer sees it), or marked accepted risk or false positive: the ticket gets
   an internal note saying so and is resolved in ITFlow.
 - **Resolved or closed in ITFlow** while the finding is still open: Sentinel checks again. A port or email finding
-  gets a "verify fix" recheck straight away (same rules as the button: in scope, not paused). A device finding waits
-  for the device's next data (NinjaOne sync or agent scan).
+  gets a "verify fix" recheck (same rules and limits as the button: in scope, not paused, at most one every 10
+  minutes; it waits for the client's scan window). A device finding waits for the device's next data (NinjaOne sync
+  or agent scan). Only that recheck or new device data counts. The daily vulnerability update or a scan of another
+  host doesn't.
   - Gone: the finding closes, and a resolved ticket gets a "verified fixed" note.
   - Still there: a resolved ticket is reopened with what Sentinel still sees. A **closed** ticket can't be reopened
     in ITFlow, so Sentinel opens a new one that names the old one.
   - No clear answer within 10 days: Sentinel stops waiting and says so on the finding, which stays open.
 - **Came back** after its ticket was resolved: the ticket is reopened (or replaced, if it was closed).
-- A ticket deleted in ITFlow is no longer followed. Weekly Warnings tickets are informational and not followed.
+- A ticket deleted in ITFlow (two "not found" answers an hour apart) is no longer followed; an open finding gets a
+  new ticket. A finding reopened by hand after its ticket was done is followed again. Weekly Warnings tickets are
+  informational and not followed.
+- If ITFlow's answer to opening a ticket is unclear (a timeout), Sentinel looks for the ticket before opening it again.
 - A ticket ITFlow refuses (a deleted client, no access) doesn't hold up the others: it is retried after 1, 2, 4 hours
   and so on (at most a day apart), and the reason shows on the finding.
 

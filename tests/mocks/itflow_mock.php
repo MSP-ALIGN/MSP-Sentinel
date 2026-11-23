@@ -109,8 +109,16 @@ if (in_array($sub, ['/api/v1/tickets/resolve.php', '/api/v1/tickets/reopen.php']
         echo json_encode(['success' => 'False', 'message' => 'No ticket']);
         exit;
     }
-    if ($state['tickets'][$i]['status'] === 'closed') {
+    $cur = $state['tickets'][$i]['status'];
+    if ($sub === '/api/v1/tickets/resolve.php' && $cur !== 'open') {
+        echo json_encode(['success' => 'False', 'message' => 'Ticket is not open']); // as ITFlow: 200, success False
+        exit;
+    }
+    if ($sub === '/api/v1/tickets/reopen.php' && $cur === 'closed') {
         $refuse('That ticket is closed. Start a new one instead.');
+    }
+    if ($sub === '/api/v1/tickets/reopen.php' && $cur === 'open') {
+        $refuse('That ticket is open already.');
     }
     $state['tickets'][$i]['status'] = $sub === '/api/v1/tickets/resolve.php' ? 'resolved' : 'open';
     $state['log'][] = basename($sub, '.php') . ':' . $state['tickets'][$i]['id'];

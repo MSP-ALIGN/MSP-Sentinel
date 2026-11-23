@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.19.0](https://img.shields.io/badge/version-1.19.0-ff5a1f?style=flat-square)
+![Version 1.19.1](https://img.shields.io/badge/version-1.19.1-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -148,6 +148,30 @@ curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install
 The same help is built into the app (**Help** in the menu), with a "What's new" page for every release.
 
 ## What's new
+
+### 1.19.1 (2026-11-23): two-way ITFlow tickets, fixes from review
+
+- **A ticket is reopened only on clear evidence.** That means a "verify fix" recheck after the close that still sees
+  the problem, or new device data that still shows it. Before, any findings refresh from stored data counted (the
+  daily vulnerability update, a scan of another host, a recheck that couldn't tell), so a fixed problem could get its
+  ticket reopened or replaced.
+- **Rechecks follow the same limits as the button:** at most one per finding every 10 minutes, and the usual caps on
+  waiting rechecks. They also wait for the client's scan window, since no person asked for them.
+- **A ticket is given up as gone only after two "not found" answers an hour apart.** ITFlow answers "not found" for
+  its own errors too. A finding whose ticket was deleted gets a new one while it's open.
+- **A ticket whose create call got an unclear answer is looked for on two runs before it's opened again.** If it
+  can't be settled, it's opened again with a note to check ITFlow for a duplicate, instead of blocking ticketing.
+- **A problem reopened by hand after its ticket was done is followed again.** So is a problem fixed after Sentinel
+  gave up waiting.
+- **A refused API key user stops the run.** That covers an inactive or archived user, or a role without the Support
+  module. Before, every item was marked failed and then waited up to a day.
+- **The "verified fixed" note is sent once,** even if resolving the ticket has to be retried.
+- **Smaller fixes:**
+  - The first retry comes after 1 hour, as documented.
+  - Tickets Sentinel resolved are followed for 30 days, not forever.
+  - A refused replacement ticket is retried whatever the finding's severity.
+- **Upgrade note:** on the first runs after updating, tickets of findings fixed since they were opened get a
+  "verified fixed" note and are resolved, 50 per run.
 
 ### 1.19.0 (2026-11-23): ITFlow tickets both ways
 

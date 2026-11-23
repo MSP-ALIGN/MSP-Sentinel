@@ -138,7 +138,7 @@ final class ItflowClient
                 return null;
             }
         }
-        throw new ItflowException('The client has too many ITFlow tickets to look through.');
+        throw new ItflowException('The client has too many ITFlow tickets to look through.', ItflowException::KIND_REFUSED);
     }
 
     /** The agent's view of a ticket in ITFlow (no secret in it), or '' when the address isn't valid. */
@@ -180,6 +180,19 @@ final class ItflowClient
     }
 
     /**
+     * ITFlow's 403 (apiDeny). Only "no access to the target client" is about one item; everything else (the key's user
+     * inactive or archived, a key without a user, a role without the Support module) is about the key, so every
+     * later call fails too and the run stops.
+     */
+    private static function denied(string $msg): ItflowException
+    {
+        $perClient = str_contains($msg, 'does not have access to the target client');
+        return new ItflowException(($perClient ? 'The ITFlow API key\'s user has no access to this client: '
+            : 'ITFlow refused the API key\'s user (check that user is active and its role has the Support module at write level): ') . $msg,
+            $perClient ? ItflowException::KIND_REFUSED : ItflowException::KIND_AUTH);
+    }
+
+    /**
      * A write endpoint (JSON body). Returns the decoded answer of a successful call.
      *
      * @param array<string,int|string> $fields
@@ -197,7 +210,7 @@ final class ItflowClient
             throw new ItflowException('ITFlow refused the API key (wrong or expired).', ItflowException::KIND_AUTH);
         }
         if ($status === 403) {
-            throw new ItflowException('The ITFlow API key\'s user may not do this (its role needs the Support module, and access to this client): ' . $msg, ItflowException::KIND_REFUSED);
+            throw self::denied($msg);
         }
         if (($status === 200 && is_array($data)) || in_array($status, [400, 404, 409, 422], true)) {
             throw new ItflowException('ITFlow refused: ' . $msg, ItflowException::KIND_REFUSED);
@@ -218,7 +231,8 @@ final class ItflowClient
             throw new ItflowException('ITFlow refused the API key (wrong or expired).', ItflowException::KIND_AUTH);
         }
         if ($status === 403) {
-            throw new ItflowException('The ITFlow API key\'s user may not read this (check the user\'s role and client access in ITFlow).', ItflowException::KIND_REFUSED);
+            $data = json_decode($body, true);
+            throw self::denied(is_array($data) && is_string($data['message'] ?? null) ? mb_substr((string) preg_replace('/[^\P{C}]/u', '', $data['message']), 0, 200) : '');
         }
         $data = json_decode($body, true);
         if ($status !== 200 || !is_array($data)) {
