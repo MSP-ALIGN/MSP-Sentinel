@@ -84,6 +84,10 @@
                 }
                 var password = form.querySelector('input[data-seal-password]');
                 var user = form.querySelector('input[name=username]');
+                var ran = form.querySelector('input[name=seal_js]');
+                if (ran) {
+                    ran.value = '1'; // tells the server this script ran (an empty password then means "keep the current one")
+                }
                 if (!password || password.value === '') {
                     form.setAttribute('data-sealed-ready', '1'); // no new password: save the other settings only
                     form.submit();
@@ -93,8 +97,13 @@
                     say(form.getAttribute('data-missing-text') || 'Enter the user name and the password.');
                     return;
                 }
+                if ((form.getAttribute('data-agent-key') || '') === '') {
+                    say(form.getAttribute('data-nokey-text') || 'This agent cannot receive passwords yet.');
+                    return;
+                }
                 busy = true;
-                seal(form.getAttribute('data-agent-key') || '', password.value, (form.getAttribute('data-aad-prefix') || '') + user.value.trim())
+                user.value = user.value.trim(); // send exactly the name the box is bound to
+                seal(form.getAttribute('data-agent-key') || '', password.value, (form.getAttribute('data-aad-prefix') || '') + user.value)
                     .then(function (box) {
                         form.querySelector('input[name=sealed]').value = box;
                         password.value = ''; // gone from the page before anything is sent

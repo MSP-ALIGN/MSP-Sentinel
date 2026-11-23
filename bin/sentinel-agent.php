@@ -112,16 +112,25 @@ switch ($command) {
         // Test settings (fake nmap, mock services) only with SENTINEL_TEST_MODE=1; otherwise a direct connector.
         $connector = $testMode && is_array($c['testing'] ?? null) ? Connector::fromTesting($c['testing']) : Connector::direct();
         $http = new Http((string) $c['server'], (string) $c['token'], is_string($c['ca_file'] ?? null) ? $c['ca_file'] : null, $testMode);
+        // The agent's own key pair (sealed passwords) and the directory password it holds, in the state folder (the only
+        // writable one: /var/lib/sentinel-agent; the config folder is read-only for the service). A key that can't be
+        // read or created only turns those off: scans go on.
+        $stateDir = dirname((string) ($c['state_file'] ?? dirname($configFile) . '/state.json'));
+        $key = null;
+        $credentials = null;
+        try {
+            $key = new AgentKey($stateDir . '/agent-key.pem');
+            $credentials = new Credentials($stateDir . '/directory-credential.json', $key, (string) $c['server_public_key'], (int) $c['agent_id'], (int) $c['site_id'], (int) $c['client_id']);
+        } catch (\Throwable $ex) {
+            $say('The agent key is unusable (' . mb_substr($ex->getMessage(), 0, 200) . '): Active Directory checks are off until it is fixed (delete the file to create a new one, then set the password again).');
+        }
         if ($command === 'status') {
             $res = $http->post('/agent/v1/poll', ['hostname' => (string) gethostname(), 'version' => Runner::version(), 'running' => []]);
             $say('Agent #' . $c['agent_id'] . ' → ' . $c['server'] . ': ' . ($res['status'] === 200 ? 'connected' . (($res['data']['paused'] ?? false) ? ' (scanning paused)' : '') : 'HTTP ' . $res['status']));
+            // Compare with the fingerprint on the client's Agents page before typing a directory password.
+            $say('Agent key fingerprint: ' . ($key !== null ? AgentKey::fingerprint($key->publicKey()) : 'none (key unusable)'));
             exit($res['status'] === 200 ? 0 : 1);
         }
-        // The agent's own key pair (sealed passwords) and the directory password it holds, in the state folder (the only
-        // writable one: /var/lib/sentinel-agent; the config folder is read-only for the service).
-        $stateDir = dirname((string) ($c['state_file'] ?? dirname($configFile) . '/state.json'));
-        $key = new AgentKey($stateDir . '/agent-key.pem');
-        $credentials = new Credentials($stateDir . '/directory-credential.json', $key, (string) $c['server_public_key'], (int) $c['agent_id'], (int) $c['site_id'], (int) $c['client_id']);
         $runner = new Runner($http, new JobVerifier((string) $c['server_public_key'], (int) $c['agent_id'], (int) $c['site_id'], (int) $c['client_id']), new State((string) ($c['state_file'] ?? dirname($configFile) . '/state.json')),
             new NmapRunner((string) ($c['nmap_path'] ?? '/usr/bin/nmap')), new TlsChecker($connector), new HttpProbe($connector), $say,
             $testMode && is_string($c['testing']['arp_file'] ?? null) ? $c['testing']['arp_file'] : '/proc/net/arp', new ProtocolProbes($connector), $key, $credentials,

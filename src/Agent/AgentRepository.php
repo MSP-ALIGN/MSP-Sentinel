@@ -176,18 +176,37 @@ final class AgentRepository
         return $agent;
     }
 
-    /** Record that an agent checked in. */
     /**
-     * Record the agent's public key (base64 SPKI, P-256) when it is valid and new. Returns true when it replaced a
-     * different key (the agent was reinstalled or lost its key file: what was sealed to the old key is lost).
+     * Record the agent's public key (base64 SPKI, P-256). The first valid key is pinned; a different key later is only
+     * kept as pending (until an admin approves it: approveBoxKey). Returns 'pinned', 'pending' (newly pending) or ''.
+     *
+     * Why: whoever holds an agent's token (or can write the database) could otherwise swap in a key of their own, and
+     * the next password an admin types would be sealed to it.
      */
-    public function setBoxKey(int $agentId, string $current, string $key): bool
+    public function setBoxKey(int $agentId, string $current, string $pending, string $key): string
     {
-        if ($key === '' || $key === $current || strlen($key) > 255 || !self::validBoxKey($key)) {
+        if ($key === '' || $key === $current || $key === $pending || strlen($key) > 255 || !self::validBoxKey($key)) {
+            return '';
+        }
+        if ($current === '') {
+            $this->db->prepare("UPDATE agents SET box_public_key = :k, box_key_pending = '', box_key_pending_at = NULL WHERE id = :id")->execute(['k' => $key, 'id' => $agentId]);
+            return 'pinned';
+        }
+        $this->db->prepare('UPDATE agents SET box_key_pending = :k, box_key_pending_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['k' => $key, 'id' => $agentId]);
+        return 'pending';
+    }
+
+    /** An admin approves the agent's pending key (it must still be the one shown, by fingerprint). */
+    public function approveBoxKey(int $agentId, string $fingerprint): bool
+    {
+        $stmt = $this->db->prepare("SELECT box_key_pending FROM agents WHERE id = :id AND status = 'active' AND box_key_pending <> ''");
+        $stmt->execute(['id' => $agentId]);
+        $pending = (string) $stmt->fetchColumn();
+        if ($pending === '' || !hash_equals(\Sentinel\AgentClient\AgentKey::fingerprint($pending), $fingerprint)) {
             return false;
         }
-        $this->db->prepare('UPDATE agents SET box_public_key = :k WHERE id = :id')->execute(['k' => $key, 'id' => $agentId]);
-        return $current !== '';
+        $this->db->prepare("UPDATE agents SET box_public_key = box_key_pending, box_key_pending = '', box_key_pending_at = NULL WHERE id = :id")->execute(['id' => $agentId]);
+        return true;
     }
 
     /** Whether a string is a base64 SPKI P-256 public key (what browsers seal to). */
@@ -201,6 +220,7 @@ final class AgentRepository
         return $pub !== false && (openssl_pkey_get_details($pub)['ec']['curve_name'] ?? '') === 'prime256v1';
     }
 
+    /** Record that an agent checked in. */
     public function touch(int $agentId, string $ip, string $hostname, string $version): void
     {
         $this->db->prepare('UPDATE agents SET last_seen_at = UTC_TIMESTAMP(), last_ip = :ip, hostname = :h, version = :v WHERE id = :id')

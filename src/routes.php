@@ -99,6 +99,7 @@ $router->add('POST', '/clients/{id}/sites/{site}/internal-authorisations', [Agen
 $router->add('POST', '/clients/{id}/internal-authorisations/{auth}/revoke', [AgentController::class, 'revokeAuthorisation'], $admin);
 $router->add('POST', '/clients/{id}/sites/{site}/enrol', [AgentController::class, 'enrol'], $admin);
 $router->add('POST', '/clients/{id}/agents/{agent}/revoke', [AgentController::class, 'revokeAgent'], $admin);
+$router->add('POST', '/clients/{id}/agents/{agent}/approve-key', [AgentController::class, 'approveKey'], $admin);
 $router->add('POST', '/clients/{id}/sites/{site}/pause', [AgentController::class, 'pause'], $technician);
 $router->add('POST', '/clients/{id}/sites/{site}/resume', [AgentController::class, 'resume'], $admin);
 $router->add('POST', '/clients/{id}/sites/{site}/scan', [AgentController::class, 'scan'], $admin);

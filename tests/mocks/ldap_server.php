@@ -15,7 +15,8 @@ declare(strict_types=1);
  * Every bind is logged as JSON: the bind name, the port mode and a SHA-256 of the password (never the password), so
  * tests can prove the real password went only over LDAPS and only after the certificate was trusted.
  *
- * Times in the fixture can be written "@days:N" (N days ago, as a Windows FILETIME), so the data never ages.
+ * Times in the fixture can be written "@days:N" (N days ago, as a Windows FILETIME), so the data never ages; SIDs as
+ * "@sid:S-1-5-21-..." (stored binary, as AD does).
  * Made-up data only.
  */
 
@@ -30,12 +31,21 @@ if (PHP_SAPI !== 'cli' || $argc < 6) {
 [$script, $port, $mode, $pem, $fixtureFile, $log] = $argv;
 $fixture = json_decode((string) file_get_contents($fixtureFile), true);
 $filetime = static fn (int $unix): string => (string) (($unix + 11644473600) * 10000000);
+// "S-1-5-21-a-b-c[-rid]" as the binary SID AD stores (objectSid).
+$sid = static function (string $text): string {
+    $p = explode('-', $text);
+    $subs = array_slice($p, 3);
+    return chr((int) $p[1]) . chr(count($subs)) . substr(pack('J', (int) $p[2]), 2) . implode('', array_map(static fn (string $s): string => pack('V', (int) $s), $subs));
+};
 $entries = [];
 foreach ($fixture['entries'] as $e) {
     $attrs = [];
     foreach ($e['attrs'] as $k => $vals) {
-        $attrs[strtolower($k)] = ['name' => $k, 'values' => array_map(static fn ($v): string => is_string($v) && str_starts_with($v, '@days:')
-            ? $filetime(time() - (int) substr($v, 6) * 86400) : (string) $v, (array) $vals)];
+        $attrs[strtolower($k)] = ['name' => $k, 'values' => array_map(static fn ($v): string => match (true) {
+            is_string($v) && str_starts_with($v, '@days:') => $filetime(time() - (int) substr($v, 6) * 86400),
+            is_string($v) && str_starts_with($v, '@sid:') => $sid(substr($v, 5)),
+            default => (string) $v,
+        }, (array) $vals)];
     }
     $entries[] = ['dn' => $e['dn'], 'attrs' => $attrs];
 }

@@ -41,6 +41,8 @@ final class AgentService
     public const FULL_DAYS = 7;
     /** Seconds a full scan listens for LLMNR/NetBIOS name requests. */
     public const LISTEN_SECONDS = 120;
+    /** Quiet listens in a row before devices heard earlier no longer count. */
+    public const QUIET_LISTENS = 3;
     public const LIGHT_HOURS = 20;
     public const JOB_HOURS = 12;
     public const MAX_HOSTS = 20000;
@@ -321,7 +323,11 @@ final class AgentService
         $previous = json_decode((string) ($site['results'] ?? ''), true);
         $results = is_array($previous) ? $previous : null;
         if ($bind === 'ok' && is_array($d['checks'] ?? null)) {
+            $earlierSigning = $results['signing_required'] ?? null;
             $results = self::directoryChecks($d['checks']);
+            if ($signing === null && is_bool($earlierSigning)) {
+                $results['signing_required'] = $earlierSigning; // an undecided probe is no evidence either way
+            }
         }
         if ($signing !== null) {
             $results = ($results ?? []) + ['signing_required' => $signing];
@@ -365,7 +371,9 @@ final class AgentService
 
     /**
      * Save what the agent heard while listening for name requests (only addresses inside the signed ranges). A protocol
-     * the agent couldn't listen to doesn't count as quiet: with neither, nothing changes.
+     * the agent couldn't listen to doesn't count as quiet: with neither, nothing changes. Devices only send these
+     * requests now and then, so a site where devices were heard counts as quiet only after QUIET_LISTENS quiet
+     * listens in a row (the finding doesn't flap with each weekly scan).
      *
      * @param list<string> $ranges
      */
@@ -383,7 +391,17 @@ final class AgentService
             $sources[] = ['ip' => $ip, 'protocols' => array_values(array_intersect(['llmnr', 'nbns'], (array) ($s['protocols'] ?? []))),
                           'names' => array_slice(array_values(array_filter(array_map(static fn ($x): string => InventoryRepository::clean($x, 64), (array) ($s['names'] ?? [])))), 0, 10)];
         }
-        $saved = ['seconds' => is_int($n['seconds'] ?? null) ? max(0, min(600, $n['seconds'])) : 0, 'llmnr' => ($n['llmnr'] ?? false) === true, 'nbns' => ($n['nbns'] ?? false) === true, 'sources' => $sources];
+        $saved = ['seconds' => is_int($n['seconds'] ?? null) ? max(0, min(600, $n['seconds'])) : 0, 'llmnr' => ($n['llmnr'] ?? false) === true, 'nbns' => ($n['nbns'] ?? false) === true, 'sources' => $sources, 'quiet_runs' => 0];
+        if ($sources === []) {
+            $prev = $this->db->prepare('SELECT llmnr_results FROM sites WHERE id = :s');
+            $prev->execute(['s' => $siteId]);
+            $before = json_decode((string) $prev->fetchColumn(), true);
+            $quiet = (int) ($before['quiet_runs'] ?? 0) + 1;
+            if (is_array($before) && ($before['sources'] ?? []) !== [] && $quiet < self::QUIET_LISTENS) {
+                $saved['sources'] = $before['sources']; // not yet: keep what was heard before
+                $saved['quiet_runs'] = $quiet;
+            }
+        }
         $this->db->prepare('UPDATE sites SET llmnr_results = :r, llmnr_checked_at = UTC_TIMESTAMP() WHERE id = :s')
             ->execute(['r' => json_encode($saved, JSON_UNESCAPED_SLASHES), 's' => $siteId]);
     }

@@ -67,6 +67,7 @@ final class NameListener
             $out[$proto] = true;
         }
         $seen = [];
+        $own = self::ownAddresses();
         $start = microtime(true);
         while ($sockets !== [] && microtime(true) - $start < $seconds && !$stop()) {
             $read = array_values($sockets);
@@ -85,7 +86,7 @@ final class NameListener
                 if ($from === '127.0.0.1' && $this->loopbackAs !== '') {
                     $from = $this->loopbackAs;
                 }
-                if (filter_var($from, FILTER_VALIDATE_IP) === false || !$accept($from)) {
+                if (filter_var($from, FILTER_VALIDATE_IP) === false || isset($own[$from]) || !$accept($from)) { // never the appliance itself
                     continue;
                 }
                 $name = $proto === 'llmnr' ? self::llmnrName($buf) : self::nbnsName($buf);
@@ -134,16 +135,21 @@ final class NameListener
         return self::clean(implode('.', $labels));
     }
 
-    /** The NetBIOS name asked for in a name-service query, '' when unreadable, null when it isn't a name query. */
+    /**
+     * The NetBIOS name asked for in a broadcast name query, '' when unreadable, null when it isn't one. Only broadcast
+     * (B flag) queries for a name (QTYPE NB, 0x20) count: that is the fallback a poisoning tool answers. Node-status
+     * queries (NBSTAT, 0x21) that inventory tools and RMMs send to every address are not.
+     */
     public static function nbnsName(string $p): ?string
     {
-        if (strlen($p) < 46) {
+        if (strlen($p) < 50) {
             return null;
         }
         $flags = unpack('n', substr($p, 2, 2))[1];
         $qd = unpack('n', substr($p, 4, 2))[1];
-        if (($flags & 0x8000) !== 0 || (($flags >> 11) & 0xF) !== 0 || $qd < 1 || ord($p[12]) !== 32) {
-            return null; // a response, a registration or release (not a query), or not a NetBIOS name
+        if (($flags & 0x8000) !== 0 || (($flags >> 11) & 0xF) !== 0 || ($flags & 0x0010) === 0 || $qd < 1 || ord($p[12]) !== 32 || ord($p[45]) !== 0
+            || unpack('n', substr($p, 46, 2))[1] !== 0x0020) {
+            return null; // a response, registration or release, not broadcast, not a NetBIOS name, or not a name query
         }
         $enc = substr($p, 13, 32);
         $name = '';
@@ -156,6 +162,20 @@ final class NameListener
             $name .= chr(($hi << 4) | $lo);
         }
         return self::clean(rtrim($name));
+    }
+
+    /** The appliance's own addresses (its own name lookups could otherwise be heard and reported). @return array<string,true> */
+    private static function ownAddresses(): array
+    {
+        $out = [];
+        foreach (function_exists('net_get_interfaces') ? (net_get_interfaces() ?: []) : [] as $if) {
+            foreach ((array) ($if['unicast'] ?? []) as $u) {
+                if (is_string($u['address'] ?? null) && filter_var($u['address'], FILTER_VALIDATE_IP) !== false) {
+                    $out[$u['address']] = true;
+                }
+            }
+        }
+        return $out;
     }
 
     private static function clean(string $s): string

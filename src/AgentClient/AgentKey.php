@@ -41,10 +41,13 @@ final class AgentKey
             throw new \RuntimeException('Could not create the agent key.');
         }
         $old = umask(0077);
-        file_put_contents($file . '.tmp', $pem);
+        $written = file_put_contents($file . '.tmp', $pem);
         umask($old);
-        chmod($file . '.tmp', 0600);
-        rename($file . '.tmp', $file);
+        // A full disk must never leave an empty key in place (the agent would be unable to start next time).
+        if ($written !== strlen($pem) || !chmod($file . '.tmp', 0600) || !rename($file . '.tmp', $file)) {
+            @unlink($file . '.tmp');
+            throw new \RuntimeException('Could not save the agent key: ' . $file);
+        }
         $this->private = $key;
     }
 
@@ -53,6 +56,13 @@ final class AgentKey
     {
         $pem = (string) (openssl_pkey_get_details($this->private)['key'] ?? '');
         return (string) preg_replace('/-----[^-]+-----|\s+/', '', $pem);
+    }
+
+    /** A short fingerprint of a public key (SPKI base64): the first 16 bytes of its SHA-256, grouped, for comparing by eye. */
+    public static function fingerprint(string $publicKey): string
+    {
+        $der = base64_decode($publicKey, true);
+        return $der === false || $der === '' ? '' : implode(':', str_split(strtoupper(substr(hash('sha256', $der), 0, 32)), 4));
     }
 
     /** The binding (AAD) of a directory password box. Must match what the browser used (agent-seal.js callers). */

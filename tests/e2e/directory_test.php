@@ -88,7 +88,7 @@ $submitDirectory = static function (TestContext $ctx, \Sentinel\Tests\HttpClient
     $aadPrefix = html_entity_decode($aad[1] ?? '', ENT_QUOTES | ENT_HTML5);
     $sealed = $password === null ? '' : $seal($ctx, html_entity_decode($key[1] ?? '', ENT_QUOTES | ENT_HTML5), $aadPrefix . trim($fields['username']), $password);
     return $admin->submit('/clients/' . $cid . '/agents', '/clients/' . $cid . '/sites/' . $site . '/directory',
-        $fields + ['sealed' => $sealed, 'nonce' => $nonce[1] ?? '', 'agent_id' => $agentId[1] ?? '']);
+        $fields + ['sealed' => $sealed, 'nonce' => $nonce[1] ?? '', 'agent_id' => $agentId[1] ?? '', 'seal_js' => '1']);
 };
 $scan = static function (TestContext $ctx, int $cid, int $site) use ($runDirAgent): string {
     $ctx->login('admin', 'Admin-Pass-0001!')->submit('/clients/' . $cid, '/clients/' . $cid . '/sites/' . $site . '/scan', ['reason' => 'Directory test']);
@@ -112,6 +112,10 @@ return [
         Assert::contains('data-agent-key="' . $agent['box_public_key'] . '"', $page);
         Assert::notContains('name="password"', $page, 'the password field has no name: the browser never sends it');
         Assert::contains('js/agent-seal.js', $page);
+        $fp = AgentKey::fingerprint((string) $agent['box_public_key']);
+        Assert::contains($fp, $page, 'the agent key fingerprint is shown');
+        [$code, $statusOut] = $ctx->cli('bin/sentinel-agent.php', ['status', '--config', $dirAgent($ctx) . '/agent.json']);
+        Assert::contains('Agent key fingerprint: ' . $fp, $statusOut, 'and printed by the agent, to compare');
 
         // Validation and roles.
         $fields = ['domain' => 'corp.example', 'dc_ip' => '10.90.0.5', 'username' => 'svc-sentinel@corp.example'];
@@ -130,6 +134,10 @@ return [
         Assert::contains('could not be sent sealed', $ctx->clientSection($admin, $cid, 'agents'));
         Assert::same(0, (int) $ctx->db->query('SELECT COUNT(*) FROM agent_secret_drops')->fetchColumn());
 
+        // The page's script didn't run (blocked): nothing is saved, and the page says why (not "saved").
+        $admin->submit('/clients/' . $cid . '/agents', '/clients/' . $cid . '/sites/' . $site . '/directory', $fields + ['sealed' => '', 'nonce' => str_repeat('a', 32), 'agent_id' => (string) $agent['id']]);
+        Assert::contains('script did not run', $ctx->clientSection($admin, $cid, 'agents'));
+        Assert::same(null, App::directory()->find($site));
         // The real thing: sealed with agent-seal.js, relayed, collected.
         $submitDirectory($ctx, $admin, $cid, $site, $fields, DIR_PASSWORD);
         $row = App::directory()->find($site);
@@ -149,6 +157,24 @@ return [
         $held = (string) file_get_contents($dirAgent($ctx) . '/directory-credential.json');
         Assert::notContains(DIR_PASSWORD, $held, 'kept sealed on the agent too');
         Assert::contains('held by the agent (sealed)', $ctx->clientSection($admin, $cid, 'agents'));
+        // A lost confirmation: the same drop arrives again and is confirmed again (not "replay"), nothing changes.
+        $agentObj = $ctx->db->query("SELECT * FROM agents WHERE id = {$agent['id']}")->fetch();
+        $nonce = bin2hex(random_bytes(16));
+        $held = json_decode((string) file_get_contents($dirAgent($ctx) . '/directory-credential.json'), true);
+        $ctx->db->prepare("INSERT INTO agent_secret_drops (id, agent_id, site_id, nonce, username, sealed, created_at, expires_at) VALUES (:id, :a, :s, :n, :u, :b, UTC_TIMESTAMP(), UTC_TIMESTAMP() + INTERVAL 1 HOUR)")
+            ->execute(['id' => $held['drop_id'], 'a' => $agentObj['id'], 's' => $site, 'n' => $held['nonce'], 'u' => $held['username'], 'b' => $held['sealed']]);
+        $ctx->db->exec("UPDATE site_directory SET cred_state = 'waiting' WHERE site_id = {$site}");
+        [$code, $out] = $runDirAgent($ctx);
+        Assert::contains('received and kept', $out);
+        Assert::same('held', App::directory()->find($site)['cred_state'], 'a re-sent drop is confirmed again');
+        // An old box re-sent under a new drop ID (e.g. restored from a backup) is refused by its one-off number.
+        $ctx->db->prepare("INSERT INTO agent_secret_drops (agent_id, site_id, nonce, username, sealed, created_at, expires_at) VALUES (:a, :s, :n, :u, :b, UTC_TIMESTAMP(), UTC_TIMESTAMP() + INTERVAL 1 HOUR)")
+            ->execute(['a' => $agentObj['id'], 's' => $site, 'n' => $held['nonce'], 'u' => $held['username'], 'b' => $held['sealed']]);
+        [$code, $out] = $runDirAgent($ctx);
+        Assert::contains('already used once', $out);
+        $ctx->db->exec("UPDATE site_directory SET cred_state = 'held', cred_error = '' WHERE site_id = {$site}");
+        Assert::same(DIR_PASSWORD, (new \Sentinel\AgentClient\Credentials($dirAgent($ctx) . '/directory-credential.json', new AgentKey($dirAgent($ctx) . '/agent-key.pem'),
+            '', (int) $agentObj['id'], $site, $cid))->password(), 'the held password still opens');
     },
     'directory: no sign-in before the certificate is trusted; then the directory read becomes findings with guidance' => function (TestContext $ctx) use ($dirSetup, $scan, $binds): void {
         [$cid, $site] = $dirSetup($ctx);
@@ -197,7 +223,7 @@ return [
         Assert::contains('WS02', $f('laps_missing')['detail']);
         Assert::notContains('WS-OLD', $f('laps_missing')['detail'], 'computers not in use are left out');
         Assert::contains('1200 days', $f('krbtgt_old')['title']);
-        Assert::contains('Too many Domain Admins (6)', $f('domain_admins')['title']);
+        Assert::contains('Too many Domain Admins (7)', $f('domain_admins')['title']);
         Assert::contains('Kerberos preauthentication', \Sentinel\Reports\Guidance::for($f('asrep'))['fix'], 'how to fix it (reports and ITFlow tickets)');
         Assert::contains('jexample', $admin->get('/findings/' . (int) $f('asrep')['id'])->body, 'shown on the finding page');
         Assert::contains('Active Directory', $admin->get('/findings?type=directory')->body);
@@ -244,9 +270,18 @@ return [
         Assert::contains('Directory password refused', $out);
         Assert::same('failed', App::directory()->find($site)['cred_state']);
         Assert::contains('does not open with this agent', $ctx->clientSection($admin, $cid, 'agents'));
-        // Turning it off: settings deleted, and the agent deletes its password at the next check-in.
+        // A changed account whose new password never arrives: the agent deletes the old account's password.
+        $submitDirectory($ctx, $admin, $cid, $site, ['username' => 'CORP\\svc-other'] + $fields, null);
+        Assert::same('none', App::directory()->find($site)['cred_state']);
+        [$code, $out] = $runDirAgent($ctx);
+        Assert::contains('Directory password deleted', $out, 'the password for the previous account is not kept');
+        $submitDirectory($ctx, $admin, $cid, $site, $fields, DIR_PASSWORD);
+        $runDirAgent($ctx);
+        Assert::same('held', App::directory()->find($site)['cred_state']);
+        // Turning it off: settings deleted, its findings close at once, and the agent deletes its password.
         $admin->submit('/clients/' . $cid . '/agents', '/clients/' . $cid . '/sites/' . $site . '/directory/remove', []);
         Assert::same(null, App::directory()->find($site));
+        Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM findings WHERE client_id = {$cid} AND finding_key LIKE 'ad:{$site}:%' AND status = 'open'")->fetchColumn(), 'closed straight away');
         [$code, $out] = $runDirAgent($ctx);
         Assert::contains('Directory password deleted', $out);
         Assert::notContains('sealed', (string) file_get_contents($dirAgent($ctx) . '/directory-credential.json'));
@@ -257,6 +292,35 @@ return [
         foreach (['site.directory_updated', 'site.directory_certificate_trusted', 'site.directory_removed', 'agent.directory_password_received', 'agent.directory_password_refused'] as $a) {
             Assert::contains($a, $audit);
         }
+    },
+    'directory: a changed agent key is pinned until an admin approves it; nothing is sealed to it before' => function (TestContext $ctx) use ($dirSetup, $dirAgent, $runDirAgent): void {
+        [$cid, $site] = $dirSetup($ctx);
+        $agent = $ctx->db->query("SELECT * FROM agents WHERE site_id = {$site} AND status = 'active'")->fetch();
+        $config = json_decode((string) file_get_contents($dirAgent($ctx) . '/agent.json'), true);
+        // Someone with the agent's token reports a key of their own.
+        $other = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'prime256v1']);
+        $otherKey = (string) preg_replace('/-----[^-]+-----|\s+/', '', (string) openssl_pkey_get_details($other)['key']);
+        $poll = static fn (string $key): int => (int) substr((string) (@get_headers($ctx->baseUrl . '/agent/v1/poll', false, stream_context_create(['http' => [
+            'method' => 'POST', 'header' => "Authorization: Bearer {$config['token']}\r\nContent-Type: application/json\r\n", 'content' => json_encode(['box_public_key' => $key]), 'ignore_errors' => true]]))[0] ?? ''), 9, 3);
+        Assert::same(200, $poll($otherKey));
+        $row = $ctx->db->query("SELECT box_public_key, box_key_pending FROM agents WHERE id = {$agent['id']}")->fetch();
+        Assert::same([$agent['box_public_key'], $otherKey], [$row['box_public_key'], $row['box_key_pending']], 'the pinned key stays; the new one waits');
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $page = $ctx->clientSection($admin, $cid, 'agents');
+        Assert::contains('reported a NEW key ' . AgentKey::fingerprint($otherKey), $page);
+        Assert::notContains('data-agent-seal', $page, 'no password form while a key change waits');
+        Assert::contains('agent.key_change_pending', implode("\n", $ctx->db->query('SELECT action FROM audit_log')->fetchAll(PDO::FETCH_COLUMN)));
+        // A wrong fingerprint isn't approved.
+        $admin->submit('/clients/' . $cid . '/agents', '/clients/' . $cid . '/agents/' . $agent['id'] . '/approve-key', ['fingerprint' => AgentKey::fingerprint((string) $agent['box_public_key'])]);
+        Assert::same($agent['box_public_key'], $ctx->db->query("SELECT box_public_key FROM agents WHERE id = {$agent['id']}")->fetchColumn());
+        // The real agent's own pinned key keeps working; approving the agent's real key again (the reinstall case).
+        $ctx->db->exec("UPDATE agents SET box_key_pending = '' WHERE id = {$agent['id']}");
+        $ctx->db->exec("UPDATE agents SET box_public_key = " . $ctx->db->quote($otherKey) . " WHERE id = {$agent['id']}"); // as if reinstalled earlier
+        $runDirAgent($ctx);
+        Assert::same($agent['box_public_key'], $ctx->db->query("SELECT box_key_pending FROM agents WHERE id = {$agent['id']}")->fetchColumn(), 'the agent\'s key waits for approval');
+        $admin->submit('/clients/' . $cid . '/agents', '/clients/' . $cid . '/agents/' . $agent['id'] . '/approve-key', ['fingerprint' => AgentKey::fingerprint((string) $agent['box_public_key'])]);
+        Assert::same([$agent['box_public_key'], ''], array_values($ctx->db->query("SELECT box_public_key, box_key_pending FROM agents WHERE id = {$agent['id']}")->fetch(PDO::FETCH_NUM)));
+        Assert::contains('data-agent-seal', $ctx->clientSection($admin, $cid, 'agents'), 'the form is back');
     },
     'directory: devices sending LLMNR/NetBIOS name requests are heard (never answered) and become a finding' => function (TestContext $ctx) use ($dirSetup, $runDirAgent, $dirAgent): void {
         [$cid, $site] = $dirSetup($ctx);
@@ -270,10 +334,17 @@ return [
         }
         $nbns = pack('nnnnnn', 0x5678, 0x0110, 1, 0, 0, 0) . "\x20" . $nb . "\x00" . pack('nn', 0x20, 1);
         $answer = pack('nnnnnn', 0x1234, 0x8000, 1, 1, 0, 0) . "\x08ignoreme\x00" . pack('nn', 1, 1); // a response: not counted
+        // A node-status (NBSTAT) query for "*", as inventory tools send to every address: not counted either.
+        $star = '';
+        foreach (str_split('*' . str_repeat("\x00", 15)) as $ch) {
+            $star .= chr(0x41 + (ord($ch) >> 4)) . chr(0x41 + (ord($ch) & 0x0F));
+        }
+        $nbstat = pack('nnnnnn', 0x9abc, 0x0000, 1, 0, 0, 0) . "\x20" . $star . "\x00" . pack('nn', 0x21, 1);
         $script = '$end = microtime(true) + 25; $s = socket_create(AF_INET, SOCK_DGRAM, SOL_UDP); while (microtime(true) < $end) { '
             . 'socket_sendto($s, base64_decode("' . base64_encode($llmnr) . '"), ' . strlen($llmnr) . ', 0, "127.0.0.1", ' . (int) $ports['llmnr_port'] . '); '
             . 'socket_sendto($s, base64_decode("' . base64_encode($nbns) . '"), ' . strlen($nbns) . ', 0, "127.0.0.1", ' . (int) $ports['nbns_port'] . '); '
-            . 'socket_sendto($s, base64_decode("' . base64_encode($answer) . '"), ' . strlen($answer) . ', 0, "127.0.0.1", ' . (int) $ports['llmnr_port'] . '); usleep(200000); }';
+            . 'socket_sendto($s, base64_decode("' . base64_encode($answer) . '"), ' . strlen($answer) . ', 0, "127.0.0.1", ' . (int) $ports['llmnr_port'] . '); '
+            . 'socket_sendto($s, base64_decode("' . base64_encode($nbstat) . '"), ' . strlen($nbstat) . ', 0, "127.0.0.1", ' . (int) $ports['nbns_port'] . '); usleep(200000); }';
         $sender = proc_open([PHP_BINARY, '-r', $script], [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes);
         try {
             $ctx->login('admin', 'Admin-Pass-0001!')->submit('/clients/' . $cid, '/clients/' . $cid . '/sites/' . $site . '/scan', ['reason' => 'Listen test']);
@@ -285,12 +356,32 @@ return [
         $heard = json_decode((string) $ctx->db->query("SELECT llmnr_results FROM sites WHERE id = {$site}")->fetchColumn(), true);
         Assert::same(['10.90.0.30'], array_column($heard['sources'], 'ip'), 'only the in-scope source');
         Assert::same(['llmnr', 'nbns'], $heard['sources'][0]['protocols']);
-        Assert::same(['fileserv', 'PRINTSRV'], $heard['sources'][0]['names']);
+        Assert::same(['fileserv', 'PRINTSRV'], $heard['sources'][0]['names'], 'not the node-status query, not the response');
         $f = $ctx->db->query("SELECT * FROM findings WHERE client_id = {$cid} AND finding_key = 'names:{$site}:name_poisoning' AND status = 'open'")->fetch();
         Assert::true($f !== false, 'name poisoning finding');
         Assert::same('fail', $f['severity']);
         Assert::contains('10.90.0.30', $f['detail']);
         Assert::contains('LLMNR / NetBIOS', $f['detail']);
         Assert::contains('Turn off multicast name resolution', \Sentinel\Reports\Guidance::for($f)['fix'], 'how to fix it');
+    },
+    'directory: a quiet listen keeps devices heard earlier (no flapping); a revoked agent deletes its password' => function (TestContext $ctx) use ($dirSetup, $runDirAgent, $dirAgent, $submitDirectory): void {
+        [$cid, $site] = $dirSetup($ctx);
+        $ctx->login('admin', 'Admin-Pass-0001!')->submit('/clients/' . $cid, '/clients/' . $cid . '/sites/' . $site . '/scan', ['reason' => 'Quiet listen']);
+        $runDirAgent($ctx);
+        $heard = json_decode((string) $ctx->db->query("SELECT llmnr_results FROM sites WHERE id = {$site}")->fetchColumn(), true);
+        Assert::same(['10.90.0.30'], array_column($heard['sources'], 'ip'), 'one quiet listen: still counted');
+        Assert::same(1, $heard['quiet_runs']);
+        Assert::same(1, (int) $ctx->db->query("SELECT COUNT(*) FROM findings WHERE client_id = {$cid} AND finding_key = 'names:{$site}:name_poisoning' AND status = 'open'")->fetchColumn());
+        // Revoked: the agent wipes its sealed password before it stops.
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $submitDirectory($ctx, $admin, $cid, $site, ['domain' => 'corp.example', 'dc_ip' => '10.90.0.5', 'username' => 'svc-sentinel@corp.example'], DIR_PASSWORD);
+        $runDirAgent($ctx);
+        Assert::contains('sealed', (string) file_get_contents($dirAgent($ctx) . '/directory-credential.json'));
+        $agentId = (int) $ctx->db->query("SELECT id FROM agents WHERE site_id = {$site} AND status = 'active'")->fetchColumn();
+        $admin->submit('/clients/' . $cid . '/agents', '/clients/' . $cid . '/agents/' . $agentId . '/revoke', []);
+        [$code, $out] = $runDirAgent($ctx);
+        Assert::same(3, $code, 'stops (revoked)');
+        Assert::contains('Deleting the directory password', $out);
+        Assert::notContains('sealed', (string) file_get_contents($dirAgent($ctx) . '/directory-credential.json'));
     },
 ];

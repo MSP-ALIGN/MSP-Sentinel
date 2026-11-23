@@ -57,7 +57,13 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                 <?php if ($s['agents'] === []): ?><tr><td colspan="5" class="text-body-secondary"><?= e(__('No agent enrolled yet.')) ?></td></tr><?php endif; ?>
                 <?php foreach ($s['agents'] as $a): $online = $a['last_seen_at'] !== null && strtotime($a['last_seen_at'] . ' UTC') > time() - 600; ?>
                 <tr>
-                    <td><?= e($a['name']) ?><div class="text-body-secondary"><?= e($a['last_ip']) ?></div></td>
+                    <td><?= e($a['name']) ?><div class="text-body-secondary"><?= e($a['last_ip']) ?></div>
+                        <?php if ($a['status'] === 'active' && (string) $a['box_public_key'] !== ''): ?><div class="text-body-secondary small"><?= e(__('Key')) ?> <span class="font-monospace"><?= e(\Sentinel\AgentClient\AgentKey::fingerprint((string) $a['box_public_key'])) ?></span></div><?php endif; ?>
+                        <?php if ($a['status'] === 'active' && (string) ($a['box_key_pending'] ?? '') !== ''): $pfp = \Sentinel\AgentClient\AgentKey::fingerprint((string) $a['box_key_pending']); ?>
+                        <div class="alert alert-warning small py-1 px-2 mt-1 mb-0"><?= e(__('The agent reported a NEW key {fp} ({t} UTC). Passwords are not sealed to it until an admin approves it. Approve only if the agent was reinstalled and its status command shows this fingerprint.', ['fp' => $pfp, 't' => $a['box_key_pending_at']])) ?>
+                            <?php if ($isAdmin): ?><form method="post" action="<?= e(url('/clients/' . $cid . '/agents/' . (int) $a['id'] . '/approve-key')) ?>" class="mt-1" data-confirm="<?= e(__('Approve this new agent key? Compare the fingerprint with the agent\'s status output first.')) ?>"><?= Csrf::field() ?>
+                                <input type="hidden" name="fingerprint" value="<?= e($pfp) ?>"><button class="btn btn-sm btn-outline-warning" type="submit"><?= e(__('Approve new key')) ?></button></form><?php endif; ?></div>
+                        <?php endif; ?></td>
                     <td class="font-monospace"><?= e($a['version'] ?: '?') ?></td>
                     <td><?= e((string) ($a['last_seen_at'] ?? '-')) ?></td>
                     <td><?php if ($a['status'] === 'revoked'): ?><span class="badge text-bg-secondary"><?= e(__('Revoked')) ?></span>
@@ -126,14 +132,18 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                 <details><summary class="small"><?= e($dir === null ? __('Set up Active Directory checks') : __('Change settings or replace the password')) ?></summary>
                 <?php if ($siteAgent === null): ?>
                     <p class="small text-body-secondary mt-2"><?= e(__('Enrol an agent for this site first: the password is sealed for that agent.')) ?></p>
+                <?php elseif ((string) ($siteAgent['box_key_pending'] ?? '') !== ''): ?>
+                    <p class="small text-warning mt-2"><?= e(__('The agent reported a new key. Approve it (above) before setting a password: nothing is sealed to an unapproved key.')) ?></p>
                 <?php else: $nonce = bin2hex(random_bytes(16)); ?>
                 <form method="post" action="<?= e(url('/clients/' . $cid . '/sites/' . $sid . '/directory')) ?>" class="row g-2 mt-1 small" autocomplete="off"
                       data-agent-seal data-agent-key="<?= e((string) $siteAgent['box_public_key']) ?>"
                       data-aad-prefix="<?= e(\Sentinel\AgentClient\AgentKey::directoryAad((int) $siteAgent['id'], $nonce, '')) ?>"
                       data-insecure-text="<?= e(__('Passwords can only be sealed on an HTTPS page. Open Sentinel through its https:// address to set or replace the password.')) ?>"
                       data-missing-text="<?= e(__('Enter the account name too.')) ?>"
-                      data-failed-text="<?= e(__('The password could not be sealed in your browser. Nothing was sent.')) ?>"><?= Csrf::field() ?>
+                      data-failed-text="<?= e(__('The password could not be sealed in your browser. Nothing was sent.')) ?>"
+                      data-nokey-text="<?= e(__('This agent is too old to receive passwords: upgrade it first.')) ?>"><?= Csrf::field() ?>
                     <input type="hidden" name="sealed" value=""><input type="hidden" name="nonce" value="<?= e($nonce) ?>"><input type="hidden" name="agent_id" value="<?= (int) $siteAgent['id'] ?>">
+                    <input type="hidden" name="seal_js" value="0">
                     <div class="col-md-4"><label class="form-label" for="dir-domain-<?= $sid ?>"><?= e(__('Domain')) ?></label>
                         <input class="form-control form-control-sm" id="dir-domain-<?= $sid ?>" name="domain" maxlength="253" required placeholder="corp.example" value="<?= e($dir['domain'] ?? '') ?>"></div>
                     <div class="col-md-3"><label class="form-label" for="dir-dc-<?= $sid ?>"><?= e(__('Domain controller IP')) ?></label>
@@ -142,7 +152,8 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                         <input class="form-control form-control-sm font-monospace" id="dir-user-<?= $sid ?>" name="username" maxlength="256" required placeholder="svc-sentinel@corp.example" value="<?= e($dir['username'] ?? '') ?>"></div>
                     <div class="col-md-7"><label class="form-label" for="dir-pass-<?= $sid ?>"><?= e($dir !== null && $dir['cred_state'] !== 'none' ? __('New password (leave empty to keep the current one)') : __('Password')) ?></label>
                         <input class="form-control form-control-sm" id="dir-pass-<?= $sid ?>" type="password" data-seal-password autocomplete="new-password">
-                        <div class="form-text"><?= e(__('Sealed in your browser for this site\'s agent before it is sent. Sentinel only relays it and cannot read it; the agent keeps it sealed on the appliance.')) ?></div></div>
+                        <div class="form-text"><?= e(__('Sealed in your browser for this site\'s agent before it is sent. Sentinel only relays it and cannot read it; the agent keeps it sealed on the appliance.')) ?>
+                            <?php if ((string) $siteAgent['box_public_key'] !== ''): ?><?= e(__('Agent key {fp}: it should match the agent\'s status output.', ['fp' => \Sentinel\AgentClient\AgentKey::fingerprint((string) $siteAgent['box_public_key'])])) ?><?php endif; ?></div></div>
                     <div class="col-md-5 d-flex align-items-end gap-2">
                         <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-lock me-1" aria-hidden="true"></i><?= e(__('Save')) ?></button></div>
                     <div class="col-12"><div class="alert alert-warning py-1 px-2 mb-0 d-none" data-seal-note role="status"></div></div>

@@ -103,9 +103,11 @@ final class AgentKernel
     {
         $body = self::body(65536) ?? [];
         App::agents()->touch((int) $agent['id'], $request->ip(), self::short($body['hostname'] ?? $agent['hostname'], 255), self::short($body['version'] ?? $agent['version'], 20));
-        if (is_string($body['box_public_key'] ?? null) && App::agents()->setBoxKey((int) $agent['id'], (string) $agent['box_public_key'], $body['box_public_key'])) {
-            App::directory()->agentKeyChanged((int) $agent['id']);
-            App::audit()->log('agent.key_changed', null, null, 'agent', (int) $agent['id'], ['client_id' => (int) $agent['client_id']], $request->ip());
+        if (is_string($body['box_public_key'] ?? null)
+            && App::agents()->setBoxKey((int) $agent['id'], (string) $agent['box_public_key'], (string) $agent['box_key_pending'], $body['box_public_key']) === 'pending') {
+            // Not used until an admin approves it on the Agents page (compare the fingerprint with the agent's status).
+            App::audit()->log('agent.key_change_pending', null, null, 'agent', (int) $agent['id'], ['client_id' => (int) $agent['client_id'],
+                'fingerprint' => \Sentinel\AgentClient\AgentKey::fingerprint($body['box_public_key'])], $request->ip());
         }
         $paused = (int) $agent['is_archived'] === 1 || (int) $agent['client_paused'] === 1 || (int) $agent['site_paused'] === 1 || App::scope()->globallyPaused();
         $running = array_values(array_filter((array) ($body['running'] ?? []), static fn ($id): bool => is_int($id) && $id > 0));
@@ -135,7 +137,7 @@ final class AgentKernel
             }
         }
         return ApiKernel::json(['jobs' => $jobs, 'stop' => array_values(array_unique($stop)), 'paused' => $paused, 'poll_seconds' => self::POLL_SECONDS]
-            + self::secrets($agent, ($body['holds_directory'] ?? false) === true));
+            + self::secrets($agent, ($body['holds_directory'] ?? false) === true, is_string($body['directory_username'] ?? null) ? $body['directory_username'] : null));
     }
 
     /**
@@ -174,7 +176,7 @@ final class AgentKernel
      * @param array<string,mixed> $agent
      * @return array<string,mixed>
      */
-    private static function secrets(array $agent, bool $holds): array
+    private static function secrets(array $agent, bool $holds, ?string $heldUser): array
     {
         $out = [];
         $signer = App::agentSigner();
@@ -184,7 +186,7 @@ final class AgentKernel
                 'nonce' => (string) $d['nonce'], 'username' => (string) $d['username'], 'sealed' => (string) $d['sealed'],
                 'expires_at' => str_replace(' ', 'T', (string) $d['expires_at']) . 'Z']);
         }
-        if ($holds && !isset($out['secrets']) && App::directory()->shouldForget((int) $agent['id'], (int) $agent['site_id'])) {
+        if ($holds && !isset($out['secrets']) && App::directory()->shouldForget((int) $agent['id'], (int) $agent['site_id'], $heldUser)) {
             $out['forget'] = $signer->sign(['v' => 1, 'type' => 'agent_forget', 'purpose' => 'directory_password', 'agent_id' => (int) $agent['id'],
                 'site_id' => (int) $agent['site_id'], 'client_id' => (int) $agent['client_id'], 'issued_at' => gmdate('Y-m-d\TH:i:s\Z')]);
         }

@@ -30,6 +30,8 @@ final class LdapClient
     public const INVALID_CREDENTIALS = 49;
     private const PAGED_OID = '1.2.840.113556.1.4.319';
     private const MAX_MESSAGE = 4194304;
+    /** Bytes of entries one search keeps at most (memory stays bounded whatever the server sends). */
+    private const MAX_SEARCH_BYTES = 67108864;
 
     private int $messageId = 0;
 
@@ -101,6 +103,8 @@ final class LdapClient
     {
         $out = [];
         $cookie = '';
+        $cookies = [];
+        $bytes = 0;
         do {
             $id = ++$this->messageId;
             $req = Ber::tlv(0x63, Ber::str($base) . Ber::int($scope, Ber::ENUMERATED) . Ber::int(0, Ber::ENUMERATED) . Ber::int(0) . Ber::int(0)
@@ -112,6 +116,10 @@ final class LdapClient
                 $msg = $this->receive($id);
                 if ($msg['op'] === 0x64) {
                     if (count($out) < $max) {
+                        $bytes += strlen($msg['body']);
+                        if ($bytes > self::MAX_SEARCH_BYTES) {
+                            throw new LdapException('The directory answer is too large to read.');
+                        }
                         $out[] = self::entry($msg['body']);
                     }
                     continue;
@@ -127,6 +135,10 @@ final class LdapClient
                     throw new LdapException('The directory refused a search (LDAP result ' . $code . ').');
                 }
                 $cookie = self::pagedCookie($msg['controls']);
+                if ($cookie !== '' && isset($cookies[$cookie])) {
+                    throw new LdapException('The directory repeated a page; the search was stopped.');
+                }
+                $cookies[$cookie] = true;
                 break;
             }
         } while ($cookie !== '' && count($out) < $max);

@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.20.0](https://img.shields.io/badge/version-1.20.0-ff5a1f?style=flat-square)
+![Version 1.20.1](https://img.shields.io/badge/version-1.20.1-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -148,6 +148,27 @@ curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install
 The same help is built into the app (**Help** in the menu), with a "What's new" page for every release.
 
 ## What's new
+
+### 1.20.1 (2026-11-23): Active Directory checks, fixes from review
+
+- **The agent's key is pinned.** A changed key no longer replaces the old one silently. It waits on the Agents page
+  until an admin compares its fingerprint, which the agent's `status` command now prints, and approves it. Nothing
+  is sealed to an unapproved key, so someone holding an agent's token or with database access can't have the next
+  password sealed to a key of their own.
+- **A re-sent password is confirmed again.** Before, if the agent's confirmation got lost, a password the agent held
+  showed as "failed (replay)". An old sealed password sent again under a new drop ID is refused.
+- **NetBIOS:** only broadcast name queries count. Node-status queries from inventory tools and RMMs are no longer
+  reported as name poisoning, and the appliance never reports itself. The finding closes only after three quiet
+  listens in a row.
+- **Domain Admins is found by its well-known SID**, so localised names work. Members through their primary group
+  count too.
+- **Smaller fixes:**
+  - A password for an account that was changed is deleted from the agent, as is the password of a revoked agent.
+  - An undecided LDAP signing probe keeps the earlier answer.
+  - Turning the checks off closes their findings at once.
+  - "Saved" is no longer shown when the page's script didn't run.
+  - An unusable key file only turns off the AD checks, not the agent.
+  - Paging is guarded against a domain controller that repeats pages or sends too much.
 
 ### 1.20.0 (2026-11-23): Active Directory checks
 

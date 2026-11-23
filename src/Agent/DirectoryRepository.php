@@ -144,13 +144,17 @@ final class DirectoryRepository
     }
 
     /**
-     * Whether this agent should delete a directory password it holds: its site has no directory settings any more,
-     * or the site's password is held by (or on its way to) another agent.
+     * Whether this agent should delete a directory password it holds: its site has no directory settings any more, the
+     * password is for another account than the site's (it was changed, and the new one never arrived), or it is held
+     * by another agent. $heldUser: the account the agent says its password is for (null from older agents).
      */
-    public function shouldForget(int $agentId, int $siteId): bool
+    public function shouldForget(int $agentId, int $siteId, ?string $heldUser = null): bool
     {
         $row = $this->find($siteId);
         if ($row === null || $row['cred_state'] === 'none') {
+            return true;
+        }
+        if ($heldUser !== null && $heldUser !== (string) $row['username']) {
             return true;
         }
         return $row['cred_state'] === 'held' && (int) $row['cred_agent_id'] !== $agentId;

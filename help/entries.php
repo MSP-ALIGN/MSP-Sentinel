@@ -223,6 +223,14 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.20.1',
+            'date' => '2026-11-23',
+            'items' => [
+                'An agent\'s key is pinned: a changed key waits on the Agents page until an admin approves its fingerprint (the agent\'s status command shows it).',
+                'Fewer false alarms: NetBIOS node-status queries from inventory tools no longer count as name poisoning, and Domain Admins is found in any language.',
+            ],
+        ],
+        [
             'version' => '1.20.0',
             'date' => '2026-11-23',
             'items' => [

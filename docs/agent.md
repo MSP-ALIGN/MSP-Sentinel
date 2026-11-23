@@ -139,11 +139,19 @@ current one. **Turn off** deletes the settings and the results, and the agent de
 - **Never to an untrusted server.** The agent signs in over LDAPS (TLS from the first byte), and only when the
   domain controller's certificate matches the fingerprint you trusted. A different certificate (a renewed one, or
   something pretending to be the domain controller) gets nothing until you trust it.
+- **The agent's key is pinned.** The first key an agent reports is kept. If it later reports a different one
+  (reinstalled, or someone with its token or database access trying to swap in their own), the Agents page shows the
+  new fingerprint and nothing is sealed to it until an admin approves it. Compare it with
+  `sentinel-agent.php status` on the appliance (it prints "Agent key fingerprint"). After approving, set the password
+  again: the old one was sealed to the old key.
+- **Revoked means wiped.** A revoked agent deletes its sealed password before it stops.
 - **HTTPS needed.** Browsers only allow this encryption on HTTPS pages: open Sentinel through its `https://`
   address to set or replace the password.
 - **Limit.** Someone who fully took over the Sentinel server could change the page to capture passwords typed in
   future, or trust a certificate of their own and point the agent at a machine they control inside the client's
-  network. Passwords already held by agents stay sealed. Protect the server accordingly.
+  network. Passwords already held by agents stay sealed. Protect the server accordingly. On the appliance itself, the
+  sealed password and the agent's private key sit side by side: someone with root on the appliance (or its disk) can
+  open it. Protect the appliance like any server that holds a credential.
 
 **What is graded** (Balanced):
 
@@ -158,6 +166,14 @@ Each finding lists up to 25 account or computer names (the agent sends up to 200
 and computers that haven't signed in for 90 days are left out. "Admin" means `adminCount` set (protected groups) or
 a direct member of Domain Admins.
 
+Domain Admins is found by its well-known SID, so localised names work, and members through their primary group
+count too.
+
+**Not covered (yet):** only the one domain controller entered is checked for LDAP signing; LDAPS channel binding is
+not checked; unconstrained delegation on user accounts is not checked; "admin" follows `adminCount`, so an account
+that left the admin groups but still has `adminCount` set counts as an admin; Windows LAPS that stores passwords only
+in Entra ID writes nothing to Active Directory, so those computers show as without LAPS.
+
 *LDAP signing* is checked on the plain LDAP port (389) with a made-up account and a random password: a domain
 controller that requires signing refuses before it looks at the account. The real password is never sent there.
 
@@ -167,7 +183,9 @@ is not evidence of a fix. The error shows on the Agents page.
 ## Name poisoning (LLMNR / NetBIOS)
 
 During each full scan the agent listens for 2 minutes for LLMNR (UDP 5355) and NetBIOS name service (UDP 137)
-requests. Devices that send them fall back to these protocols when DNS has no answer, so a poisoning tool (Responder
+requests (broadcast NetBIOS name queries only: node-status queries from inventory tools don't count, and neither does
+the appliance itself). Devices that send them fall back to these protocols when DNS has no answer, so a poisoning tool (Responder
 and the like) on the network could answer instead and capture their users' password hashes. The agent only listens:
 it never answers or sends anything. Devices heard (inside the site's authorisation only) become one Fail finding,
-with their names when the agent knows them. It works without the Active Directory checks.
+with their names when the agent knows them. Devices only send these now and then, so the finding closes after three
+quiet listens in a row. It works without the Active Directory checks.

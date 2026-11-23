@@ -79,7 +79,8 @@ final class Runner
         $this->sendPending();
         $res = $this->http->post('/agent/v1/poll', $this->pollBody([]));
         if ($res['status'] === 401) {
-            ($this->log)('Sentinel no longer accepts this agent (revoked?). Stopping.');
+            ($this->log)('Sentinel no longer accepts this agent (revoked?). Deleting the directory password and stopping.');
+            $this->credentials?->wipe();
             return -1;
         }
         if ($res['status'] !== 200) {
@@ -119,8 +120,10 @@ final class Runner
      */
     private function pollBody(array $running): array
     {
+        $holds = $this->credentials?->holds() ?? false;
         return ['hostname' => (string) gethostname(), 'version' => self::version(), 'running' => $running]
-            + ($this->key !== null ? ['box_public_key' => $this->key->publicKey(), 'holds_directory' => $this->credentials?->holds() ?? false] : []);
+            + ($this->key !== null ? ['box_public_key' => $this->key->publicKey(), 'holds_directory' => $holds,
+                                      'directory_username' => $holds ? $this->credentials?->username() : ''] : []);
     }
 
     /**
@@ -145,7 +148,10 @@ final class Runner
             }
             ($this->log)($r['ok'] ? 'Directory password received and kept (sealed).' : 'Directory password refused: ' . $r['error']);
             try {
-                $this->http->post('/agent/v1/secrets/' . $r['drop_id'] . '/ack', ['ok' => $r['ok'], 'error' => $r['error']]);
+                $ack = $this->http->post('/agent/v1/secrets/' . $r['drop_id'] . '/ack', ['ok' => $r['ok'], 'error' => $r['error']]);
+                if ($ack['status'] < 200 || $ack['status'] > 299) {
+                    ($this->log)('Sentinel did not accept the confirmation (HTTP ' . $ack['status'] . '); it will send the password again and get the same answer.');
+                }
             } catch (\Throwable $ex) {
                 ($this->log)('Could not confirm the directory password (will be sent again): ' . mb_substr($ex->getMessage(), 0, 200));
             }

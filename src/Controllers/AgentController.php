@@ -160,6 +160,31 @@ final class AgentController extends Controller
         return Response::redirect('/clients/' . (int) $client['id'] . '/agents');
     }
 
+    /**
+     * POST /clients/{id}/agents/{agent}/approve-key (admins): accept the new public key an agent reported, after
+     * comparing its fingerprint with the agent's own status output. A password sealed to the old key can't be opened
+     * by the new one, so it must be set again.
+     */
+    public function approveKey(Request $request, array $params): Response
+    {
+        $client = $this->client($params);
+        $stmt = App::db()->prepare("SELECT id FROM agents WHERE id = :a AND client_id = :c AND status = 'active'");
+        $stmt->execute(['a' => (int) ($params['agent'] ?? 0), 'c' => (int) $client['id']]);
+        $id = (int) $stmt->fetchColumn();
+        if ($id === 0) {
+            throw new HttpException(404);
+        }
+        $fingerprint = strtoupper($request->input('fingerprint'));
+        if (preg_match('/^([0-9A-F]{4}:){7}[0-9A-F]{4}$/', $fingerprint) !== 1 || !App::agents()->approveBoxKey($id, $fingerprint)) {
+            Session::flash('warning', __('That key is no longer the one the agent reported. Check the page again.'));
+        } else {
+            App::directory()->agentKeyChanged($id);
+            $this->audit($request, 'agent.key_approved', 'agent', $id, ['client_id' => (int) $client['id'], 'fingerprint' => $fingerprint]);
+            Session::flash('success', __('New agent key approved. Set the Active Directory password again: the old one was sealed to the previous key.'));
+        }
+        return Response::redirect('/clients/' . (int) $client['id'] . '/agents');
+    }
+
     /** POST /clients/{id}/sites/{site}/pause (technicians and admins): stop agent scans at this site now. */
     public function pause(Request $request, array $params): Response
     {

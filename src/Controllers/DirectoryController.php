@@ -55,10 +55,15 @@ final class DirectoryController extends Controller
             $error = match (true) {
                 $agent === null => __('This site has no active agent to send the password to.'),
                 (string) $agent['box_public_key'] === '' => __('The site\'s agent is too old to receive passwords: update it first.'),
+                (string) $agent['box_key_pending'] !== '' => __('The site\'s agent reported a new key: approve it on the Agents page first.'),
                 (int) $request->input('agent_id') !== (int) $agent['id'] => __('The site\'s agent changed while you were typing. Enter the password again.'),
                 preg_match('/^[0-9a-f]{32}$/', $nonce) !== 1 || !self::sealedShape($sealed) => __('The password could not be sent sealed. Nothing was saved.'),
                 default => null,
             };
+        }
+        if ($error === null && $sealed === '' && $request->input('seal_js') !== '1') {
+            // The page's script didn't run (blocked or not loaded): a typed password was NOT sent. Say so rather than "saved".
+            $error = __('Nothing was saved: the page\'s script did not run, so a password could not be sealed. Reload the page (over HTTPS) and try again.');
         }
         if ($error !== null) {
             Session::flash('danger', $error);
@@ -96,6 +101,7 @@ final class DirectoryController extends Controller
     {
         [$client, $site] = $this->clientSite($params);
         App::directory()->remove((int) $site['id']);
+        App::findingsEngine()->refreshClient((int) $client['id']); // its findings close now, not at the next refresh
         $this->audit($request, 'site.directory_removed', 'site', (int) $site['id'], ['client_id' => (int) $client['id']]);
         Session::flash('success', __('Active Directory checks turned off. The agent deletes the password at its next check-in.'));
         return Response::redirect('/clients/' . (int) $client['id'] . '/agents');

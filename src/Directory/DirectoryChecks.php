@@ -42,7 +42,7 @@ final class DirectoryChecks
      *
      * @param array{domain:string, dc_ip:string, cert_trusted:string} $job  the signed job's directory settings
      * @return array{cert:array<string,string>, signing_required:?bool, bind:string, error:string, checks:?array<string,mixed>}
-     *   bind: ok | untrusted_certificate | no_password | user_mismatch | refused | failed
+     *   bind: ok | untrusted_certificate | no_password | refused | failed
      */
     public function run(array $job, string $username, ?string $password, ?int $now = null): array
     {
@@ -101,8 +101,18 @@ final class DirectoryChecks
     private function read(LdapClient $c, string $base, int $now): array
     {
         $users = $c->search($base, LdapClient::SCOPE_SUBTREE, ['and', [['eq', 'objectCategory', 'person'], ['eq', 'objectClass', 'user']]],
-            ['sAMAccountName', 'userAccountControl', 'servicePrincipalName', 'adminCount', 'pwdLastSet', 'lastLogonTimestamp']);
-        $groups = $c->search($base, LdapClient::SCOPE_SUBTREE, ['and', [['eq', 'objectClass', 'group'], ['eq', 'sAMAccountName', 'Domain Admins']]], ['member'], 5);
+            ['sAMAccountName', 'userAccountControl', 'servicePrincipalName', 'adminCount', 'pwdLastSet', 'lastLogonTimestamp', 'primaryGroupID']);
+        // Domain Admins by its well-known SID (the domain's SID + 512), so localised names ("Domänen-Admins") are found;
+        // by its English name only when the domain's SID can't be read.
+        $groups = [];
+        $domain = $c->search($base, LdapClient::SCOPE_BASE, ['present', 'objectClass'], ['objectSid'], 1);
+        $daSid = self::domainAdminsSid((string) ($domain[0]['attrs']['objectsid'][0] ?? ''));
+        if ($daSid !== null) {
+            $groups = $c->search($base, LdapClient::SCOPE_SUBTREE, ['eq', 'objectSid', $daSid], ['member'], 5);
+        }
+        if ($groups === []) {
+            $groups = $c->search($base, LdapClient::SCOPE_SUBTREE, ['and', [['eq', 'objectClass', 'group'], ['eq', 'sAMAccountName', 'Domain Admins']]], ['member'], 5);
+        }
         $computers = $c->search($base, LdapClient::SCOPE_SUBTREE, ['eq', 'objectCategory', 'computer'],
             ['sAMAccountName', 'userAccountControl', 'primaryGroupID', 'lastLogonTimestamp', 'ms-Mcs-AdmPwdExpirationTime', 'msLAPS-PasswordExpirationTime']);
 
@@ -111,6 +121,15 @@ final class DirectoryChecks
         $daGroup = $groups[0] ?? null;
         foreach ($daGroup['attrs']['member'] ?? [] as $dn) {
             $daNames[] = self::cn($dn);
+        }
+        // Members whose PRIMARY group is Domain Admins (primaryGroupID 512) are not listed in "member".
+        foreach ($users as $u) {
+            if (self::num($u, 'primarygroupid') === 512 && !(self::num($u, 'useraccountcontrol') & self::UAC_DISABLED)) {
+                $cn = self::cn($u['dn']);
+                if (!in_array(strtolower($cn), array_map('strtolower', $daNames), true)) {
+                    $daNames[] = $cn;
+                }
+            }
         }
         $daLower = array_map('strtolower', $daNames);
 
@@ -183,6 +202,23 @@ final class DirectoryChecks
             'unconstrained' => $list($unconstrained),
             'laps' => ['deployed' => $lapsSeen, 'eligible' => $eligible] + $list($lapsMissing),
         ];
+    }
+
+    /**
+     * The binary SID of Domain Admins from the domain's binary objectSid (revision, sub-authority count, 6-byte
+     * authority, 32-bit little-endian sub-authorities): one more sub-authority, 512. Null when it isn't a domain SID.
+     */
+    public static function domainAdminsSid(string $domainSid): ?string
+    {
+        $len = strlen($domainSid);
+        if ($len < 8 || ord($domainSid[0]) !== 1) {
+            return null;
+        }
+        $count = ord($domainSid[1]);
+        if ($count < 1 || $count > 14 || $len !== 8 + 4 * $count) {
+            return null;
+        }
+        return chr(1) . chr($count + 1) . substr($domainSid, 2) . pack('V', 512);
     }
 
     /** @param array{dn:string, attrs:array<string,list<string>>} $e */

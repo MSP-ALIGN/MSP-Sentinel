@@ -20,6 +20,8 @@ use Sentinel\Agent\Signer;
 final class Credentials
 {
     private const MAX_SEEN = 200;
+    /** A "forget it" instruction older than this is ignored (it is signed, but shouldn't live for ever). */
+    private const FORGET_MAX_AGE = 86400;
 
     public function __construct(private readonly string $file, private readonly AgentKey $key, private readonly string $serverKey,
         private readonly int $agentId, private readonly int $siteId, private readonly int $clientId)
@@ -68,6 +70,10 @@ final class Credentials
         }
         $state = $this->read();
         $fail = static fn (string $why): array => ['drop_id' => (int) $d['drop_id'], 'ok' => false, 'error' => $why];
+        // The drop we already hold, sent again because our confirmation was lost: confirm again, change nothing.
+        if (($state['drop_id'] ?? null) === $d['drop_id'] && is_string($state['sealed'] ?? null) && hash_equals($state['sealed'], (string) ($d['sealed'] ?? ''))) {
+            return ['drop_id' => (int) $d['drop_id'], 'ok' => true, 'error' => ''];
+        }
         if (in_array($d['drop_id'], (array) ($state['seen'] ?? []), true)) {
             return $fail('Already received (replay).');
         }
@@ -80,21 +86,31 @@ final class Credentials
         if (!is_string($nonce) || preg_match('/^[0-9a-f]{32}$/', $nonce) !== 1 || !is_string($user) || $user === '' || strlen($user) > 256 || preg_match('/[\x00-\x1F\x7F]/', $user)) {
             return $fail('Malformed.');
         }
+        // Each box carries a one-off number: an old box re-sent under a new drop ID (e.g. restored from a backup to
+        // roll back to an older password or account) is refused.
+        if (in_array($nonce, (array) ($state['nonces'] ?? []), true)) {
+            return $fail('This sealed password was already used once (replay).');
+        }
         $sealed = is_string($d['sealed'] ?? null) ? $d['sealed'] : '';
         $password = $this->key->open($sealed, AgentKey::directoryAad($this->agentId, $nonce, $user));
         if ($password === null || $password === '') {
-            $this->write(['seen' => [...(array) ($state['seen'] ?? []), $d['drop_id']]] + $state);
+            $this->write(['seen' => array_slice([...(array) ($state['seen'] ?? []), $d['drop_id']], -self::MAX_SEEN)] + $state);
             return $fail('It does not open with this agent\'s key (sealed for another agent, or changed on the way).');
         }
         // Keep the box, not the password.
         $this->write(['sealed' => $sealed, 'nonce' => $nonce, 'username' => $user, 'drop_id' => $d['drop_id'], 'received_at' => gmdate('Y-m-d H:i:s', $now),
-                      'seen' => array_slice([...(array) ($state['seen'] ?? []), $d['drop_id']], -self::MAX_SEEN)]);
+                      'seen' => array_slice([...(array) ($state['seen'] ?? []), $d['drop_id']], -self::MAX_SEEN),
+                      'nonces' => array_slice([...(array) ($state['nonces'] ?? []), $nonce], -self::MAX_SEEN)]);
         return ['drop_id' => (int) $d['drop_id'], 'ok' => true, 'error' => ''];
     }
 
-    /** Delete the held password when Sentinel says so (signed, for this agent). Returns true when it was deleted. */
-    public function forget(string $payload, string $signature): bool
+    /**
+     * Delete the held password when Sentinel says so (signed, for this agent, issued within FORGET_MAX_AGE). Returns
+     * true when it was deleted.
+     */
+    public function forget(string $payload, string $signature, ?int $now = null): bool
     {
+        $now ??= time();
         if (!Signer::verify($payload, $signature, $this->serverKey)) {
             return false;
         }
@@ -103,9 +119,22 @@ final class Credentials
             || ($d['agent_id'] ?? null) !== $this->agentId || ($d['site_id'] ?? null) !== $this->siteId || ($d['client_id'] ?? null) !== $this->clientId) {
             return false;
         }
-        $state = $this->read();
-        $this->write(['seen' => (array) ($state['seen'] ?? [])]);
+        $issued = strtotime((string) ($d['issued_at'] ?? ''));
+        if ($issued === false || $issued < $now - self::FORGET_MAX_AGE || $issued > $now + 300) {
+            return false;
+        }
+        $this->wipe();
         return true;
+    }
+
+    /**
+     * Delete the held password (keeping the replay lists). Also used when Sentinel revokes this agent: the sealed box
+     * and the agent's private key sit side by side on the appliance, so they must not outlive the agent.
+     */
+    public function wipe(): void
+    {
+        $state = $this->read();
+        $this->write(['seen' => (array) ($state['seen'] ?? []), 'nonces' => (array) ($state['nonces'] ?? [])]);
     }
 
     /** @return array<string,mixed> */
