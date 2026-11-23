@@ -116,14 +116,15 @@ final class NmapRunner
 
     /**
      * nmap script selection for engagements (fixed strings; nothing from a form reaches nmap):
-     * - SAFE_SCRIPTS: nmap's "safe" scripts, minus anything that broadcasts on the local network, contacts third
-     *   parties, guesses passwords, may crash a service, exploits, fuzzes or checks for malware;
-     * - ANON_SCRIPTS: anonymous-access checks over TCP: anonymous FTP, NFS exports, SMB shares readable without a
-     *   password (guest/null session: it lists shares, never writes). (SNMP is UDP, which an unprivileged nmap can't
-     *   scan: Sentinel's own UDP probes check it.)
+     * - SAFE_SCRIPTS: nmap's "safe" scripts, minus anything that checks for vulnerabilities (some send attack-like
+     *   requests, e.g. Heartbleed or slowloris checks), broadcasts on the local network, contacts third parties,
+     *   guesses passwords, may crash a service, exploits, fuzzes or checks for malware;
+     * - ANON_SCRIPTS: read-only anonymous-access checks over TCP: anonymous FTP login (lists the top folder) and NFS
+     *   exports. (nmap's SMB share script is NOT used: it writes and deletes a test file in every share. SNMP is UDP,
+     *   which an unprivileged nmap can't scan: Sentinel's own UDP probes check it.)
      */
-    public const SAFE_SCRIPTS = 'safe and not (broadcast or external or brute or dos or exploit or intrusive or fuzzer or malware)';
-    public const ANON_SCRIPTS = 'ftp-anon or nfs-showmount or smb-enum-shares';
+    public const SAFE_SCRIPTS = 'safe and not (vuln or broadcast or external or brute or dos or exploit or intrusive or fuzzer or malware)';
+    public const ANON_SCRIPTS = 'ftp-anon or nfs-showmount';
 
     /**
      * The command line for an engagement's deeper scan of ONE host: all TCP ports or a list, and optional scripts.
@@ -185,7 +186,7 @@ final class NmapRunner
      * @param list<string> $cidrs Canonical CIDRs of ONE address family, already checked against the signed scope.
      * @return list<string>
      */
-    public function discoveryArguments(array $cidrs): array
+    public function discoveryArguments(array $cidrs, array $exclude = []): array
     {
         if ($cidrs === [] || count($cidrs) > 64) {
             throw new \InvalidArgumentException('Between 1 and 64 networks.');
@@ -205,6 +206,17 @@ final class NmapRunner
         if ($v6) {
             $args[] = '-6';
         }
+        // Engagements: hosts never to touch, not even by the sweep (canonical addresses or CIDRs, checked here too).
+        $ex = [];
+        foreach (array_slice($exclude, 0, 64) as $x) {
+            if (!is_string($x) || !preg_match('#^([0-9a-f:.]+)(/\d{1,3})?$#', $x, $m) || @inet_pton($m[1]) === false || inet_ntop((string) inet_pton($m[1])) !== $m[1]) {
+                throw new \InvalidArgumentException('Exclusions must be canonical addresses or CIDRs.');
+            }
+            $ex[] = $x;
+        }
+        if ($ex !== []) {
+            array_push($args, '--exclude', implode(',', $ex));
+        }
         return array_merge($args, $cidrs);
     }
 
@@ -215,10 +227,10 @@ final class NmapRunner
      * @param callable():bool $shouldStop
      * @return array{exit:int, xml:string, stderr:string, stopped:bool, timed_out:bool, overflow:bool}
      */
-    public function discover(array $cidrs, callable $shouldStop, int $timeoutSeconds = 57600): array
+    public function discover(array $cidrs, callable $shouldStop, int $timeoutSeconds = 57600, array $exclude = []): array
     {
         // Large networks: up to 16 hours and 60 MB of output (about 200,000 hosts that are up).
-        return $this->run($this->discoveryArguments($cidrs), $shouldStop, $timeoutSeconds, 60_000_000);
+        return $this->run($this->discoveryArguments($cidrs, $exclude), $shouldStop, $timeoutSeconds, 60_000_000);
     }
 
     /**

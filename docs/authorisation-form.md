@@ -84,19 +84,18 @@ It only covers systems already in the authorised scope above.
 | [203.0.113.10] | [Office firewall] |
 | [10.20.0.0/24] (site [name], through the agent) | [Office LAN] |
 
-**Never tested (exclusions):** [e.g. 10.20.0.50: phone system; 10.20.0.60: medical device].
+**Never tested (exclusions, by IP address or range):** [e.g. 10.20.0.50: phone system; 10.20.0.60: medical device].
 
 **P3. Tests the Client allows** (tick):
 
 - [ ] All 65,535 TCP ports, instead of the usual list.
 - [ ] Common UDP services: one read-only request each to SNMP (with the default community names "public" and
   "private"), NTP and SSDP/UPnP.
-- [ ] Service detail scripts (nmap's "safe" category, excluding anything that broadcasts, contacts third parties,
-  guesses passwords, may crash a service or exploits).
-- [ ] Anonymous access: anonymous FTP, NFS exports, SMB shares readable or writable without a password (shares are
-  listed; nothing is written).
+- [ ] Service detail scripts (nmap's "safe" category, excluding vulnerability checks and anything that broadcasts,
+  contacts third parties, guesses passwords, may crash a service or exploits).
+- [ ] Anonymous access: anonymous FTP login (the top folder is listed) and NFS exports. Read only.
 
-Pace: [ ] gentle [ ] normal (at most 200 packets a second).
+Pace: [ ] gentle [ ] normal (at most 200 packets a second; needed for all 65,535 ports).
 
 **P4. Never done:**
 

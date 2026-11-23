@@ -260,7 +260,9 @@ final class AgentKernel
                 }
                 $signed = App::agentService()->signedJob($job, $agent);
                 if ($signed === null) {
-                    App::agents()->finishJob((int) $job['id'], 'cancelled', ['messages' => [__('Cancelled: the site has no valid internal authorisation any more.')]]);
+                    App::agents()->finishJob((int) $job['id'], 'cancelled', ['messages' => [$job['kind'] === 'engagement'
+                        ? __('Cancelled: the engagement is no longer active (stopped, or its window ended), or the site has no valid internal authorisation.')
+                        : __('Cancelled: the site has no valid internal authorisation any more.')]]);
                     continue;
                 }
                 App::agents()->markSent((int) $job['id']);

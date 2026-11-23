@@ -47,7 +47,15 @@ if (in_array('-sn', $args, true)) {
             exit(2);
         }
     }
-    $cidrs = array_values(array_filter(array_slice($args, count($want)), static fn (string $a): bool => $a !== '-6'));
+    $rest = array_slice($args, count($want));
+    $excluded = [];
+    $xi = array_search('--exclude', $rest, true);
+    if ($xi !== false) {
+        $excluded = explode(',', (string) ($rest[$xi + 1] ?? ''));
+        array_splice($rest, $xi, 2);
+        file_put_contents(dirname($log) . '/nmap-excluded.log', implode(',', $excluded) . "\n", FILE_APPEND);
+    }
+    $cidrs = array_values(array_filter($rest, static fn (string $a): bool => $a !== '-6'));
     $inside = static function (string $ip, string $cidr): bool {
         [$net, $bits] = explode('/', $cidr);
         $a = inet_pton($ip); $b = inet_pton($net);
@@ -64,7 +72,9 @@ if (in_array('-sn', $args, true)) {
     foreach ($hosts as $ip => $h) {
         $in = false;
         foreach ($cidrs as $c) { $in = $in || $inside((string) $ip, $c); }
-        if (!$in || in_array($ip, $gone, true)) { continue; }
+        $isExcluded = false;
+        foreach ($excluded as $x) { $isExcluded = $isExcluded || $inside((string) $ip, str_contains($x, '/') ? $x : $x . '/32'); }
+        if (!$in || in_array($ip, $gone, true) || $isExcluded) { continue; }
         echo '<host><status state="up" reason="syn-ack"/><address addr="' . htmlspecialchars((string) $ip) . '" addrtype="' . (str_contains((string) $ip, ':') ? 'ipv6' : 'ipv4') . '"/>'
             . (isset($h['mac']) ? '<address addr="' . htmlspecialchars($h['mac']) . '" addrtype="mac"/>' : '') . "</host>\n";
     }
@@ -79,8 +89,8 @@ $engagement = false;
 $si = array_search('--script', $args, true);
 $ti = array_search('--host-timeout', $args, true);
 if ($si !== false || ($ti !== false && ($args[$ti + 1] ?? '') === '180m')) {
-    $safe = 'safe and not (broadcast or external or brute or dos or exploit or intrusive or fuzzer or malware)';
-    $anon = 'ftp-anon or nfs-showmount or smb-enum-shares';
+    $safe = 'safe and not (vuln or broadcast or external or brute or dos or exploit or intrusive or fuzzer or malware)';
+    $anon = 'ftp-anon or nfs-showmount';
     if ($si !== false) {
         if (!in_array($args[$si + 1] ?? '', ['(' . $safe . ')', '(' . $anon . ')', '(' . $safe . ') or (' . $anon . ')'], true)
             || ($args[$si + 2] ?? '') !== '--script-timeout' || ($args[$si + 3] ?? '') !== '3m') {

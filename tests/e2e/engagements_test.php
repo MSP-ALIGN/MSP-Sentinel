@@ -70,6 +70,8 @@ return [
         Assert::contains('must be a PDF', $tech->upload($form, $action, $fields($site), 'document', $txt, 'application/pdf')->body);
         Assert::contains('Confirm that the client signed', $tech->upload($form, $action, $fields($site, ['confirm' => '']), 'document', $pdf, 'application/pdf')->body);
         Assert::contains('at most 14 days', $tech->upload($form, $action, $fields($site, ['window_end' => gmdate('Y-m-d\TH:i', time() + 86400 * 20)]), 'document', $pdf, 'application/pdf')->body);
+        Assert::contains('need the normal pace', $tech->upload($form, $action, $fields($site, ['intensity' => 'gentle']), 'document', $pdf, 'application/pdf')->body, 'all ports never gentle');
+        Assert::contains('not by name', $tech->upload($form, $action, $fields($site, ['exclusions' => 'portal.engagement.example']), 'document', $pdf, 'application/pdf')->body, 'exclusions by address');
         Assert::same($before, $lastId($ctx, $cid), 'nothing saved');
         // A valid one.
         $res = $tech->upload($form, $action, $fields($site), 'document', $pdf, 'application/pdf');
@@ -178,11 +180,12 @@ return [
         Assert::true($host !== null, 'results recorded');
         Assert::same([21, 22, 50080], array_column($host['ports_list'], 'port'), 'a high port found by the full scan');
         Assert::contains('Anonymous FTP login allowed', json_encode($host['ports_list']));
-        Assert::contains('Anonymous access: READ', json_encode($host['checks_list']));
+        Assert::contains('signing enabled but not required', json_encode($host['checks_list']));
+        Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM assets WHERE client_id = {$cid} AND ip = '203.0.113.3'")->fetchColumn(), 'evidence only: day-to-day data untouched');
         $page = $tech->get('/engagements/' . $id)->body;
         Assert::contains('50080/http', $page);
         Assert::contains('Anonymous FTP login is allowed', $page, 'findings from the evidence');
-        Assert::contains('Share Public can be read without a password', $page);
+        Assert::contains('SMB signing is not required', $page);
         // Stopped: a new run is refused, and a queued job is cancelled by the worker without scanning.
         $q = App::scans()->queue($cid, 'manual', null, true, 'test', ['engagement_id' => $id], 'engagement');
         $tech->post('/engagements/' . $id . '/stop', ['_csrf' => $tech->get('/engagements/' . $id)->csrf(), 'reason' => 'Test stop']);
@@ -227,11 +230,12 @@ return [
         $calls = array_map(static fn (string $l): array => json_decode($l, true), file($ctx->nmapLog, FILE_IGNORE_NEW_LINES));
         $scanned = array_values(array_filter(array_map(static fn (array $c): string => in_array('-sn', $c, true) ? '' : (string) end($c), $calls)));
         Assert::same(['10.97.0.20'], $scanned, 'deep scan of the found host, not the excluded one: ' . $out);
+        Assert::contains('10.97.0.9/32', (string) @file_get_contents(dirname($ctx->nmapLog) . '/nmap-excluded.log'), 'the excluded host is left out of the sweep too');
         Assert::true(in_array('1-65535', $calls[1] ?? [], true) && in_array('--script', $calls[1] ?? [], true), 'all ports and the fixed scripts');
         $results = App::engagements()->results($id);
         Assert::same(['10.97.0.20'], array_column($results, 'ip'), 'evidence for the tested host only');
         Assert::same('internal', $results[0]['origin']);
-        Assert::contains("Scans:\n  Anonymous access: READ/WRITE", (string) ($results[0]['checks_list']['hostscripts'][0]['output'] ?? ''), 'script output kept line by line');
+        Assert::contains("dialects:\n  NT LM 0.12", (string) ($results[0]['checks_list']['hostscripts'][0]['output'] ?? ''), 'script output kept line by line');
         Assert::same([445, 2049, 40000], array_column($results[0]['ports_list'], 'port'));
         Assert::same('done', (string) $ctx->db->query('SELECT status FROM agent_jobs WHERE id = ' . (int) $jobs[0]['id'])->fetchColumn());
         Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE client_id = {$cid} AND ip_addresses LIKE '%10.97.0.20%'")->fetchColumn(), 'engagement results stay out of the inventory');
@@ -290,7 +294,7 @@ return [
                 $status[$it['title']] = $it['status'];
             }
             Assert::same('fixed', $status['Anonymous FTP login is allowed'] ?? null, json_encode($status));
-            Assert::same('open', $status['Share Public can be read without a password'] ?? null, 'still open');
+            Assert::same('open', $status['SMB signing is not required (relay attacks)'] ?? null, 'still open');
             Assert::contains('Retest letter', (string) App::reports()->find((int) $letter['id'])['html']);
         } finally {
             @unlink(dirname($ctx->nmapLog) . '/nmap-closed.json');

@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.27.0](https://img.shields.io/badge/version-1.27.0-ff5a1f?style=flat-square)
+![Version 1.27.1](https://img.shields.io/badge/version-1.27.1-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -150,6 +150,21 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
 
 ## What's new
 
+### 1.27.1 (2026-11-23): pen-test engagements, fixes from review
+
+- **Anonymous access no longer lists SMB shares.** nmap's script for that writes and deletes a test file in every
+  share, which breaks "nothing is written". Anonymous access now means FTP and NFS (read only).
+- **nmap's "safe" scripts now exclude vulnerability checks.** Some of them send attack-like requests.
+- **External engagement results are evidence only.** They no longer change the client's day-to-day services,
+  certificates or findings (as the docs said).
+- **All 65,535 ports need the normal pace.** At the gentle pace one host would take about 7 hours.
+- **Exclusions are given as addresses, not names.** Agents also leave excluded hosts out of the discovery sweep.
+- **The retest letter marks a finding "fixed" only when the same test ran again** and the host was tested to the end.
+  IPv6 hosts are matched correctly.
+- **When nmap can't run, an external engagement job fails** instead of queuing more jobs.
+- **Clearer texts:** the test descriptions, the 200 packets a second limit, the cancel message for stopped
+  engagements, and the docs (stop timing, how slices work, scope checks).
+
 ### 1.27.0 (2026-11-23): pen-test engagements
 
 - **Pen-test engagements** (Client → Pen-test engagements): time-boxed, deeper tests the client authorises in
@@ -160,7 +175,7 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
   - all 65,535 TCP ports;
   - common UDP services (SNMP, NTP, SSDP; one read-only request each);
   - nmap's safe scripts;
-  - anonymous-access checks (FTP, NFS, SMB shares).
+  - anonymous-access checks (FTP, NFS; read only).
 
   The pace is gentle or normal (never faster). No password guessing, no exploits, nothing that changes the systems.
 - **External tests run from Sentinel.** They run in 20-minute slices, and every host is checked against the

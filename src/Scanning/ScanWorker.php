@@ -504,14 +504,15 @@ final class ScanWorker
     /**
      * A pen-test engagement's external tests (job type 'engagement', payload {engagement_id, ips?}): deeper scans of
      * the engagement's external targets: all TCP ports or the usual list, nmap's safe scripts and anonymous-access
-     * scripts, at the engagement's intensity. Results go to engagement_results (evidence) and, like a port scan, to the
-     * client's services, certificates and web pages.
+     * scripts, at the engagement's intensity. Results go to engagement_results only (evidence for the report): the
+     * client's day-to-day services, certificates and findings are not changed.
      *
      * Every host, right before and while it is scanned (polled every second): the engagement is ACTIVE (approved, in
      * its window, not stopped: EngagementRepository::isActive), the address is one of its targets and not excluded,
      * and it is in the client's live authorised scope (ScopeService::isInScope). Names are resolved now; each address
      * they give is checked the same way. The client's daily scan window does not apply (the engagement's does).
-     * A job runs for at most 20 minutes, then queues the rest as a new job, so other clients' scans are not held up.
+     * After 20 minutes the job ends when the host being tested is done and queues the rest as a new job, so other
+     * clients' scans are not held up for long. If nmap can't run, the job fails (no continuation).
      *
      * @param array<string,mixed> $job Already claimed.
      */
@@ -604,6 +605,7 @@ final class ScanWorker
             return false;
         };
         $started = microtime(true);
+        $failed = false;
         $remaining = $targets;
         foreach ($targets as $ip => $names) {
             $ip = (string) $ip;
@@ -628,6 +630,7 @@ final class ScanWorker
                 $this->scans->logFinish($logId, 'error', mb_substr($ex->getMessage(), 0, 300));
                 $summary['hosts_failed']++;
                 $summary['messages'][] = __('Could not run nmap: {e}', ['e' => $ex->getMessage()]);
+                $failed = true; // no continuation: it would fail the same way
                 break;
             }
             if ($result['stopped']) {
@@ -656,35 +659,25 @@ final class ScanWorker
                 $checks['udp'] = $this->probes->udpChecks($ip);
             }
             $engagements->addResult($eid, 'external', null, 'scan:' . $jobId, $ip, array_values(array_unique($names)), $parsed['open'], $checks, $complete);
-            // Like a port scan: the client's services, certificates and web pages (only the ports this scan covered).
-            $default = null;
-            foreach ($this->clients->sites($clientId) as $site) {
-                if ((int) $site['is_default'] === 1) {
-                    $default = (int) $site['id'];
-                }
-            }
-            $covered = $ports ?? array_column($parsed['open'], 'port');
-            if ($covered !== []) {
-                $this->scans->recordHost($clientId, $default, $ip, array_values(array_unique($names)), $covered, $parsed['open'], $complete && $ports !== null, $jobId);
-            }
             $this->scans->logFinish($logId, 'scanned', __('{n} open port(s)', ['n' => count($parsed['open'])]) . ($complete ? '' : ' ' . __('(incomplete)')));
             $summary['hosts_scanned']++;
             $summary['open_ports'] += count($parsed['open']);
-            $services = array_map(static fn (array $sv): array => ['port' => $sv['port'], 'service' => $sv['service']], $parsed['open']);
-            $this->checkEndpoints($jobId, $clientId, $ip, array_values(array_unique($names)), $services, $shouldStop, $summary);
         }
-        $status = 'done';
+        $status = $failed ? 'failed' : 'done';
         if ($stopReason !== null) {
             $status = $this->scans->cancelRequested($jobId) ? 'cancelled' : 'partial';
             $summary['messages'][] = $stopReason;
-        } elseif ($remaining !== []) {
+        } elseif ($remaining !== [] && !$failed) {
             $next = $this->scans->queue($clientId, 'manual', $job['requested_by'] === null ? null : (int) $job['requested_by'], true, __('Engagement window'),
                 ['engagement_id' => $eid, 'ips' => $remaining], 'engagement');
             $summary['messages'][] = __('{n} address(es) continue in scan #{id}.', ['n' => count($remaining), 'id' => $next]);
         } elseif ($summary['hosts_failed'] > 0) {
             $status = 'partial';
         }
-        $this->refreshFindings($clientId, $summary);
+        if (count($targets) >= self::MAX_TARGETS) {
+            $summary['messages'][] = __('Only the first {n} addresses are tested per run.', ['n' => self::MAX_TARGETS]);
+        }
+        // Evidence only (engagement_results): the client's day-to-day services, certificates and findings are untouched.
         $this->scans->finish($jobId, $status, $summary);
         $this->publishFinished($jobId, $clientId, 'ports', $status);
         return "Engagement job {$jobId} {$status}: {$summary['hosts_scanned']} scanned, {$summary['hosts_skipped']} skipped, {$summary['hosts_failed']} failed.";

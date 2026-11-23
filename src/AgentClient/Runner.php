@@ -305,7 +305,8 @@ final class Runner
             if ($shouldStop()) {
                 break;
             }
-            $r = $nmap->discover($cidrs, $shouldStop);
+            // An engagement's exclusions are left out of the sweep too: never touched at all.
+            $r = $nmap->discover($cidrs, $shouldStop, 57600, $engagement['exclusions'] ?? []);
             if ($r['stopped'] || $r['timed_out'] || $r['overflow']) {
                 // Use what the sweep found so far (complete host entries only), but the job is not complete.
                 $messages[] = $r['stopped'] ? 'Discovery stopped.' : ($r['timed_out'] ? 'Discovery took too long and was stopped.' : 'Discovery output too large; stopped.');
@@ -427,7 +428,7 @@ final class Runner
         foreach ($found as $ip => $host) {
             foreach ($engagement['exclusions'] as $x) {
                 if (InternalRanges::within((string) $ip, $x)) {
-                    continue 2; // excluded: never touched beyond the discovery sweep
+                    continue 2; // excluded (the sweep left it out too; this guards against anything it still reported)
                 }
             }
             if ($shouldStop()) {
@@ -450,7 +451,7 @@ final class Runner
                 $messages[] = $ip . ': ' . mb_substr($ex->getMessage(), 0, 200);
                 $complete = false;
             }
-            if ($this->probes !== null && in_array('udp_common', $tests, true) && !$shouldStop()) {
+            if ($this->probes !== null && in_array('udp_common', $tests, true) && in_array(161, $job['udp_ports'] ?? [], true) && !$shouldStop()) {
                 $h['udp'] = $this->probes->udpChecks((string) $ip); // SNMP, NTP, SSDP: signed in the job
             }
             $hosts[] = $h;

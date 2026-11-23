@@ -48,7 +48,7 @@ $clientId = (int) $client['id'];
                     <div class="form-check"><input class="form-check-input" type="radio" name="intensity" id="int-gentle" value="gentle" <?= $val('intensity') !== 'normal' ? 'checked' : '' ?>>
                         <label class="form-check-label" for="int-gentle"><?= e(__('Gentle: polite timing, as day-to-day scans (slow: hours per network)')) ?></label></div>
                     <div class="form-check"><input class="form-check-input" type="radio" name="intensity" id="int-normal" value="normal" <?= $val('intensity') === 'normal' ? 'checked' : '' ?>>
-                        <label class="form-check-label" for="int-normal"><?= e(__('Normal: nmap normal timing (-T3), up to 300 packets a second; never aggressive')) ?></label></div>
+                        <label class="form-check-label" for="int-normal"><?= e(__('Normal: nmap normal timing (-T3), up to 200 packets a second; never aggressive (needed for all 65,535 ports)')) ?></label></div>
                     <?php $field = 'intensity'; require __DIR__ . '/../partials/field_error.php'; ?>
                 </fieldset>
             </div>
@@ -110,7 +110,7 @@ $clientId = (int) $client['id'];
                 <div class="mb-3">
                     <label for="exclusions" class="form-label"><?= e(__('Exclusions: never touch these (optional)')) ?></label>
                     <textarea class="form-control font-monospace<?= $invalid('exclusions') ?>" id="exclusions" name="exclusions" rows="2" spellcheck="false"><?= e($val('exclusions')) ?></textarea>
-                    <div class="form-text"><?= e(__('Fragile or third-party systems inside the ranges above, e.g. a phone system or a medical device.')) ?></div>
+                    <div class="form-text"><?= e(__('IP addresses or ranges (not names) of fragile or third-party systems inside the ranges above, e.g. a phone system or a medical device.')) ?></div>
                     <?php $field = 'exclusions'; require __DIR__ . '/../partials/field_error.php'; ?>
                 </div>
                 <div class="form-check mb-3">

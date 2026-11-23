@@ -58,7 +58,7 @@ final class EngagementReport
             'engagement' => [
                 'id' => (int) $engagement['id'], 'name' => (string) $engagement['name'], 'window_start' => $local((string) $engagement['window_start']),
                 'window_end' => $local((string) $engagement['window_end']), 'intensity' => (string) $engagement['intensity'],
-                'tests' => array_map(static fn (string $t): string => $testLabels[$t] ?? $t, $engagement['tests_list']),
+                'tests' => array_map(static fn (string $t): string => $testLabels[$t] ?? $t, $engagement['tests_list']), 'test_keys' => $engagement['tests_list'],
                 'signer' => (string) $engagement['signer_name'], 'signer_role' => (string) $engagement['signer_role'], 'signed_on' => (string) $engagement['signed_on'],
                 'document_sha256' => (string) $engagement['document_sha256'], 'created_by' => (string) ($engagement['created_by_name'] ?? ''),
                 'approved_by' => (string) ($engagement['approved_by_name'] ?? ''), 'approved_at' => $local($engagement['approved_at']),
@@ -72,7 +72,12 @@ final class EngagementReport
             'hosts' => $hosts,
         ];
         if ($original !== null) {
-            $snapshot['retest'] = self::compare((array) ($original['findings'] ?? []), $findings, array_column($hosts, 'ip'))
+            $complete = [];
+            foreach ($hosts as $h) {
+                $complete[$h['ip']] = ($complete[$h['ip']] ?? false) || $h['complete'];
+            }
+            $snapshot['retest'] = self::compare((array) ($original['findings'] ?? []), $findings, $complete, $engagement['tests_list'],
+                (array) ($original['engagement']['test_keys'] ?? []))
                 + ['original_engagement' => (string) ($original['engagement']['name'] ?? ''), 'original_date' => (string) ($original['generated_at'] ?? '')];
         }
         return $snapshot;
@@ -114,18 +119,18 @@ final class EngagementReport
             }
             return false;
         };
-        $externalDoor = $has(['ftp_anon', 'snmp_public', 'snmp_private', 'telnet', 'smb_anon_read', 'smb_anon_write', 'nfs_exports'], 'external')
+        $externalDoor = $has(['ftp_anon', 'snmp_public', 'snmp_private', 'telnet', 'nfs_exports'], 'external')
             || array_filter($findings, static fn (array $f): bool => $f['origin'] === 'external' && str_starts_with($f['key'], 'exposed_')) !== [];
-        $internalSpread = $has(['smb_anon_write', 'smb1', 'nfs_exports'], 'internal');
+        $internalSpread = $has(['smb1', 'nfs_exports'], 'internal');
         $paths = [];
         if ($externalDoor && $internalSpread) {
-            $paths[] = __('From the internet an attacker can reach services that should not be reachable; once inside, shares or old protocols that need no password would let them read data, plant files and spread to other machines.');
+            $paths[] = __('From the internet an attacker can reach services that should not be reachable; once inside, old protocols and exports open to anyone would let them read data and spread to other machines.');
         }
-        if ($has(['smb_anon_write']) && $has(['smb1'])) {
-            $paths[] = __('Shares anyone can write to, together with SMBv1, are how ransomware spreads from one infected computer to the rest of the network.');
+        if ($has(['smb1'])) {
+            $paths[] = __('SMBv1 is how worms like WannaCry spread from one infected computer to the rest of the network.');
         }
-        if ($has(['smb_signing']) && $has(['smb_anon_read', 'smb_anon_write', 'smb1'])) {
-            $paths[] = __('SMB without required signing lets an attacker on the network relay a user\'s sign-in to other servers; the open shares show where that access would lead.');
+        if ($has(['smb_signing'])) {
+            $paths[] = __('SMB without required signing lets an attacker on the network relay a user\'s sign-in to other servers.');
         }
         if ($has(['snmp_private'])) {
             $paths[] = __('A device answering the default SNMP write community can be reconfigured by anyone who can reach it, for example to redirect or capture traffic.');
@@ -137,14 +142,18 @@ final class EngagementReport
     }
 
     /**
-     * Compare an earlier report's Fails and Warnings with the retest's findings.
+     * Compare an earlier report's Fails and Warnings with the retest's findings. "Fixed" only when the finding is gone,
+     * its host was tested to the end in the retest, AND the retest ran the test that finds it (an open port: all ports
+     * again, or the same port list as before); otherwise "not retested".
      *
      * @param list<array<string,mixed>> $before
      * @param list<array<string,mixed>> $after
-     * @param list<string> $retestedHosts
+     * @param array<string,bool> $completeHosts address => tested to the end in the retest
+     * @param list<string> $retestTests the retest's test keys
+     * @param list<string> $originalTests the earlier engagement's test keys
      * @return array{items:list<array<string,string>>, fixed:int, open:int, not_retested:int}
      */
-    public static function compare(array $before, array $after, array $retestedHosts): array
+    public static function compare(array $before, array $after, array $completeHosts, array $retestTests, array $originalTests = []): array
     {
         $now = [];
         foreach ($after as $f) {
@@ -156,8 +165,12 @@ final class EngagementReport
             if (!in_array($f['severity'] ?? '', ['fail', 'warn'], true)) {
                 continue;
             }
-            $host = (string) preg_replace('/:\d+(\/udp)?$/', '', (string) $f['target']);
-            $status = isset($now[$f['key'] . '|' . $f['target']]) ? 'open' : (in_array($host, $retestedHosts, true) ? 'fixed' : 'not_retested');
+            $host = (string) ($f['host'] ?? '');
+            $test = (string) ($f['test'] ?? EngagementFindings::testFor((string) $f['key']));
+            // Open ports: the retest scanned all ports, or the same list as the first test (neither used all ports).
+            $covered = $test !== '' ? in_array($test, $retestTests, true)
+                : (in_array('tcp_full', $retestTests, true) || !in_array('tcp_full', $originalTests, true));
+            $status = isset($now[$f['key'] . '|' . $f['target']]) ? 'open' : (($completeHosts[$host] ?? false) && $covered ? 'fixed' : 'not_retested');
             $n[$status]++;
             $items[] = ['severity' => (string) $f['severity'], 'title' => (string) $f['title'], 'target' => (string) $f['target'], 'status' => $status];
         }

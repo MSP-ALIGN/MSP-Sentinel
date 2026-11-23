@@ -39,9 +39,9 @@ final class EngagementController extends Controller
     {
         return [
             'tcp_full' => __('All 65,535 TCP ports (instead of the usual list)'),
-            'udp_common' => __('Common UDP services (DNS, NTP, SNMP, NetBIOS, SSDP and others)'),
-            'nse_safe' => __('nmap\'s "safe" service scripts (details of each service; nothing intrusive)'),
-            'anon_access' => __('Anonymous access checks (anonymous FTP, SMB guest shares, NFS exports, open SNMP)'),
+            'udp_common' => __('Common UDP services: one read-only request each to SNMP (default communities), NTP and SSDP/UPnP'),
+            'nse_safe' => __('nmap\'s "safe" service scripts (details of each service; no vulnerability or intrusive checks)'),
+            'anon_access' => __('Anonymous access checks (anonymous FTP login, NFS exports; read only)'),
         ];
     }
 
@@ -91,6 +91,9 @@ final class EngagementController extends Controller
         }
         if ($v['tests'] === []) {
             $errors['tests'] = __('Choose at least one test.');
+        } elseif (in_array('tcp_full', $v['tests'], true) && $v['intensity'] === 'gentle') {
+            // Gentle timing waits between probes: 65,535 ports would take about 7 hours per host and never finish.
+            $errors['intensity'] = __('All 65,535 ports need the normal pace (gentle would take about 7 hours per host). Choose normal, or untick all ports.');
         }
         $retestOf = null;
         if ($v['retest_of'] !== '') {
@@ -186,8 +189,10 @@ final class EngagementController extends Controller
                 continue;
             }
             $pub = App::scopeParser()->parse($line);
-            if (is_string($pub)) {
-                $errors['exclusions'] = __('Line {n} ("{text}"): {error}', ['n' => $n + 1, 'text' => mb_substr($line, 0, 80), 'error' => $pub]);
+            if (is_string($pub) || $pub['type'] === 'domain') {
+                // By address only: a name can't protect the address behind it (and agents test addresses).
+                $errors['exclusions'] = __('Line {n} ("{text}"): {error}', ['n' => $n + 1, 'text' => mb_substr($line, 0, 80),
+                    'error' => is_string($pub) ? $pub : __('Exclude by IP address or range, not by name.')]);
                 break;
             }
             $targets[] = ['kind' => 'exclude', 'site_id' => null, 'entry_type' => $pub['type'], 'value' => $pub['value'],

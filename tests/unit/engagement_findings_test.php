@@ -8,6 +8,7 @@ declare(strict_types=1);
  */
 
 use Sentinel\Engagements\EngagementFindings;
+use Sentinel\Engagements\EngagementReport;
 use Sentinel\Tests\Assert;
 use Sentinel\Tests\TestContext;
 
@@ -24,8 +25,7 @@ return [
                 'scripts' => [['id' => 'nfs-showmount', 'output' => "/export/backups *\n/export/home 10.97.0.0/24"]]]],
              'checks_list' => ['hostscripts' => [
                 ['id' => 'smb-protocols', 'output' => "dialects:\n  NT LM 0.12 (SMBv1) [dangerous, but default]\n  2.1"],
-                ['id' => 'smb2-security-mode', 'output' => "3.1.1:\n  Message signing enabled but not required"],
-                ['id' => 'smb-enum-shares', 'output' => "\\\\10.97.0.20\\Scans:\n  Anonymous access: READ/WRITE\n\\\\10.97.0.20\\Public:\n  Anonymous access: READ\n\\\\10.97.0.20\\IPC$:\n  Anonymous access: READ"]],
+                ['id' => 'smb2-security-mode', 'output' => "3.1.1:\n  Message signing enabled but not required"]],
               'udp' => $udp(['snmp_public' => true, 'snmp_private' => true, 'ntp' => true, 'ssdp' => null])]],
         ];
         $f = EngagementFindings::analyse($results);
@@ -37,16 +37,31 @@ return [
             'ftp_anon@203.0.113.3:21' => 'fail', 'exposed_3389@203.0.113.3:3389' => 'fail', 'snmp_public@203.0.113.3:161/udp' => 'fail', 'ssdp@203.0.113.3:1900/udp' => 'warn',
             'ftp@203.0.113.3:21' => 'warn', 'open_443@203.0.113.3:443' => 'info',
             'telnet@10.97.0.20:23' => 'fail', 'nfs_exports@10.97.0.20:111' => 'fail', 'smb1@10.97.0.20' => 'fail', 'smb_signing@10.97.0.20' => 'warn',
-            'smb_anon_write@10.97.0.20' => 'fail', 'smb_anon_read@10.97.0.20' => 'warn', 'snmp_private@10.97.0.20:161/udp' => 'fail', 'snmp_public@10.97.0.20:161/udp' => 'warn',
+'snmp_private@10.97.0.20:161/udp' => 'fail', 'snmp_public@10.97.0.20:161/udp' => 'warn',
             'ntp@10.97.0.20:123/udp' => 'info',
         ];
         foreach ($expect as $k => $sev) {
             Assert::same($sev, $by[$k] ?? 'missing', $k);
         }
         Assert::true(!isset($by['ntp@203.0.113.3:123/udp']), 'no NTP answer, no finding');
-        Assert::same(2, count(array_filter($f, static fn (array $x): bool => str_starts_with($x['key'], 'smb_anon'))), 'IPC$ is not a finding');
         Assert::same('fail', $f[0]['severity'], 'fails first');
         $c = EngagementFindings::counts($f);
-        Assert::true($c['fail'] === 8 && $c['warn'] === 5 && $c['info'] === 3, json_encode($c)); // 443, rpcbind (111) and NTP
+        Assert::true($c['fail'] === 7 && $c['warn'] === 4 && $c['info'] === 3, json_encode($c)); // 443, rpcbind (111) and NTP
+    },
+    'retest comparison: fixed only when the same test ran again and the host was tested to the end' => function (TestContext $ctx): void {
+        $f = static fn (string $key, string $target, string $host): array => ['key' => $key, 'severity' => 'fail', 'title' => $key, 'target' => $target, 'host' => $host,
+            'test' => EngagementFindings::testFor($key)];
+        $before = [$f('smb1', '2001:db8::5', '2001:db8::5'), $f('ftp_anon', '203.0.113.3:21', '203.0.113.3'), $f('telnet', '203.0.113.4:23', '203.0.113.4'),
+            $f('snmp_private', '203.0.113.6:161/udp', '203.0.113.6')];
+        $c = EngagementReport::compare($before, [], ['2001:db8::5' => true, '203.0.113.3' => true, '203.0.113.4' => false, '203.0.113.6' => true], ['nse_safe', 'tcp_full'], ['nse_safe', 'anon_access', 'udp_common', 'tcp_full']);
+        $s = array_column($c['items'], 'status', 'title');
+        Assert::same('fixed', $s['smb1'], 'IPv6 host without a port, same test ran again');
+        Assert::same('not_retested', $s['ftp_anon'], 'anonymous access was not tested again');
+        Assert::same('not_retested', $s['telnet'], 'host not tested to the end');
+        Assert::same('not_retested', $s['snmp_private'], 'no UDP checks in the retest');
+        $open = EngagementReport::compare($before, [$f('smb1', '2001:db8::5', '2001:db8::5')], ['2001:db8::5' => true], ['nse_safe'], ['nse_safe']);
+        Assert::same('open', array_column($open['items'], 'status', 'title')['smb1']);
+        $ports = EngagementReport::compare([$f('telnet', '203.0.113.4:23', '203.0.113.4')], [], ['203.0.113.4' => true], [], ['tcp_full']);
+        Assert::same('not_retested', $ports['items'][0]['status'], 'all ports first, fewer in the retest: not retested');
     },
 ];

@@ -11,9 +11,9 @@ use Sentinel\Scanning\PortProfile;
  * pen-test findings: what was found, how serious, the exact evidence, and how to fix it. A pure function of the
  * evidence, so the report always matches what was recorded, and a retest is the same analysis on newer evidence.
  *
- * Severities: 'fail' (fix soon: anonymous write access, SMBv1, default SNMP write community, high-risk services on the
- * internet, Telnet, anonymous FTP), 'warn' (should be fixed: anonymous read access, signing not required, SNMP
- * "public", plain FTP, UPnP on the internet), 'info' (worth knowing: services reachable).
+ * Severities: 'fail' (fix soon: SMBv1, NFS exports open to everyone, default SNMP write community, high-risk services
+ * on the internet, Telnet, anonymous FTP), 'warn' (should be fixed: SMB signing not required, NFS exports listed,
+ * SNMP "public", plain FTP, UPnP on the internet), 'info' (worth knowing: services reachable).
  *
  * Untrusted: all evidence came from the tested hosts. Only fixed phrases are matched; evidence is cut to 600
  * characters and always escaped where shown.
@@ -24,14 +24,16 @@ final class EngagementFindings
 
     /**
      * @param list<array<string,mixed>> $results
-     * @return list<array{key:string, severity:string, title:string, target:string, origin:string, evidence:string, fix:string}>
+     * @return list<array{key:string, severity:string, title:string, target:string, host:string, test:string, origin:string, evidence:string, fix:string}>
+     *         host: the address; test: the engagement test that finds it ('' for open ports: any port scan)
      */
     public static function analyse(array $results): array
     {
         $out = [];
-        $add = static function (string $severity, string $key, string $title, string $target, string $origin, string $evidence, string $fix) use (&$out): void {
-            $out[$key . '|' . $target] = ['key' => $key, 'severity' => $severity, 'title' => $title, 'target' => $target, 'origin' => $origin,
-                'evidence' => mb_substr(trim($evidence), 0, 600), 'fix' => $fix];
+        $ip = '';
+        $add = static function (string $severity, string $key, string $title, string $target, string $origin, string $evidence, string $fix) use (&$out, &$ip): void {
+            $out[$key . '|' . $target] = ['key' => $key, 'severity' => $severity, 'title' => $title, 'target' => $target, 'host' => $ip, 'test' => self::testFor($key),
+                'origin' => $origin, 'evidence' => mb_substr(trim($evidence), 0, 600), 'fix' => $fix];
         };
         foreach ($results as $r) {
             $ip = (string) $r['ip'];
@@ -74,20 +76,6 @@ final class EngagementFindings
                 if ($id === 'smb2-security-mode' && str_contains($text, 'not required')) {
                     $add('warn', 'smb_signing', __('SMB signing is not required (relay attacks)'), $target, $origin, $text, __('Require SMB signing (Group Policy: "Digitally sign communications (always)").'));
                 }
-                if ($id === 'smb-enum-shares') {
-                    foreach (self::shares($text) as $share => $access) {
-                        if (strtoupper($share) === 'IPC$') {
-                            continue;
-                        }
-                        if (str_contains($access, 'WRITE')) {
-                            $add('fail', 'smb_anon_write', __('Share {s} can be written without a password', ['s' => $share]), $target, $origin, $text,
-                                __('Remove guest and anonymous access from this share; grant named users or groups only.'));
-                        } elseif (str_contains($access, 'READ')) {
-                            $add('warn', 'smb_anon_read', __('Share {s} can be read without a password', ['s' => $share]), $target, $origin, $text,
-                                __('Remove guest and anonymous access from this share; grant named users or groups only.'));
-                        }
-                    }
-                }
                 if ($id === 'nfs-showmount' && preg_match('#^\s*/\S+#m', $text) === 1) {
                     $everyone = preg_match('#^\s*/\S+\s+(\*|0\.0\.0\.0/0|everyone)\s*$#mi', $text) === 1;
                     $add($everyone ? 'fail' : 'warn', 'nfs_exports', $everyone ? __('NFS exports are open to everyone') : __('NFS exports are listed to anyone who asks'), $target, $origin, $text,
@@ -118,6 +106,17 @@ final class EngagementFindings
         return $list;
     }
 
+    /** The engagement test whose results show a finding ('' when any port scan does). */
+    public static function testFor(string $key): string
+    {
+        return match ($key) {
+            'ftp_anon', 'nfs_exports' => 'anon_access',
+            'smb1', 'smb_signing' => 'nse_safe',
+            'snmp_public', 'snmp_private', 'ssdp', 'ntp' => 'udp_common',
+            default => '',
+        };
+    }
+
     /** Counts per severity. @param list<array{severity:string}> $findings @return array{fail:int, warn:int, info:int} */
     public static function counts(array $findings): array
     {
@@ -126,24 +125,5 @@ final class EngagementFindings
             $c[$f['severity']]++;
         }
         return $c;
-    }
-
-    /**
-     * Shares and their anonymous access from smb-enum-shares output ("\\host\NAME:" then "Anonymous access: READ").
-     *
-     * @return array<string,string>
-     */
-    private static function shares(string $text): array
-    {
-        $out = [];
-        $current = null;
-        foreach (preg_split('/\R/', $text) ?: [] as $line) {
-            if (preg_match('/^\s*\\\\\\\\[^\\\\]+\\\\([^:\\\\]{1,80}):\s*$/', $line, $m) === 1) {
-                $current = $m[1];
-            } elseif ($current !== null && preg_match('/Anonymous access:\s*(READ\/WRITE|READ|WRITE)/i', $line, $m) === 1) {
-                $out[$current] = strtoupper($m[1]);
-            }
-        }
-        return $out;
     }
 }

@@ -262,8 +262,8 @@
     ],
     "hostscripts": [
       {
-        "id": "smb-enum-shares",
-        "output": "account_used: guest\n\\\\203.0.113.3\\Public:\n  Type: STYPE_DISKTREE\n  Anonymous access: READ"
+        "id": "smb2-security-mode",
+        "output": "3:1:1:\n  Message signing enabled but not required"
       }
     ]
   },
@@ -299,8 +299,8 @@
     ],
     "hostscripts": [
       {
-        "id": "smb-enum-shares",
-        "output": "account_used: guest\n\\\\10.97.0.20\\Scans:\n  Anonymous access: READ/WRITE"
+        "id": "smb-protocols",
+        "output": "dialects:\n  NT LM 0.12 (SMBv1) [dangerous, but default]\n  2:1:0"
       }
     ]
   },
