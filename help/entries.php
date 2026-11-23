@@ -103,6 +103,7 @@ return [
                 'An agent is a small Linux appliance at the client\'s site. It only connects out to Sentinel, finds the devices on the internal network with their open services, certificates and web pages, and reports them. A full scan runs weekly and a light sweep daily, inside the client\'s scan window (stopped when it closes and continued in the next window); admins can also press Scan now (with a reason).',
                 'An agent scans only the networks in a signed internal authorisation for its site: who at the client approved it, the dates, and exactly which private networks (each at most a /16). Sentinel signs the authorisation and every job; the agent checks both signatures and refuses any target outside the signed networks.',
                 'To add one: record an internal authorisation for the site, click Create an enrolment code (admins; shown once, valid once for 24 hours), and run the agent installer on the appliance with that code. Pause on the site stops agent scans within a minute; revoking an agent stops its token at once.',
+                'Managed from the Agents page afterwards (admins): scan gentleness per site (very gentle, gentle or normal nmap timing, never faster), how often agents check in, a Diagnostics report (versions, disk, memory, clock difference, key fingerprint) and Restart.',
                 'Risky internal protocols, checked read-only: SMBv1 enabled, Telnet open and SNMP answering the default "private" community are Fails; SMB signing not required, Remote Desktop without Network Level Authentication, FTP open, SNMP answering "public" and login pages over plain HTTP are Warnings. The SNMP check sends one read request with the default community names.',
                 'Findings: known vulnerabilities in the services found (distribution builds are never "confirmed"), and certificates that are expired, accept old TLS or use a weak key. Self-signed certificates are normal inside a network and not findings. After the first scan (the baseline), devices never seen before are announced as new devices, unless NinjaOne already knows them.',
             ],
@@ -222,6 +223,13 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.21.0',
+            'date' => '2026-11-23',
+            'items' => [
+                'Agents managed from the Agents page: scan gentleness and check-in interval per site, a Diagnostics report and a Restart button.',
+            ],
+        ],
         [
             'version' => '1.20.1',
             'date' => '2026-11-23',

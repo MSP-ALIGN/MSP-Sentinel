@@ -147,6 +147,9 @@ switch ($command) {
                 $say('Error: ' . mb_substr($ex->getMessage(), 0, 300));
                 $wait = 60;
             }
+            if ($wait === -2) {
+                exit(75); // a restart Sentinel asked for: systemd (Restart=on-failure) starts the agent again
+            }
             if ($wait < 0) {
                 exit(3);
             }

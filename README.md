@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.20.1](https://img.shields.io/badge/version-1.20.1-ff5a1f?style=flat-square)
+![Version 1.21.0](https://img.shields.io/badge/version-1.21.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -148,6 +148,17 @@ curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install
 The same help is built into the app (**Help** in the menu), with a "What's new" page for every release.
 
 ## What's new
+
+### 1.21.0 (2026-11-23): agent settings from the web UI
+
+- **Manage agents from the client's Agents page** (admins) after the one-time install:
+  - **Scan gentleness per site:** very gentle (nmap `-T1`, 10 packets/s), gentle (`-T2`, 50; the default) or normal
+    (`-T3`, 200). It is signed into each job, and the agent refuses anything else.
+  - **Check-in interval per site:** 30 seconds to 10 minutes.
+  - **Diagnostics:** a report from the agent with versions, disk, memory, load, uptime, clock difference with
+    Sentinel, key fingerprint and whether it holds a directory password. Never a secret.
+  - **Restart:** between scans; the agent's service starts it again.
+- Next: signed agent updates from Sentinel, then moving agents to a new Sentinel address.
 
 ### 1.20.1 (2026-11-23): Active Directory checks, fixes from review
 

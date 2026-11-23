@@ -44,7 +44,7 @@ final class JobVerifier
      *
      * @param list<int> $doneIds Jobs this agent already ran.
      * @return array{job_id:int, kind:string, targets:list<string>, ports:list<int>, udp_ports:list<int>, ranges:list<string>,
-     *               directory:?array{domain:string, dc_ip:string, cert_trusted:string}, listen:int}|string The job, or why it was refused.
+     *               directory:?array{domain:string, dc_ip:string, cert_trusted:string}, listen:int, timing:string}|string The job, or why it was refused.
      */
     public function verify(string $payload, string $signature, array $doneIds, ?int $now = null): array|string
     {
@@ -144,11 +144,15 @@ final class JobVerifier
             }
             $directory = ['domain' => $d['domain'], 'dc_ip' => $d['dc_ip'], 'cert_trusted' => $d['cert_trusted']];
         }
+        $timing = $job['timing'] ?? 'gentle';
+        if (!is_string($timing) || !isset(\Sentinel\Scanning\NmapRunner::PROFILES[$timing])) {
+            return 'unknown scan timing'; // only the built-in gentle profiles, never anything faster than -T3
+        }
         $listen = $job['listen'] ?? 0;
         if (!is_int($listen) || $listen < 0 || $listen > self::MAX_LISTEN || ($listen > 0 && $job['kind'] !== 'full')) {
             return 'invalid listening time';
         }
         return ['job_id' => $jobId, 'kind' => (string) $job['kind'], 'targets' => $targets, 'ports' => array_values($ports), 'udp_ports' => array_values($udp), 'ranges' => $ranges,
-                'directory' => $directory, 'listen' => $listen];
+                'directory' => $directory, 'listen' => $listen, 'timing' => $timing];
     }
 }

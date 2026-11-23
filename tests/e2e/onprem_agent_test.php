@@ -155,7 +155,7 @@ return [
         $res = $ctx->api('POST', '/agent/v1/jobs/' . $job . '/results', $config['token'], ['status' => 'done', 'hosts' => [['ip' => '10.91.0.5'], ['ip' => '8.8.8.8'], ['ip' => '10.90.0.20']]]);
         Assert::status(200, $res);
         Assert::same(2, json_decode($res->body, true)['rejected'] ?? null);
-        Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE source_id LIKE '%10.91.0.5'")->fetchColumn(), 'nothing stored outside scope');
+        Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE site_id = {$site} AND source_id LIKE '%10.91.0.5'")->fetchColumn(), 'nothing stored outside scope');
         // A tampered authorisation (ranges changed in the database, signature not) is never used.
         $ctx->db->exec("UPDATE internal_authorisations SET signed_payload = REPLACE(signed_payload, '10.90.0.0/24', '10.91.0.0/24') WHERE id = {$auth}");
         $job2 = App::agents()->queueJob($agentId, $cid, $site, $auth, 'light', 'manual', null, [], 12);

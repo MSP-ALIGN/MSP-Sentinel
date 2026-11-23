@@ -19,6 +19,12 @@ final class State
     {
     }
 
+    /** The folder the state lives in. */
+    public function directory(): string
+    {
+        return dirname($this->file);
+    }
+
     /** @return list<int> */
     public function doneIds(): array
     {

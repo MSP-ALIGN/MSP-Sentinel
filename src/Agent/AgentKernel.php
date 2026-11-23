@@ -17,6 +17,11 @@ use Sentinel\Core\Response;
  * - POST /agent/v1/poll    {hostname, version, running[]} -> signed jobs to run, job IDs to stop
  * - POST /agent/v1/jobs/{id}/results  results of one job
  * - POST /agent/v1/secrets/{id}/ack   {ok, error}: the agent opened and kept (or refused) a sealed directory password
+ * - POST /agent/v1/diagnostics        the agent's diagnostics report, when an admin asked for one
+ *
+ * The poll answer also carries the site's check-in interval and one-off requests from the Agents page ("restart":
+ * the agent exits and its service starts it again; "diagnostics": send a report). Neither can make the agent scan or
+ * run anything, so they need no signature.
  *
  * Sealed passwords: the poll body carries the agent's public key (box_public_key) and whether it holds a directory
  * password (holds_directory). The answer carries, signed with the server key, the sealed passwords waiting for it
@@ -63,6 +68,14 @@ final class AgentKernel
             }
             if (preg_match('#^/agent/v1/secrets/([1-9][0-9]{0,9})/ack$#', $request->path, $m)) {
                 return self::ackSecret($agent, (int) $m[1]);
+            }
+            if ($request->path === '/agent/v1/diagnostics') {
+                $body = self::body(65536);
+                if ($body === null) {
+                    return ApiKernel::error(400, 'Send the diagnostics as a JSON object.');
+                }
+                App::agents()->saveDiagnostics((int) $agent['id'], $body);
+                return ApiKernel::json(['ok' => true]);
             }
             return ApiKernel::error(404, 'Not found.');
         } catch (\Throwable $ex) {
@@ -136,7 +149,10 @@ final class AgentKernel
                 $jobs[] = $signed;
             }
         }
-        return ApiKernel::json(['jobs' => $jobs, 'stop' => array_values(array_unique($stop)), 'paused' => $paused, 'poll_seconds' => self::POLL_SECONDS]
+        // One-off requests from the Agents page: restart (the service restarts it) and a diagnostics report.
+        $requests = App::agents()->takeRequests((int) $agent['id']);
+        return ApiKernel::json(['jobs' => $jobs, 'stop' => array_values(array_unique($stop)), 'paused' => $paused,
+                                'poll_seconds' => max(30, min(600, (int) ($agent['agent_poll_seconds'] ?? self::POLL_SECONDS)))] + $requests
             + self::secrets($agent, ($body['holds_directory'] ?? false) === true, is_string($body['directory_username'] ?? null) ? $body['directory_username'] : null));
     }
 

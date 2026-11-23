@@ -87,6 +87,23 @@ is kept). Remove: `sudo ./install/agent-install.sh --uninstall`, and revoke the 
   `directory-credential.json` (the Active Directory password, still sealed). Reinstalling creates a new key: set the
   directory password again afterwards (the Agents page says so).
 
+## Managing agents from Sentinel (1.21)
+
+After the one-time install with an enrolment code, these are set on the client's **Agents** page (admins):
+
+- **Scan gentleness** per site: *Very gentle* (nmap `-T1`, at most 10 packets per second), *Gentle* (`-T2`, 50; the
+  default) or *Normal* (`-T3`, 200). It is part of each signed job; the agent accepts only these three, so nothing
+  faster than `-T3` can be asked for.
+- **Check-in interval** per site: 30 seconds to 10 minutes (default 1 minute). Pausing and stopping scans take up to
+  one interval.
+- **Diagnostics**: the agent sends a report at its next check-in: versions (agent, PHP, nmap, system), free disk and
+  memory, load, uptime, results waiting to upload, the clock difference with Sentinel (jobs carry expiry times, so
+  more than a couple of minutes matters), its key fingerprint and whether it holds a directory password. Never the
+  token or the password.
+- **Restart**: the agent exits at its next check-in, between scans, and its service starts it again.
+
+Agent updates and moving agents to a new Sentinel address follow in the next releases.
+
 ## What is graded
 
 - Known vulnerabilities in the services the agent finds, matched like external services. Service banners from Linux

@@ -70,14 +70,48 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                         <?php elseif ($online): ?><span class="badge text-bg-success"><i class="bi bi-wifi me-1" aria-hidden="true"></i><?= e(__('Online')) ?></span>
                         <?php else: ?><span class="badge text-bg-warning"><i class="bi bi-wifi-off me-1" aria-hidden="true"></i><?= e(__('Offline')) ?></span><?php endif; ?></td>
                     <td class="text-end"><?php if ($isAdmin && $a['status'] === 'active'): ?>
+                        <div class="d-flex flex-wrap gap-1 justify-content-end">
+                        <form method="post" action="<?= e(url('/clients/' . $cid . '/agents/' . (int) $a['id'] . '/diagnostics')) ?>"><?= Csrf::field() ?><button class="btn btn-sm btn-outline-secondary" type="submit"><i class="bi bi-clipboard-pulse me-1" aria-hidden="true"></i><?= e(__('Diagnostics')) ?></button></form>
+                        <form method="post" action="<?= e(url('/clients/' . $cid . '/agents/' . (int) $a['id'] . '/restart')) ?>" data-confirm="<?= e(__('Restart this agent at its next check-in? A running scan finishes first.')) ?>"><?= Csrf::field() ?><button class="btn btn-sm btn-outline-secondary" type="submit"><i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i><?= e(__('Restart')) ?></button></form>
                         <form method="post" action="<?= e(url('/clients/' . $cid . '/agents/' . (int) $a['id'] . '/revoke')) ?>" data-confirm="<?= e(__('Revoke this agent? Its token stops working immediately.')) ?>"><?= Csrf::field() ?><button class="btn btn-sm btn-outline-secondary" type="submit"><?= e(__('Revoke')) ?></button></form>
+                        </div>
+                        <?php if ((int) ($a['restart_requested'] ?? 0) === 1): ?><div class="small text-body-secondary"><?= e(__('restart requested')) ?></div><?php endif; ?>
+                        <?php if ((int) ($a['diagnostics_requested'] ?? 0) === 1): ?><div class="small text-body-secondary"><?= e(__('diagnostics requested')) ?></div><?php endif; ?>
                     <?php endif; ?></td>
                 </tr>
+                <?php $diag = json_decode((string) ($a['diagnostics'] ?? ''), true); if (is_array($diag) && $a['status'] === 'active'): ?>
+                <tr><td colspan="5" class="small">
+                    <details><summary><?= e(__('Diagnostics from {t} UTC', ['t' => $a['diagnostics_at']])) ?></summary>
+                    <dl class="row mb-0 mt-1">
+                        <?php foreach ([__('Agent version') => $diag['version'] ?? '', __('PHP') => $diag['php'] ?? '', __('System') => $diag['os'] ?? '', __('nmap') => $diag['nmap'] ?? '',
+                                        __('Free disk') => isset($diag['disk_free_mb']) ? $diag['disk_free_mb'] . ' MB' : '', __('Free memory') => isset($diag['memory_mb']) ? $diag['memory_mb'] . ' MB' : '',
+                                        __('Load') => (string) ($diag['load'] ?? ''), __('Up for') => isset($diag['uptime_seconds']) ? __('{d} day(s)', ['d' => intdiv((int) $diag['uptime_seconds'], 86400)]) : '',
+                                        __('Results waiting to upload') => (string) ($diag['pending_results'] ?? ''),
+                                        __('Clock difference') => isset($diag['clock_skew_seconds']) ? $diag['clock_skew_seconds'] . ' s' . (abs((int) $diag['clock_skew_seconds']) > 120 ? ' — ' . __('fix the appliance\'s clock (NTP): jobs carry expiry times') : '') : '',
+                                        __('Agent key') => $diag['key_fingerprint'] ?? '', __('Directory password held') => ($diag['holds_directory'] ?? false) ? __('yes (sealed)') : __('no'),
+                                        __('Name listening') => $diag['name_listening'] ?? ''] as $label => $value): ?>
+                        <?php if ((string) $value !== ''): ?><dt class="col-sm-4"><?= e($label) ?></dt><dd class="col-sm-8"><?= e((string) $value) ?></dd><?php endif; ?>
+                        <?php endforeach; ?>
+                    </dl></details></td></tr>
+                <?php endif; ?>
                 <?php endforeach; ?>
                 </tbody>
             </table>
             </div>
             <?php if ($isAdmin): ?>
+            <form method="post" action="<?= e(url('/clients/' . $cid . '/sites/' . $sid . '/agent-settings')) ?>" class="d-flex flex-wrap align-items-end gap-2 mb-2 small"><?= Csrf::field() ?>
+                <div><label class="form-label mb-0" for="timing-<?= $sid ?>"><?= e(__('Scan gentleness')) ?></label>
+                    <select class="form-select form-select-sm" id="timing-<?= $sid ?>" name="timing">
+                        <?php foreach (['very_gentle' => __('Very gentle (nmap -T1, 10 packets/s)'), 'gentle' => __('Gentle (nmap -T2, 50 packets/s; default)'), 'normal' => __('Normal (nmap -T3, 200 packets/s)')] as $v => $l): ?>
+                        <option value="<?= e($v) ?>" <?= ($site['agent_timing'] ?? 'gentle') === $v ? 'selected' : '' ?>><?= e($l) ?></option>
+                        <?php endforeach; ?></select></div>
+                <div><label class="form-label mb-0" for="poll-<?= $sid ?>"><?= e(__('Check-in every')) ?></label>
+                    <select class="form-select form-select-sm" id="poll-<?= $sid ?>" name="poll_seconds">
+                        <?php foreach (\Sentinel\Controllers\AgentController::POLL_CHOICES as $sec): ?>
+                        <option value="<?= $sec ?>" <?= (int) ($site['agent_poll_seconds'] ?? 60) === $sec ? 'selected' : '' ?>><?= e($sec < 60 ? __('{n} seconds', ['n' => $sec]) : __('{n} minute(s)', ['n' => intdiv($sec, 60)])) ?></option>
+                        <?php endforeach; ?></select></div>
+                <button class="btn btn-sm btn-outline-primary" type="submit"><?= e(__('Save agent settings')) ?></button>
+            </form>
             <div class="d-flex flex-wrap gap-2 mb-2">
                 <form method="post" action="<?= e(url('/clients/' . $cid . '/sites/' . $sid . '/enrol')) ?>"><?= Csrf::field() ?><button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-key me-1" aria-hidden="true"></i><?= e(__('Create an enrolment code')) ?></button></form>
                 <form method="post" action="<?= e(url('/clients/' . $cid . '/sites/' . $sid . '/scan')) ?>" class="d-flex gap-2"><?= Csrf::field() ?>

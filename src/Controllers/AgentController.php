@@ -185,6 +185,56 @@ final class AgentController extends Controller
         return Response::redirect('/clients/' . (int) $client['id'] . '/agents');
     }
 
+    /** Check-in intervals offered on the Agents page (seconds). */
+    public const POLL_CHOICES = [30, 60, 120, 300, 600];
+
+    /**
+     * POST /clients/{id}/sites/{site}/agent-settings (admins): the site's scan gentleness (an nmap timing profile,
+     * signed into each job; nothing faster than -T3 exists) and how often its agents check in.
+     */
+    public function siteSettings(Request $request, array $params): Response
+    {
+        [$client, $site] = $this->clientSite($params);
+        $timing = $request->input('timing');
+        $poll = (int) $request->input('poll_seconds');
+        if (!isset(\Sentinel\Scanning\NmapRunner::PROFILES[$timing]) || !in_array($poll, self::POLL_CHOICES, true)) {
+            Session::flash('danger', __('Choose one of the offered settings.'));
+            return Response::redirect('/clients/' . (int) $client['id'] . '/agents');
+        }
+        App::db()->prepare('UPDATE sites SET agent_timing = :t, agent_poll_seconds = :p, updated_at = UTC_TIMESTAMP() WHERE id = :s')
+            ->execute(['t' => $timing, 'p' => $poll, 's' => (int) $site['id']]);
+        $this->audit($request, 'site.agent_settings', 'site', (int) $site['id'], ['client_id' => (int) $client['id'], 'timing' => $timing, 'poll_seconds' => $poll]);
+        Session::flash('success', __('Agent settings saved. The check-in interval applies from the next check-in, the gentleness from the next scan.'));
+        return Response::redirect('/clients/' . (int) $client['id'] . '/agents');
+    }
+
+    /** POST /clients/{id}/agents/{agent}/restart (admins): the agent restarts at its next check-in (between scans). */
+    public function restartAgent(Request $request, array $params): Response
+    {
+        return $this->agentRequest($request, $params, 'restart', __('The agent restarts at its next check-in (between scans; its service starts it again within a minute or two).'));
+    }
+
+    /** POST /clients/{id}/agents/{agent}/diagnostics (admins): the agent sends a diagnostics report at its next check-in. */
+    public function diagnosticsAgent(Request $request, array $params): Response
+    {
+        return $this->agentRequest($request, $params, 'diagnostics', __('The agent sends its diagnostics at its next check-in (within a minute). Reload the page then.'));
+    }
+
+    private function agentRequest(Request $request, array $params, string $what, string $done): Response
+    {
+        $client = $this->client($params);
+        $stmt = App::db()->prepare("SELECT id FROM agents WHERE id = :a AND client_id = :c AND status = 'active'");
+        $stmt->execute(['a' => (int) ($params['agent'] ?? 0), 'c' => (int) $client['id']]);
+        $id = (int) $stmt->fetchColumn();
+        if ($id === 0) {
+            throw new HttpException(404);
+        }
+        App::agents()->request($id, $what);
+        $this->audit($request, 'agent.' . $what . '_requested', 'agent', $id, ['client_id' => (int) $client['id']]);
+        Session::flash('success', $done);
+        return Response::redirect('/clients/' . (int) $client['id'] . '/agents');
+    }
+
     /** POST /clients/{id}/sites/{site}/pause (technicians and admins): stop agent scans at this site now. */
     public function pause(Request $request, array $params): Response
     {

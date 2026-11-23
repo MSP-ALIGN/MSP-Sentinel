@@ -176,6 +176,9 @@ final class AgentService
             }
             $extra['listen'] = max(0, min(300, $this->listenSeconds));
         }
+        // The site's scan gentleness (an nmap timing profile; never faster than -T3), signed like the targets.
+        $timing = (string) ($agent['agent_timing'] ?? 'gentle');
+        $extra['timing'] = isset(\Sentinel\Scanning\NmapRunner::PROFILES[$timing]) ? $timing : 'gentle';
         return $this->signer->sign($extra + [
             'v' => 1, 'type' => 'agent_job', 'job_id' => (int) $job['id'], 'agent_id' => (int) $agent['id'], 'site_id' => (int) $job['site_id'], 'client_id' => (int) $job['client_id'],
             'kind' => (string) $job['kind'], 'ports' => $ports, 'targets' => $targets,

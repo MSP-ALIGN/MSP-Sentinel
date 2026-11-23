@@ -88,6 +88,13 @@ final class Runner
             return 60;
         }
         $this->takeSecrets((array) $res['data']);
+        if (($res['data']['diagnostics'] ?? false) === true) {
+            $this->sendDiagnostics();
+        }
+        if (($res['data']['restart'] ?? false) === true) {
+            ($this->log)('Sentinel asked for a restart. Exiting; the service starts the agent again.');
+            return -2;
+        }
         foreach ((array) ($res['data']['jobs'] ?? []) as $signed) {
             if (!is_array($signed) || !is_string($signed['payload'] ?? null) || !is_string($signed['signature'] ?? null)) {
                 continue;
@@ -162,6 +169,33 @@ final class Runner
         }
     }
 
+    /**
+     * A diagnostics report for the Agents page: versions, disk, memory, load, uptime, clock, the key fingerprint and
+     * whether a directory password is held (never the password or the token).
+     */
+    private function sendDiagnostics(): void
+    {
+        $uptime = is_readable('/proc/uptime') ? (int) (float) explode(' ', (string) file_get_contents('/proc/uptime'))[0] : null;
+        $mem = null;
+        if (is_readable('/proc/meminfo') && preg_match('/MemAvailable:\s+(\d+)/', (string) file_get_contents('/proc/meminfo'), $m)) {
+            $mem = intdiv((int) $m[1], 1024);
+        }
+        $free = @disk_free_space($this->state->directory());
+        $load = function_exists('sys_getloadavg') ? (sys_getloadavg()[0] ?? null) : null;
+        try {
+            $this->http->post('/agent/v1/diagnostics', [
+                'version' => self::version(), 'php' => PHP_VERSION, 'os' => php_uname('s') . ' ' . php_uname('r') . ' ' . php_uname('m'), 'nmap' => $this->nmap->version(),
+                'disk_free_mb' => $free === false ? null : (int) ($free / 1048576), 'uptime_seconds' => $uptime, 'memory_mb' => $mem, 'load' => $load,
+                'pending_results' => count($this->state->pending()), 'time' => gmdate('Y-m-d\TH:i:s\Z'),
+                'key_fingerprint' => $this->key !== null ? AgentKey::fingerprint($this->key->publicKey()) : '', 'holds_directory' => $this->credentials?->holds() ?? false,
+                'name_listening' => $this->listener === null ? 'off' : 'on (LLMNR UDP 5355, NetBIOS UDP 137)',
+            ]);
+            ($this->log)('Diagnostics sent.');
+        } catch (\Throwable $ex) {
+            ($this->log)('Could not send diagnostics: ' . mb_substr($ex->getMessage(), 0, 200));
+        }
+    }
+
     /** Send finished results that Sentinel hasn't accepted yet (2xx accepted; 404/409: it no longer wants them). */
     private function sendPending(): void
     {
@@ -200,11 +234,12 @@ final class Runner
         foreach ($job['targets'] as $t) {
             $byFamily[str_contains($t, ':') ? 6 : 4][] = $t;
         }
+        $nmap = $this->nmap->withProfile($job['timing'] ?? 'gentle'); // the site's gentleness, from the signed job
         foreach ($byFamily as $cidrs) {
             if ($shouldStop()) {
                 break;
             }
-            $r = $this->nmap->discover($cidrs, $shouldStop);
+            $r = $nmap->discover($cidrs, $shouldStop);
             if ($r['stopped'] || $r['timed_out'] || $r['overflow']) {
                 // Use what the sweep found so far (complete host entries only), but the job is not complete.
                 $messages[] = $r['stopped'] ? 'Discovery stopped.' : ($r['timed_out'] ? 'Discovery took too long and was stopped.' : 'Discovery output too large; stopped.');
@@ -233,7 +268,7 @@ final class Runner
                     break;
                 }
                 try {
-                    $scan = $this->nmap->scan((string) $ip, $job['ports'], $shouldStop);
+                    $scan = $nmap->scan((string) $ip, $job['ports'], $shouldStop);
                     if ($scan['stopped'] || $scan['timed_out'] || $scan['overflow']) {
                         $complete = false;
                         continue;

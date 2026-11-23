@@ -19,6 +19,14 @@ declare(strict_types=1);
 $log = $argv[1];
 $args = array_slice($argv, 2);
 file_put_contents($log, json_encode($args) . "\n", FILE_APPEND);
+// The agent's per-site timing profiles (-T1/10, -T3/200) are checked like the default -T2/50; anything else fails.
+foreach ([['-T1', '10'], ['-T3', '200']] as [$t, $r]) {
+    $i = array_search($t, $args, true);
+    if ($i !== false && ($args[$i + 1] ?? '') === '--max-rate' && ($args[$i + 2] ?? '') === $r) {
+        $args[$i] = '-T2';
+        $args[$i + 2] = '50';
+    }
+}
 
 // Discovery sweep (on-premises agent): exact gentle arguments, then the fixture hosts inside the given networks.
 if (in_array('-sn', $args, true)) {

@@ -12,7 +12,8 @@ use Sentinel\Core\Config;
  * Fixed arguments (no user-controlled options):
  *   -sT --unprivileged   TCP connect scan, no root or raw sockets needed
  *   -Pn -n               no ping (many hosts block it), no reverse DNS
- *   -T2 --max-rate 50    "polite" timing, at most 50 packets per second
+ *   -T2 --max-rate 50    "polite" timing, at most 50 packets per second (the "gentle" profile; agents can be set
+ *                        per site to "very_gentle" -T1/10 or "normal" -T3/200, never faster: PROFILES)
  *   --max-retries 2 --host-timeout 20m
  *   -sV --version-light  light service/version detection on open ports only
  *   -p <ports> -oX -     ports from PortProfile (ints), XML to stdout
@@ -31,15 +32,43 @@ use Sentinel\Core\Config;
  */
 final class NmapRunner
 {
+    /** Timing profiles: nmap timing template and packets per second at most. Nothing faster than -T3 exists here. */
+    public const PROFILES = ['very_gentle' => ['-T1', '10'], 'gentle' => ['-T2', '50'], 'normal' => ['-T3', '200']];
+
     /** Use fromConfig() normally. */
-    public function __construct(private readonly string $nmapPath, private readonly int $hostTimeoutSeconds = 1500)
+    public function __construct(private readonly string $nmapPath, private readonly int $hostTimeoutSeconds = 1500, private readonly string $profile = 'gentle')
     {
+        if (!isset(self::PROFILES[$profile])) {
+            throw new \InvalidArgumentException('Unknown timing profile.');
+        }
+    }
+
+    /** The same runner with another timing profile (agents: the site's setting from the signed job). */
+    public function withProfile(string $profile): self
+    {
+        return new self($this->nmapPath, $this->hostTimeoutSeconds, $profile);
     }
 
     /** Build from config: scanner.nmap_path (default /usr/bin/nmap). */
     public static function fromConfig(Config $config): self
     {
         return new self((string) $config->get('scanner.nmap_path', '/usr/bin/nmap'), (int) $config->get('scanner.host_timeout', 1500));
+    }
+
+    /** The first line of `nmap --version` (diagnostics), or '' when it can't be run. */
+    public function version(): string
+    {
+        if (!$this->available()) {
+            return '';
+        }
+        $p = @proc_open([$this->nmapPath, '--version'], [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes);
+        if (!is_resource($p)) {
+            return '';
+        }
+        $line = (string) fgets($pipes[1], 200);
+        fclose($pipes[1]);
+        proc_close($p);
+        return trim($line);
     }
 
     /** True if the configured nmap binary exists and is executable. */
@@ -67,7 +96,8 @@ final class NmapRunner
                 throw new \InvalidArgumentException('Invalid port.');
             }
         }
-        $args = [$this->nmapPath, '-sT', '--unprivileged', '-Pn', '-n', '-T2', '--max-rate', '50', '--max-retries', '2',
+        [$timing, $rate] = self::PROFILES[$this->profile];
+        $args = [$this->nmapPath, '-sT', '--unprivileged', '-Pn', '-n', $timing, '--max-rate', $rate, '--max-retries', '2',
                  '--host-timeout', '20m', '-sV', '--version-light', '--noninteractive', '-p', PortProfile::toNmapArg($ports), '-oX', '-'];
         if (str_contains($ip, ':')) {
             $args[] = '-6';
@@ -111,7 +141,8 @@ final class NmapRunner
             }
             $v6 = $isV6;
         }
-        $args = [$this->nmapPath, '-sn', '--unprivileged', '-n', '-T2', '--max-rate', '50', '--max-retries', '1', '--host-timeout', '2m', '-oX', '-'];
+        [$timing, $rate] = self::PROFILES[$this->profile];
+        $args = [$this->nmapPath, '-sn', '--unprivileged', '-n', $timing, '--max-rate', $rate, '--max-retries', '1', '--host-timeout', '2m', '-oX', '-'];
         if ($v6) {
             $args[] = '-6';
         }

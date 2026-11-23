@@ -166,7 +166,7 @@ final class AgentRepository
         if (!preg_match('/^Bearer (sna_([0-9a-f]{12})_[A-Za-z0-9_-]{43})$/', trim($authorization), $m)) {
             return null;
         }
-        $stmt = $this->db->prepare("SELECT a.*, c.is_archived, c.scanning_paused AS client_paused, c.timezone, c.scan_window_start, c.scan_window_end, s.scanning_paused AS site_paused, s.name AS site_name
+        $stmt = $this->db->prepare("SELECT a.*, c.is_archived, c.scanning_paused AS client_paused, c.timezone, c.scan_window_start, c.scan_window_end, s.scanning_paused AS site_paused, s.name AS site_name, s.agent_timing, s.agent_poll_seconds
                                     FROM agents a JOIN clients c ON c.id = a.client_id JOIN sites s ON s.id = a.site_id WHERE a.token_prefix = :p AND a.status = 'active'");
         $stmt->execute(['p' => $m[2]]);
         $agent = $stmt->fetch();
@@ -218,6 +218,59 @@ final class AgentRepository
         }
         $pub = openssl_pkey_get_public("-----BEGIN PUBLIC KEY-----\n" . chunk_split(base64_encode($der), 64, "\n") . "-----END PUBLIC KEY-----\n");
         return $pub !== false && (openssl_pkey_get_details($pub)['ec']['curve_name'] ?? '') === 'prime256v1';
+    }
+
+    /**
+     * The one-off requests waiting for an agent, cleared as they are handed out (a restart is asked for once).
+     *
+     * @return array{restart?:true, diagnostics?:true}
+     */
+    public function takeRequests(int $agentId): array
+    {
+        $stmt = $this->db->prepare('SELECT restart_requested, diagnostics_requested FROM agents WHERE id = :id');
+        $stmt->execute(['id' => $agentId]);
+        $r = $stmt->fetch() ?: [];
+        $out = [];
+        if ((int) ($r['restart_requested'] ?? 0) === 1) {
+            $out['restart'] = true;
+        }
+        if ((int) ($r['diagnostics_requested'] ?? 0) === 1) {
+            $out['diagnostics'] = true;
+        }
+        if ($out !== []) {
+            $this->db->prepare('UPDATE agents SET restart_requested = 0, diagnostics_requested = 0 WHERE id = :id')->execute(['id' => $agentId]);
+        }
+        return $out;
+    }
+
+    /** Ask an agent to restart, or to send diagnostics, at its next check-in. */
+    public function request(int $agentId, string $what): void
+    {
+        $column = match ($what) { 'restart' => 'restart_requested', 'diagnostics' => 'diagnostics_requested', default => throw new \InvalidArgumentException('Unknown request.') };
+        $this->db->prepare("UPDATE agents SET {$column} = 1 WHERE id = :id AND status = 'active'")->execute(['id' => $agentId]);
+    }
+
+    /**
+     * Save an agent's diagnostics report (untrusted: only known fields, typed and shortened). The clock difference is
+     * worked out here, against the server's clock.
+     *
+     * @param array<string,mixed> $d
+     */
+    public function saveDiagnostics(int $agentId, array $d): void
+    {
+        $text = static fn (mixed $v, int $max): string => \Sentinel\Inventory\InventoryRepository::clean($v, $max);
+        $num = static fn (mixed $v, int $max): ?int => is_int($v) && $v >= 0 && $v <= $max ? $v : null;
+        $agentTime = is_string($d['time'] ?? null) ? strtotime($d['time']) : false;
+        $out = [
+            'version' => $text($d['version'] ?? '', 20), 'php' => $text($d['php'] ?? '', 40), 'os' => $text($d['os'] ?? '', 120), 'nmap' => $text($d['nmap'] ?? '', 120),
+            'disk_free_mb' => $num($d['disk_free_mb'] ?? null, 100000000), 'uptime_seconds' => $num($d['uptime_seconds'] ?? null, 1000000000),
+            'load' => is_numeric($d['load'] ?? null) ? round((float) $d['load'], 2) : null, 'memory_mb' => $num($d['memory_mb'] ?? null, 10000000),
+            'pending_results' => $num($d['pending_results'] ?? null, 100000), 'key_fingerprint' => $text($d['key_fingerprint'] ?? '', 40),
+            'holds_directory' => ($d['holds_directory'] ?? false) === true, 'name_listening' => $text($d['name_listening'] ?? '', 80),
+            'clock_skew_seconds' => $agentTime === false ? null : $agentTime - time(),
+        ];
+        $this->db->prepare('UPDATE agents SET diagnostics = :d, diagnostics_at = UTC_TIMESTAMP(), diagnostics_requested = 0 WHERE id = :id')
+            ->execute(['d' => json_encode($out, JSON_UNESCAPED_SLASHES), 'id' => $agentId]);
     }
 
     /** Record that an agent checked in. */

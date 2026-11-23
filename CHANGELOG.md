@@ -2,6 +2,17 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.21.0 (2026-11-23): agent settings from the web UI
+
+- **Manage agents from the client's Agents page** (admins) after the one-time install:
+  - **Scan gentleness per site:** very gentle (nmap `-T1`, 10 packets/s), gentle (`-T2`, 50; the default) or normal
+    (`-T3`, 200). It is signed into each job, and the agent refuses anything else.
+  - **Check-in interval per site:** 30 seconds to 10 minutes.
+  - **Diagnostics:** a report from the agent with versions, disk, memory, load, uptime, clock difference with
+    Sentinel, key fingerprint and whether it holds a directory password. Never a secret.
+  - **Restart:** between scans; the agent's service starts it again.
+- Next: signed agent updates from Sentinel, then moving agents to a new Sentinel address.
+
 ### 1.20.1 (2026-11-23): Active Directory checks, fixes from review
 
 - **The agent's key is pinned.** A changed key no longer replaces the old one silently. It waits on the Agents page
