@@ -451,7 +451,8 @@ final class App
 
     /**
      * The agent release key made on the System page (one secret setting, authenticated with the app key: a database write
-     * alone can't change it; if it doesn't decrypt, there is no key). chain: the rotations, oldest first, each a statement
+     * alone can't change it; if it doesn't decrypt, there is no key from the System page, and AgentRelease falls back to
+     * install/release-key.pub in the code tree when a maintainer key ships there). chain: the rotations, oldest first, each a statement
      * naming the next key and signed by the key before it; an agent holding any key of the chain can follow it to the
      * current key. A chain that doesn't end at the current key, or doesn't link up, is dropped.
      *

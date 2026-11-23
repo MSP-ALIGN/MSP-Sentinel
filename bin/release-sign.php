@@ -88,7 +88,8 @@ switch ($command) {
         if ($dirty !== []) {
             $fail("Commit your changes first (the manifest must match committed files):\n" . implode("\n", array_slice($dirty, 0, 10)));
         }
-        $paths = array_values(array_filter($lines, static fn (string $l): bool => $l !== '' && !str_ends_with($l, '/')));
+        // The same rule as the System page (ReleaseManifest::releaseFile), so both make the same manifest and hash.
+        $paths = array_values(array_filter($lines, static fn (string $l): bool => $l !== '' && !str_ends_with($l, '/') && ReleaseManifest::releaseFile($l)));
         $manifest = ReleaseManifest::build($root, $version, $paths);
         // Say what isn't part of the agent release (excluded folders, hidden files, odd names): a remote update installs
         // exactly the signed files, so anything else disappears from an updated agent.

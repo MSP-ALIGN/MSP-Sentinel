@@ -4,6 +4,7 @@
  * - Renders the TOTP enrolment QR code locally from a data attribute, so the
  *   secret never leaves the browser for a third-party QR service.
  * - Asks for confirmation before submitting forms marked with data-confirm.
+ * - Copy buttons (data-copy="element id"): copy that element's text (install commands, enrolment codes).
  * - Refreshes dashboard panels (elements with data-refresh-url) every 60 seconds
  *   while the tab is visible. Only same-origin fragments marked with the
  *   X-Sentinel-Fragment header are used (server-rendered, already escaped);
@@ -125,6 +126,22 @@
             }
         });
         window.addEventListener('hashchange', function () { show(window.location.hash); });
+    });
+
+    document.addEventListener('click', function (event) {
+        var button = event.target && event.target.closest ? event.target.closest('[data-copy]') : null;
+        var source = button ? document.getElementById(button.getAttribute('data-copy')) : null;
+        if (!source || !navigator.clipboard) {
+            return; // no clipboard (plain HTTP): the text can still be selected by hand
+        }
+        navigator.clipboard.writeText(source.textContent.trim()).then(function () {
+            var label = button.getAttribute('data-copied');
+            if (label) {
+                button.setAttribute('title', label);
+                button.classList.add('btn-success');
+                setTimeout(function () { button.classList.remove('btn-success'); }, 1500);
+            }
+        });
     });
 
     document.addEventListener('submit', function (event) {

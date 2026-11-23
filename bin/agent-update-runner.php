@@ -13,7 +13,8 @@ declare(strict_types=1);
  *    manifest, signature and files, removes the request, and writes them all to stdout as one JSON document (size
  *    capped). Whatever it reads, it could read anyway.
  * 2. Check (root, in memory only): the manifest is signed with the pinned release key (/etc/sentinel-agent/
- *    release-key.pub: root-owned, written by the installer, never by an update), is the version requested and newer
+ *    release-key.pub, else the key pinned at enrolment in agent.json; both root-owned; never changed by an update,
+ *    only by a pin this helper checks: see $pinnedKey), is the version requested and newer
  *    than the installed one (an unreadable installed version is refused), and every file matches its SHA-256. Exactly
  *    the manifest's files are written into a new root-owned folder.
  * 3. Pre-flight (as the agent's user): the new release's own `sentinel-agent.php selfcheck` must pass (PHP version and
@@ -177,21 +178,37 @@ $rm = static function (string $dir): void { // only for root-owned folders under
 };
 
 /**
- * The pinned release key: /etc/sentinel-agent/release-key.pub, else the key pinned at enrolment in agent.json. Only
- * from a root-owned file that nobody else can write (else '': nothing pinned that can be trusted).
+ * The pinned release key, as [state, key]: /etc/sentinel-agent/release-key.pub, else (no file, or an empty one, as the
+ * agent reads it too) the key pinned at enrolment in agent.json. Files must be root-owned, not writable by others and
+ * not symlinks. States: 'ok' (a trusted key), 'absent' (truly nothing pinned: only then may a key be pinned without the
+ * pinned key's signature), 'bad' (something is there but can't be trusted or isn't a key: refuse updates AND pins, so
+ * a damaged pin never turns into "nothing pinned").
+ *
+ * @return array{0:'ok'|'absent'|'bad', 1:string}
  */
-$pinnedKey = static function () use ($keyFile, $configFile, $test): string {
+$pinnedKey = static function () use ($keyFile, $configFile, $test): array {
     $trusted = static function (string $f) use ($test): bool {
-        $st = @stat($f);
-        return $st !== false && ($test || ($st['uid'] === 0 && ($st['mode'] & 0022) === 0 && !is_link($f)));
+        $st = @lstat($f);
+        return $st !== false && ($test || ($st['uid'] === 0 && ($st['mode'] & 0022) === 0 && !is_link($f) && is_file($f)));
     };
-    if (is_file($keyFile)) {
-        // A key file that is there but not root-owned is never passed over for the config key: nothing is trusted then.
-        return $trusted($keyFile) ? trim((string) @file_get_contents($keyFile, false, null, 0, 1024)) : '';
+    if (file_exists($keyFile) || is_link($keyFile)) {
+        if (!$trusted($keyFile)) {
+            return ['bad', ''];
+        }
+        $k = trim((string) @file_get_contents($keyFile, false, null, 0, 1024));
+        if ($k !== '') {
+            return ReleaseManifest::validPublicKey($k) ? ['ok', $k] : ['bad', ''];
+        }
     }
-    $cfg = $trusted($configFile) ? json_decode((string) @file_get_contents($configFile), true) : null;
-    $k = is_array($cfg) && is_string($cfg['release_public_key'] ?? null) ? trim($cfg['release_public_key']) : '';
-    return ReleaseManifest::validPublicKey($k) ? $k : '';
+    if (!$trusted($configFile)) {
+        return ['bad', '']; // the config also holds the server key: without it nothing can be checked
+    }
+    $cfg = json_decode((string) @file_get_contents($configFile), true);
+    if (!is_array($cfg)) {
+        return ['bad', ''];
+    }
+    $k = is_string($cfg['release_public_key'] ?? null) ? trim($cfg['release_public_key']) : '';
+    return $k === '' ? ['absent', ''] : (ReleaseManifest::validPublicKey($k) ? ['ok', $k] : ['bad', '']);
 };
 
 // 0. A crash in the middle of a swap must never leave the appliance without its agent.
@@ -217,7 +234,10 @@ if (($req['kind'] ?? null) === 'pin' && is_array($c)) {
         || !is_string($d['key'] ?? null) || !ReleaseManifest::validPublicKey($d['key']) || $issued === false || abs(time() - $issued) > 7200) {
         $result('release-key', false, 'The release key offer is not signed by this agent\'s Sentinel (or too old).');
     }
-    $pinned = $pinnedKey();
+    [$pinState, $pinned] = $pinnedKey();
+    if ($pinState === 'bad') {
+        $result('release-key', false, 'The pinned release key (' . $keyFile . ' or agent.json) is damaged or not root-owned: nothing is pinned until it is fixed by hand (agent-install.sh --upgrade --release-key).');
+    }
     if ($pinned === $d['key']) {
         $result('release-key', true, 'Already pinned.');
     }
@@ -253,9 +273,10 @@ if (!is_array($c) || $wanted === '') {
 }
 
 // 2. Check, in memory, with the pinned release key (the key file, else the key pinned at enrolment in the config).
-$pinned = $pinnedKey();
-if ($pinned === '') {
-    $result($wanted, false, 'No release key is pinned on this appliance (or its file is not root-owned): ' . $keyFile);
+[$pinState, $pinned] = $pinnedKey();
+if ($pinState !== 'ok') {
+    $result($wanted, false, $pinState === 'absent' ? 'No release key is pinned on this appliance yet.'
+        : 'The pinned release key (' . $keyFile . ' or agent.json) is damaged or not root-owned; fix it by hand (agent-install.sh --upgrade --release-key).');
 }
 $m = ReleaseManifest::verify((string) ($c['manifest'] ?? ''), (string) ($c['signature'] ?? ''), $pinned);
 if (is_string($m)) {

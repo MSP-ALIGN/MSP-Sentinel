@@ -96,6 +96,26 @@ return [
         Assert::status(403, $res, 'unknown code refused');
         Assert::status(401, $ctx->api('POST', '/agent/v1/poll', null, ['running' => []]), 'no token');
         Assert::status(401, $ctx->api('POST', '/agent/v1/poll', 'sna_000000000000_' . str_repeat('A', 43), ['running' => []]), 'wrong token');
+
+        // The install steps: the guide on the Agents card, then the enrolment page with the commands for this Sentinel.
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        Assert::contains('How to add an agent', $ctx->clientSection($admin, $cid, 'agents'));
+        $page = $admin->submit('/clients/' . $cid, '/clients/' . $cid . '/sites/' . $site . '/enrol', [])->body;
+        preg_match('/SNE(-[A-Z2-9]{5}){4}/', $page, $m);
+        $server = rtrim((string) ((require $ctx->configPath)['app']['public_url'] ?? ''), '/');
+        Assert::contains('install-agent.sh | sudo SENTINEL_SERVER=' . ($server !== '' ? $server : 'https://sentinel.example') . ' bash', html_entity_decode($page, ENT_QUOTES));
+        Assert::contains('./install/agent-install.sh --server', $page);
+        Assert::contains('data-copy="cmd-oneline"', $page);
+        Assert::contains('Check it worked', $page);
+        Assert::notContains('--code ' . ($m[0] ?? 'missing'), $page, 'the code is never put on a command line');
+        Assert::notContains('no internal authorisation valid today', $page, 'this site has one');
+        // A site without an authorisation: the page says the agent won't scan yet.
+        $res = $admin->submit('/clients/new', '/clients', ['name' => 'Unapproved Example', 'itflow_client_id' => '', 'timezone' => 'UTC', 'scan_window_start' => '00:00',
+            'scan_window_end' => '23:59', 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);
+        $other = (int) basename((string) $res->location());
+        $otherSite = (int) $ctx->db->query("SELECT id FROM sites WHERE client_id = {$other} AND is_default = 1")->fetchColumn();
+        Assert::contains('no internal authorisation valid today', $admin->submit('/clients/' . $other, '/clients/' . $other . '/sites/' . $otherSite . '/enrol', [])->body);
+        $ctx->db->exec("UPDATE clients SET is_archived = 1 WHERE id = {$other}");
     },
     'a full scan by the real agent: devices, services, certificates, CVEs; baseline without alerts' => function (TestContext $ctx) use ($setup, $runAgent, $scanNow, $agentDir): void {
         [$cid, $site] = $setup($ctx);

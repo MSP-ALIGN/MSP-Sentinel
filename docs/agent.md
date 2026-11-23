@@ -50,12 +50,21 @@ results are kept on the appliance and sent again until Sentinel accepts them.
 
 1. On the client page, under **On-premises agents**, record an internal authorisation for the site.
 2. Click **Create an enrolment code** (admins). The code is shown once and works once, within 24 hours.
-3. On the appliance (Debian 13, or Debian 12 / Ubuntu 24.04; a mini-PC or VM with a network interface on the
-   internal network), either use the one-line install, which asks for the Sentinel address and the code:
+   The page after it has everything for the install: the code with a copy button, the commands with your Sentinel
+   address filled in (`app.public_url`), how to check the result, and troubleshooting. It also warns when the site
+   has no internal authorisation valid today (the agent would enrol but not scan).
+3. Prepare the appliance: a mini-PC or VM that stays on, Debian 13 (or Debian 12 / Ubuntu 24.04 LTS), 64-bit; 2 CPU
+   cores, 2 GB memory and 20 GB disk are plenty. It must sit on the internal network it scans (a VM needs a bridged
+   adapter / external virtual switch, not NAT), ideally with a fixed address or DHCP reservation, and reach Sentinel
+   over outbound HTTPS (443) plus the package mirrors (and GitHub for the one-line install). Nothing inbound.
+
+   Either use the one-line install, which asks for the code (and the Sentinel address, unless given):
 
    ```sh
-   curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install-agent.sh | sudo -E bash
+   curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install-agent.sh | sudo SENTINEL_SERVER=https://sentinel.msp.example bash
    ```
+
+   With a private CA, add `SENTINEL_CA=/path/ca.pem` after `sudo`.
 
    (upgrade later with `sudo msp-sentinel-agent-update`), or copy and unpack the Sentinel release archive and run:
 
@@ -195,8 +204,10 @@ holds the private key.
    key file and type its password; your browser checks the file is the release key Sentinel uses, signs, and sends
    only the signature. Agents can then be updated to that version.
    The page shows the manifest's SHA-256 and every file that will be signed: compare the hash with the one published
-   in the release notes for that version (`bin/release-sign.php sign` prints it). Only the release's own folders and
-   file types are listed, never anything else left in Sentinel's folder (a backup, a dump).
+   in the release notes for that version (`bin/release-sign.php sign` prints it; both use the same file list). Only
+   the release's own folders and file types are listed: files of other types or outside those folders (a backup, a
+   dump) never are. A stray file of a release type inside a release folder (say `src/extra.php`) would be, which is
+   one more reason to compare the hash and look over the list.
 3. **Agents learn the public key from Sentinel, once**: new agents at enrolment (the installer prints its fingerprint:
    compare it with the System page); agents enrolled before (1.24.0 or later) at their next check-in, through the root
    update helper, which pins it only when the agent has no key yet. A pinned key never changes without its own
@@ -212,8 +223,11 @@ holds the private key.
 **If the key file leaks**, rotate at once (the leaked key signs the change, which is still you if you rotate first),
 or replace it and give agents the new key by hand.
 
-The key is stored on Sentinel authenticated with the app key (from `config/config.php`), so a database write alone
-(a stolen backup, SQL injection) can't plant a key agents would trust.
+The key is stored on Sentinel authenticated with the app key (from `config/config.php`), so a database write without
+that app key (SQL injection, a stolen database password) can't plant a key agents would trust. Two limits: someone who
+also has the app key (it is in `config.php`, and in unencrypted backups) can, and putting back an older value of the
+setting (or restoring an older backup) brings back the older key. Agents that pinned a newer key refuse it; agents
+with no key yet would take it.
 
 **What the release key protects, and what it doesn't.**
 

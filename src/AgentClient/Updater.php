@@ -12,7 +12,8 @@ use Sentinel\System\ReleaseManifest;
  * (bin/agent-update-runner.php, started by a systemd path unit) to install it. The helper checks everything again.
  *
  * Steps: fetch the release manifest and signature from Sentinel; check the signature with the PINNED release key
- * (/etc/sentinel-agent/release-key.pub, written by the installer, never taken from Sentinel or from the new code),
+ * (/etc/sentinel-agent/release-key.pub, else the key pinned at enrolment in the root-owned agent.json; changed only by a
+ * pin the root helper checks, never by the new code),
  * that it is the version asked for and newer than this one; download every file and check its SHA-256; write the
  * request. Anything unexpected stops the update and is reported; nothing is installed half-way.
  *

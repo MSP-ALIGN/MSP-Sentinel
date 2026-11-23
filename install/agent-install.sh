@@ -93,6 +93,13 @@ render() {
 # Remote updates (1.22): pin the maintainer's release public key OUTSIDE the code folder (root-owned; a remote update
 # never changes it), and install the root update helper's path unit. Without a key in the release, remote updates stay
 # off and the agent can only be upgraded by hand.
+# Whether a release key was pinned at enrolment (in agent.json): parsed as JSON, not matched as text. When agent.json
+# can't be read or parsed, say yes, so a key file from the release folder never replaces a pin we couldn't check.
+enrolment_key_pinned() {
+  [ -f "$CONF_DIR/agent.json" ] || return 1
+  "$PHP_BIN" -r '$c = json_decode((string) @file_get_contents($argv[1]), true); exit(!is_array($c) || (is_string($c["release_public_key"] ?? null) && $c["release_public_key"] !== "") ? 0 : 1);' "$CONF_DIR/agent.json"
+}
+
 release_key_and_helper() {
   # The release key normally comes from Sentinel (at enrolment, or offered later); a key given with --release-key
   # replaces the pinned one (after a lost key was replaced on the System page). A key file in the release folder is
@@ -103,8 +110,7 @@ release_key_and_helper() {
       printf '%s\n' "$release_key" > "$CONF_DIR/release-key.pub.tmp"; chown root:root "$CONF_DIR/release-key.pub.tmp"; chmod 0644 "$CONF_DIR/release-key.pub.tmp"
       mv -f "$CONF_DIR/release-key.pub.tmp" "$CONF_DIR/release-key.pub"; fi
     echo "  Release key pinned from --release-key."
-  elif [ ! -s "$CONF_DIR/release-key.pub" ] && [ -s "$SRC/install/release-key.pub" ] \
-       && ! grep -Eqs '"release_public_key": *"[A-Za-z0-9+/]{43}="' "$CONF_DIR/agent.json"; then
+  elif [ ! -s "$CONF_DIR/release-key.pub" ] && [ -s "$SRC/install/release-key.pub" ] && ! enrolment_key_pinned; then
     # (Not when a key was pinned at enrolment: it is in agent.json, and a key file here would take its place.)
     run install -o root -g root -m 0644 "$SRC/install/release-key.pub" "$CONF_DIR/release-key.pub"
   fi

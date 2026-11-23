@@ -102,7 +102,7 @@ return [
             'paragraphs' => [
                 'An agent is a small Linux appliance at the client\'s site. It only connects out to Sentinel, finds the devices on the internal network with their open services, certificates and web pages, and reports them. A full scan runs weekly and a light sweep daily, inside the client\'s scan window (stopped when it closes and continued in the next window); admins can also press Scan now (with a reason).',
                 'An agent scans only the networks in a signed internal authorisation for its site: who at the client approved it, the dates, and exactly which private networks (each at most a /16). Sentinel signs the authorisation and every job; the agent checks both signatures and refuses any target outside the signed networks.',
-                'To add one: record an internal authorisation for the site, click Create an enrolment code (admins; shown once, valid once for 24 hours), and run the agent installer on the appliance with that code. Pause on the site stops agent scans within a minute; revoking an agent stops its token at once.',
+                'To add one: record an internal authorisation for the site, prepare a mini-PC or VM on the internal network (Debian 13, Debian 12 or Ubuntu 24.04; 2 CPU cores, 2 GB memory, 20 GB disk; a VM needs a bridged adapter, not NAT; outbound HTTPS to Sentinel), click Create an enrolment code (admins; shown once, valid once for 24 hours), and run the install command shown on that page (it has a copy button and asks for the code). The page also says how to check it worked and what to do if it does not. Pause on the site stops agent scans within a minute; revoking an agent stops its token at once.',
                 'New Sentinel address: Administration, System, Move agents (with your password). Each agent switches only after the new address signs a challenge for that address with this Sentinel\'s key (nothing secret is sent before). Right after a move it goes back if the new address keeps failing; while moved it asks its original address every 6 hours, so keep that address working.',
                 'Release key (Administration, System): create it once in your browser (the private key downloads as a password-protected file; Sentinel keeps only the public half; it does not expire), then Sign this version after each Sentinel update. Agents learn the key from Sentinel. Rotate it with the old key file; Replace it only if the file is lost (agents then need it by hand).',
                 'Updates: Update to x.y.z (per agent), Update all agents (per client, or under Administration, System). The agent installs a release only when it is signed with the maintainer\'s release key it pinned at install; a root helper checks everything again. Agents older than 1.22.0 must be upgraded once by hand.',
@@ -226,6 +226,14 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.25.0',
+            'date' => '2026-11-23',
+            'items' => [
+                'Agent install steps: a How to add an agent guide on the Agents card, and the enrolment page now has the requirements, the install commands for your Sentinel address with copy buttons, a private CA option (SENTINEL_CA for the one-line install), how to check it worked, and troubleshooting. It warns when the site has no internal authorisation yet.',
+                'Release key fixes: a damaged or wrongly owned pinned key is never treated as none; the System page and bin/release-sign.php sign the same file list, so the hashes match.',
+            ],
+        ],
         [
             'version' => '1.24.1',
             'date' => '2026-11-23',

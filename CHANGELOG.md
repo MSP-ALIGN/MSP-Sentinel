@@ -2,14 +2,34 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.25.0 (2026-11-23): agent install steps
+
+- **"How to add an agent" on the Agents card**: open until a client has its first agent.
+- **The enrolment page has everything for the install**:
+  - requirements (OS, size, bridged network, outbound HTTPS only);
+  - the one-line and archive install commands with your Sentinel address, with copy buttons (the code is typed at
+    the prompt, never put on a command line);
+  - how to check it worked, including the release key fingerprint to expect;
+  - troubleshooting.
+- **It warns when the site has no internal authorisation valid today**, so the agent won't scan yet.
+- **The one-line installer accepts `SENTINEL_CA=/path/ca.pem`** for a Sentinel with a private CA.
+- Help topics can be linked directly.
+- **Fixes from the second release-key review:**
+  - The update helper never treats a damaged or wrongly owned key as "nothing pinned", so Sentinel can't slip in a
+    new key that way.
+  - The System page and `bin/release-sign.php` now list exactly the same files, so the manifest hashes match.
+  - The installer reads the enrolment key as JSON.
+  - The docs are more precise about what the app key protects (and that restoring an old value brings an old key
+    back).
+
 ### 1.24.1 (2026-11-23): release key, fixes from review
 
 - **Agents given the key at enrolment can now be updated.** The update helper only looked for the key file, so
   these agents refused every update.
 - **The release key is stored authenticated with the app key**, so a database write alone can't plant a key agents
   would trust. A key made with 1.24.0 must be made again.
-- **Only the release's own files are signed and sent to agents.** Anything else left in Sentinel's folder (a backup,
-  a dump) is no longer included.
+- **Only the release's own files are signed and sent to agents:** its own folders and file types. Other files left in
+  Sentinel's folder (a backup, a dump) are no longer included.
 - **Before signing, the page shows the manifest's SHA-256 and every file.** Compare the hash with the one in the
   release notes (`bin/release-sign.php sign` prints it).
 - **Agents follow several rotations** (each step signed by the key before), not just the last one.

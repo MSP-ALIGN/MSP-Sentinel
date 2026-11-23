@@ -4,7 +4,7 @@
 <div class="row g-3">
     <div class="col-lg-7">
         <?php foreach (($entries['topics'] ?? []) as $topic): ?>
-        <div class="card mb-3">
+        <div id="<?= e(trim((string) preg_replace('/[^a-z0-9]+/', '-', strtolower((string) $topic['title'])), '-')) ?>" class="card mb-3">
             <div class="card-header"><h2 class="card-title h5 mb-0"><?= e($topic['title']) ?></h2></div>
             <div class="card-body">
                 <?php foreach ($topic['paragraphs'] as $paragraph): ?>

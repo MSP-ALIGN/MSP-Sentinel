@@ -25,6 +25,17 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
             <button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-cloud-arrow-down me-1" aria-hidden="true"></i><?= e(__('Update all agents to {v}', ['v' => $agentRelease])) ?></button></form>
         <?php endif; ?>
         <p class="small text-body-secondary"><?= e(__('An agent is a small Linux appliance at the client\'s site. It connects out to Sentinel, scans only the internal networks approved in a signed internal authorisation, and reports devices, open services and certificates. A full scan runs weekly and a light sweep daily, inside the scan window.')) ?></p>
+        <?php $anyAgent = array_filter($agentSites, static fn (array $s): bool => $s['agents'] !== []) !== []; ?>
+        <details class="border rounded p-2 mb-3 small" <?= $anyAgent ? '' : 'open' ?>>
+            <summary class="fw-semibold"><?= e(__('How to add an agent')) ?></summary>
+            <ol class="mt-2 mb-1">
+                <li><?= e(__('Record an internal authorisation for the site below: who at the client approved internal scanning, the dates, and the private networks to scan.')) ?></li>
+                <li><?= e(__('Prepare a mini-PC or VM at the site that stays on: Debian 13 (or Debian 12 / Ubuntu 24.04), 2 CPU cores, 2 GB memory, 20 GB disk, on the internal network (a VM needs a bridged adapter, not NAT), with outbound HTTPS to Sentinel. No inbound firewall rule is needed.')) ?></li>
+                <li><?= e(__('Click Create an enrolment code for the site (admins). The next page shows the code once, the install command for your Sentinel address with a copy button, and how to check it worked.')) ?></li>
+                <li><?= e(__('Run the command on the appliance and type the code when asked. The agent shows up here within a minute, and scans inside the client\'s scan window.')) ?></li>
+            </ol>
+            <a href="<?= e(url('/help')) ?>#on-premises-agents-internal-scans"><?= e(__('More in Help')) ?></a>
+        </details>
         <?php foreach ($agentSites as $s): $site = $s['site']; $sid = (int) $site['id']; ?>
         <div class="border rounded p-3 mb-3">
             <div class="d-flex flex-wrap align-items-center gap-2 mb-2">

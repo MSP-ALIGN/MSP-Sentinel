@@ -97,6 +97,15 @@ return [
             unlink($releaseRoot . '/src/notes.bak');
             Assert::true(!in_array('database-dump.sql', $listed, true) && !in_array('src/notes.bak', $listed, true), 'stray files are never signed');
             Assert::true(in_array('bin/sentinel-agent.php', $listed, true), 'release files are');
+            // The System page and bin/release-sign.php list the same files (one rule), so the hashes can be compared.
+            if (is_dir($ctx->root . '/.git')) {
+                exec('git -C ' . escapeshellarg($ctx->root) . ' archive --format=tar HEAD | tar -tf -', $lines, $gitCode);
+                $fromGit = array_values(array_filter($lines, static fn (string $l): bool => $l !== '' && !str_ends_with($l, '/') && ReleaseManifest::releaseFile($l)));
+                sort($fromGit, SORT_STRING);
+                $tracked = array_values(array_filter(ReleaseManifest::listTree($ctx->root), static fn (string $p): bool => in_array($p, $lines, true)));
+                Assert::same($fromGit, $tracked, 'same release files as a release archive');
+                Assert::true(!in_array('bin/build-release.sh', ReleaseManifest::listTree($ctx->root), true), 'export-ignore files are left out');
+            }
             $admin->submit('/admin/system', '/admin/system/release-sign', ['manifest' => $manifest, 'signature' => base64_encode(str_repeat('x', 64))]);
             Assert::same(null, App::agentRelease()->version(), 'a bad signature is not kept');
             $sig = $js($ctx, ['op' => 'sign', 'file' => $k['file'], 'password' => 'Key-File-Password-1', 'text' => $manifest]);
@@ -165,6 +174,34 @@ return [
             Assert::same(0, $code, 'helper: ' . $out);
             Assert::contains('Release key rotated', $out);
             Assert::same($r['publicKey'] . "\n", file_get_contents($rkDir($ctx) . '/release-key.pub'), 'two rotations followed');
+
+            // A chain with a forged middle link, or one that doesn't start at the pinned key, is refused by the helper.
+            $offer = static function (array $payload) use ($ctx, $rkDir): array {
+                file_put_contents($rkDir($ctx) . '/release-key-offer.json', json_encode(App::agentSigner()->sign($payload + ['v' => 1, 'type' => 'agent_release_key',
+                    'issued_at' => gmdate('Y-m-d\TH:i:s\Z')])));
+                file_put_contents($rkDir($ctx) . '/update-request', json_encode(['kind' => 'pin', 'request' => gmdate('Y-m-d\TH:i:s\Z')]));
+                return [];
+            };
+            $evil = $js($ctx, ['op' => 'rotate', 'file' => $js($ctx, ['op' => 'create', 'password' => 'Key-File-Password-6'])['file'], 'password' => 'Key-File-Password-6',
+                'newPassword' => 'Key-File-Password-7', 'at' => gmdate('Y-m-d\TH:i:s\Z')]);
+            $offer(['agent_id' => $agentId, 'site_id' => $site, 'client_id' => $cid, 'key' => $evil['publicKey'],
+                'rotations' => [['statement' => $evil['statement'], 'signature' => $evil['signature']]]]);
+            [$code, $out] = $helper($ctx);
+            Assert::same(1, $code, 'a chain not starting at the pinned key: ' . $out);
+            $forged = json_encode(['at' => gmdate('Y-m-d\TH:i:s\Z'), 'new_key' => $evil['publicKey'], 'old_key' => $r['publicKey'], 'type' => 'release_key_rotation', 'v' => 1]);
+            $offer(['agent_id' => $agentId, 'site_id' => $site, 'client_id' => $cid, 'key' => $evil['publicKey'],
+                'rotations' => [['statement' => $forged, 'signature' => base64_encode(str_repeat('f', 64))]]]);
+            [$code, $out] = $helper($ctx);
+            Assert::same(1, $code, 'a forged link: ' . $out);
+            Assert::same($r['publicKey'] . "\n", file_get_contents($rkDir($ctx) . '/release-key.pub'), 'still the pinned key');
+            // A damaged pin (not a key) is never read as "nothing pinned": no key from Sentinel replaces it, no update runs.
+            file_put_contents($rkDir($ctx) . '/release-key.pub', "not a key\n");
+            $offer(['agent_id' => $agentId, 'site_id' => $site, 'client_id' => $cid, 'key' => $evil['publicKey'], 'rotations' => []]);
+            [$code, $out] = $helper($ctx);
+            Assert::same(1, $code);
+            Assert::contains('damaged or not root-owned', $out);
+            Assert::same("not a key\n", file_get_contents($rkDir($ctx) . '/release-key.pub'));
+            file_put_contents($rkDir($ctx) . '/release-key.pub', $r['publicKey'] . "\n");
 
             // A replaced key (the old file lost) never reaches agents that pinned another key; the page says so.
             $lost = $js($ctx, ['op' => 'create', 'password' => 'Key-File-Password-3']);

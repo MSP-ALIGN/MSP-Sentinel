@@ -14,7 +14,8 @@ namespace Sentinel\System;
  * before staging an update) and the agent's root update helper (checks everything again before installing).
  *
  * Trust: only the signature with the PINNED release public key counts (/etc/sentinel-agent/release-key.pub on agents,
- * copied there by the installer; never from the code being installed). Sentinel's own keys can't vouch for code.
+ * else the key pinned at enrolment in agent.json; never from the code being installed). Sentinel's own keys can't vouch
+ * for code.
  *
  * Untrusted: the manifest and every file (they arrive over the network); paths are checked against a strict pattern
  * (no "..", no absolute paths, no hidden top-level files), sizes and counts are capped.
@@ -75,10 +76,16 @@ final class ReleaseManifest
     /** File types a release is made of; files without a type only under install/templates/ (and LICENSE files). */
     public const RELEASE_TYPES = ['php', 'js', 'css', 'md', 'sh', 'svg', 'txt', 'webp', 'png', 'ico', 'woff', 'woff2', 'path', 'service', 'timer', 'conf', 'json', 'pub'];
 
-    /** Whether an installed file belongs to the release (see listTree()). */
+    /** Files a release archive leaves out (.gitattributes export-ignore): never in the agent release either. */
+    public const NOT_RELEASED = ['bin/build-release.sh'];
+
+    /**
+     * Whether an installed file belongs to the release. One rule for both lists: the System page's (listTree()) and
+     * bin/release-sign.php's (git archive), so the manifest and its hash are the same either way.
+     */
     public static function releaseFile(string $rel): bool
     {
-        if (!self::validPath($rel)) {
+        if (!self::validPath($rel) || in_array($rel, self::NOT_RELEASED, true)) {
             return false;
         }
         if (!str_contains($rel, '/')) {

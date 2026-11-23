@@ -139,8 +139,13 @@ final class AgentController extends Controller
         $code = App::agents()->createEnrolment((int) $client['id'], (int) $site['id'], (int) $this->user()['id']);
         $this->audit($request, 'agent.enrolment_created', 'site', (int) $site['id'], ['client_id' => (int) $client['id']]);
         $url = rtrim((string) App::config()->get('app.public_url', ''), '/');
+        $releaseKey = App::agentRelease()->publicKey();
         return $this->page('agents/enrolment', __('Enrol an agent for {site}', ['site' => $site['name']]), [
             'client' => $client, 'site' => $site, 'code' => $code, 'serverUrl' => $url,
+            // Shown so the installer's output can be compared with it ('' when no release key exists yet).
+            'releaseKeyFp' => $releaseKey !== '' ? \Sentinel\System\ReleaseManifest::keyFingerprint($releaseKey) : '',
+            // Without an approved internal authorisation the agent enrols but never scans: say so before installing.
+            'authorised' => App::agents()->activeAuthorisation((int) $site['id'], \Sentinel\Scope\ScopeService::today((string) $client['timezone'])) !== null,
         ])->header('Cache-Control', 'no-store');
     }
 

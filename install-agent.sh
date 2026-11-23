@@ -5,7 +5,8 @@
 #  On the appliance at the client's site, with a one-time enrolment code from the client page in Sentinel:
 #    curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install-agent.sh | sudo -E bash
 #  It asks for the Sentinel address and the code. Unattended: set SENTINEL_SERVER (https://...) and
-#  SENTINEL_CODE. SENTINEL_BRANCH (default main) and SENTINEL_REPO (owner/name) choose the source.
+#  SENTINEL_CODE. SENTINEL_CA=/path/ca.pem when Sentinel's certificate is from a private CA.
+#  SENTINEL_BRANCH (default main) and SENTINEL_REPO (owner/name) choose the source.
 #
 #  Upgrade later: sudo msp-sentinel-agent-update
 #
@@ -32,6 +33,11 @@ if [ -z "$server" ]; then
   read -r -p "Sentinel address (https://...): " server </dev/tty
 fi
 case "$server" in https://*) ;; *) die "The Sentinel address must start with https://" ;; esac
+ca="${SENTINEL_CA:-}"
+if [ -n "$ca" ]; then
+  [ -f "$ca" ] && [ -r "$ca" ] || die "SENTINEL_CA must be a readable CA certificate file (PEM)."
+  ca="$(readlink -f -- "$ca")"
+fi
 code="${SENTINEL_CODE:-}"
 if [ -z "$code" ]; then
   have_tty || die "SENTINEL_CODE is required (no terminal available to ask)."
@@ -55,4 +61,4 @@ exec bash $SRC_DIR/install/agent-install.sh --upgrade
 UPD
 chmod 0755 /usr/local/sbin/msp-sentinel-agent-update
 # The code reaches the installer through its environment-free prompt path: on stdin via a here-string.
-SENTINEL_AGENT_CODE_STDIN=1 bash "$SRC_DIR/install/agent-install.sh" --server "$server" <<<"$code"
+SENTINEL_AGENT_CODE_STDIN=1 bash "$SRC_DIR/install/agent-install.sh" --server "$server" ${ca:+--ca "$ca"} <<<"$code"
