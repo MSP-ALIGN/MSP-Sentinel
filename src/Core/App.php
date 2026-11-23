@@ -449,11 +449,56 @@ final class App
             : ['url' => '', 'ca' => '', 'requested_at' => '', 'id' => '', 'complete' => false];
     }
 
+    /**
+     * The agent release key made on the System page (one secret setting, authenticated with the app key: a database write
+     * alone can't change it; if it doesn't decrypt, there is no key). chain: the rotations, oldest first, each a statement
+     * naming the next key and signed by the key before it; an agent holding any key of the chain can follow it to the
+     * current key. A chain that doesn't end at the current key, or doesn't link up, is dropped.
+     *
+     * @return array{key:string, created_at:string, chain:list<array{statement:string, signature:string, old_key:string, new_key:string}>}
+     */
+    public static function releaseKey(): array
+    {
+        $none = ['key' => '', 'created_at' => '', 'chain' => []];
+        $r = json_decode(self::settings()->getSecret('release_key'), true);
+        if (!is_array($r) || !is_string($r['key'] ?? null) || !\Sentinel\System\ReleaseManifest::validPublicKey($r['key'])) {
+            return $none;
+        }
+        $chain = [];
+        $next = null;
+        foreach (is_array($r['chain'] ?? null) ? array_values($r['chain']) : [] as $link) {
+            $st = is_array($link) && is_string($link['statement'] ?? null) ? json_decode($link['statement'], true) : null;
+            if (!is_array($st) || !is_string($link['signature'] ?? null) || !is_string($st['old_key'] ?? null) || !is_string($st['new_key'] ?? null)
+                || ($next !== null && $st['old_key'] !== $next)) {
+                $chain = [];
+                break;
+            }
+            $chain[] = ['statement' => $link['statement'], 'signature' => $link['signature'], 'old_key' => $st['old_key'], 'new_key' => $st['new_key']];
+            $next = $st['new_key'];
+        }
+        if ($chain !== [] && $next !== $r['key']) {
+            $chain = [];
+        }
+        return ['key' => $r['key'], 'created_at' => is_string($r['created_at'] ?? null) ? $r['created_at'] : '', 'chain' => $chain];
+    }
+
+    /**
+     * Save the release key (see releaseKey()). The caller has checked the key and, for a rotation, the statement.
+     *
+     * @param list<array{statement:string, signature:string}> $chain
+     */
+    public static function setReleaseKey(string $key, array $chain): void
+    {
+        $chain = array_slice(array_map(static fn (array $l): array => ['statement' => $l['statement'], 'signature' => $l['signature']], $chain), -\Sentinel\System\ReleaseManifest::MAX_ROTATIONS);
+        self::settings()->setSecret('release_key', $key === '' ? '' : (string) json_encode(['key' => $key, 'created_at' => (string) self::db()->query('SELECT UTC_TIMESTAMP()')->fetchColumn(),
+            'chain' => $chain], JSON_UNESCAPED_SLASHES));
+    }
+
     /** The signed agent release this installation can hand to agents (test suite: testing.release_root). */
     public static function agentRelease(): \Sentinel\Agent\AgentRelease
     {
         $test = self::config()->get('testing.allow_documentation_ranges', false) === true ? (string) self::config()->get('testing.release_root', '') : '';
-        $key = self::settings()->fresh('release_public_key');
+        $key = self::releaseKey()['key'];
         return $test !== '' ? new \Sentinel\Agent\AgentRelease($test, self::version(), true, $key, (string) self::config()->get('testing.release_ui_dir', ''))
             : new \Sentinel\Agent\AgentRelease(dirname(__DIR__, 2), self::version(), false, $key, SENTINEL_ROOT . '/storage/agent-release');
     }

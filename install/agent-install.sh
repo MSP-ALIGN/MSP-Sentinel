@@ -103,7 +103,9 @@ release_key_and_helper() {
       printf '%s\n' "$release_key" > "$CONF_DIR/release-key.pub.tmp"; chown root:root "$CONF_DIR/release-key.pub.tmp"; chmod 0644 "$CONF_DIR/release-key.pub.tmp"
       mv -f "$CONF_DIR/release-key.pub.tmp" "$CONF_DIR/release-key.pub"; fi
     echo "  Release key pinned from --release-key."
-  elif [ ! -s "$CONF_DIR/release-key.pub" ] && [ -s "$SRC/install/release-key.pub" ]; then
+  elif [ ! -s "$CONF_DIR/release-key.pub" ] && [ -s "$SRC/install/release-key.pub" ] \
+       && ! grep -Eqs '"release_public_key": *"[A-Za-z0-9+/]{43}="' "$CONF_DIR/agent.json"; then
+    # (Not when a key was pinned at enrolment: it is in agent.json, and a key file here would take its place.)
     run install -o root -g root -m 0644 "$SRC/install/release-key.pub" "$CONF_DIR/release-key.pub"
   fi
   # The helper's results: root-owned, readable by the agent, not changeable by it.

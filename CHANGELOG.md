@@ -2,6 +2,24 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.24.1 (2026-11-23): release key, fixes from review
+
+- **Agents given the key at enrolment can now be updated.** The update helper only looked for the key file, so
+  these agents refused every update.
+- **The release key is stored authenticated with the app key**, so a database write alone can't plant a key agents
+  would trust. A key made with 1.24.0 must be made again.
+- **Only the release's own files are signed and sent to agents.** Anything else left in Sentinel's folder (a backup,
+  a dump) is no longer included.
+- **Before signing, the page shows the manifest's SHA-256 and every file.** Compare the hash with the one in the
+  release notes (`bin/release-sign.php sign` prints it).
+- **Agents follow several rotations** (each step signed by the key before), not just the last one.
+- **The agent installer prints the release key fingerprint at enrolment**, and the System page lists agents that have
+  no key yet.
+- **The docs now say what the key does and doesn't protect.** An agent with no key yet trusts the first key Sentinel
+  gives it. Signing in a page Sentinel serves means a compromised server could copy the key file and its password
+  while you use them.
+- The key file name now includes its fingerprint. A pinned key is never overridden by a key file in a release folder.
+
 ### 1.24.0 (2026-11-23): release key in the web UI
 
 - **The agent release key is created and used on Administration → System, in your browser.** The private key

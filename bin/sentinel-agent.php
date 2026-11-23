@@ -124,6 +124,9 @@ switch ($command) {
         umask($old);
         chmod($configFile, 0600);
         $say('Enrolled as agent #' . $config['agent_id'] . ' (site #' . $config['site_id'] . '). Server key, site and client pinned. Config written to ' . $configFile . '.');
+        // Compare with the fingerprint on Sentinel's System page: this key decides which code the appliance installs.
+        $say($config['release_public_key'] !== '' ? 'Release key pinned from Sentinel: ' . \Sentinel\System\ReleaseManifest::keyFingerprint($config['release_public_key']) . ' (compare it with Administration, System).'
+            : 'No release key yet: Sentinel offers it once one is created on Administration, System.');
         exit(0);
 
     case 'run':

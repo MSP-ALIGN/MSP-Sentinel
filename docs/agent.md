@@ -154,12 +154,12 @@ rest of the server.
 Agents can be updated from Sentinel: **Update to x.y.z** per agent and **Update all agents** on the client's Agents
 page, or **Update all agents** under Administration → System. An agent updates at its next check-in between scans.
 
-**It only installs code signed with your release key.** Sentinel can ask an agent to update, but it can't vouch for
-code: a compromised Sentinel server can't push code to client networks.
+**It only installs code signed with your release key.** Sentinel can ask an agent to update, but its own keys can't
+vouch for code. What that protects, and what it doesn't, is under "What the release key protects" below.
 
 1. The agent downloads the release from Sentinel (client sites need no access to GitHub) and checks it against the
-   release public key pinned at install (`/etc/sentinel-agent/release-key.pub`, root-owned, never changed by an
-   update): the signature, that it is the version asked for and newer than its own, and every file's SHA-256.
+   release public key it pinned (`/etc/sentinel-agent/release-key.pub`, else the key pinned at enrolment in the
+   root-owned `agent.json`; an update never changes it): the signature, that it is the version asked for and newer than its own, and every file's SHA-256.
 2. It stages the files in its state folder and asks the root update helper (`sentinel-agent-update.path` starts
    `bin/agent-update-runner.php`) to install them. The agent itself can't change its code.
 3. **Root never touches the agent's folder** (its user could plant symlinks there). The helper has the staged release
@@ -194,12 +194,17 @@ holds the private key.
 2. **Sign this version** (after each Sentinel update): Sentinel lists its own files with their SHA-256; you pick the
    key file and type its password; your browser checks the file is the release key Sentinel uses, signs, and sends
    only the signature. Agents can then be updated to that version.
-3. **Agents learn the public key from Sentinel**: new agents at enrolment; agents enrolled before (1.24.0 or later)
-   at their next check-in, through the root update helper, which pins it only when the agent has no key yet. A pinned
-   key never changes by itself.
+   The page shows the manifest's SHA-256 and every file that will be signed: compare the hash with the one published
+   in the release notes for that version (`bin/release-sign.php sign` prints it). Only the release's own folders and
+   file types are listed, never anything else left in Sentinel's folder (a backup, a dump).
+3. **Agents learn the public key from Sentinel, once**: new agents at enrolment (the installer prints its fingerprint:
+   compare it with the System page); agents enrolled before (1.24.0 or later) at their next check-in, through the root
+   update helper, which pins it only when the agent has no key yet. A pinned key never changes without its own
+   signature. The System page lists agents that have no key yet.
 4. **Rotate the key** (you still have the key file): pick the current key file and its password, and a new password.
    The current key signs a statement naming the new key; agents check it with the key they pinned and switch on their
-   own. A new key file downloads; sign the version again with it.
+   own, also when they were offline for several rotations (each step is signed by the key before; the last 20 are
+   kept). A new key file downloads; sign the version again with it.
 5. **Replace the key** (the key file or its password is lost): a new key without the old one's signature. Agents that
    pinned the old key keep refusing updates until given the new key by hand (shown on the System page):
    `sudo /opt/sentinel-agent/install/agent-install.sh --upgrade --release-key BASE64KEY`.
@@ -207,9 +212,22 @@ holds the private key.
 **If the key file leaks**, rotate at once (the leaked key signs the change, which is still you if you rotate first),
 or replace it and give agents the new key by hand.
 
-Trade-off of signing in the browser: if the Sentinel server itself were taken over, someone could change its files
-and ask you to sign them (the page shows the version and file count, not the code). Sign right after you updated
-Sentinel yourself. The command line remains for maintainers who sign from their git repository instead:
+The key is stored on Sentinel authenticated with the app key (from `config/config.php`), so a database write alone
+(a stolen backup, SQL injection) can't plant a key agents would trust.
+
+**What the release key protects, and what it doesn't.**
+
+- An agent that has pinned a key installs only code signed with it. Someone who takes over Sentinel (or its database)
+  can't change that key on the agent or get other code installed there, as long as they don't have your key file
+  and its password.
+- An agent with **no key yet** trusts the first key Sentinel gives it (at enrolment, or the offer to older agents).
+  If Sentinel is taken over before then, that could be the attacker's key. Create the release key soon after
+  installing Sentinel, and check the fingerprint the agent installer prints against the System page.
+- **Signing and rotating happen in a page Sentinel serves.** If the Sentinel server itself were taken over, its
+  page could be changed to copy your key file and password while you use them, or show you changed files to sign.
+  Only sign and rotate on a Sentinel you just updated yourself, compare the manifest hash with the release notes,
+  and if you think the server was compromised, don't use the key there: rebuild the server, then replace the key
+  and give agents the new one by hand. The command line remains for maintainers who sign from their git repository instead:
 `php bin/release-sign.php keygen --out ~/sentinel-release.key`, then `sign --key …` for each release
 (release/agent-manifest.*); a Sentinel with a key created on the System page uses that key.
 

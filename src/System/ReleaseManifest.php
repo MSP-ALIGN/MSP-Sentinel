@@ -26,6 +26,8 @@ final class ReleaseManifest
     public const EXCLUDED = ['config/', 'storage/', 'dist/', 'tests/', 'release/'];
     public const MAX_FILES = 5000;
     public const MAX_FILE_BYTES = 8388608; // one file per request, base64 in JSON, under the agent's 16 MB answer cap
+    /** Release key rotations kept and followed (an agent further behind is given the key by hand). */
+    public const MAX_ROTATIONS = 20;
 
     /** Whether a manifest path is acceptable (relative, plain characters, no "..", not excluded). */
     public static function validPath(string $path): bool
@@ -67,9 +69,34 @@ final class ReleaseManifest
         return ['v' => 1, 'type' => self::TYPE, 'version' => $version, 'files' => $files];
     }
 
+    /** Top-level folders and files of a release (what the repository holds, without tests and dot-files). */
+    public const RELEASE_DIRS = ['bin', 'docs', 'help', 'install', 'lang', 'migrations', 'public', 'src', 'views'];
+    public const RELEASE_ROOT_FILES = ['VERSION', 'LICENSE', 'README.md', 'CHANGELOG.md', 'SECURITY.md', 'CONTRIBUTING.md', 'install.sh', 'install-agent.sh', 'install-dev.sh'];
+    /** File types a release is made of; files without a type only under install/templates/ (and LICENSE files). */
+    public const RELEASE_TYPES = ['php', 'js', 'css', 'md', 'sh', 'svg', 'txt', 'webp', 'png', 'ico', 'woff', 'woff2', 'path', 'service', 'timer', 'conf', 'json', 'pub'];
+
+    /** Whether an installed file belongs to the release (see listTree()). */
+    public static function releaseFile(string $rel): bool
+    {
+        if (!self::validPath($rel)) {
+            return false;
+        }
+        if (!str_contains($rel, '/')) {
+            return in_array($rel, self::RELEASE_ROOT_FILES, true);
+        }
+        if (!in_array(explode('/', $rel, 2)[0], self::RELEASE_DIRS, true)) {
+            return false;
+        }
+        $base = basename($rel);
+        $type = str_contains($base, '.') ? strtolower(substr($base, strrpos($base, '.') + 1)) : '';
+        return $type !== '' ? in_array($type, self::RELEASE_TYPES, true) : ($base === 'LICENSE' || str_starts_with($rel, 'install/templates/'));
+    }
+
     /**
-     * The release files of an installed tree (for signing in the web UI, where there may be no git): every plain file
-     * except excluded folders, hidden files and folders, symlinks and the install's own BUILD stamp. Sorted.
+     * The release files of an installed tree (for signing in the web UI, where there may be no git): only the release's
+     * own folders and root files (RELEASE_DIRS, RELEASE_ROOT_FILES) and file types (RELEASE_TYPES), never hidden files,
+     * symlinks, or anything else left in the server's folder (a backup, a database dump): what is listed here is signed
+     * and installed on every agent. On a clean install it is the same list the maintainer signs from git. Sorted.
      *
      * @return list<string>
      */
@@ -83,12 +110,12 @@ final class ReleaseManifest
                 if ($f->isLink() || str_starts_with($f->getFilename(), '.')) {
                     return false;
                 }
-                return !$f->isDir() || self::validPath($rel . '/x');
+                return !$f->isDir() || (self::validPath($rel . '/x') && in_array(explode('/', $rel, 2)[0], self::RELEASE_DIRS, true));
             }
         ));
         foreach ($it as $f) {
             $rel = substr($f->getPathname(), strlen($root) + 1);
-            if ($f->isFile() && $rel !== 'BUILD' && self::validPath($rel)) {
+            if ($f->isFile() && self::releaseFile($rel)) {
                 $out[] = $rel;
                 if (count($out) > self::MAX_FILES) {
                     break;

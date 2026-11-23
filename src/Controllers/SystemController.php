@@ -40,8 +40,10 @@ final class SystemController extends Controller
             'retentionLast' => $s->get('retention_last_run'),
             'sourceUrl' => $s->get('source_url'),
             'agentRelease' => App::agentRelease(),
-            'releaseKey' => ['key' => App::agentRelease()->publicKey(), 'created' => $s->get('release_key_created_at'), 'previous' => $s->get('release_previous_key'),
-                'rotated' => $s->get('release_key_rotation') !== '', 'manifest' => App::agentRelease()->version() === null ? App::agentRelease()->manifestToSign() : null],
+            'releaseKey' => ['key' => App::agentRelease()->publicKey(), 'created' => App::releaseKey()['created_at'],
+                // Agents holding one of these (older keys of the rotation chain) follow it to the current key on their own.
+                'followable' => array_map(static fn (array $l): string => \Sentinel\System\ReleaseManifest::keyFingerprint($l['old_key']), App::releaseKey()['chain']),
+                'manifest' => App::agentRelease()->version() === null ? App::agentRelease()->manifestToSign() : null],
             'agentMove' => ['url' => App::agentMove()['url'], 'ca' => App::agentMove()['ca'] !== '', 'since' => App::agentMove()['requested_at'], 'complete' => App::agentMove()['complete'],
                 'agents' => App::db()->query("SELECT a.id, a.name, a.server_url, a.version, a.move_result, a.move_result_at, a.release_key_fp, c.name AS client_name FROM agents a JOIN clients c ON c.id = a.client_id
                                               WHERE a.status = 'active' AND c.is_demo = 0 ORDER BY c.name, a.name")->fetchAll()],
@@ -121,7 +123,6 @@ final class SystemController extends Controller
             Session::flash('danger', __('Enter your Sentinel password to confirm.') . ' ' . $reauth);
             return $back;
         }
-        $s = App::settings();
         $mode = $request->input('mode');
         $new = trim($request->input('public_key'));
         $current = App::agentRelease()->publicKey();
@@ -129,7 +130,8 @@ final class SystemController extends Controller
             !\Sentinel\System\ReleaseManifest::validPublicKey($new) => __('The key could not be made in your browser (open Sentinel over HTTPS).'),
             $new === $current => __('That is already the release key.'),
             $mode === 'create' && $current !== '' => __('There is already a release key: rotate it instead.'),
-            !in_array($mode, ['create', 'rotate', 'replace'], true), $mode !== 'create' && $current === '' => __('Create a release key first.'),
+            !in_array($mode, ['create', 'rotate', 'replace'], true) => __('Unknown request.'),
+            $mode !== 'create' && $current === '' => __('Create a release key first.'),
             default => null,
         };
         $statement = $request->raw('statement');
@@ -144,10 +146,9 @@ final class SystemController extends Controller
             Session::flash('danger', $error);
             return $back;
         }
-        $s->set('release_previous_key', $current);
-        $s->set('release_key_rotation', $mode === 'rotate' ? (string) json_encode(['statement' => $statement, 'signature' => $request->input('statement_signature')], JSON_UNESCAPED_SLASHES) : '');
-        $s->set('release_public_key', $new);
-        $s->set('release_key_created_at', (string) App::db()->query('SELECT UTC_TIMESTAMP()')->fetchColumn());
+        // A rotation extends the chain agents follow (each link signed by the key before it); a new or replaced key starts
+        // a new chain (agents that pinned an older key need it by hand).
+        App::setReleaseKey($new, $mode === 'rotate' ? [...App::releaseKey()['chain'], ['statement' => $statement, 'signature' => $request->input('statement_signature')]] : []);
         $this->audit($request, 'release_key.' . $mode, null, null, ['fingerprint' => \Sentinel\System\ReleaseManifest::keyFingerprint($new)]);
         Session::flash('success', match ($mode) {
             'create' => __('Release key created. Keep the downloaded key file and its password safe: you need both to sign releases. Now sign this version below.'),

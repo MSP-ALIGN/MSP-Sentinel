@@ -14,6 +14,8 @@ const req = JSON.parse(fs.readFileSync(0, 'utf8'));
 let out;
 if (req.op === 'create') {
     out = await k.create(req.password);
+    out.fingerprint = await k.fingerprint(out.publicKey);
+    out.fileName = await k.fileName(out.publicKey);
 } else if (req.op === 'sign') {
     const u = await k.unlock(req.file, req.password);
     out = { signature: await k.sign(u.privateKey, req.text), publicKey: u.publicKey };

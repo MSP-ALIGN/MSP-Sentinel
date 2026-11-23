@@ -81,7 +81,20 @@
         return JSON.stringify({ at: at, new_key: newKey, old_key: oldKey, type: 'release_key_rotation', v: 1 });
     }
 
-    window.SentinelReleaseKey = { create: create, unlock: unlock, sign: sign, rotationStatement: rotationStatement }; // tests run these in Node
+    /** A key's fingerprint as Sentinel shows it (first 128 bits of SHA-256 of the raw key, in groups of four). */
+    async function fingerprint(publicKey) {
+        var hex = Array.prototype.map.call(new Uint8Array(await crypto.subtle.digest('SHA-256', unb64(publicKey))), function (b) {
+            return ('0' + b.toString(16)).slice(-2);
+        }).join('').slice(0, 32).toUpperCase();
+        return hex.match(/.{4}/g).join(':');
+    }
+
+    /** The key file's name: with the start of its fingerprint, so files of different keys can't be mixed up. */
+    async function fileName(publicKey) {
+        return 'sentinel-release-key-' + (await fingerprint(publicKey)).slice(0, 9).replace(':', '-') + '.json';
+    }
+
+    window.SentinelReleaseKey = { create: create, unlock: unlock, sign: sign, rotationStatement: rotationStatement, fingerprint: fingerprint, fileName: fileName }; // tests run these in Node
 
     if (typeof document === 'undefined') {
         return;
@@ -150,9 +163,11 @@
                         return;
                     }
                     create(field('new-password')).then(function (k) {
-                        download('sentinel-release-key-' + new Date().toISOString().slice(0, 10) + '.json', k.file);
-                        set('public_key', k.publicKey);
-                        done();
+                        return fileName(k.publicKey).then(function (name) {
+                            download(name, k.file);
+                            set('public_key', k.publicKey);
+                            done();
+                        });
                     }).catch(fail);
                 } else if (mode === 'sign') {
                     readFile(form.querySelector('[data-key-field=file]')).then(function (text) {
@@ -182,8 +197,9 @@
                         return create(field('new-password'));
                     }).then(function (n) {
                         var statement = rotationStatement(old.publicKey, n.publicKey, new Date().toISOString().slice(0, 19) + 'Z');
-                        return sign(old.privateKey, statement).then(function (sig) {
-                            download('sentinel-release-key-' + new Date().toISOString().slice(0, 10) + '.json', n.file);
+                        return Promise.all([sign(old.privateKey, statement), fileName(n.publicKey)]).then(function (r) {
+                            var sig = r[0];
+                            download(r[1], n.file);
                             set('public_key', n.publicKey);
                             set('statement', statement);
                             set('statement_signature', sig);

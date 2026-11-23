@@ -227,6 +227,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.24.1',
+            'date' => '2026-11-23',
+            'items' => [
+                'Release key fixes: agents given the key at enrolment can be updated; the key is stored authenticated with the app key (make it again if you made one with 1.24.0); only the release\'s own files are signed, with the manifest hash and file list shown before signing; agents follow several rotations; the fingerprint is printed at enrolment.',
+            ],
+        ],
+        [
             'version' => '1.24.0',
             'date' => '2026-11-23',
             'items' => [

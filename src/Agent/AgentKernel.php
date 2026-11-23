@@ -225,9 +225,9 @@ final class AgentKernel
             $move = App::agentSigner()->sign(['v' => 1, 'type' => 'agent_move', 'agent_id' => (int) $agent['id'], 'site_id' => (int) $agent['site_id'], 'client_id' => (int) $agent['client_id'],
                 'server' => $mv['url'], 'ca_pem' => $mv['ca'], 'move_id' => $mv['id'], 'issued_at' => gmdate('Y-m-d\TH:i:s\Z')]);
         }
-        // The agent release key: offered (signed with this server's key) to agents that have none pinned, or that have the
-        // previous key when the admin rotated it (with the statement the previous key signed). Hourly at most. Root's
-        // update helper on the appliance checks it again before pinning.
+        // The agent release key: offered (signed with this server's key) to agents that have none pinned, or that hold an
+        // older key of the rotation chain (with the statements from that key on, each signed by the key before). Hourly at
+        // most. Root's update helper on the appliance checks it all again before pinning.
         $keyOffer = null;
         if (is_string($body['release_key_fp'] ?? null)) {
             $fpSeen = self::short($body['release_key_fp'], 40);
@@ -235,14 +235,20 @@ final class AgentKernel
                 App::db()->prepare('UPDATE agents SET release_key_fp = :f WHERE id = :id')->execute(['f' => $fpSeen, 'id' => (int) $agent['id']]);
             }
             $rkey = App::agentRelease()->publicKey();
-            $rotation = null;
-            if ($fpSeen !== '' && $rkey !== '' && $fpSeen === \Sentinel\System\ReleaseManifest::keyFingerprint(App::settings()->fresh('release_previous_key'))) {
-                $rotation = json_decode(App::settings()->fresh('release_key_rotation'), true);
+            $rotations = null;
+            if ($fpSeen !== '' && $rkey !== '') {
+                $chain = App::releaseKey()['chain'];
+                foreach ($chain as $i => $link) {
+                    if ($fpSeen === \Sentinel\System\ReleaseManifest::keyFingerprint($link['old_key'])) {
+                        $rotations = array_map(static fn (array $l): array => ['statement' => $l['statement'], 'signature' => $l['signature']], array_slice($chain, $i));
+                        break;
+                    }
+                }
             }
-            if ($idle === true && $rkey !== '' && $fpSeen !== \Sentinel\System\ReleaseManifest::keyFingerprint($rkey) && ($fpSeen === '' || is_array($rotation))
+            if ($idle === true && $rkey !== '' && $fpSeen !== \Sentinel\System\ReleaseManifest::keyFingerprint($rkey) && ($fpSeen === '' || $rotations !== null)
                 && App::agents()->takeKeyOffer((int) $agent['id'])) {
                 $keyOffer = App::agentSigner()->sign(['v' => 1, 'type' => 'agent_release_key', 'agent_id' => (int) $agent['id'], 'site_id' => (int) $agent['site_id'],
-                    'client_id' => (int) $agent['client_id'], 'key' => $rkey, 'rotation' => is_array($rotation) ? $rotation : null, 'issued_at' => gmdate('Y-m-d\TH:i:s\Z')]);
+                    'client_id' => (int) $agent['client_id'], 'key' => $rkey, 'rotations' => $rotations ?? [], 'issued_at' => gmdate('Y-m-d\TH:i:s\Z')]);
             }
         }
         // A restart, an update or a move goes out alone: jobs in the same answer would be marked sent and never run.

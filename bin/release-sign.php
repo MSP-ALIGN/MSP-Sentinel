@@ -105,6 +105,8 @@ switch ($command) {
         file_put_contents($root . '/release/agent-manifest.json', $json);
         file_put_contents($root . '/release/agent-manifest.sig', $sig . "\n");
         echo 'Signed agent release ' . $version . ' (' . count($manifest['files']) . " files). Commit release/agent-manifest.json and release/agent-manifest.sig.\n";
+        // Published with the release notes: admins compare it with the hash Sentinel's System page shows before signing.
+        echo 'Manifest SHA-256 (publish it with the release notes): ' . hash('sha256', ReleaseManifest::canonical($manifest)) . "\n";
         exit(0);
 
     case 'verify':

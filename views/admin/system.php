@@ -130,7 +130,12 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
         <?php if ($rk['manifest'] !== null): $mf = json_decode($rk['manifest'], true); ?>
         <form method="post" action="<?= e(url('/admin/system/release-sign')) ?>" class="row g-2 mb-3" data-release-key="sign" data-public-key="<?= e($rk['key']) ?>" <?= $keyAttrs ?>><?= \Sentinel\Core\Csrf::field() ?>
             <input type="hidden" name="manifest" value="<?= e($rk['manifest']) ?>"><input type="hidden" name="signature" value="">
-            <div class="col-12"><?= e(__('Sign version {v} ({n} files) so agents can be updated to it.', ['v' => $mf['version'] ?? '?', 'n' => count($mf['files'] ?? [])])) ?></div>
+            <div class="col-12"><?= e(__('Sign version {v} ({n} files) so agents can be updated to it.', ['v' => $mf['version'] ?? '?', 'n' => count($mf['files'] ?? [])])) ?>
+                <div class="form-text"><?= e(__('Before signing, compare this fingerprint of the files with the one published in the release notes for this version: a difference means files on this server were changed, so do not sign.')) ?></div>
+                <div class="font-monospace small text-break" data-manifest-hash><?= e(__('Manifest SHA-256: {h}', ['h' => hash('sha256', $rk['manifest'])])) ?></div>
+                <details class="small"><summary><?= e(__('Files that will be signed')) ?></summary>
+                    <pre class="small mb-0 update-log"><?php foreach (($mf['files'] ?? []) as $path => $hash): ?><?= e($hash . '  ' . $path) ?>
+<?php endforeach; ?></pre></details></div>
             <div class="col-md-5"><label class="form-label"><?= e(__('Key file')) ?></label><input class="form-control form-control-sm" type="file" accept=".json,application/json" data-key-field="file"></div>
             <div class="col-md-4"><label class="form-label"><?= e(__('Key file password')) ?></label><input class="form-control form-control-sm" type="password" data-key-field="password" autocomplete="off"></div>
             <?= $note ?>
@@ -162,7 +167,8 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
             <?php foreach ($behind as $ag): $agFp = (string) ($ag['release_key_fp'] ?? ''); ?>
             <li><?= e($ag['client_name'] . ' · ' . $ag['name']) ?>:
                 <?php if ($agFp === '' && preg_match('/^\d+\.\d+\.\d+$/', (string) $ag['version']) === 1 && version_compare((string) $ag['version'], '1.24.0', '<')): ?><span class="text-warning"><?= e(__('needs agent 1.24.0 or later (upgrade it once by hand)')) ?></span>
-                <?php elseif ($agFp === '' || ($rk['rotated'] && $agFp === \Sentinel\System\ReleaseManifest::keyFingerprint($rk['previous']))): ?><span class="text-body-secondary"><?= e(__('gets it at its next check-in')) ?></span>
+                <?php elseif ($agFp === ''): ?><span class="text-warning"><?= e(__('has no release key yet: it will trust the key Sentinel offers at its next check-in')) ?></span>
+                <?php elseif (in_array($agFp, $rk['followable'], true)): ?><span class="text-body-secondary"><?= e(__('follows the rotation at its next check-in')) ?></span>
                 <?php else: ?><span class="text-danger"><?= e(__('pinned another key ({fp}): give it the new key by hand: agent-install.sh --release-key', ['fp' => $agFp])) ?></span><?php endif; ?></li>
             <?php endforeach; ?>
         </ul>

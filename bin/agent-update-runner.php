@@ -101,6 +101,7 @@ if (!$test && (!function_exists('posix_geteuid') || posix_geteuid() !== 0)) {
 }
 $app = $test && $opt('app') ? rtrim((string) $opt('app'), '/') : '/opt/sentinel-agent';
 $keyFile = $test && $opt('key') ? (string) $opt('key') : '/etc/sentinel-agent/release-key.pub';
+$configFile = $test && $opt('config') ? (string) $opt('config') : '/etc/sentinel-agent/agent.json';
 $resultDir = $test && $opt('result') ? rtrim((string) $opt('result'), '/') : '/var/lib/sentinel-agent-update';
 $systemd = !($test && in_array('--no-systemd', $argv, true));
 $php = PHP_BINARY;
@@ -175,6 +176,24 @@ $rm = static function (string $dir): void { // only for root-owned folders under
     @rmdir($dir);
 };
 
+/**
+ * The pinned release key: /etc/sentinel-agent/release-key.pub, else the key pinned at enrolment in agent.json. Only
+ * from a root-owned file that nobody else can write (else '': nothing pinned that can be trusted).
+ */
+$pinnedKey = static function () use ($keyFile, $configFile, $test): string {
+    $trusted = static function (string $f) use ($test): bool {
+        $st = @stat($f);
+        return $st !== false && ($test || ($st['uid'] === 0 && ($st['mode'] & 0022) === 0 && !is_link($f)));
+    };
+    if (is_file($keyFile)) {
+        // A key file that is there but not root-owned is never passed over for the config key: nothing is trusted then.
+        return $trusted($keyFile) ? trim((string) @file_get_contents($keyFile, false, null, 0, 1024)) : '';
+    }
+    $cfg = $trusted($configFile) ? json_decode((string) @file_get_contents($configFile), true) : null;
+    $k = is_array($cfg) && is_string($cfg['release_public_key'] ?? null) ? trim($cfg['release_public_key']) : '';
+    return ReleaseManifest::validPublicKey($k) ? $k : '';
+};
+
 // 0. A crash in the middle of a swap must never leave the appliance without its agent.
 if (!is_dir($app) && is_dir($app . '.old')) {
     rename($app . '.old', $app);
@@ -189,7 +208,6 @@ $req = is_array($c) && is_array($c['request'] ?? null) ? $c['request'] : [];
 // A release key offered by Sentinel: pin it (none pinned yet), or rotate to it (with a statement the pinned key signed).
 if (($req['kind'] ?? null) === 'pin' && is_array($c)) {
     $requestId = is_string($req['request'] ?? null) && preg_match('/^[0-9TZ:. -]{1,30}$/', $req['request']) === 1 ? $req['request'] : '';
-    $configFile = $test && $opt('config') ? (string) $opt('config') : '/etc/sentinel-agent/agent.json';
     $cfg = json_decode((string) @file_get_contents($configFile), true); // root-owned: the pinned server key and identity
     $offer = json_decode((string) ($c['offer'] ?? ''), true);
     $d = is_array($offer) && is_string($offer['payload'] ?? null) && is_string($offer['signature'] ?? null) && is_array($cfg)
@@ -199,18 +217,26 @@ if (($req['kind'] ?? null) === 'pin' && is_array($c)) {
         || !is_string($d['key'] ?? null) || !ReleaseManifest::validPublicKey($d['key']) || $issued === false || abs(time() - $issued) > 7200) {
         $result('release-key', false, 'The release key offer is not signed by this agent\'s Sentinel (or too old).');
     }
-    $pinned = trim((string) @file_get_contents($keyFile));
-    $pinned = $pinned !== '' ? $pinned : trim((string) ($cfg['release_public_key'] ?? ''));
+    $pinned = $pinnedKey();
     if ($pinned === $d['key']) {
         $result('release-key', true, 'Already pinned.');
     }
     if ($pinned !== '') {
-        // Changing a pinned key needs the pinned key's own signature on the change.
-        $rot = is_array($d['rotation'] ?? null) ? $d['rotation'] : [];
-        $st = is_string($rot['statement'] ?? null) ? json_decode($rot['statement'], true) : null;
-        $sig = is_string($rot['signature'] ?? null) ? base64_decode($rot['signature'], true) : false;
-        if (!is_array($st) || ($st['type'] ?? null) !== 'release_key_rotation' || ($st['old_key'] ?? null) !== $pinned || ($st['new_key'] ?? null) !== $d['key']
-            || $sig === false || strlen($sig) !== SODIUM_CRYPTO_SIGN_BYTES || !sodium_crypto_sign_verify_detached($sig, (string) $rot['statement'], (string) base64_decode($pinned))) {
+        // Changing a pinned key needs a chain of rotation statements from it: each names the next key and is signed by
+        // the key before it (the pinned key signs the first), and the chain ends at the offered key.
+        $current = $pinned;
+        $chain = is_array($d['rotations'] ?? null) ? array_values($d['rotations']) : [];
+        foreach (array_slice($chain, 0, ReleaseManifest::MAX_ROTATIONS) as $link) {
+            $st = is_array($link) && is_string($link['statement'] ?? null) ? json_decode($link['statement'], true) : null;
+            $sig = is_array($link) && is_string($link['signature'] ?? null) ? base64_decode($link['signature'], true) : false;
+            if (!is_array($st) || ($st['type'] ?? null) !== 'release_key_rotation' || ($st['old_key'] ?? null) !== $current || !is_string($st['new_key'] ?? null)
+                || !ReleaseManifest::validPublicKey($st['new_key']) || $sig === false || strlen($sig) !== SODIUM_CRYPTO_SIGN_BYTES
+                || !sodium_crypto_sign_verify_detached($sig, (string) $link['statement'], (string) base64_decode($current))) {
+                break;
+            }
+            $current = $st['new_key'];
+        }
+        if ($current !== $d['key']) {
             $result('release-key', false, 'A different release key is pinned and the change is not signed by it: give the new key by hand (agent-install.sh --release-key).');
         }
     }
@@ -226,14 +252,12 @@ if (!is_array($c) || $wanted === '') {
     $result('', false, 'No valid update request.');
 }
 
-// 2. Check, in memory.
-if (!$test) {
-    $st = @stat($keyFile);
-    if ($st === false || $st['uid'] !== 0 || ($st['mode'] & 0022) !== 0) {
-        $result($wanted, false, 'The release key file must exist, belong to root and not be writable by others: ' . $keyFile);
-    }
+// 2. Check, in memory, with the pinned release key (the key file, else the key pinned at enrolment in the config).
+$pinned = $pinnedKey();
+if ($pinned === '') {
+    $result($wanted, false, 'No release key is pinned on this appliance (or its file is not root-owned): ' . $keyFile);
 }
-$m = ReleaseManifest::verify((string) ($c['manifest'] ?? ''), (string) ($c['signature'] ?? ''), (string) @file_get_contents($keyFile));
+$m = ReleaseManifest::verify((string) ($c['manifest'] ?? ''), (string) ($c['signature'] ?? ''), $pinned);
 if (is_string($m)) {
     $result($wanted, false, 'Release refused: ' . $m . '.');
 }
