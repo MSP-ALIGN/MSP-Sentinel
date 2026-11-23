@@ -3,7 +3,7 @@
  * One pen-test engagement: state, window, tests, scope, the signed authorisation, and the actions (approve by a
  * different admin, stop, cancel).
  * Expects: $client, $engagement (with 'targets', 'tests_list'), $state, $siteNames, $testLabels, $currentUser, $results
- * (latest per host), $externalJobs, $agentJobs.
+ * (latest per host), $findings (EngagementFindings::analyse), $externalJobs, $agentJobs.
  * Every value is escaped; results came from the tested hosts and are untrusted. Actions are shown only to roles allowed to use them (the routes enforce it too).
  */
 use Sentinel\Auth\Role;
@@ -122,3 +122,23 @@ foreach ($e['targets'] as $t) {
         <?php endif; ?>
     </div>
 </div>
+<?php if ($findings !== []): $sev = ['fail' => ['text-bg-danger', __('Fail')], 'warn' => ['text-bg-warning', __('Warning')], 'info' => ['text-bg-secondary', __('Info')]]; ?>
+<div class="card mb-3">
+    <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Findings from the tests')) ?></h2></div>
+    <div class="card-body">
+        <div class="table-responsive"><table class="table table-sm align-middle mb-0">
+            <thead><tr><th><?= e(__('Severity')) ?></th><th><?= e(__('Finding')) ?></th><th><?= e(__('Where')) ?></th><th><?= e(__('Evidence')) ?></th></tr></thead>
+            <tbody>
+            <?php foreach ($findings as $f): [$cls, $lbl] = $sev[$f['severity']]; ?>
+                <tr>
+                    <td><span class="badge <?= e($cls) ?>"><?= e($lbl) ?></span></td>
+                    <td><?= e($f['title']) ?><div class="small text-body-secondary"><?= e($f['fix']) ?></div></td>
+                    <td class="font-monospace small"><?= e($f['target']) ?></td>
+                    <td><?php if ($f['evidence'] !== ''): ?><pre class="small mb-0 update-log"><?= e($f['evidence']) ?></pre><?php endif; ?></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table></div>
+    </div>
+</div>
+<?php endif; ?>

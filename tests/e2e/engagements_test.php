@@ -181,6 +181,8 @@ return [
         Assert::contains('Anonymous access: READ', json_encode($host['checks_list']));
         $page = $tech->get('/engagements/' . $id)->body;
         Assert::contains('50080/http', $page);
+        Assert::contains('Anonymous FTP login is allowed', $page, 'findings from the evidence');
+        Assert::contains('Share Public can be read without a password', $page);
         // Stopped: a new run is refused, and a queued job is cancelled by the worker without scanning.
         $q = App::scans()->queue($cid, 'manual', null, true, 'test', ['engagement_id' => $id], 'engagement');
         $tech->post('/engagements/' . $id . '/stop', ['_csrf' => $tech->get('/engagements/' . $id)->csrf(), 'reason' => 'Test stop']);

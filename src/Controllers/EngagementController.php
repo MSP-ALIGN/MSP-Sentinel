@@ -232,7 +232,8 @@ final class EngagementController extends Controller
             $siteNames[(int) $s['id']] = (string) $s['name'];
         }
         return $this->page('engagements/show', (string) $e['name'], ['client' => $client, 'engagement' => $e, 'siteNames' => $siteNames,
-            'results' => App::engagements()->results((int) $e['id']), 'externalJobs' => App::engagements()->externalJobs((int) $e['id']),
+            'results' => $results = App::engagements()->results((int) $e['id']), 'findings' => \Sentinel\Engagements\EngagementFindings::analyse($results),
+            'externalJobs' => App::engagements()->externalJobs((int) $e['id']),
             'agentJobs' => App::agents()->engagementJobs((int) $e['id']),
             'state' => EngagementRepository::state($e, gmdate('Y-m-d H:i:s')), 'testLabels' => self::testLabels(),
             'clientNav' => ClientController::nav($client, 'engagements', App::findings()->counts((int) $client['id']))]);

@@ -190,7 +190,7 @@ final class AgentService
             }
             $tests = $e['tests_list'];
             $ports = in_array('tcp_full', $tests, true) ? [] : self::PORTS; // [] with tcp_full: all 65,535 TCP ports
-            $udp = in_array('udp_common', $tests, true) ? [161] : [];
+            $udp = in_array('udp_common', $tests, true) ? [123, 161, 1900] : []; // NTP, SNMP, SSDP
             $ends = str_replace(' ', 'T', (string) $e['window_end']) . 'Z';
             $expires = min($expires, $ends);
             $extra['engagement'] = ['id' => (int) $e['id'], 'tests' => $tests, 'exclusions' => $exclusions, 'ends_at' => $ends];

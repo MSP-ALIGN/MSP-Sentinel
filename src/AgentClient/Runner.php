@@ -450,9 +450,8 @@ final class Runner
                 $messages[] = $ip . ': ' . mb_substr($ex->getMessage(), 0, 200);
                 $complete = false;
             }
-            if ($this->probes !== null && in_array(161, $job['udp_ports'] ?? [], true) && !$shouldStop()) {
-                $snmp = $this->probes->snmp((string) $ip); // UDP 161, listed in the signed job
-                $h['udp'] = ['snmp_public' => (string) json_encode($snmp['public'] ?? null), 'snmp_private' => (string) json_encode($snmp['private'] ?? null)];
+            if ($this->probes !== null && in_array('udp_common', $tests, true) && !$shouldStop()) {
+                $h['udp'] = $this->probes->udpChecks((string) $ip); // SNMP, NTP, SSDP: signed in the job
             }
             $hosts[] = $h;
         }

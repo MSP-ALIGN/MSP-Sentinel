@@ -78,6 +78,7 @@ final class ScanWorker
         private readonly ?FixWorkflow $workflow = null,
         private readonly ?\Sentinel\Inventory\InventorySync $inventory = null,
         private readonly ?\Sentinel\Agent\AgentService $agentService = null,
+        private readonly ?ProtocolProbes $probes = null,
     ) {
         $this->log ??= static function (string $line): void {
         };
@@ -650,7 +651,11 @@ final class ScanWorker
                 continue;
             }
             $complete = $parsed['complete'] && $result['exit'] === 0;
-            $engagements->addResult($eid, 'external', null, 'scan:' . $jobId, $ip, array_values(array_unique($names)), $parsed['open'], ['hostscripts' => $parsed['hostscripts']], $complete);
+            $checks = ['hostscripts' => $parsed['hostscripts']];
+            if (in_array('udp_common', $tests, true) && $this->probes !== null && !$shouldStop($ip)) {
+                $checks['udp'] = $this->probes->udpChecks($ip);
+            }
+            $engagements->addResult($eid, 'external', null, 'scan:' . $jobId, $ip, array_values(array_unique($names)), $parsed['open'], $checks, $complete);
             // Like a port scan: the client's services, certificates and web pages (only the ports this scan covered).
             $default = null;
             foreach ($this->clients->sites($clientId) as $site) {

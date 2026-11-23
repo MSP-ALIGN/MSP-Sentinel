@@ -19,6 +19,11 @@ namespace Sentinel\Scanning;
  *   default credential (read only); the owner chose to include it. Replies
  *   must come from the probed address (connected UDP socket).
  *
+ * - NTP (123/udp, engagements only): one ordinary client time request (mode 3, what any computer sends); answered
+ *   means a time service is reachable. Nothing else (no control or monitor queries).
+ * - SSDP (1900/udp, engagements only): one unicast discovery request (M-SEARCH); answered means UPnP discovery is
+ *   reachable (on the internet, a known amplification risk).
+ *
  * Every check is one short exchange with a small timeout and a read limit.
  * Answers are untrusted binary data, only parsed at fixed offsets. "null"
  * means the check couldn't decide (no answer, unexpected reply).
@@ -116,6 +121,44 @@ final class ProtocolProbes
             }
         }
         return $checked ? $out : null;
+    }
+
+    /**
+     * An engagement's UDP checks of one address (each one request, read only): SNMP's default communities, NTP, SSDP.
+     * Values are JSON strings (null: no answer or couldn't decide). The same shape from Sentinel and from agents.
+     *
+     * @return array<string,string>
+     */
+    public function udpChecks(string $ip): array
+    {
+        $snmp = $this->snmp($ip);
+        return ['snmp_public' => (string) json_encode($snmp['public'] ?? null), 'snmp_private' => (string) json_encode($snmp['private'] ?? null),
+                'ntp' => (string) json_encode($this->ntp($ip)), 'ssdp' => (string) json_encode($this->ssdp($ip))];
+    }
+
+    /** NTP: true if a time service answers an ordinary client request, false if not, null if it couldn't be sent. */
+    public function ntp(string $ip, int $port = 123): ?bool
+    {
+        $answer = $this->udp($ip, $port, "\x1B" . str_repeat("\0", 47)); // LI 0, version 3, mode 3 (client)
+        if ($answer === false) {
+            return null;
+        }
+        return strlen($answer) >= 48 && (ord($answer[0]) & 0x07) === 4; // mode 4: a server's reply
+    }
+
+    /**
+     * SSDP: the device's answer to one unicast M-SEARCH, or null when there was none.
+     *
+     * @return array{server:string}|null server: its SERVER header (untrusted, cleaned)
+     */
+    public function ssdp(string $ip, int $port = 1900): ?array
+    {
+        $answer = $this->udp($ip, $port, "M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: \"ssdp:discover\"\r\nMX: 1\r\nST: ssdp:all\r\n\r\n");
+        if (!is_string($answer) || !str_starts_with($answer, 'HTTP/1.1 200')) {
+            return null;
+        }
+        $server = preg_match('/^server:\s*(.+)$/mi', $answer, $m) === 1 ? (string) preg_replace('/[^\x20-\x7E]/', '', trim($m[1])) : '';
+        return ['server' => mb_substr($server, 0, 200)];
     }
 
     /** SMBv1: offer only "NT LM 0.12"; true if the server accepts it. */
