@@ -3,7 +3,7 @@
  * One pen-test engagement: state, window, tests, scope, the signed authorisation, and the actions (approve by a
  * different admin, stop, cancel).
  * Expects: $client, $engagement (with 'targets', 'tests_list'), $state, $siteNames, $testLabels, $currentUser, $results
- * (latest per host), $findings (EngagementFindings::analyse), $externalJobs, $agentJobs.
+ * (latest per host), $findings (EngagementFindings::analyse), $externalJobs, $agentJobs, $reports, $retestOf.
  * Every value is escaped; results came from the tested hosts and are untrusted. Actions are shown only to roles allowed to use them (the routes enforce it too).
  */
 use Sentinel\Auth\Role;
@@ -78,6 +78,20 @@ foreach ($e['targets'] as $t) {
                 <?php endif; ?>
             </div>
         </div>
+    </div>
+</div>
+<?php if ($retestOf !== null): ?><p class="small"><?= e(__('Retest of engagement #{id} ({n}).', ['id' => (int) $retestOf['id'], 'n' => $retestOf['name']])) ?> <a href="<?= e(url('/engagements/' . (int) $retestOf['id'])) ?>"><?= e(__('Open it')) ?></a></p><?php endif; ?>
+<div class="card mb-3">
+    <div class="card-header d-flex align-items-center flex-wrap gap-2"><h2 class="card-title h5 mb-0"><?= e(__('Report')) ?></h2>
+        <?php if ($isTech && $e['approved_at'] !== null && $results !== []): ?>
+        <form method="post" action="<?= e(url('/engagements/' . (int) $e['id'] . '/report')) ?>" class="ms-auto"><?= Csrf::field() ?>
+            <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-file-earmark-text me-1" aria-hidden="true"></i><?= e($retestOf !== null ? __('Issue retest letter') : __('Issue penetration test report')) ?></button></form>
+        <?php endif; ?>
+    </div>
+    <div class="card-body">
+        <?php if ($reports === []): ?><p class="text-body-secondary mb-0"><?= e(__('No report issued yet. Issue it when the tests are done; each issue is kept.')) ?></p><?php else: ?>
+        <ul class="mb-0"><?php foreach ($reports as $rep): ?><li><a href="<?= e(url('/reports/' . (int) $rep['id'])) ?>"><?= e($rep['kind'] === 'retest' ? __('Retest letter') : __('Penetration test report')) ?></a> <span class="small text-body-secondary"><?= e($local((string) $rep['generated_at'])) ?></span></li><?php endforeach; ?></ul>
+        <?php endif; ?>
     </div>
 </div>
 <div class="card mb-3">

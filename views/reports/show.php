@@ -20,7 +20,7 @@ $rt = $rating !== null ? ($ratingLabel[$rating['level']] ?? null) : null;
                 <?php endif; ?>
                 <dl class="row small mb-3">
                     <dt class="col-sm-4"><?= e(__('Client')) ?></dt><dd class="col-sm-8"><a href="<?= e(url('/clients/' . (int) $report['client_id'])) ?>"><?= e($report['client_name']) ?></a></dd>
-                    <dt class="col-sm-4"><?= e(__('Type')) ?></dt><dd class="col-sm-8"><?= e($report['kind'] === 'executive' ? __('Executive summary') : __('Technical findings')) ?><?= $report['source'] === 'scheduled' ? ' · ' . e(__('Monthly')) : '' ?></dd>
+                    <dt class="col-sm-4"><?= e(__('Type')) ?></dt><dd class="col-sm-8"><?= e(match ((string) $report['kind']) { 'executive' => __('Executive summary'), 'pentest' => __('Penetration test report'), 'retest' => __('Retest letter'), default => __('Technical findings') }) ?><?= $report['source'] === 'scheduled' ? ' · ' . e(__('Monthly')) : '' ?></dd>
                     <dt class="col-sm-4"><?= e(__('Period')) ?></dt><dd class="col-sm-8"><?= e($report['period_start'] . ' – ' . $report['period_end']) ?></dd>
                     <dt class="col-sm-4"><?= e(__('Created')) ?></dt><dd class="col-sm-8"><?= e($report['generated_at']) ?> UTC · <?= e($report['generated_by_name'] ?? __('Monthly schedule')) ?></dd>
                     <dt class="col-sm-4"><?= e(__('Totals')) ?></dt><dd class="col-sm-8"><?= e(__('{f} Fail, {w} Warning, {x} fixed this period, {a} accepted, {p} false positive', ['f' => $counts['fail'] ?? 0, 'w' => $counts['warn'] ?? 0, 'x' => $counts['fixed'] ?? 0, 'a' => $counts['accepted'] ?? 0, 'p' => $counts['false_positive'] ?? 0])) ?></dd>

@@ -3,7 +3,7 @@
  * Saved reports, newest first, optionally for one client.
  * Expects: $reports, $clients, $clientFilter. Every value is escaped.
  */
-$kindLabel = static fn (string $k): string => $k === 'executive' ? __('Executive summary') : __('Technical findings');
+$kindLabel = static fn (string $k): string => match ($k) { 'executive' => __('Executive summary'), 'pentest' => __('Penetration test report'), 'retest' => __('Retest letter'), default => __('Technical findings') };
 ?>
 <div class="card">
     <div class="card-header">

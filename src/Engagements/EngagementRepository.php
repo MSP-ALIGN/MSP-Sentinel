@@ -49,7 +49,7 @@ final class EngagementRepository
      * Save a validated engagement and its targets (one transaction). Returns its id.
      *
      * @param array{name:string, window_start:string, window_end:string, intensity:string, tests:list<string>, signer_name:string,
-     *              signer_role:string, signed_on:string, document_sha256:string, document_name:string, document_bytes:int, notes:string} $e
+     *              signer_role:string, signed_on:string, document_sha256:string, document_name:string, document_bytes:int, notes:string, retest_of?:?int} $e
      * @param list<array{kind:string, site_id:?int, entry_type:string, value:string, range_start:?string, range_end:?string}> $targets
      */
     public function create(int $clientId, array $e, array $targets, int $userId): int
@@ -57,11 +57,11 @@ final class EngagementRepository
         $this->db->beginTransaction();
         try {
             $this->db->prepare('INSERT INTO engagements (client_id, name, window_start, window_end, intensity, tests, signer_name, signer_role, signed_on,
-                document_sha256, document_name, document_bytes, notes, created_by, created_at)
-                VALUES (:c, :n, :ws, :we, :i, :t, :sn, :sr, :so, :dh, :dn, :db, :no, :u, UTC_TIMESTAMP())')->execute([
+                document_sha256, document_name, document_bytes, notes, retest_of, created_by, created_at)
+                VALUES (:c, :n, :ws, :we, :i, :t, :sn, :sr, :so, :dh, :dn, :db, :no, :rt, :u, UTC_TIMESTAMP())')->execute([
                 'c' => $clientId, 'n' => $e['name'], 'ws' => $e['window_start'], 'we' => $e['window_end'], 'i' => $e['intensity'], 't' => implode(',', $e['tests']),
                 'sn' => $e['signer_name'], 'sr' => $e['signer_role'], 'so' => $e['signed_on'], 'dh' => $e['document_sha256'], 'dn' => $e['document_name'],
-                'db' => $e['document_bytes'], 'no' => $e['notes'] !== '' ? $e['notes'] : null, 'u' => $userId,
+                'db' => $e['document_bytes'], 'no' => $e['notes'] !== '' ? $e['notes'] : null, 'rt' => $e['retest_of'] ?? null, 'u' => $userId,
             ]);
             $id = (int) $this->db->lastInsertId();
             $stmt = $this->db->prepare('INSERT INTO engagement_targets (engagement_id, kind, site_id, entry_type, value, range_start, range_end) VALUES (:e, :k, :s, :t, :v, :rs, :re)');

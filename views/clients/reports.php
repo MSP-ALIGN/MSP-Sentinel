@@ -42,7 +42,7 @@ $rRole = (string) $currentUser['role'];
         <?php else: ?>
         <ul class="list-unstyled small mb-0">
             <?php foreach ($clientReports as $r): ?>
-            <li class="mb-1"><a href="<?= e(url('/reports/' . (int) $r['id'])) ?>"><?= e($r['kind'] === 'executive' ? __('Executive summary') : __('Technical findings')) ?></a>
+            <li class="mb-1"><a href="<?= e(url('/reports/' . (int) $r['id'])) ?>"><?= e(match ((string) $r['kind']) { 'executive' => __('Executive summary'), 'pentest' => __('Penetration test report'), 'retest' => __('Retest letter'), default => __('Technical findings') }) ?></a>
                 <span class="text-body-secondary"><?= e($r['period_start'] . ' – ' . $r['period_end']) ?></span>
                 <?php if ($r['source'] === 'scheduled'): ?><span class="badge text-bg-secondary"><?= e(__('Monthly')) ?></span><?php endif; ?></li>
             <?php endforeach; ?>

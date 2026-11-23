@@ -69,6 +69,7 @@ final class EngagementController extends Controller
         $v['external'] = mb_substr($request->raw('external'), 0, 20000);
         $v['exclusions'] = mb_substr($request->raw('exclusions'), 0, 20000);
         $v['tests'] = array_values(array_intersect(EngagementRepository::TESTS, $request->postList('tests')));
+        $v['retest_of'] = $request->input('retest_of');
         $sites = App::clients()->sites($clientId);
         foreach ($sites as $s) {
             $v['internal'][(int) $s['id']] = mb_substr($request->raw('internal_' . (int) $s['id']), 0, 20000);
@@ -90,6 +91,15 @@ final class EngagementController extends Controller
         }
         if ($v['tests'] === []) {
             $errors['tests'] = __('Choose at least one test.');
+        }
+        $retestOf = null;
+        if ($v['retest_of'] !== '') {
+            $prev = ctype_digit($v['retest_of']) ? App::engagements()->find((int) $v['retest_of']) : null;
+            if ($prev === null || (int) $prev['client_id'] !== $clientId || $prev['approved_at'] === null) {
+                $errors['retest_of'] = __('Choose an earlier approved engagement of this client.');
+            } else {
+                $retestOf = (int) $prev['id'];
+            }
         }
         if (mb_strlen($v['notes']) > 5000) {
             $errors['notes'] = __('Notes are too long.');
@@ -214,7 +224,7 @@ final class EngagementController extends Controller
         $id = App::engagements()->create($clientId, [
             'name' => $v['name'], 'window_start' => $start->setTimezone($utc)->format('Y-m-d H:i:s'), 'window_end' => $end->setTimezone($utc)->format('Y-m-d H:i:s'),
             'intensity' => $v['intensity'], 'tests' => $v['tests'], 'signer_name' => $v['signer_name'], 'signer_role' => $v['signer_role'], 'signed_on' => $v['signed_on'],
-            'document_sha256' => $sha, 'document_name' => mb_substr($name, 0, 190), 'document_bytes' => $docBytes, 'notes' => $v['notes'],
+            'document_sha256' => $sha, 'document_name' => mb_substr($name, 0, 190), 'document_bytes' => $docBytes, 'notes' => $v['notes'], 'retest_of' => $retestOf,
         ], $targets, (int) $this->user()['id']);
         $this->audit($request, 'engagement.created', 'engagement', $id, ['client_id' => $clientId, 'tests' => $v['tests'], 'intensity' => $v['intensity'],
             'external' => count($external), 'internal' => count(array_filter($targets, static fn (array $t): bool => $t['kind'] === 'internal')), 'document_sha256' => $sha]);
@@ -234,7 +244,8 @@ final class EngagementController extends Controller
         return $this->page('engagements/show', (string) $e['name'], ['client' => $client, 'engagement' => $e, 'siteNames' => $siteNames,
             'results' => $results = App::engagements()->results((int) $e['id']), 'findings' => \Sentinel\Engagements\EngagementFindings::analyse($results),
             'externalJobs' => App::engagements()->externalJobs((int) $e['id']),
-            'agentJobs' => App::agents()->engagementJobs((int) $e['id']),
+            'agentJobs' => App::agents()->engagementJobs((int) $e['id']), 'reports' => App::reports()->forEngagement((int) $e['id']),
+            'retestOf' => $e['retest_of'] !== null ? App::engagements()->find((int) $e['retest_of']) : null,
             'state' => EngagementRepository::state($e, gmdate('Y-m-d H:i:s')), 'testLabels' => self::testLabels(),
             'clientNav' => ClientController::nav($client, 'engagements', App::findings()->counts((int) $client['id']))]);
     }
@@ -368,6 +379,58 @@ final class EngagementController extends Controller
         return $back;
     }
 
+    /**
+     * POST /engagements/{id}/report (technicians and admins): issue the pen-test report (or, for a retest, the retest
+     * letter, comparing with the earlier engagement's latest report) from the evidence recorded so far. A frozen
+     * snapshot, like every report; it can be issued again later (e.g. after more tests), each one kept.
+     */
+    public function report(Request $request, array $params): Response
+    {
+        $e = $this->engagementOr404($params);
+        $back = Response::redirect('/engagements/' . (int) $e['id']);
+        if ($e['approved_at'] === null) {
+            Session::flash('danger', __('Only an approved engagement has a report.'));
+            return $back;
+        }
+        $results = App::engagements()->results((int) $e['id']);
+        if ($results === []) {
+            Session::flash('warning', __('Run the tests first: there are no results to report yet.'));
+            return $back;
+        }
+        $client = App::clients()->find((int) $e['client_id']) ?? throw new HttpException(404);
+        $original = null;
+        if ($e['retest_of'] !== null) {
+            $prev = App::reports()->forEngagement((int) $e['retest_of']);
+            foreach ($prev as $p) {
+                if ($p['kind'] === 'pentest') {
+                    $row = App::reports()->find((int) $p['id']);
+                    $original = is_array($row) ? json_decode((string) $row['snapshot'], true) : null;
+                    break;
+                }
+            }
+            if (!is_array($original)) {
+                Session::flash('danger', __('The engagement this retests has no penetration test report to compare with.'));
+                return $back;
+            }
+        }
+        $siteNames = [];
+        foreach (App::clients()->sites((int) $client['id']) as $s) {
+            $siteNames[(int) $s['id']] = (string) $s['name'];
+        }
+        $user = $this->user();
+        $builder = new \Sentinel\Reports\ReportBuilder(App::db(), App::settings(), App::authorisations(), SENTINEL_ROOT . '/storage/branding', App::version());
+        $snap = \Sentinel\Engagements\EngagementReport::build($e, $client, $results, $builder->brand(), $siteNames, self::testLabels(), (string) $user['display_name'], $original);
+        $html = \Sentinel\Engagements\EngagementReport::render($snap, SENTINEL_ROOT . '/views/reports');
+        $kind = $original === null ? 'pentest' : 'retest';
+        $title = ($kind === 'pentest' ? __('Penetration test report') : __('Retest letter')) . ' – ' . $client['name'] . ' – ' . $e['name'];
+        $id = App::reports()->create((int) $client['id'], $kind, 'manual', $title, substr((string) $e['window_start'], 0, 10), substr((string) $e['window_end'], 0, 10),
+            (int) $user['id'], $html, $snap);
+        App::reports()->setEngagement($id, (int) $e['id']);
+        $this->audit($request, 'report.created', 'report', $id, ['client' => (int) $client['id'], 'kind' => $kind, 'engagement' => (int) $e['id']]);
+        Session::flash('success', $kind === 'pentest' ? __('Penetration test report issued.') : __('Retest letter issued.'));
+        return Response::redirect('/reports/' . $id);
+    }
+
     /** POST /engagements/{id}/cancel (before approval) */
     public function cancel(Request $request, array $params): Response
     {
@@ -410,7 +473,8 @@ final class EngagementController extends Controller
             $a = App::agents()->activeAuthorisation((int) $s['id'], $today);
             $sites[] = ['site' => $s, 'ranges' => $a['ranges_list'] ?? [], 'until' => $a['valid_until'] ?? null];
         }
-        return $this->page('engagements/form', __('New engagement'), ['client' => $client, 'values' => $values, 'errors' => $errors,
+        $earlier = array_values(array_filter(App::engagements()->forClient((int) $client['id']), static fn (array $g): bool => $g['approved_at'] !== null));
+        return $this->page('engagements/form', __('New engagement'), ['client' => $client, 'values' => $values, 'errors' => $errors, 'earlier' => $earlier,
             'sites' => $sites, 'scope' => App::authorisations()->activeEntries((int) $client['id'], $today), 'testLabels' => self::testLabels(),
             'clientNav' => ClientController::nav($client, 'engagements', App::findings()->counts((int) $client['id']))], $status);
     }

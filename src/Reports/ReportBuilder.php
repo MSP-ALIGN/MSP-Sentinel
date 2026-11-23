@@ -179,7 +179,7 @@ final class ReportBuilder
      *
      * @return array{name:string, color:string, footer:string, logo:string, powered_by:bool, paper:string}
      */
-    private function brand(): array
+    public function brand(): array
     {
         $logo = '';
         $hash = $this->settings->get('brand_logo');

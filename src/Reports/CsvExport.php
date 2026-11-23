@@ -20,6 +20,9 @@ final class CsvExport
     /** @param array<string,mixed> $snapshot */
     public static function build(array $snapshot): string
     {
+        if (in_array($snapshot['kind'] ?? '', ['pentest', 'retest'], true)) {
+            return self::engagement($snapshot);
+        }
         $out = fopen('php://temp', 'r+');
         fwrite($out, "\xEF\xBB\xBF"); // UTF-8 BOM so spreadsheet programs read accents correctly
         fputcsv($out, self::COLUMNS, ',', '"', '');
@@ -29,6 +32,19 @@ final class CsvExport
                 $f['cve_id'] ?? '', $f['finding_type'] === 'vuln' ? ((int) $f['in_kev'] === 1 ? 'yes' : 'no') : '', $f['epss'] ?? '',
                 $f['confidence'] ?? '', $f['fix'] ?? '', $f['first_seen'], $f['last_seen'], $f['resolved_at'] ?? '', $f['triage_note'] ?? '',
             ]), ',', '"', '');
+        }
+        rewind($out);
+        return (string) stream_get_contents($out);
+    }
+
+    /** A pen-test report's findings as CSV (severity, finding, where, inside or from the internet, evidence, fix). @param array<string,mixed> $snapshot */
+    private static function engagement(array $snapshot): string
+    {
+        $out = fopen('php://temp', 'r+');
+        fwrite($out, "\xEF\xBB\xBF");
+        fputcsv($out, ['severity', 'finding', 'target', 'origin', 'evidence', 'how_to_fix'], ',', '"', '');
+        foreach ((array) ($snapshot['findings'] ?? []) as $f) {
+            fputcsv($out, array_map([self::class, 'cell'], [$f['severity'] ?? '', $f['title'] ?? '', $f['target'] ?? '', $f['origin'] ?? '', $f['evidence'] ?? '', $f['fix'] ?? '']), ',', '"', '');
         }
         rewind($out);
         return (string) stream_get_contents($out);

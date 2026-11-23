@@ -118,8 +118,12 @@ final class ReportController extends Controller
         $report = $this->report($params);
         $snapshot = json_decode((string) $report['snapshot'], true) ?: [];
         unset($report['html']);
-        return $this->page('reports/show', (string) $report['title'], ['report' => $report, 'counts' => $snapshot['counts'] ?? [],
-            'rating' => $snapshot['rating'] ?? null]);
+        $rating = $snapshot['rating'] ?? null;
+        if (is_string($rating)) {
+            // Pen-test reports and retest letters keep the level only.
+            $rating = ['level' => $rating, 'reason' => __('{f} Fail(s) and {w} Warning(s) from the engagement\'s tests.', ['f' => (int) ($snapshot['counts']['fail'] ?? 0), 'w' => (int) ($snapshot['counts']['warn'] ?? 0)])];
+        }
+        return $this->page('reports/show', (string) $report['title'], ['report' => $report, 'counts' => $snapshot['counts'] ?? [], 'rating' => is_array($rating) ? $rating : null]);
     }
 
     /** GET /reports/{id}/view: the stored document itself, for reading and printing. */
@@ -262,7 +266,7 @@ final class ReportController extends Controller
     /** A safe download file name: report-12-executive-2026-11-30.html */
     private static function fileName(array $report, string $ext): string
     {
-        return 'report-' . (int) $report['id'] . '-' . ($report['kind'] === 'executive' ? 'executive' : 'technical') . '-'
+        return 'report-' . (int) $report['id'] . '-' . (in_array($report['kind'], ['executive', 'technical', 'pentest', 'retest'], true) ? $report['kind'] : 'report') . '-'
             . preg_replace('/[^0-9-]/', '', (string) $report['period_end']) . '.' . $ext;
     }
 

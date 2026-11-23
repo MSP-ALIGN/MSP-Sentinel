@@ -246,4 +246,54 @@ return [
         $agent = $ctx->db->query("SELECT * FROM agents WHERE site_id = {$site} AND status = 'active'")->fetch();
         Assert::true(in_array((int) $second[0]['id'], App::agents()->jobsToStop((int) $agent['id']), true), 'listed for the agent to stop');
     },
+    'engagements: the penetration test report, then a retest letter marking each finding fixed or still open' => function (TestContext $ctx) use ($engSetup, $fields, $lastId): void {
+        [$cid, $site, $pdf] = $engSetup($ctx);
+        $admin2 = $ctx->login('engadmin2', 'Engadmin2-Pass-0001!');
+        $tech = $ctx->login('engtech', 'Engtech-Pass-0001!');
+        $runAll = static function (int $id) use ($ctx, $tech): void {
+            $tech->post('/engagements/' . $id . '/run-external', ['_csrf' => $tech->get('/engagements/' . $id)->csrf()]);
+            $job = (int) (App::engagements()->externalJobs($id)[0]['id'] ?? 0);
+            $ctx->cli('bin/worker.php', ['--no-schedule', '--job=' . $job]);
+        };
+        $tech->upload('/clients/' . $cid . '/engagements/new', '/clients/' . $cid . '/engagements', $fields($site, ['name' => 'Report test',
+            'external' => '203.0.113.3', 'internal_' . $site => '', 'exclusions' => '']), 'document', $pdf, 'application/pdf');
+        $id = $lastId($ctx, $cid);
+        $tech->post('/engagements/' . $id . '/report', ['_csrf' => $tech->get('/engagements/' . $id)->csrf()]);
+        Assert::same([], App::reports()->forEngagement($id), 'no report before approval');
+        $admin2->post('/engagements/' . $id . '/approve', ['_csrf' => $admin2->get('/engagements/' . $id)->csrf(), 'password' => 'Engadmin2-Pass-0001!']);
+        $runAll($id);
+        $res = $tech->post('/engagements/' . $id . '/report', ['_csrf' => $tech->get('/engagements/' . $id)->csrf()]);
+        $reports = App::reports()->forEngagement($id);
+        Assert::same('pentest', $reports[0]['kind'] ?? null, 'issued');
+        $report = App::reports()->find((int) $reports[0]['id']);
+        foreach (['Penetration test report', 'Scope and authorisation', 'Anonymous FTP login is allowed', 'Robin Example', hash_file('sha256', $pdf), 'Never done: password guessing'] as $want) {
+            Assert::contains($want, (string) $report['html'], $want);
+        }
+        Assert::contains('Penetration test report', $tech->get('/reports/' . (int) $reports[0]['id'])->body);
+        $csv = $tech->get('/reports/' . (int) $reports[0]['id'] . '/csv');
+        Assert::contains('Anonymous FTP login is allowed', $csv->body, 'CSV of the findings');
+        // The client "fixes" anonymous FTP (the port is closed); a retest engagement checks it.
+        file_put_contents(dirname($ctx->nmapLog) . '/nmap-closed.json', json_encode(['203.0.113.3:21']));
+        try {
+            $tech->upload('/clients/' . $cid . '/engagements/new', '/clients/' . $cid . '/engagements', $fields($site, ['name' => 'Retest',
+                'external' => '203.0.113.3', 'internal_' . $site => '', 'exclusions' => '', 'retest_of' => (string) $id]), 'document', $pdf, 'application/pdf');
+            $re = $lastId($ctx, $cid);
+            Assert::same($id, (int) App::engagements()->find($re)['retest_of']);
+            $admin2->post('/engagements/' . $re . '/approve', ['_csrf' => $admin2->get('/engagements/' . $re)->csrf(), 'password' => 'Engadmin2-Pass-0001!']);
+            $runAll($re);
+            $tech->post('/engagements/' . $re . '/report', ['_csrf' => $tech->get('/engagements/' . $re)->csrf()]);
+            $letter = App::reports()->forEngagement($re)[0] ?? [];
+            Assert::same('retest', $letter['kind'] ?? null);
+            $snap = json_decode((string) App::reports()->find((int) $letter['id'])['snapshot'], true);
+            $status = [];
+            foreach ($snap['retest']['items'] as $it) {
+                $status[$it['title']] = $it['status'];
+            }
+            Assert::same('fixed', $status['Anonymous FTP login is allowed'] ?? null, json_encode($status));
+            Assert::same('open', $status['Share Public can be read without a password'] ?? null, 'still open');
+            Assert::contains('Retest letter', (string) App::reports()->find((int) $letter['id'])['html']);
+        } finally {
+            @unlink(dirname($ctx->nmapLog) . '/nmap-closed.json');
+        }
+    },
 ];

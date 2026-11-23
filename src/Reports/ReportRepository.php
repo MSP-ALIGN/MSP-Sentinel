@@ -37,6 +37,20 @@ final class ReportRepository
         return (int) $this->db->lastInsertId();
     }
 
+    /** Link a report to the engagement it reports on (pen-test reports and retest letters). */
+    public function setEngagement(int $reportId, int $engagementId): void
+    {
+        $this->db->prepare('UPDATE reports SET engagement_id = :e WHERE id = :id')->execute(['e' => $engagementId, 'id' => $reportId]);
+    }
+
+    /** An engagement's reports, newest first (no HTML). @return list<array<string,mixed>> */
+    public function forEngagement(int $engagementId): array
+    {
+        $stmt = $this->db->prepare('SELECT id, kind, title, generated_at FROM reports WHERE engagement_id = :e ORDER BY id DESC');
+        $stmt->execute(['e' => $engagementId]);
+        return $stmt->fetchAll();
+    }
+
     /** One report with its client name (including the HTML), or null. */
     public function find(int $id): ?array
     {

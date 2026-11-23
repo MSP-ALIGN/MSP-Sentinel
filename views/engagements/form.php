@@ -2,7 +2,7 @@
 /**
  * New pen-test engagement (multipart: the client's signed authorisation, a PDF).
  * Expects: $client, $values (untrusted strings), $errors (field => message), $sites (site, its active internal ranges
- * and their end date), $scope (the client's active external scope entries), $testLabels.
+ * and their end date), $scope (the client's active external scope entries), $testLabels, $earlier (approved engagements).
  * Every value is escaped.
  */
 use Sentinel\Core\Csrf;
@@ -75,6 +75,13 @@ $clientId = (int) $client['id'];
                 <div class="mb-3"><label for="signed_on" class="form-label"><?= e(__('Signed on')) ?></label>
                     <input type="date" class="form-control<?= $invalid('signed_on') ?>" id="signed_on" name="signed_on" value="<?= e($val('signed_on')) ?>" required>
                     <?php $field = 'signed_on'; require __DIR__ . '/../partials/field_error.php'; ?></div>
+                <?php if ($earlier !== []): ?>
+                <div class="mb-3"><label for="retest_of" class="form-label"><?= e(__('This is a retest of (optional)')) ?></label>
+                    <select class="form-select<?= $invalid('retest_of') ?>" id="retest_of" name="retest_of"><option value=""><?= e(__('No: a new test')) ?></option>
+                        <?php foreach ($earlier as $g): ?><option value="<?= (int) $g['id'] ?>" <?= $val('retest_of') === (string) $g['id'] ? 'selected' : '' ?>><?= e('#' . (int) $g['id'] . ' ' . $g['name']) ?></option><?php endforeach; ?></select>
+                    <div class="form-text"><?= e(__('Its report becomes a retest letter: each earlier finding marked fixed, still open or not retested.')) ?></div>
+                    <?php $field = 'retest_of'; require __DIR__ . '/../partials/field_error.php'; ?></div>
+                <?php endif; ?>
                 <div class="mb-3"><label for="notes" class="form-label"><?= e(__('Notes (optional)')) ?></label>
                     <textarea class="form-control<?= $invalid('notes') ?>" id="notes" name="notes" rows="3" maxlength="5000"><?= e($val('notes')) ?></textarea>
                     <?php $field = 'notes'; require __DIR__ . '/../partials/field_error.php'; ?></div>
