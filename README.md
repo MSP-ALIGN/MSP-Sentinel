@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.17.0](https://img.shields.io/badge/version-1.17.0-ff5a1f?style=flat-square)
+![Version 1.18.0](https://img.shields.io/badge/version-1.18.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -149,6 +149,17 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
 
 ## What's new
 
+### 1.18.0 (2026-11-23): ITFlow tickets from findings
+
+- **Findings open ITFlow tickets** (phase 2 of [docs/ROADMAP-itflow.md](docs/ROADMAP-itflow.md)): each Fail, and
+  anything known to be exploited, gets its own ticket (High; Urgent when exploited) with what was found, where, the
+  evidence, why it matters, how to fix it, the due date and a link back to Sentinel.
+- Never two tickets for one finding; a finding that becomes known-exploited adds an internal note.
+- Warnings are grouped into one ticket per client a week, when there are new ones.
+- Tickets are internal (ITFlow doesn't email the client). Turning tickets on covers findings from then on; one button
+  opens tickets for the existing Fails too. The finding page shows its ticket.
+- Next: Sentinel resolves tickets it sees fixed, and closing a ticket in ITFlow makes Sentinel recheck.
+
 ### 1.17.0 (2026-11-22): clients from ITFlow
 
 - **ITFlow client sync** (phase 1 of the ITFlow plan, see [docs/ROADMAP-itflow.md](docs/ROADMAP-itflow.md)): every
@@ -158,6 +169,9 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
 - With MSP Align connected, clients are linked to MSP Align automatically by their ITFlow ID.
 - **Administration → Integrations → ITFlow**: address and API key (encrypted), Test connection and Sync now.
 - Next: tickets from findings in ITFlow, and closing them from ITFlow.
+
+<details>
+<summary><b>Earlier releases (1.16.0 to 1.0.0)</b></summary>
 
 ### 1.16.0 (2026-11-22): compliance from MSP Align
 
@@ -169,9 +183,6 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
 - **Administration → Integrations → MSP Align**: address and API key (encrypted; a read-only key with
   clients:read and compliance:read is all it needs), with Test connection. Admins link each client on its
   Compliance page; the same name is suggested first.
-
-<details>
-<summary><b>Earlier releases (1.15.0 to 1.0.0)</b></summary>
 
 ### 1.15.0 (2026-11-22): tabbed settings and vulnerability data on demand
 

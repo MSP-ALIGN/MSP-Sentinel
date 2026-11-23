@@ -19,7 +19,7 @@ The **ITFlow client ID** is the shared key: Sentinel stores it on each client, a
 - Tickets: create (also from ticket templates), read, update, resolve, close, reopen; ticket replies.
 - No webhooks: Sentinel polls ITFlow for changes (only the clients list and the tickets Sentinel opened).
 
-## Phase 1: ITFlow connection and client sync (1.17.0)
+## Phase 1: ITFlow connection and client sync (1.17.0, done)
 
 - Administration → Integrations → ITFlow: address, API key (encrypted), Test connection, Sync now.
 - Every 15 minutes Sentinel reads ITFlow's clients:
@@ -33,13 +33,16 @@ The **ITFlow client ID** is the shared key: Sentinel stores it on each client, a
 - MSP Align is linked automatically: an unlinked Sentinel client whose ITFlow ID matches an MSP Align client's
   `psa_id` gets that MSP Align client.
 
-## Phase 2: tickets from findings
+## Phase 2: tickets from findings (1.18.0, done)
 
 - Each Fail (and anything known-exploited) opens its own ITFlow ticket at once; Warnings are grouped into one weekly
   ticket per client.
 - A ticket holds what was found, where, the evidence, why it matters, how to fix it step by step (the report
   guidance), the due date and a link to the finding in Sentinel.
-- One ticket per problem (never duplicated); escalations (Warning → Fail, newly known-exploited) add a note.
+- One ticket per problem (never duplicated); a finding that becomes known-exploited adds an internal note. A Warning
+  that becomes a Fail gets its own ticket as a Fail.
+- Tickets are internal (ITFlow doesn't email the client). Turning tickets on only covers findings from then on; an
+  admin can open tickets for the existing Fails with one button. At most 20 tickets per run, every 5 minutes.
 
 ## Phase 3: two-way status
 

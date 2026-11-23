@@ -131,7 +131,8 @@ return [
             'title' => 'ITFlow',
             'paragraphs' => [
                 'With ITFlow connected (Administration, Integrations), Sentinel adds new ITFlow clients every 15 minutes, applies renames, and archives or restores clients when they are archived or unarchived in ITFlow. A client added from ITFlow is not scanned until its written authorisation is recorded. A client you archived yourself in Sentinel stays archived. Changes appear in the audit log as itflow-sync.',
-                'Coming next: findings open tickets on the ITFlow alert board with how to fix them, and closing a ticket in ITFlow makes Sentinel recheck and close the finding (or reopen the ticket if the problem is still there).',
+                'With tickets turned on, each Fail and known-exploited finding opens its own internal ITFlow ticket (High, or Urgent when exploited) with what was found, why it matters and how to fix it, and a link back. Warnings go into one ticket per client a week when there are new ones. A finding never gets two tickets; the finding page shows its ticket number.',
+                'Coming next: Sentinel resolves the ticket when it sees the problem fixed, and closing a ticket in ITFlow makes Sentinel recheck (and reopen the ticket if the problem is still there).',
             ],
         ],
         [
@@ -211,6 +212,14 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.18.0',
+            'date' => '2026-11-23',
+            'items' => [
+                'Findings open ITFlow tickets: each Fail and known-exploited problem its own ticket with how to fix it; Warnings in one weekly ticket per client.',
+                'The finding page shows its ITFlow ticket.',
+            ],
+        ],
         [
             'version' => '1.17.0',
             'date' => '2026-11-22',

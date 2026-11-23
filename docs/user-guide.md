@@ -45,7 +45,8 @@ back. The client's forms (edit, new authorisation, agent enrolment, a device) ke
 ITFlow is the list of clients (see [ROADMAP-itflow.md](ROADMAP-itflow.md) for where this is going: tickets from
 findings, closed from ITFlow). Today Sentinel keeps its clients in step with ITFlow:
 
-1. In ITFlow, add an agent named MSP Sentinel with a role that can read clients and access to all clients. Then go to
+1. In ITFlow, add an agent named MSP Sentinel with a role that can read clients and create tickets and ticket replies,
+   with access to all clients. Then go to
    **Admin → API Keys**, create a key for that agent (with an expiry date) and copy it.
 2. In Sentinel, go to **Administration → Integrations → ITFlow**: enter ITFlow's address and the key, tick **Sync
    clients from ITFlow**, save, and click **Test connection**, then **Sync now**.
@@ -68,6 +69,22 @@ Every 15 minutes after that:
   not linked.
 
 Every change shows in the audit log as "itflow-sync".
+
+**Tickets from findings.** Tick **Open ITFlow tickets for findings** (and save) to put security work on the ITFlow
+board:
+
+- Each **Fail**, and anything known to be exploited, gets its own ticket: priority High, or Urgent when known
+  exploited. The ticket says what was found, where, the evidence, why it matters, how to fix it step by step, the
+  due date, and links to the finding in Sentinel (which shows the ticket number).
+- A finding never gets two tickets. If it becomes known-exploited later, Sentinel adds an internal note.
+- **Warnings** are grouped: one ticket per client, at most once a week, when there are new warnings since the last
+  one (it lists all open warnings, the new ones marked).
+- Tickets are internal: ITFlow doesn't email the client.
+- Turning tickets on covers findings from then on. **Also open tickets for existing Fail findings** catches up on the
+  rest (20 at a time, every 5 minutes).
+
+Coming next: Sentinel resolves the ticket when it sees the problem fixed, and closing the ticket in ITFlow makes
+Sentinel recheck (and reopen the ticket if the problem is still there).
 
 ## NinjaOne
 

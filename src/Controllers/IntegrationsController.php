@@ -50,6 +50,11 @@ final class IntegrationsController extends Controller
                 'last_result' => $s->get('itflow_last_result'),
                 'last_ok' => $s->get('itflow_last_ok') !== '0',
                 'linked' => (int) App::db()->query('SELECT COUNT(*) FROM clients WHERE itflow_client_id IS NOT NULL AND is_demo = 0')->fetchColumn(),
+                'tickets' => $s->get('itflow_tickets_enabled') === '1',
+                'tickets_last_run' => $s->get('itflow_tickets_last_run'),
+                'tickets_last_result' => $s->get('itflow_tickets_last_result'),
+                'tickets_last_ok' => $s->get('itflow_tickets_last_ok') !== '0',
+                'tickets_total' => (int) App::db()->query('SELECT COUNT(*) FROM itflow_tickets')->fetchColumn(),
             ],
             'align' => [
                 'enabled' => $s->get('mspalign_enabled') === '1',
@@ -227,10 +232,14 @@ final class IntegrationsController extends Controller
             return $back;
         }
         $changed = [];
-        foreach (['itflow_url' => $url, 'itflow_enabled' => $enabled ? '1' : '0'] as $key => $value) {
+        $tickets = $request->input('tickets') === '1';
+        if ($tickets && $s->get('itflow_tickets_enabled') !== '1') {
+            $s->set('itflow_tickets_since', gmdate('Y-m-d H:i:s')); // only findings from now on (no flood when turning it on)
+        }
+        foreach (['itflow_url' => $url, 'itflow_enabled' => $enabled ? '1' : '0', 'itflow_tickets_enabled' => $tickets ? '1' : '0'] as $key => $value) {
             if ($s->get($key) !== $value) {
                 $s->set($key, $value);
-                $changed[$key] = $key === 'itflow_enabled' ? $enabled : $value;
+                $changed[$key] = in_array($key, ['itflow_enabled', 'itflow_tickets_enabled'], true) ? $value === '1' : $value;
             }
         }
         $apiKey = trim($request->raw('api_key'));
@@ -291,6 +300,27 @@ final class IntegrationsController extends Controller
         $summary = App::itflowSync()->sync();
         $this->audit($request, 'itflow.sync_requested', null, null, ['result' => mb_substr($summary, 0, 300)]);
         Session::flash(str_starts_with($summary, 'Failed') ? 'danger' : 'success', __('ITFlow sync: {s}', ['s' => $summary]));
+        return $back;
+    }
+
+    /**
+     * POST /admin/integrations/itflow/tickets: open due tickets now; with existing=1 first include the open Fail findings
+     * that were there before tickets were turned on (the rest follow every 5 minutes, MAX_PER_RUN at a time).
+     */
+    public function ticketsItflow(Request $request): Response
+    {
+        $back = Response::redirect('/admin/integrations#itflow');
+        if (App::itflow() === null || App::settings()->get('itflow_tickets_enabled') !== '1') {
+            Session::flash('warning', __('Turn on ITFlow tickets and save first.'));
+            return $back;
+        }
+        if ($request->input('existing') === '1') {
+            App::settings()->set('itflow_tickets_since', '2000-01-01 00:00:00');
+            $this->audit($request, 'itflow.tickets_for_existing');
+        }
+        @set_time_limit(120);
+        $summary = App::itflowTickets()->run();
+        Session::flash(str_contains($summary, 'Stopped:') ? 'danger' : 'success', __('ITFlow tickets: {s}', ['s' => $summary]));
         return $back;
     }
 

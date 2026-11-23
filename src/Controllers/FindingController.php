@@ -94,6 +94,11 @@ final class FindingController extends Controller
             'values' => $values + ['status' => '', 'note' => ''],
             'assignable' => App::fixWorkflow()->assignableUsers(),
             'verifiable' => VerifyTarget::fromKey((string) $finding['finding_key']) !== null,
+            'itflowTicket' => (static function (int $id): ?array {
+                $t = App::db()->prepare("SELECT reference, url, itflow_ticket_id, created_at FROM itflow_tickets WHERE kind = 'finding' AND finding_id = :f");
+                $t->execute(['f' => $id]);
+                return $t->fetch() ?: null;
+            })((int) $finding['id']),
         ], $status);
     }
 

@@ -18,7 +18,7 @@ $eventLabels = [
     'evidence_changed' => __('Reopened: evidence changed'), 'severity_changed' => __('Grade changed'), 'alerted' => __('Alert sent'),
     'triaged_accepted' => __('Marked as accepted risk'), 'triaged_false_positive' => __('Marked as false positive'), 'triaged_open' => __('Reopened by a user'),
     'assigned' => __('Assigned'), 'unassigned' => __('Unassigned'), 'due_changed' => __('Due date changed'),
-    'verify_requested' => __('Recheck requested'), 'verified' => __('Recheck finished'),
+    'verify_requested' => __('Recheck requested'), 'verified' => __('Recheck finished'), 'itflow_ticket' => __('ITFlow ticket'),
 ];
 ?>
 <div class="row g-3">
@@ -33,6 +33,13 @@ $eventLabels = [
                 <p class="mb-2"><code><?= e($finding['target']) ?></code>
                     <?php if (($finding['device_id'] ?? null) !== null): ?> · <a href="<?= e(url('/clients/' . (int) $finding['client_id'] . '/devices/' . (int) $finding['device_id'])) ?>"><i class="bi bi-pc-display me-1" aria-hidden="true"></i><?= e(__('Device details')) ?></a> <span class="badge text-bg-dark"><?= e(__('Internal')) ?></span><?php endif; ?></p>
                 <p class="text-pre-line"><?= e($finding['detail']) ?></p>
+                <?php if (($itflowTicket ?? null) !== null): ?>
+                <p class="small"><i class="bi bi-ticket-perforated me-1" aria-hidden="true"></i><?= e(__('ITFlow ticket')) ?>:
+                    <?php $tRef = $itflowTicket['reference'] !== '' ? $itflowTicket['reference'] : '#' . (int) $itflowTicket['itflow_ticket_id']; ?>
+                    <?php $itflowBase = rtrim(\Sentinel\Core\App::settings()->get('itflow_url'), '/') . '/'; ?>
+                    <?php if ($itflowTicket['url'] !== '' && str_starts_with($itflowTicket['url'], $itflowBase)): ?><a href="<?= e($itflowTicket['url']) ?>" rel="noopener noreferrer" target="_blank"><?= e($tRef) ?></a><?php else: ?><?= e($tRef) ?><?php endif; ?>
+                    <span class="text-body-secondary">(<?= e(__('opened {t} UTC', ['t' => $itflowTicket['created_at']])) ?>)</span></p>
+                <?php endif; ?>
                 <?php if ($finding['cve_id'] !== null): ?>
                 <p class="small"><a href="https://nvd.nist.gov/vuln/detail/<?= e(rawurlencode((string) $finding['cve_id'])) ?>" target="_blank" rel="noopener noreferrer"><?= e(__('{cve} on NVD', ['cve' => $finding['cve_id']])) ?></a></p>
                 <?php endif; ?>

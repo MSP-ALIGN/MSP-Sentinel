@@ -19,9 +19,10 @@ final class Housekeeping
      * Wires the parts.
      *
      * @param (callable(): ?string)|null $itflowSync The ITFlow client sync (it runs only when due: every 15 minutes).
+     * @param (callable(): ?string)|null $itflowTickets ITFlow tickets from findings (when due: every 5 minutes).
      */
     public function __construct(private readonly Settings $settings, private readonly UpdateChecker $updates, private readonly Retention $retention,
-        private $itflowSync = null)
+        private $itflowSync = null, private $itflowTickets = null)
     {
     }
 
@@ -29,7 +30,8 @@ final class Housekeeping
     public function tick(): void
     {
         $this->settings->set('worker_last_tick', gmdate('Y-m-d H:i:s'));
-        foreach ([fn () => $this->updates->check(), fn () => $this->retention->run(), fn () => $this->itflowSync === null ? null : ($this->itflowSync)()] as $job) {
+        foreach ([fn () => $this->updates->check(), fn () => $this->retention->run(), fn () => $this->itflowSync === null ? null : ($this->itflowSync)(),
+                  fn () => $this->itflowTickets === null ? null : ($this->itflowTickets)()] as $job) {
             try {
                 $job();
             } catch (\Throwable $ex) {

@@ -5,7 +5,8 @@ declare(strict_types=1);
 namespace Sentinel\Itflow;
 
 /**
- * Talks to ITFlow's API (v1). Phase 1 only reads clients; tickets follow in later phases (docs/ROADMAP-itflow.md).
+ * Talks to ITFlow's API (v1): reads clients (phase 1), opens tickets and adds internal notes (phase 2); see
+ * docs/ROADMAP-itflow.md.
  *
  * API facts used (ITFlow's own source: api/v1/validate_api_key.php, clients/read.php, read_output.php,
  * functions/api_keys.php):
@@ -15,6 +16,11 @@ namespace Sentinel\Itflow;
  *   client_archived_at, client_updated_at, ...}]}. Archived clients are included. No match answers
  *   {"success":"False","message":"No resource ..."} with HTTP 200, which is an empty page, not an error.
  * - A wrong or expired key answers HTTP 401.
+ * - POST /api/v1/tickets/create.php (JSON body: client_id, ticket_subject, ticket_details HTML, ticket_priority one of
+ *   Low|Medium|High|Urgent) -> {"success":"True","data":[{"insert_id":N}],"ticket_reference":"...","ticket_url":"..."};
+ *   a refused request answers 400 {"success":"False","message":"..."}. Without ticket_notify nobody is emailed.
+ * - POST /api/v1/ticket_replies/create.php (client_id, ticket_id, ticket_reply HTML, ticket_reply_type "Internal")
+ *   -> {"success":"True","data":[{"insert_id":N}]}; an Internal reply is not emailed to the client.
  *
  * Security assumptions:
  * - The address is ITFlow's, entered by an admin (it may be an internal host: both are self-hosted). Only https,
@@ -77,6 +83,54 @@ final class ItflowClient
     }
 
     /**
+     * Open a ticket for a client. ITFlow stores the details as HTML: the caller must have escaped every value in it.
+     *
+     * @return array{id:int, reference:string, url:string}
+     */
+    public function createTicket(int $clientId, string $subject, string $detailsHtml, string $priority): array
+    {
+        if (!in_array($priority, ['Low', 'Medium', 'High', 'Urgent'], true)) {
+            throw new \InvalidArgumentException('Unknown ITFlow priority.');
+        }
+        $data = $this->post('/api/v1/tickets/create.php', ['client_id' => $clientId, 'ticket_subject' => mb_substr($subject, 0, 200),
+            'ticket_details' => $detailsHtml, 'ticket_priority' => $priority]);
+        $id = $data['data'][0]['insert_id'] ?? null;
+        if (!is_numeric($id) || (int) $id <= 0) {
+            throw new ItflowException('ITFlow did not return the new ticket\'s number.');
+        }
+        $ref = is_string($data['ticket_reference'] ?? null) ? mb_substr($data['ticket_reference'], 0, 40) : '';
+        $url = is_string($data['ticket_url'] ?? null) && preg_match('#^https?://#', $data['ticket_url']) === 1 ? mb_substr($data['ticket_url'], 0, 500) : '';
+        return ['id' => (int) $id, 'reference' => (string) preg_replace('/[^A-Za-z0-9#._-]/', '', $ref), 'url' => $url];
+    }
+
+    /** Add an internal note (not emailed to the client) to a ticket. The caller must have escaped the HTML. */
+    public function addNote(int $clientId, int $ticketId, string $html): void
+    {
+        $this->post('/api/v1/ticket_replies/create.php', ['client_id' => $clientId, 'ticket_id' => $ticketId, 'ticket_reply' => $html, 'ticket_reply_type' => 'Internal']);
+    }
+
+    /**
+     * A write endpoint (JSON body). Returns the decoded answer of a successful call.
+     *
+     * @param array<string,int|string> $fields
+     * @return array<string,mixed>
+     */
+    private function post(string $path, array $fields): array
+    {
+        [$status, $body] = $this->request($path, null, (string) json_encode($fields, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE));
+        $data = json_decode($body, true);
+        if ($status === 200 && is_array($data) && ($data['success'] ?? '') === 'True') {
+            return $data;
+        }
+        $msg = is_array($data) && is_string($data['message'] ?? null) ? mb_substr((string) preg_replace('/[^\P{C}]/u', '', $data['message']), 0, 200) : 'HTTP ' . $status;
+        throw new ItflowException(match ($status) {
+            401 => 'ITFlow refused the API key (wrong or expired).',
+            403 => 'The ITFlow API key\'s user may not do this (it needs tickets in its role): ' . $msg,
+            default => 'ITFlow refused: ' . $msg,
+        });
+    }
+
+    /**
      * A read endpoint's rows ([] for ITFlow's "No resource" answer).
      *
      * @param array<string,int|string> $query
@@ -84,32 +138,7 @@ final class ItflowClient
      */
     private function read(string $path, array $query): array
     {
-        if (!self::validUrl($this->baseUrl, $this->allowHttp)) {
-            throw new ItflowException('The ITFlow address must be an https:// address (Administration, Integrations).');
-        }
-        $body = '';
-        $ch = curl_init(rtrim($this->baseUrl, '/') . $path . '?' . http_build_query($query));
-        curl_setopt_array($ch, [
-            CURLOPT_HTTPHEADER => ['Accept: application/json', 'X-API-Key: ' . $this->apiKey],
-            CURLOPT_FOLLOWLOCATION => false,
-            CURLOPT_CONNECTTIMEOUT => 10,
-            CURLOPT_TIMEOUT => 30,
-            CURLOPT_PROTOCOLS => $this->allowHttp ? (CURLPROTO_HTTP | CURLPROTO_HTTPS) : CURLPROTO_HTTPS,
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_SSL_VERIFYHOST => 2,
-            CURLOPT_USERAGENT => 'MSP-Sentinel',
-            CURLOPT_WRITEFUNCTION => static function ($c, string $chunk) use (&$body): int {
-                $body .= $chunk;
-                return strlen($body) > self::MAX_BYTES ? 0 : strlen($chunk);
-            },
-        ]);
-        $ok = curl_exec($ch);
-        $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-        $err = curl_error($ch);
-        curl_close($ch);
-        if ($ok === false) {
-            throw new ItflowException('Could not reach ITFlow: ' . mb_substr($err, 0, 200));
-        }
+        [$status, $body] = $this->request($path, $query, null);
         if ($status === 401) {
             throw new ItflowException('ITFlow refused the API key (wrong or expired).');
         }
@@ -128,5 +157,49 @@ final class ItflowClient
             return []; // ITFlow's way of saying "nothing (more) here"
         }
         throw new ItflowException('ITFlow refused the request: ' . mb_substr((string) preg_replace('/[^\P{C}]/u', '', $msg), 0, 200));
+    }
+
+    /**
+     * One HTTPS call: GET with a query, or POST with a JSON body.
+     *
+     * @param array<string,int|string>|null $query
+     * @return array{0:int,1:string} status and body
+     */
+    private function request(string $path, ?array $query, ?string $json): array
+    {
+        if (!self::validUrl($this->baseUrl, $this->allowHttp)) {
+            throw new ItflowException('The ITFlow address must be an https:// address (Administration, Integrations).');
+        }
+        $body = '';
+        $ch = curl_init(rtrim($this->baseUrl, '/') . $path . ($query === null || $query === [] ? '' : '?' . http_build_query($query)));
+        $headers = ['Accept: application/json', 'X-API-Key: ' . $this->apiKey];
+        $opts = [
+            CURLOPT_FOLLOWLOCATION => false,
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_PROTOCOLS => $this->allowHttp ? (CURLPROTO_HTTP | CURLPROTO_HTTPS) : CURLPROTO_HTTPS,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_USERAGENT => 'MSP-Sentinel',
+            CURLOPT_WRITEFUNCTION => static function ($c, string $chunk) use (&$body): int {
+                $body .= $chunk;
+                return strlen($body) > self::MAX_BYTES ? 0 : strlen($chunk);
+            },
+        ];
+        if ($json !== null) {
+            $opts[CURLOPT_POST] = true;
+            $opts[CURLOPT_POSTFIELDS] = $json;
+            $headers[] = 'Content-Type: application/json';
+        }
+        $opts[CURLOPT_HTTPHEADER] = $headers;
+        curl_setopt_array($ch, $opts);
+        $ok = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        $err = curl_error($ch);
+        curl_close($ch);
+        if ($ok === false) {
+            throw new ItflowException('Could not reach ITFlow: ' . mb_substr($err, 0, 200));
+        }
+        return [$status, $body];
     }
 }

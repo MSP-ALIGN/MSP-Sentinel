@@ -2,6 +2,17 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.18.0 (2026-11-23): ITFlow tickets from findings
+
+- **Findings open ITFlow tickets** (phase 2 of [docs/ROADMAP-itflow.md](docs/ROADMAP-itflow.md)): each Fail, and
+  anything known to be exploited, gets its own ticket (High; Urgent when exploited) with what was found, where, the
+  evidence, why it matters, how to fix it, the due date and a link back to Sentinel.
+- Never two tickets for one finding; a finding that becomes known-exploited adds an internal note.
+- Warnings are grouped into one ticket per client a week, when there are new ones.
+- Tickets are internal (ITFlow doesn't email the client). Turning tickets on covers findings from then on; one button
+  opens tickets for the existing Fails too. The finding page shows its ticket.
+- Next: Sentinel resolves tickets it sees fixed, and closing a ticket in ITFlow makes Sentinel recheck.
+
 ### 1.17.0 (2026-11-22): clients from ITFlow
 
 - **ITFlow client sync** (phase 1 of the ITFlow plan, see [docs/ROADMAP-itflow.md](docs/ROADMAP-itflow.md)): every

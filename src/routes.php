@@ -150,6 +150,7 @@ $router->add('POST', '/admin/integrations/ninjaone/test', [IntegrationsControlle
 $router->add('POST', '/admin/integrations/itflow', [IntegrationsController::class, 'saveItflow'], $admin);
 $router->add('POST', '/admin/integrations/itflow/test', [IntegrationsController::class, 'testItflow'], $admin);
 $router->add('POST', '/admin/integrations/itflow/sync', [IntegrationsController::class, 'syncItflow'], $admin);
+$router->add('POST', '/admin/integrations/itflow/tickets', [IntegrationsController::class, 'ticketsItflow'], $admin);
 $router->add('POST', '/admin/integrations/mspalign', [IntegrationsController::class, 'saveAlign'], $admin);
 $router->add('POST', '/admin/integrations/mspalign/test', [IntegrationsController::class, 'testAlign'], $admin);
 $router->add('POST', '/clients/{id}/compliance/link', [ComplianceController::class, 'link'], $admin);

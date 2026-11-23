@@ -283,7 +283,8 @@ final class App
     /** Heartbeat, update check and retention, run by the worker. */
     public static function housekeeping(): Housekeeping
     {
-        return new Housekeeping(self::settings(), self::updates(), self::retention(), static fn (): ?string => self::itflowSync()->syncIfDue());
+        return new Housekeeping(self::settings(), self::updates(), self::retention(), static fn (): ?string => self::itflowSync()->syncIfDue(),
+            static fn (): ?string => self::itflowTickets()->runIfDue());
     }
 
     /** Install health checks (bin/doctor.php, admin System page). */
@@ -407,6 +408,12 @@ final class App
     public static function itflowSync(): \Sentinel\Itflow\ItflowSync
     {
         return new \Sentinel\Itflow\ItflowSync(self::db(), self::settings(), self::audit(), self::itflow(), self::align());
+    }
+
+    /** ITFlow tickets from findings (worker every 5 minutes, and "Open tickets now"). */
+    public static function itflowTickets(): \Sentinel\Itflow\ItflowTickets
+    {
+        return new \Sentinel\Itflow\ItflowTickets(self::db(), self::settings(), self::audit(), self::itflow(), (string) self::config()->get('app.public_url', ''));
     }
 
     /** Inventory sync service (worker and "Sync now"). */

@@ -1,7 +1,8 @@
 <?php
 /**
  * Administration > Integrations: outside systems Sentinel reads from (NinjaOne first).
- * Expects: $itflow (enabled, url, has_key, tested_at, test_result, last_sync, last_result, last_ok, linked), $ninja (enabled, host, client_id, has_secret, tested_at, test_result, linked), $align (enabled, url, has_key,
+ * Expects: $itflow (enabled, url, has_key, tested_at, test_result, last_sync, last_result, last_ok, linked, tickets,
+ *          tickets_last_run, tickets_last_result, tickets_last_ok, tickets_total), $ninja (enabled, host, client_id, has_secret, tested_at, test_result, linked), $align (enabled, url, has_key,
  *          tested_at, test_result, linked).
  * Every value is escaped. The client secret is never sent back to the browser.
  */
@@ -22,11 +23,11 @@ $n = $ninja;
         <span class="ms-auto small text-body-secondary"><?= e(__('{n} client(s) from ITFlow', ['n' => $it['linked']])) ?></span>
     </div>
     <div class="card-body">
-        <p class="small"><?= e(__('ITFlow is the list of clients: every 15 minutes new ITFlow clients are added to Sentinel, names are kept in step, and clients archived in ITFlow are archived here. A new client is not scanned until its written authorisation is recorded. With MSP Align connected, clients are linked to MSP Align by their ITFlow ID too. Tickets from findings come in a later release.')) ?></p>
+        <p class="small"><?= e(__('ITFlow is the list of clients: every 15 minutes new ITFlow clients are added to Sentinel, names are kept in step, and clients archived in ITFlow are archived here. A new client is not scanned until its written authorisation is recorded. With MSP Align connected, clients are linked to MSP Align by their ITFlow ID too. With tickets on, findings open tickets on the ITFlow board with how to fix them.')) ?></p>
         <details class="small mb-3">
             <summary><?= e(__('How to create the API key in ITFlow')) ?></summary>
             <ol class="mt-2 mb-0">
-                <li><?= e(__('In ITFlow, add an agent named MSP Sentinel with a role that can read clients (later releases will also need tickets), with access to all clients.')) ?></li>
+                <li><?= e(__('In ITFlow, add an agent named MSP Sentinel with a role that can read clients and create tickets and ticket replies, with access to all clients.')) ?></li>
                 <li><?= e(__('Go to Admin, API Keys, create a key for that agent with an expiry date, and copy it into the form below. Each API key acts as its agent.')) ?></li>
             </ol>
         </details>
@@ -47,6 +48,9 @@ $n = $ninja;
             </div>
             <div class="form-check mt-3"><input class="form-check-input" type="checkbox" id="itflow-enabled" name="enabled" value="1" <?= $it['enabled'] ? 'checked' : '' ?>>
                 <label class="form-check-label" for="itflow-enabled"><?= e(__('Sync clients from ITFlow')) ?></label></div>
+            <div class="form-check"><input class="form-check-input" type="checkbox" id="itflow-tickets" name="tickets" value="1" <?= $it['tickets'] ? 'checked' : '' ?>>
+                <label class="form-check-label" for="itflow-tickets"><?= e(__('Open ITFlow tickets for findings')) ?></label>
+                <div class="form-text"><?= e(__('Each Fail, and anything known to be exploited, gets its own ticket (High; Urgent when exploited) with how to fix it. Warnings get one ticket per client a week when there are new ones. Tickets are internal: ITFlow does not email the client. Only findings that appear after this is turned on get tickets, unless you open them for the existing ones below.')) ?></div></div>
             <button type="submit" class="btn btn-primary btn-sm mt-3"><?= e(__('Save')) ?></button>
         </form>
         <hr>
@@ -55,9 +59,16 @@ $n = $ninja;
                 <button type="submit" class="btn btn-outline-secondary btn-sm"><i class="bi bi-plug me-1" aria-hidden="true"></i><?= e(__('Test connection')) ?></button></form>
             <form method="post" action="<?= e(url('/admin/integrations/itflow/sync')) ?>"><?= Csrf::field() ?>
                 <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i><?= e(__('Sync now')) ?></button></form>
+            <?php if ($it['tickets']): ?>
+            <form method="post" action="<?= e(url('/admin/integrations/itflow/tickets')) ?>"><?= Csrf::field() ?>
+                <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-ticket-perforated me-1" aria-hidden="true"></i><?= e(__('Open tickets now')) ?></button></form>
+            <form method="post" action="<?= e(url('/admin/integrations/itflow/tickets')) ?>" data-confirm="<?= e(__('Open tickets for every current open Fail finding of linked clients (up to 20 now, the rest every 5 minutes)?')) ?>"><?= Csrf::field() ?><input type="hidden" name="existing" value="1">
+                <button type="submit" class="btn btn-outline-secondary btn-sm"><?= e(__('Also open tickets for existing Fail findings')) ?></button></form>
+            <?php endif; ?>
         </div>
         <?php if ($it['test_result'] !== ''): ?><p class="small mb-1 mt-2"><?= e($it['test_result']) ?> <span class="text-body-secondary">(<?= e($it['tested_at']) ?> UTC)</span></p><?php endif; ?>
         <?php if ($it['last_sync'] !== ''): ?><p class="small mb-0 mt-1<?= $it['last_ok'] ? '' : ' text-danger' ?>"><?= e(__('Last sync {t} UTC: {r}', ['t' => $it['last_sync'], 'r' => $it['last_result']])) ?></p><?php endif; ?>
+        <?php if ($it['tickets_last_run'] !== ''): ?><p class="small mb-0 mt-1<?= $it['tickets_last_ok'] ? '' : ' text-danger' ?>"><?= e(__('Tickets {t} UTC: {r} ({n} opened so far)', ['t' => $it['tickets_last_run'], 'r' => $it['tickets_last_result'], 'n' => $it['tickets_total']])) ?></p><?php endif; ?>
     </div>
 </div>
 <div class="card mb-3" id="ninjaone">

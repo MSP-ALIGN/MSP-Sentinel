@@ -6,6 +6,7 @@
 |---|---|---|
 | `bin/worker.php` | every minute | Runs queued and weekly scans, daily certificate, website and email checks and *verify fix* rechecks; queues on-premises agent jobs (weekly full scan, daily light sweep); syncs inventory sources; sends alerts, daily fix reminders and events; creates monthly reports; records trend counts; checks for updates and applies data retention (daily). Runs as `sentinel`, never root. One worker at a time; scans continue in the next window if the window closes. |
 | (worker) ITFlow client sync | every 15 minutes, when turned on | Adds new ITFlow clients, applies renames and archives, links MSP Align by ITFlow ID. |
+| (worker) ITFlow tickets | every 5 minutes, when turned on | Opens tickets for new Fail and known-exploited findings (up to 20 a run), the weekly Warnings ticket, and known-exploited notes. |
 | `bin/feeds.php --if-due` | checked every 5 minutes | Refreshes CISA KEV, NVD and EPSS data and re-grades findings when due: about once a day (every 23 hours), within minutes of installing, an hour after a run with a problem, or after **Refresh now** (Administration → Settings → Vulnerability data). One run at a time. |
 | `bin/discover.php` | weekly, Sunday 03:17 | Passive discovery (DNS, certificate logs) for every client. Suggestions need an admin's approval. |
 | `bin/backup.php` | daily 02:23 | Backup, keeps 14. See [backup.md](backup.md). |
