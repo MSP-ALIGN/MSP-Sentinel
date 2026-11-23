@@ -57,7 +57,9 @@ The **ITFlow client ID** is the shared key: Sentinel stores it on each client, a
   create is found again by its marker instead of opened twice; links go to ITFlow's technician view, never the
   client guest link.
 
-## Phase 4 (later): Huntress and DNSFilter
+## Not planned: Huntress and DNSFilter
 
-- Bring Huntress incidents and DNSFilter blocks into Sentinel as findings, on the same ticket path, so Sentinel is
-  the one security feed. Avoid duplicates with any tickets those tools already send to ITFlow.
+Decided 2026-11-23: not for now. Their events (Huntress incidents, DNSFilter blocks) don't fit Sentinel: a block is
+the tool already doing its job, the volume is high, and there is nothing to fix or recheck; both tools already alert
+on what matters. If this is picked up again, the better fit is coverage checks: devices Sentinel knows (NinjaOne, the
+agent) that have no Huntress agent or DNS protection, as findings that close themselves when the agent appears.
