@@ -54,14 +54,18 @@ Every 15 minutes after that:
 
 - A new ITFlow client is added to Sentinel with its ITFlow ID. **It is not scanned** until someone records its
   written authorisation, like any other client.
-- A Sentinel client with the same name and no ITFlow ID is linked instead of duplicated. If the name is taken by a
-  client linked to another ITFlow client, the new one is called "Name (ITFlow #id)".
+- An active Sentinel client with the same name (capitals and accents ignored) and no ITFlow ID is linked instead of
+  duplicated. If the name is taken by another client, the new one is called "Name (ITFlow #id)" until the name is
+  free.
 - A rename in ITFlow is applied in Sentinel.
 - A client archived in ITFlow is archived in Sentinel (scanning stops, history is kept); unarchiving it in ITFlow
-  restores it. A client you archived yourself in Sentinel stays archived.
+  restores it. A client you archived or restored yourself in Sentinel is left as you set it from then on. (Restoring
+  a client in Sentinel while it is still archived in ITFlow works too; archive and unarchive it in ITFlow if you want
+  the sync to follow ITFlow again.)
 - Clients that disappear from ITFlow's answer are left alone, and demo clients are never touched.
-- With MSP Align connected, a client is also linked to its MSP Align client automatically when MSP Align has the
-  same ITFlow ID (MSP Align's PSA ID).
+- With MSP Align connected and ITFlow as MSP Align's PSA, a client is also linked to its MSP Align client
+  automatically when MSP Align has the same ITFlow ID (its PSA ID). An ITFlow ID found on two MSP Align clients is
+  not linked.
 
 Every change shows in the audit log as "itflow-sync".
 

@@ -109,7 +109,8 @@ final class ClientRepository
     /** Archive or restore a client. Archived clients are never scanned. */
     public function setArchived(int $id, bool $archived): void
     {
-        $this->db->prepare('UPDATE clients SET is_archived = :a, updated_at = UTC_TIMESTAMP() WHERE id = :id')
+        // An admin's choice: from now on the ITFlow sync never undoes it (itflow_archived marks only the sync's own archives).
+        $this->db->prepare('UPDATE clients SET is_archived = :a, itflow_archived = 0, updated_at = UTC_TIMESTAMP() WHERE id = :id')
             ->execute(['a' => $archived ? 1 : 0, 'id' => $id]);
     }
 

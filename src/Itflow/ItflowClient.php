@@ -59,6 +59,7 @@ final class ItflowClient
         $out = [];
         for ($page = 0; $page < self::MAX_PAGES; $page++) {
             $rows = $this->read('/api/v1/clients/read.php', ['limit' => self::PAGE, 'offset' => $page * self::PAGE]);
+            $before = count($out);
             foreach ($rows as $r) {
                 if (is_array($r) && is_numeric($r['client_id'] ?? null) && (int) $r['client_id'] > 0) {
                     $out[(int) $r['client_id']] = ['id' => (int) $r['client_id'], 'name' => is_scalar($r['client_name'] ?? null) ? trim((string) $r['client_name']) : '',
@@ -67,6 +68,9 @@ final class ItflowClient
             }
             if (count($rows) < self::PAGE) {
                 return array_values($out);
+            }
+            if (count($out) === $before) {
+                throw new ItflowException('ITFlow returned the same clients again for the next page; the sync was stopped.');
             }
         }
         throw new ItflowException('ITFlow returned more clients than Sentinel reads in one sync.');

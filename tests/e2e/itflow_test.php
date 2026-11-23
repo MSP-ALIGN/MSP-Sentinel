@@ -79,6 +79,7 @@ return [
         Assert::same([], $c(803), 'already archived in ITFlow: not created');
         Assert::same('Dock Example (ITFlow #804)', $c(804)['name'], 'a name clash gets the ITFlow number');
         Assert::same('BadName Example', $c(805)['name'], 'control and direction characters removed');
+        Assert::same(null, $c(805)['align_client_id'], 'an ITFlow ID on two MSP Align clients: linked to neither');
         Assert::true((int) $ctx->db->query("SELECT COUNT(*) FROM audit_log WHERE username = 'itflow-sync' AND action = 'client.created'")->fetchColumn() >= 3, 'audited');
 
         // Not due again for 15 minutes.
@@ -97,6 +98,13 @@ return [
         Assert::contains('1 restored', App::itflowSync()->sync());
         Assert::same(0, (int) $c(804)['is_archived']);
         Assert::same(1, (int) $c(801)['is_archived'], 'still archived (an admin did that)');
+        // An admin restores a client the sync archived and archives it again by hand: the sync never undoes that.
+        $ctx->db->exec('UPDATE clients SET is_archived = 1, itflow_archived = 1 WHERE itflow_client_id = 804');
+        $dockId = (int) $c(804)['id'];
+        $admin->submit('/clients/' . $dockId, '/clients/' . $dockId . '/archive', ['archive' => '0']);
+        $admin->submit('/clients/' . $dockId, '/clients/' . $dockId . '/archive', ['archive' => '1']);
+        App::itflowSync()->sync();
+        Assert::same(1, (int) $c(804)['is_archived'], 'archived by hand: stays archived although ITFlow has it active');
         // Gone from ITFlow's answer: left alone (the key may not see it any more).
         $setItflow($ctx, [[801, 'Lighthouse Example']]);
         Assert::contains('0 new', App::itflowSync()->sync());

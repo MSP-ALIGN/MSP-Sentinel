@@ -69,11 +69,14 @@ final class AlignClient
                 'app_version' => self::str($d['app_version'] ?? '')];
     }
 
-    /** @return list<array{id:int, name:string, psa_id:string}> psa_id: the client's PSA (e.g. ITFlow) ID in MSP Align, or ''. */
+    /**
+     * @return list<array{id:int, name:string, psa_id:string, source:string}> psa_id: the client's PSA ID in MSP Align, or '';
+     *         source: where MSP Align got the client ("itflow" when its PSA is ITFlow, "manual", ...).
+     */
     public function clients(): array
     {
         return array_values(array_filter(array_map(static fn ($c): ?array => is_array($c) && is_int($c['id'] ?? null)
-            ? ['id' => $c['id'], 'name' => self::str($c['name'] ?? ''), 'psa_id' => self::str($c['psa_id'] ?? '')] : null, $this->all('/api/v1/clients', ['include_excluded' => 'true']))));
+            ? ['id' => $c['id'], 'name' => self::str($c['name'] ?? ''), 'psa_id' => self::str($c['psa_id'] ?? ''), 'source' => self::str($c['source'] ?? '')] : null, $this->all('/api/v1/clients', ['include_excluded' => 'true']))));
     }
 
     /** @return list<array{framework_id:int, framework:string, slug:string, score:int, url:string}> */

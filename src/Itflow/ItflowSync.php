@@ -76,6 +76,10 @@ final class ItflowSync
             } catch (ItflowException $ex) {
                 $summary = 'Failed: ' . $ex->getMessage();
                 $ok = false;
+            } catch (\Throwable $ex) {
+                error_log('[msp-sentinel] ITFlow sync: ' . $ex->getMessage());
+                $summary = 'Failed: an unexpected error (see the PHP error log).';
+                $ok = false;
             }
             if ($ok && $this->align !== null) {
                 $summary .= ' ' . $this->linkAlign();
@@ -98,67 +102,99 @@ final class ItflowSync
     {
         $s = ['seen' => count($clients), 'created' => 0, 'linked' => 0, 'renamed' => 0, 'archived' => 0, 'restored' => 0, 'conflicts' => 0];
         $byItflow = $this->db->prepare('SELECT * FROM clients WHERE itflow_client_id = :i AND is_demo = 0 ORDER BY id LIMIT 1');
-        $byName = $this->db->prepare('SELECT * FROM clients WHERE LOWER(name) = LOWER(:n) AND itflow_client_id IS NULL AND is_demo = 0 LIMIT 1');
+        // Same name (MariaDB's comparison: case and accents ignored), not archived, not yet linked to ITFlow.
+        $byName = $this->db->prepare('SELECT * FROM clients WHERE name = :n AND itflow_client_id IS NULL AND is_demo = 0 AND is_archived = 0 LIMIT 1');
         foreach ($clients as $c) {
             $name = self::clean($c['name']);
             if ($name === '') {
                 continue;
             }
-            $byItflow->execute(['i' => $c['id']]);
-            $mine = $byItflow->fetch();
-            if ($mine === false) {
-                if ($c['archived']) {
-                    continue; // not worth creating a client that is already archived in ITFlow
-                }
-                $byName->execute(['n' => $name]);
-                $same = $byName->fetch();
-                if ($same !== false) {
-                    $this->db->prepare('UPDATE clients SET itflow_client_id = :i, updated_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['i' => $c['id'], 'id' => $same['id']]);
-                    $this->log('client.itflow_linked', (int) $same['id'], ['itflow_client_id' => $c['id']]);
-                    $s['linked']++;
-                    $mine = $same + ['itflow_client_id' => $c['id']];
-                } else {
-                    $this->create($c['id'], $this->nameTaken($name) ? mb_substr($name, 0, 130) . ' (ITFlow #' . $c['id'] . ')' : $name);
-                    $s['created']++;
-                    continue;
-                }
-            }
-            $id = (int) $mine['id'];
-            if ($mine['name'] !== $name && !str_ends_with((string) $mine['name'], '(ITFlow #' . $c['id'] . ')')) {
-                if ($this->nameTaken($name, $id)) {
-                    $s['conflicts']++;
-                } else {
-                    $this->db->prepare('UPDATE clients SET name = :n, updated_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['n' => $name, 'id' => $id]);
-                    $this->log('client.itflow_renamed', $id, ['from' => $mine['name'], 'to' => $name]);
-                    $s['renamed']++;
-                }
-            }
-            if ($c['archived'] && (int) $mine['is_archived'] === 0) {
-                $this->db->prepare('UPDATE clients SET is_archived = 1, itflow_archived = 1, updated_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['id' => $id]);
-                $this->log('client.archived', $id, ['reason' => 'archived in ITFlow']);
-                $s['archived']++;
-            } elseif (!$c['archived'] && (int) $mine['is_archived'] === 1 && (int) ($mine['itflow_archived'] ?? 0) === 1) {
-                $this->db->prepare('UPDATE clients SET is_archived = 0, itflow_archived = 0, updated_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['id' => $id]);
-                $this->log('client.restored', $id, ['reason' => 'unarchived in ITFlow']);
-                $s['restored']++;
+            try {
+                $this->syncOne($c, $name, $s, $byItflow, $byName);
+            } catch (\PDOException $ex) {
+                // e.g. someone created a client with this name at the same moment: count it, carry on with the rest
+                error_log('[msp-sentinel] ITFlow sync, client ' . $c['id'] . ': ' . $ex->getMessage());
+                $s['conflicts']++;
             }
         }
         return $s;
+    }
+
+    /**
+     * One ITFlow client (see syncClients).
+     *
+     * @param array{id:int, name:string, archived:bool} $c
+     * @param array<string,int> $s counters, updated in place
+     */
+    private function syncOne(array $c, string $name, array &$s, \PDOStatement $byItflow, \PDOStatement $byName): void
+    {
+        $byItflow->execute(['i' => $c['id']]);
+        $mine = $byItflow->fetch();
+        if ($mine === false) {
+            if ($c['archived']) {
+                return; // not worth creating a client that is already archived in ITFlow
+            }
+            $byName->execute(['n' => $name]);
+            $same = $byName->fetch();
+            if ($same !== false) {
+                $this->db->prepare('UPDATE clients SET itflow_client_id = :i, updated_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['i' => $c['id'], 'id' => $same['id']]);
+                $this->log('client.itflow_linked', (int) $same['id'], ['itflow_client_id' => $c['id']]);
+                $s['linked']++;
+                $mine = $same + ['itflow_client_id' => $c['id']];
+            } else {
+                $this->create($c['id'], $this->nameTaken($name) ? mb_substr($name, 0, 130) . ' (ITFlow #' . $c['id'] . ')' : $name);
+                $s['created']++;
+                return;
+            }
+        }
+        $id = (int) $mine['id'];
+        // Stored as "Name (ITFlow #id)" because the plain name was taken: try the plain name again (it may be free now),
+        // otherwise keep it as it is (not a conflict).
+        $suffixed = mb_substr($name, 0, 130) . ' (ITFlow #' . $c['id'] . ')';
+        if ($mine['name'] !== $name && !($mine['name'] === $suffixed && $this->nameTaken($name, $id))) {
+            if ($this->nameTaken($name, $id)) {
+                if ($mine['name'] !== $suffixed) {
+                    $s['conflicts']++;
+                }
+            } else {
+                $this->db->prepare('UPDATE clients SET name = :n, updated_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['n' => $name, 'id' => $id]);
+                $this->log('client.itflow_renamed', $id, ['from' => $mine['name'], 'to' => $name]);
+                $s['renamed']++;
+            }
+        }
+        if ($c['archived'] && (int) $mine['is_archived'] === 0) {
+            $this->db->prepare('UPDATE clients SET is_archived = 1, itflow_archived = 1, updated_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['id' => $id]);
+            $this->log('client.archived', $id, ['reason' => 'archived in ITFlow']);
+            $s['archived']++;
+        } elseif (!$c['archived'] && (int) $mine['is_archived'] === 1 && (int) ($mine['itflow_archived'] ?? 0) === 1) {
+            $this->db->prepare('UPDATE clients SET is_archived = 0, itflow_archived = 0, updated_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['id' => $id]);
+            $this->log('client.restored', $id, ['reason' => 'unarchived in ITFlow']);
+            $s['restored']++;
+        }
     }
 
     /** Link unlinked Sentinel clients to MSP Align clients whose psa_id is their ITFlow ID. */
     private function linkAlign(): string
     {
         try {
-            $byPsa = [];
-            foreach ($this->align->clients() as $a) {
-                if (($a['psa_id'] ?? '') !== '' && ctype_digit($a['psa_id'])) {
-                    $byPsa[(int) $a['psa_id']] = $a;
-                }
-            }
+            $clients = $this->align->clients();
         } catch (\Sentinel\Compliance\AlignException $ex) {
             return 'MSP Align not linked: ' . $ex->getMessage();
         }
+        // Only when MSP Align's PSA is ITFlow (its PSA clients say source "itflow"): another PSA's IDs mean nothing here.
+        $sources = array_unique(array_column($clients, 'source'));
+        if (!in_array('itflow', $sources, true)) {
+            return '';
+        }
+        $byPsa = [];
+        $dupes = [];
+        foreach ($clients as $a) {
+            if ($a['psa_id'] !== '' && ctype_digit($a['psa_id'])) {
+                $k = (int) $a['psa_id'];
+                isset($byPsa[$k]) ? $dupes[$k] = true : $byPsa[$k] = $a;
+            }
+        }
+        $byPsa = array_diff_key($byPsa, $dupes); // an ITFlow ID on two MSP Align clients: link neither
         $n = 0;
         $rows = $this->db->query('SELECT id, itflow_client_id FROM clients WHERE itflow_client_id IS NOT NULL AND align_client_id IS NULL AND is_demo = 0 AND is_archived = 0')->fetchAll();
         foreach ($rows as $r) {
@@ -194,7 +230,7 @@ final class ItflowSync
 
     private function nameTaken(string $name, ?int $exceptId = null): bool
     {
-        $stmt = $this->db->prepare('SELECT COUNT(*) FROM clients WHERE LOWER(name) = LOWER(:n)' . ($exceptId === null ? '' : ' AND id <> ' . (int) $exceptId));
+        $stmt = $this->db->prepare('SELECT COUNT(*) FROM clients WHERE name = :n' . ($exceptId === null ? '' : ' AND id <> ' . (int) $exceptId));
         $stmt->execute(['n' => $name]);
         return (int) $stmt->fetchColumn() > 0;
     }

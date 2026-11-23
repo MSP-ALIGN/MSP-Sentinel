@@ -47,7 +47,7 @@ return [
         Assert::true($raw !== '' && !str_contains($raw, $goodKey), 'key stored encrypted');
         $admin->submit('/admin/integrations', '/admin/integrations/mspalign/test', []);
         $page = $admin->get('/admin/integrations')->body;
-        Assert::contains('Connected to MSP Align 2.41.0 as &quot;MSP Sentinel&quot;; the key can see 3 client(s)', $page);
+        Assert::contains('Connected to MSP Align 2.41.0 as &quot;MSP Sentinel&quot;; the key can see 5 client(s)', $page);
         Assert::notContains($goodKey, $page, 'key never shown');
         Assert::notContains($goodKey, implode("\n", $ctx->db->query('SELECT details FROM audit_log')->fetchAll(PDO::FETCH_COLUMN)), 'key never audited');
     },
