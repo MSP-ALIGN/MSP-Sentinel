@@ -69,7 +69,7 @@ $router->add('GET', '/clients/new', [ClientController::class, 'create'], $admin)
 $router->add('POST', '/clients', [ClientController::class, 'store'], $admin);
 $router->add('GET', '/clients/{id}', [ClientController::class, 'show']);
 // A client's pages, one per section (the overview is /clients/{id}); see ClientController::SECTIONS.
-foreach (['findings', 'scans', 'vulnerabilities', 'certificates', 'website', 'agents', 'devices', 'authorisations', 'discovery', 'reports', 'compliance'] as $clientSection) {
+foreach (['findings', 'scans', 'vulnerabilities', 'certificates', 'website', 'agents', 'devices', 'authorisations', 'engagements', 'discovery', 'reports', 'compliance'] as $clientSection) {
     $router->add('GET', '/clients/{id}/' . $clientSection, [ClientController::class, 'show']);
 }
 $router->add('GET', '/clients/{id}/overview', [ClientController::class, 'overview'], ['passive' => true]);
@@ -82,6 +82,14 @@ $router->add('POST', '/clients/{id}/sites', [ClientController::class, 'addSite']
 $router->add('POST', '/sites/{id}', [ClientController::class, 'updateSite'], $admin);
 
 // Authorised-to-scan register: admins only (everyone sees it on the client page)
+// Pen-test engagements: technicians and admins create, stop and cancel; a DIFFERENT admin approves (two-person rule).
+$router->add('GET', '/clients/{id}/engagements/new', [\Sentinel\Controllers\EngagementController::class, 'create'], $technician);
+$router->add('POST', '/clients/{id}/engagements', [\Sentinel\Controllers\EngagementController::class, 'store'], $technician);
+$router->add('GET', '/engagements/{id}', [\Sentinel\Controllers\EngagementController::class, 'show']);
+$router->add('GET', '/engagements/{id}/document', [\Sentinel\Controllers\EngagementController::class, 'document'], $technician);
+$router->add('POST', '/engagements/{id}/approve', [\Sentinel\Controllers\EngagementController::class, 'approve'], $admin);
+$router->add('POST', '/engagements/{id}/stop', [\Sentinel\Controllers\EngagementController::class, 'stop'], $technician);
+$router->add('POST', '/engagements/{id}/cancel', [\Sentinel\Controllers\EngagementController::class, 'cancel'], $technician);
 $router->add('GET', '/clients/{id}/authorisations/new', [AuthorisationController::class, 'create'], $admin);
 $router->add('POST', '/clients/{id}/authorisations', [AuthorisationController::class, 'store'], $admin);
 $router->add('POST', '/authorisations/{id}/revoke', [AuthorisationController::class, 'revoke'], $admin);

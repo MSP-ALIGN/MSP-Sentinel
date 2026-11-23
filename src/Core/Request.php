@@ -83,6 +83,13 @@ final class Request
         return $f['tmp_name'];
     }
 
+    /** The name the browser gave an uploaded file ('' if none). Untrusted: sanitise before storing or showing. */
+    public function uploadedName(string $key): string
+    {
+        $f = $this->files[$key] ?? null;
+        return is_array($f) && is_string($f['name'] ?? null) ? $f['name'] : '';
+    }
+
     /** The upload error code for a file field (UPLOAD_ERR_NO_FILE if none was sent). */
     public function uploadError(string $key): int
     {

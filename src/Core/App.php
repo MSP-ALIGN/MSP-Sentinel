@@ -504,6 +504,12 @@ final class App
             : new \Sentinel\Agent\AgentRelease(dirname(__DIR__, 2), self::version(), false, $key, SENTINEL_ROOT . '/storage/agent-release');
     }
 
+    /** Pen-test engagements (EngagementRepository::isActive() is the gate every engagement test goes through). */
+    public static function engagements(): \Sentinel\Engagements\EngagementRepository
+    {
+        return new \Sentinel\Engagements\EngagementRepository(self::db());
+    }
+
     /** Active Directory settings per site and the sealed password relay to agents. */
     public static function directory(): \Sentinel\Agent\DirectoryRepository
     {
