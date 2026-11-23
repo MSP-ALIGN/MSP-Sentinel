@@ -82,7 +82,7 @@ return [
                 'It requests a short, fixed list of files that are often left on websites by mistake: /.git/HEAD, /.env, common backup and database dump names, /phpinfo.php, /server-status and /.DS_Store. A file is only reported when its content proves it (for example a real git reference or a zip file), so sites that answer every address with a page are not flagged. The content of these files is never stored.',
                 'It recognises WordPress, Drupal and Joomla and common JavaScript libraries (jQuery, Bootstrap, AngularJS, Lodash, Moment.js, Vue.js) from the page markup. When a version is visible, it is matched to known vulnerabilities like any other software. Sentinel never guesses a version.',
                 'For each domain in the authorisation that receives email (has MX records), Sentinel checks the SPF and DMARC records and looks for DKIM under common selectors, through DNS only. Domains without MX records (or with a "null MX" that refuses email) are not judged. A wildcard entry such as *.client.example covers only subdomains, so client.example itself is checked only when it is listed too. An SPF record that hands over to another with redirect= is not judged, and a subdomain without its own DMARC record uses its parent domain\'s record when the parent is also authorised.',
-                'DNS checks (once a day at most): for each authorised domain, Sentinel asks each of the domain\'s own listed nameservers for a zone transfer. A nameserver that hands out the whole zone lets anyone list every name, including internal and forgotten systems; only the first part of the answer is read. Each authorised name (and each in-scope name seen on the client\'s addresses) is also checked for subdomain takeover: a CNAME to a cloud service such as Amazon S3, GitHub Pages, Heroku or Azure that no longer exists, either because the cloud name no longer resolves or because one request to the name gets the provider\'s "no such site" page. Both are Fails. The nameservers and cloud providers are usually third parties; each gets one standard request.',
+                'DNS checks (once a day at most): for each authorised domain, Sentinel asks each of the domain\'s own listed nameservers for a zone transfer. A nameserver that hands out the whole zone lets anyone list every name, including internal and forgotten systems; only the first part of the answer is read. Each authorised name (and each in-scope name seen on the client\'s addresses) is also checked for subdomain takeover: a CNAME to a cloud service such as Amazon S3, GitHub Pages, Heroku or Azure that no longer exists, either because the cloud name no longer resolves or because one request to the name gets the provider\'s "no such site" page. Both are Fails. The nameservers and cloud providers are usually third parties; each gets one standard request, and only public addresses are contacted. A check that cannot decide (a DNS failure, no web answer) keeps the earlier result.',
                 'Grading: a login over HTTP, an exposed .git folder, .env file, backup or phpinfo page, and an SPF record that allows anyone to send (+all) are Fails. A missing HTTPS redirect, HSTS or Content-Security-Policy, insecure cookies, a directory listing, the server-status page, a .DS_Store file, a missing or weak SPF and a missing or "p=none" DMARC are Warnings. Other headers and DKIM not being found under a common selector are advice only (Info): DKIM may use a selector Sentinel does not know.',
             ],
         ],
@@ -236,6 +236,13 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.28.1',
+            'date' => '2026-11-23',
+            'items' => [
+                'DNS check fixes: zones with a wildcard record are reported as open; a takeover check that can\'t decide keeps the earlier result; only public addresses are contacted; no takeover reports for cloud names nobody else can claim; pauses and scope changes stop the checks within one name, with a 10-minute limit per job; demo clients are never checked. Linux agent updates stop the agent before swapping folders.',
+            ],
+        ],
         [
             'version' => '1.28.0',
             'date' => '2026-11-23',

@@ -106,4 +106,18 @@ return [
             }
         }
     },
+    'zone transfer parser: wildcard names read, hostile messages refused' => function (TestContext $ctx) use ($throws): void {
+        $q = "\x01z\x07example\x00" . pack('nn', DnsMessage::AXFR, 1);
+        $rr = static fn (string $owner, int $type): string => $owner . pack('nnNn', $type, 1, 300, 0);
+        $msg = pack('nnnnnn', 7, 0x8400, 1, 3, 0, 0) . $q . $rr("\xc0\x0c", DnsMessage::SOA) . $rr("\x01*\xc0\x0c", DnsMessage::A) . $rr("\x03a\x01b\xc0\x0c", DnsMessage::A);
+        $p = DnsMessage::parseAxfrMessage($msg, 7, 'z.example');
+        Assert::same(['z.example', '*.z.example', 'a?b.z.example'], array_column($p['records'], 'name'), 'wildcard kept, odd bytes made harmless');
+        Assert::true($throws(fn () => DnsMessage::parseAxfrMessage($msg, 8, 'z.example')), 'wrong id');
+        Assert::true($throws(fn () => DnsMessage::parseAxfrMessage($msg, 7, 'other.example')), 'answer to another zone');
+        Assert::true($throws(fn () => DnsMessage::parseAxfrMessage(pack('nnnnnn', 7, 0x8400, 2, 0, 0, 0) . $q . $q, 7, 'z.example')), 'two questions');
+        Assert::true($throws(fn () => DnsMessage::parseAxfrMessage(pack('nnnnnn', 7, 0x8400, 0, 1, 0, 0) . "\xc0\x0c" . pack('nnNn', 1, 1, 300, 0), 7, 'z.example')), 'compression loop');
+        Assert::true($throws(fn () => DnsMessage::parseAxfrMessage(pack('nnnnnn', 7, 0x8400, 1, 1, 0, 0) . $q . "\x01x\x00" . pack('nnNn', 1, 1, 300, 50), 7, 'z.example')), 'record longer than the message');
+        // A later message without the question is fine.
+        Assert::same(1, count(DnsMessage::parseAxfrMessage(pack('nnnnnn', 7, 0x8400, 0, 1, 0, 0) . $rr("\x01z\x07example\x00", DnsMessage::SOA), 7, 'z.example')['records']));
+    },
 ];

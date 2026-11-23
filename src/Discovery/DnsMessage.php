@@ -129,13 +129,16 @@ final class DnsMessage
 
     /**
      * One message of a zone transfer answer: the response code, and each answer's owner name and type (at most 500).
-     * Only names and types are read (enough to tell an open transfer and show a few names as evidence).
+     * Only names and types are read (enough to tell an open transfer and show a few names as evidence). Owner names are
+     * read leniently: zones hold names hostnames can't (a wildcard "*", odd bytes), and refusing those would hide an
+     * open transfer. Every byte outside [a-z0-9_*-] becomes "?", so nothing odd reaches storage or display.
+     * A question section, when present, must be exactly our one question ($zone, AXFR); later messages may omit it.
      *
      * @param string $packet Untrusted bytes.
      * @return array{rcode:int, records:list<array{name:string,type:int}>}
      * @throws DnsException if the packet is malformed or doesn't answer our request.
      */
-    public static function parseAxfrMessage(string $packet, int $expectedId): array
+    public static function parseAxfrMessage(string $packet, int $expectedId, string $zone = ''): array
     {
         if (strlen($packet) < 12) {
             throw new DnsException('DNS response too short.');
@@ -144,14 +147,20 @@ final class DnsMessage
         if ($h['id'] !== ($expectedId & 0xffff) || ($h['flags'] & 0x8000) === 0) {
             throw new DnsException('DNS response does not match the request.');
         }
+        if ($h['qd'] > 1) {
+            throw new DnsException('DNS response has an unexpected question count.');
+        }
         $offset = 12;
-        for ($i = 0; $i < min($h['qd'], 1); $i++) {
-            self::readName($packet, $offset);
-            self::read($packet, $offset, 4);
+        if ($h['qd'] === 1) {
+            $qname = self::readName($packet, $offset, true);
+            $qt = unpack('ntype/nclass', self::read($packet, $offset, 4));
+            if (($zone !== '' && $qname !== strtolower(rtrim($zone, '.'))) || $qt['type'] !== self::AXFR) {
+                throw new DnsException('DNS response is for a different question.');
+            }
         }
         $records = [];
         for ($i = 0; $i < min($h['an'], 500); $i++) {
-            $name = self::readName($packet, $offset);
+            $name = self::readName($packet, $offset, true);
             $fixed = unpack('ntype/nclass/Nttl/nlen', self::read($packet, $offset, 10));
             self::read($packet, $offset, $fixed['len']);
             $records[] = ['name' => $name, 'type' => $fixed['type']];
@@ -194,7 +203,7 @@ final class DnsMessage
      *
      * @param int $offset Moved past the name as it appears at the original position.
      */
-    private static function readName(string $packet, int &$offset): string
+    private static function readName(string $packet, int &$offset, bool $lenient = false): string
     {
         $labels = [];
         $pos = $offset;
@@ -230,7 +239,9 @@ final class DnsMessage
             }
             // Only hostname-safe bytes. Anything else (dots inside labels, control or non-UTF-8 bytes)
             // has no place in the names discovery uses, and could break storage or display later.
-            if (!preg_match('/^[A-Za-z0-9_-]+$/D', $label)) {
+            if ($lenient) {
+                $label = (string) preg_replace('/[^A-Za-z0-9_*-]/', '?', $label); // zone transfers only (see parseAxfrMessage)
+            } elseif (!preg_match('/^[A-Za-z0-9_-]+$/D', $label)) {
                 throw new DnsException('DNS name contains characters that are not allowed in hostnames.');
             }
             $total += $len + 1;

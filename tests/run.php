@@ -213,6 +213,8 @@ try {
     // Zone transfers: the made-up zones' nameservers are the mock DNS server (TCP), one open and one refusing.
     $redirects['203.0.113.53:53'] = $dnsPort;
     $redirects['203.0.113.54:53'] = $dnsPort;
+    // A private nameserver address: would answer (open) if ever contacted; Sentinel must skip it.
+    $redirects['10.0.0.53:53'] = $dnsPort;
     $cfg['testing']['redirect_connections'] = $redirects;
     // Agent updates: a tiny made-up agent release (version 9.9.9), signed with a release key made for this run only.
     // Sentinel hands it out (testing.release_root); agents check it against the public key (testing.release_key in

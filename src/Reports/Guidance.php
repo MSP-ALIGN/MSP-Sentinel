@@ -37,7 +37,8 @@ final class Guidance
             'web' => self::web(substr($key, (int) strrpos($key, ':') + 1)),
             'vuln' => self::vuln($vuln),
             'email' => self::email(substr($key, (int) strrpos($key, ':') + 1)),
-            'dns' => self::dns(substr($key, (int) strrpos($key, ':') + 1)),
+            // Long keys are shortened with a hash (FindingsEngine), losing the code: the evidence names the check too.
+            'dns' => self::dns(str_starts_with((string) ($f['evidence'] ?? ''), 'takeover|') ? 'takeover' : substr($key, (int) strrpos($key, ':') + 1)),
             'device', 'patch' => self::device(substr($key, (int) strrpos($key, ':') + 1)),
             'directory' => self::directory(substr($key, (int) strrpos($key, ':') + 1)),
             default => ['meaning' => __('This item needs a review by your IT provider.'), 'fix' => __('Review the details and decide whether to fix or accept it.')],

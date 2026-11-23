@@ -50,6 +50,8 @@ final class ScanWorker
 {
     public const SCHEDULE_DAYS = 7;
     private const MAX_TARGETS = 2048;
+    /** Longest the daily DNS checks may run within one job (seconds); the rest waits for the next job. */
+    private const DNS_BUDGET = 600;
 
     /** @param callable(string):void $log Progress lines (CLI output). */
     public function __construct(
@@ -1018,20 +1020,15 @@ final class ScanWorker
     }
 
     /**
-     * Email security records (SPF, DMARC, DKIM) for the client's in-scope domains. Each domain is
-     * checked at most every 20 hours; new domains and domains whose DNS failed are checked on the next
-     * job, and domains that left the scope are removed on every job. DNS lookups only: nothing is sent
-     * to the client's servers. Never fatal to the job.
-     *
-     * @param string|null $force Check only this domain, now ("verify fix"); nothing if it isn't in scope.
-     *
-     * @param array<string,mixed> $summary
-     */
-    /**
      * DNS checks of the client's authorised names, at most once every 20 hours per name (1.28): zone transfers for each
      * authorised domain (one AXFR request to each of its listed nameservers) and subdomain takeover for each authorised
-     * host name (the client's own exact names, and names seen on its scanned addresses that are in scope). Only names
-     * in scope right now; paused means paused. Results go to domain_checks; the findings refresh turns them into findings.
+     * host name (the client's own exact names, and names seen on its scanned addresses that are in scope).
+     *
+     * Security: every name is checked against the live scope (isInScope: authorisation, pause switches, archive)
+     * right before it is checked, so a pause or a revoked authorisation stops the step within one name. Demo clients
+     * are never checked. The whole step stops after DNS_BUDGET seconds (the rest waits for the next job), so it never
+     * holds a scan job for long. Names are taken in a fixed order, so the caps always pick the same names and findings
+     * don't flap. A check that couldn't decide (DNS or web failure) keeps the earlier result. Never fatal to the job.
      *
      * @param array<string,mixed> $summary
      */
@@ -1042,7 +1039,8 @@ final class ScanWorker
         }
         try {
             $client = $this->clients->find($clientId);
-            if ($client === null || (int) $client['scanning_paused'] === 1 || (int) $client['is_archived'] === 1 || $this->scope->globallyPaused()) {
+            if ($client === null || (int) $client['scanning_paused'] === 1 || (int) $client['is_archived'] === 1 || (int) ($client['is_demo'] ?? 0) === 1
+                || $this->scope->globallyPaused()) {
                 return;
             }
             $zones = [];
@@ -1051,26 +1049,35 @@ final class ScanWorker
                 if ($e['entry_type'] !== 'domain') {
                     continue;
                 }
-                $value = strtolower((string) $e['value']);
-                $d = (string) preg_replace('/^\*\./', '', $value);
-                if ($d === $value || $this->scope->isInScope($clientId, $d)) {
+                // "*.client.example" does not authorise client.example itself: isInScope decides for every name.
+                $d = (string) preg_replace('/^\*\./', '', strtolower((string) $e['value']));
+                if ($this->scope->isInScope($clientId, $d)) {
                     $zones[$d] = true;
                     $hosts[$d] = true;
                 }
             }
             // Names seen on the client's scanned addresses (certificates, earlier lookups), when they are in scope too.
-            $stmt = $this->db->prepare('SELECT hostnames FROM assets WHERE client_id = :c AND hostnames <> \'\'');
+            $stmt = $this->db->prepare('SELECT hostnames FROM assets WHERE client_id = :c AND hostnames <> \'\' ORDER BY id');
             $stmt->execute(['c' => $clientId]);
+            $seen = [];
             foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $list) {
                 foreach (explode(',', (string) $list) as $h) {
                     $h = strtolower(trim($h));
-                    if ($h !== '' && ScopeService::canonicalTarget($h) === $h && filter_var($h, FILTER_VALIDATE_IP) === false && $this->scope->isInScope($clientId, $h)) {
-                        $hosts[$h] = true;
+                    if ($h !== '' && !isset($hosts[$h]) && ScopeService::canonicalTarget($h) === $h && filter_var($h, FILTER_VALIDATE_IP) === false && $this->scope->isInScope($clientId, $h)) {
+                        $seen[$h] = true;
                     }
                 }
             }
-            $zones = array_slice(array_keys($zones), 0, 20);
-            $hosts = array_slice(array_keys($hosts), 0, 50);
+            $zones = array_keys($zones);
+            $hosts = array_keys($hosts);
+            sort($zones);
+            sort($hosts);
+            $seen = array_keys($seen);
+            sort($seen);
+            // The client's own authorised names first, then names seen on its addresses.
+            $zones = array_slice($zones, 0, 20);
+            $hosts = array_slice(array_merge($hosts, $seen), 0, 50);
+            $deadline = microtime(true) + self::DNS_BUDGET;
             foreach (['zone' => $zones, 'takeover' => $hosts] as $kind => $names) {
                 $times = $this->websiteStore->domainCheckedTimes($clientId, $kind);
                 $results = [];
@@ -1078,21 +1085,38 @@ final class ScanWorker
                     if (isset($times[$n]) && strtotime($times[$n] . ' UTC') > time() - 20 * 3600) {
                         continue;
                     }
+                    if (microtime(true) > $deadline) {
+                        break; // the rest waits for the next job
+                    }
+                    if (!$this->scope->isInScope($clientId, $n)) {
+                        break; // paused, archived or authorisation ended while checking: stop here
+                    }
                     if ($kind === 'zone') {
                         $r = $this->domains->zoneTransfer($n);
                         $results[$n] = $r['error'] === '' ? $r : null;
                     } else {
-                        $results[$n] = ['finding' => $this->domains->takeover($n)];
+                        $t = $this->domains->takeover($n);
+                        $results[$n] = $t['state'] === 'unknown' ? null : ['finding' => $t['finding']];
                     }
                 }
                 $this->websiteStore->saveDomainChecks($clientId, $kind, $results, $names);
-                $summary['dns_checked_' . $kind] = count($results);
+                $summary['dns_checked_' . $kind] = count(array_filter($results, static fn ($r): bool => $r !== null));
             }
         } catch (\Throwable $ex) {
             error_log('[msp-sentinel] DNS checks failed for client ' . $clientId . ': ' . $ex->getMessage());
         }
     }
 
+    /**
+     * Email security records (SPF, DMARC, DKIM) for the client's in-scope domains. Each domain is
+     * checked at most every 20 hours; new domains and domains whose DNS failed are checked on the next
+     * job, and domains that left the scope are removed on every job. DNS lookups only: nothing is sent
+     * to the client's servers. Never fatal to the job.
+     *
+     * @param string|null $force Check only this domain, now ("verify fix"); nothing if it isn't in scope.
+     *
+     * @param array<string,mixed> $summary
+     */
     private function checkEmail(int $clientId, array &$summary, ?string $force = null): void
     {
         if ($this->email === null || $this->websiteStore === null) {

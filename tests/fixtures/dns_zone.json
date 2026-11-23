@@ -240,6 +240,52 @@
       "A": [
         "203.0.113.78"
       ]
+    },
+    "*.axfr-open.example": {
+      "A": [
+        "203.0.113.50"
+      ]
+    },
+    "axfr-private.example": {
+      "NS": [
+        "ns1.axfr-private.example"
+      ],
+      "A": [
+        "203.0.113.52"
+      ]
+    },
+    "ns1.axfr-private.example": {
+      "A": [
+        "10.0.0.53"
+      ]
+    },
+    "wildzone.example": {
+      "NS": [
+        "ns1.axfr-open.example"
+      ],
+      "A": [
+        "203.0.113.55"
+      ]
+    },
+    "flaky.takeover.example": {
+      "CNAME": [
+        "flaky.herokuapp.com"
+      ]
+    },
+    "intra.takeover.example": {
+      "CNAME": [
+        "intra.github.io"
+      ]
+    },
+    "intra.github.io": {
+      "A": [
+        "10.1.2.3"
+      ]
+    },
+    "gone-lb.takeover.example": {
+      "CNAME": [
+        "gone-lb-123.us-east-1.elb.amazonaws.com"
+      ]
     }
   },
   "behaviours": {
@@ -249,9 +295,12 @@
     "deadzone.example": "timeout",
     "big.quiet.example": "truncate",
     "files.discovery.example": "extra-answer",
-    "wrongid.quiet.example": "wrong-id"
+    "wrongid.quiet.example": "wrong-id",
+    "flaky.herokuapp.com": "servfail"
   },
   "axfr_open": [
-    "axfr-open.example"
+    "axfr-open.example",
+    "axfr-private.example",
+    "wildzone.example"
   ]
 }

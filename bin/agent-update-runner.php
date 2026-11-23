@@ -299,13 +299,25 @@ if ($code !== 0 || trim($check) !== 'selfcheck ok ' . $m['version']) {
 }
 
 // 4. Swap, units, restart; roll back if the agent doesn't stay up.
+// The agent is stopped first: its unit puts .old back when the code folder is missing (a repair after a power cut,
+// 1.28), and a restart between the two renames below must not race the swap.
+if ($systemd) {
+    $run(['/usr/bin/systemctl', 'stop', 'sentinel-agent.service'], 60);
+}
+$startAgain = static function () use ($systemd, $run): void {
+    if ($systemd) {
+        $run(['/usr/bin/systemctl', 'start', 'sentinel-agent.service'], 60); // the version in place keeps running
+    }
+};
 $rm($app . '.old');
 if (!rename($app, $app . '.old')) {
     $rm($new);
+    $startAgain();
     $result($wanted, false, 'Could not move the current version aside.');
 }
 if (!rename($new, $app)) {
     rename($app . '.old', $app);
+    $startAgain();
     $result($wanted, false, 'Could not put the new version in place; the previous one was kept.');
 }
 if ($systemd) {
@@ -329,7 +341,8 @@ if ($systemd) {
         $healthy = $healthy && $active === 0 && trim($restarts) === '0';
     }
     if (!$healthy) {
-        // Roll back to the previous version, which was running before.
+        // Roll back to the previous version, which was running before (agent stopped first: see the swap above).
+        $run(['/usr/bin/systemctl', 'stop', 'sentinel-agent.service'], 60);
         $rm($app . '.failed');
         $back = rename($app, $app . '.failed') && rename($app . '.old', $app);
         if (!$back && !is_dir($app) && is_dir($app . '.failed')) {

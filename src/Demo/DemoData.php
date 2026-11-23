@@ -143,6 +143,7 @@ final class DemoData
                 "DELETE t FROM tls_endpoints t JOIN assets a ON a.id = t.asset_id WHERE a.client_id IN ({$in})",
                 "DELETE FROM assets WHERE client_id IN ({$in})",
                 "DELETE FROM email_checks WHERE client_id IN ({$in})",
+                "DELETE FROM domain_checks WHERE client_id IN ({$in})",
                 "DELETE FROM target_suggestions WHERE client_id IN ({$in})",
                 "DELETE FROM discovery_runs WHERE client_id IN ({$in})",
                 "DELETE sv FROM software_vulns sv JOIN device_software s ON s.id = sv.software_id JOIN devices d ON d.id = s.device_id WHERE d.client_id IN ({$in})",

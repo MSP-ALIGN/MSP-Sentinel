@@ -328,7 +328,6 @@ final class FindingsEngine
                     'target' => "{$v['ip']}:{$v['port']}", 'evidence' => $v['confidence'] . '|' . $v['name'] . ' ' . $v['version'], 'asset_id' => (int) $v['asset_id'], 'cve_id' => (string) $v['cve_id'],
                 ]);
             }
-            // Email security records (SPF, DMARC) for in-scope domains that receive mail.
             // DNS: zone transfers and subdomain takeover (1.28).
             foreach ($this->website->domainChecksForClient($clientId) as $dc) {
                 $r = $dc['result'];
@@ -349,11 +348,12 @@ final class FindingsEngine
                     $f = $r['finding'];
                     $add('dns:' . $dc['name'] . ':takeover', [
                         'type' => 'dns', 'severity' => 'fail',
-                        'title' => __('{h} can be taken over: it points at a {p} name that no longer exists', ['h' => $dc['name'], 'p' => (string) ($f['provider'] ?? '?')]),
+                        'title' => __('{h} can be taken over: it points at an unclaimed {p} name', ['h' => $dc['name'], 'p' => (string) ($f['provider'] ?? '?')]),
                         'detail' => (string) ($f['evidence'] ?? ''), 'target' => $dc['name'], 'evidence' => 'takeover|' . (string) ($f['cname'] ?? '') . '|' . (string) ($f['reason'] ?? ''),
                     ]);
                 }
             }
+            // Email security records (SPF, DMARC) for in-scope domains that receive mail.
             foreach ($this->website->emailForClient($clientId) as $e) {
                 foreach ((array) ($e['issues'] ?? []) as $code) {
                     $rule = ExposureRules::emailIssue((string) $code);

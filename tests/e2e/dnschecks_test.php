@@ -25,7 +25,7 @@ $setup = static function (TestContext $ctx): int {
     $admin->submit('/clients/' . $cid . '/authorisations/new', '/clients/' . $cid . '/authorisations', [
         'approved_by_name' => 'Jo Example', 'approved_by_role' => 'Owner', 'approved_on' => gmdate('Y-m-d'), 'valid_from' => gmdate('Y-m-d', time() - 86400),
         'valid_until' => gmdate('Y-m-d', time() + 86400 * 200), 'document_ref' => '', 'notes' => '',
-        'scope' => "axfr-open.example\naxfr-closed.example\nshop.takeover.example\nold.takeover.example\nlive.takeover.example", 'confirm' => '1']);
+        'scope' => "axfr-open.example\naxfr-closed.example\naxfr-private.example\n*.wildzone.example\nshop.takeover.example\nold.takeover.example\nlive.takeover.example\nflaky.takeover.example\nintra.takeover.example\ngone-lb.takeover.example", 'confirm' => '1']);
     $admin->submit('/clients/' . $cid, '/clients/' . $cid . '/scan', []);
     $job = (int) $ctx->db->query("SELECT MAX(id) FROM scan_jobs WHERE client_id = {$cid}")->fetchColumn();
     $ctx->cli('bin/worker.php', ['--no-schedule', '--job=' . $job]);
@@ -43,6 +43,7 @@ return [
         $ns = $stored['nameservers'][0] ?? [];
         Assert::same('open', $ns['status'] ?? null);
         Assert::true(in_array('secret-backup.axfr-open.example', $ns['sample'] ?? [], true), 'a sample of the names handed out: ' . implode(', ', $ns['sample'] ?? []));
+        Assert::true(in_array('*.axfr-open.example', $ns['sample'] ?? [], true), 'a wildcard record in the zone is read, not a parse error');
         Assert::true(($ns['records'] ?? 0) >= 6, 'records across both messages, SOA to SOA');
         $closed = json_decode((string) $ctx->db->query("SELECT result FROM domain_checks WHERE client_id = {$cid} AND kind = 'zone' AND name = 'axfr-closed.example'")->fetchColumn(), true);
         Assert::same('refused', $closed['nameservers'][0]['status'] ?? null);
@@ -62,9 +63,18 @@ return [
     'only authorised names are checked, and not again within 20 hours' => function (TestContext $ctx) use ($setup): void {
         $cid = $setup($ctx);
         $names = $ctx->db->query("SELECT DISTINCT name FROM domain_checks WHERE client_id = {$cid} ORDER BY name")->fetchAll(PDO::FETCH_COLUMN);
-        Assert::same(['axfr-closed.example', 'axfr-open.example', 'live.takeover.example', 'old.takeover.example', 'shop.takeover.example'], $names);
+        Assert::true(!in_array('wildzone.example', $names, true), 'only names in scope are checked: ' . implode(', ', $names));
+        $names = $ctx->db->query("SELECT name FROM domain_checks WHERE client_id = {$cid} AND kind = 'takeover' ORDER BY name")->fetchAll(PDO::FETCH_COLUMN);
+        // Takeover: flaky (DNS failure) and intra (private address) couldn't be decided: no result stored, nothing reported.
+        Assert::same(['axfr-closed.example', 'axfr-open.example', 'axfr-private.example', 'gone-lb.takeover.example', 'live.takeover.example', 'old.takeover.example', 'shop.takeover.example'], $names);
+        Assert::same([], json_decode((string) $ctx->db->query("SELECT result FROM domain_checks WHERE client_id = {$cid} AND kind = 'zone' AND name = 'axfr-private.example'")->fetchColumn(), true)['nameservers'] ?? null,
+            'a nameserver at a private address is never contacted');
+        Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM findings WHERE client_id = {$cid} AND finding_key LIKE 'dns:gone-lb.takeover.example:%'")->fetchColumn(),
+            'a deleted load balancer name (nobody else can claim it) is not a takeover');
         $log = (string) @file_get_contents($ctx->dnsLog ?? '');
         Assert::notContains('AXFR takeover.example', $log, 'never a zone transfer for a domain that is not itself authorised');
+        Assert::notContains('AXFR wildzone.example', $log, '*.wildzone.example does not authorise wildzone.example itself');
+        Assert::notContains('AXFR axfr-private.example', $log);
         $before = substr_count($log, 'AXFR axfr-open.example');
         Assert::true($before >= 1, 'the zone transfer was asked over DNS');
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
@@ -91,5 +101,22 @@ return [
         Assert::contains('secret-backup.axfr-open.example', $client);
         Assert::contains('ns1.axfr-closed.example (203.0.113.54) refuses', $client);
         Assert::contains('Can be taken over: old.takeover.example', $client);
+    },
+    'a failed lookup keeps the earlier result; a name leaving scope clears its finding' => function (TestContext $ctx) use ($setup, $finding): void {
+        $cid = $setup($ctx);
+        // An earlier run found flaky.takeover.example vulnerable; today its lookups fail (SERVFAIL): the finding stays.
+        $ctx->db->exec("INSERT INTO domain_checks (client_id, name, kind, result, checked_at) VALUES ({$cid}, 'flaky.takeover.example', 'takeover',
+            '{\"finding\":{\"host\":\"flaky.takeover.example\",\"cname\":\"flaky.herokuapp.com\",\"provider\":\"Heroku\",\"reason\":\"dangling\",\"evidence\":\"x\"}}',
+            UTC_TIMESTAMP() - INTERVAL 2 DAY)");
+        $ctx->db->exec("DELETE FROM scope_entries WHERE client_id = {$cid} AND value = 'shop.takeover.example'");
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $admin->submit('/clients/' . $cid, '/clients/' . $cid . '/scan', []);
+        $job = (int) $ctx->db->query("SELECT MAX(id) FROM scan_jobs WHERE client_id = {$cid}")->fetchColumn();
+        $ctx->cli('bin/worker.php', ['--no-schedule', '--job=' . $job]);
+        $flaky = $finding($ctx, $cid, 'dns:flaky.takeover.example:takeover');
+        Assert::true($flaky !== null && $flaky['status'] === 'open', 'kept open: the check could not decide');
+        Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM domain_checks WHERE client_id = {$cid} AND name = 'shop.takeover.example'")->fetchColumn(), 'out of scope: result removed');
+        $shop = $finding($ctx, $cid, 'dns:shop.takeover.example:takeover');
+        Assert::true($shop === null || $shop['status'] !== 'open', 'out of scope: finding no longer open');
     },
 ];

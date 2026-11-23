@@ -2,6 +2,29 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.28.1 (2026-11-23): attack-surface checks, fixes from review
+
+- **A zone with a wildcard record (`*.client.example`) is now reported as open.** Before, the name stopped the check
+  and the open zone transfer was missed. Names in a zone are now read leniently and made safe for display.
+- **A takeover check that can't decide keeps the earlier result.** A DNS failure or an unanswered web request no
+  longer closes an open finding (and reopens it the next day).
+- **Only public addresses are contacted.** A nameserver or cloud name that resolves to a private, loopback or other
+  reserved address (perhaps your own network) is skipped.
+- **No takeover reports for names nobody else can claim.** Only Amazon S3 names count for AWS (not load balancers,
+  databases or API gateways). A cloud name that no longer resolves counts only where anyone can register it again
+  (Azure, Elastic Beanstalk, Heroku). The title now says "an unclaimed name".
+- **Pauses and scope changes take effect within one name.** Every name is checked against the live scope right
+  before it is checked. The DNS step stops after 10 minutes and continues with the next job.
+- **The caps always pick the same names.** The client's own names come first, in a fixed order, so findings don't
+  come and go.
+- **Demo clients are never DNS-checked**, and removing demo data also removes their DNS results.
+- **Stricter zone transfer reading:**
+  - exactly our question;
+  - complete messages over TCP;
+  - "open" only once a record of the zone itself arrives.
+- **Linux agent updates stop the agent before swapping folders and before a rollback.** The new repair step then
+  can't race them. If the swap fails, the agent is started again.
+
 ### 1.28.0 (2026-11-23): attack-surface checks
 
 - **DNS zone transfers.** For each domain in the authorisation, Sentinel asks each of the domain's own listed
