@@ -2,6 +2,23 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.26.2 (2026-11-23): Windows agent, fixes from re-review
+
+- **A fresh install creates its ProgramData folder itself.** It fails if someone recreated the folder in between,
+  replaces the whole permission list in one step, and checks that nothing got in. A local user racing the install can
+  no longer keep write access.
+- **`-Upgrade` only trusts folders it made.** It refuses unless the service exists and the data, config and update
+  folders are writable only by Administrators and SYSTEM.
+- **nmap installs no longer fail because of an empty exit code.**
+- **An update interrupted by a crash or reboot no longer leaves the service disabled or stopped.** The next update
+  task run starts it again, and `-Upgrade` resets its start mode.
+- **The update task is harder to fool and keeps more on failure:**
+  - it checks the state folder afresh on every read, and logs when the folder is redirected;
+  - it retries folder renames;
+  - it keeps the failed copy when a rollback fails;
+  - it logs when its result can't be written.
+- **Agents installed with 1.26.0 need `install-agent.ps1 -Upgrade` once.**
+
 ### 1.26.1 (2026-11-23): Windows agent, fixes from review
 
 - **The agent's service has only two privileges.** It can no longer impersonate clients, which known tools turn into

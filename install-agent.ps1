@@ -188,12 +188,13 @@ function Install-Nmap {
     # /S: silent (it skips Npcap; the agent doesn't need it). If this nmap installer doesn't support a silent install,
     # it waits for someone at the screen: stop after 5 minutes and say how to install nmap by hand.
     $p = Start-Process -FilePath $exe -ArgumentList '/S' -PassThru
+    $null = $p.Handle  # keep the process handle, or ExitCode reads as empty after WaitForExit
     if (-not $p.WaitForExit(300000)) {
         Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
         Fail "nmap's installer did not finish silently. Install nmap from nmap.org by hand (Npcap is not needed: untick it), then run this again."
     }
     $found = @("${env:ProgramFiles(x86)}\Nmap\nmap.exe", "$env:ProgramFiles\Nmap\nmap.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
-    if ($p.ExitCode -ne 0 -or -not $found) { Fail "nmap did not install (exit $($p.ExitCode))." }
+    if (-not $found -or ($null -ne $p.ExitCode -and $p.ExitCode -ne 0)) { Fail "nmap did not install (exit $($p.ExitCode))." }
     return $found
 }
 
@@ -250,15 +251,44 @@ function Invoke-Icacls {
     if ($LASTEXITCODE -ne 0) { Fail "Setting folder permissions failed (icacls $($args -join ' '))." }
 }
 
+# SIDs of the only accounts that may own or change the agent's protected folders.
+$TrustedSids = @('S-1-5-18', 'S-1-5-32-544')  # SYSTEM, Administrators
+
 function Set-Folders {
-    # A fresh install starts from a fresh folder: anything already there (a local user can create folders in ProgramData
-    # and would stay its owner) is removed first, without following links inside it.
+    # A fresh install starts from a folder it created itself. A local user can create folders in ProgramData (and would
+    # own them), so: remove whatever is there (rmdir /s: links removed, never followed), then CREATE it (no -Force:
+    # if someone recreated it in between, this fails), then replace its whole permission list at once (protected: no
+    # inheritance; SYSTEM and Administrators only; owner Administrators) and check that nothing else got in.
     Remove-Tree $Data
     if (Test-Path -LiteralPath $Data) { Fail "$Data could not be removed: inspect this machine." }
-    foreach ($d in $Data, $ConfDir, $StateDir, $UpdateDir, $LogDir) { New-Item -ItemType Directory -Force -Path $d | Out-Null }
-    # Owned by Administrators; no inherited permissions; Administrators and SYSTEM full control everywhere.
-    Invoke-Icacls $Data /setowner '*S-1-5-32-544' /T /C /L
-    Invoke-Icacls $Data /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F'
+    New-Item -ItemType Directory -Path $Data | Out-Null
+    $acl = New-Object Security.AccessControl.DirectorySecurity
+    $acl.SetAccessRuleProtection($true, $false)
+    $admins = New-Object Security.Principal.SecurityIdentifier 'S-1-5-32-544'
+    $acl.SetOwner($admins)
+    foreach ($sid in $TrustedSids) {
+        $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule (New-Object Security.Principal.SecurityIdentifier $sid),
+            'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
+    }
+    Set-Acl -LiteralPath $Data -AclObject $acl
+    # Nothing may have been created inside in the moment before the permissions were set.
+    if (@(Get-ChildItem -LiteralPath $Data -Force).Count -ne 0) { Fail "Something was created in $Data during the install: inspect this machine." }
+    Assert-Protected $Data
+    foreach ($d in $ConfDir, $StateDir, $UpdateDir, $LogDir) { New-Item -ItemType Directory -Path $d | Out-Null }
+}
+
+# A folder only SYSTEM and Administrators own and can change (read access for others is fine), and not a link.
+function Assert-Protected([string]$Path) {
+    if (Test-Redirected $Path) { Fail "$Path is a link or junction: refusing to use it. Inspect this machine." }
+    $acl = Get-Acl -LiteralPath $Path
+    $owner = (New-Object Security.Principal.NTAccount $acl.Owner).Translate([Security.Principal.SecurityIdentifier]).Value
+    if ($TrustedSids -notcontains $owner) { Fail "$Path is owned by $($acl.Owner), not Administrators: refusing to use it. Inspect this machine." }
+    $write = [Security.AccessControl.FileSystemRights]'WriteData,AppendData,WriteExtendedAttributes,WriteAttributes,Delete,DeleteSubdirectoriesAndFiles,ChangePermissions,TakeOwnership'
+    foreach ($r in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
+        if ($r.AccessControlType -eq 'Allow' -and ($r.FileSystemRights -band $write) -and $TrustedSids -notcontains $r.IdentityReference.Value) {
+            Fail "$Path can be changed by $($r.IdentityReference.Value): refusing to use it. Inspect this machine."
+        }
+    }
 }
 
 function Set-AgentAccess {
@@ -280,7 +310,8 @@ function Register-Service {
         if ($LASTEXITCODE -ne 0) { Fail 'Registering the service failed.' }
     }
     # Run as its own virtual account (no password, no admin rights).
-    & sc.exe config $Service obj= $Account | Out-Null
+    # Run as its own virtual account, and start automatically (also resets a start mode an interrupted update left).
+    & sc.exe config $Service obj= $Account start= delayed-auto | Out-Null
     if ($LASTEXITCODE -ne 0) { Fail 'Setting the service account failed.' }
     # Only the privileges it needs: every service gets "Impersonate a client" by default, which known tools turn into
     # SYSTEM. With a required-privileges list, the service process gets these two and nothing else.
@@ -326,11 +357,16 @@ try {
     if ($Upgrade) {
         if (-not (Test-Path (Join-Path $ConfDir 'agent.json'))) { Fail 'No enrolled agent found. Install without -Upgrade first.' }
         Say 'Upgrading the agent (the enrolment is kept)'
+        # Only an agent this script installed: its service exists and its protected folders are still only
+        # Administrators' (a folder a local user made, or changed, is never trusted).
+        if (-not (Get-Service -Name $Service -ErrorAction SilentlyContinue)) { Fail 'No agent service found: install without -Upgrade (after -Uninstall).' }
         Assert-NotRedirected
+        foreach ($d in $Data, $ConfDir, $UpdateDir) { Assert-Protected $d }
         # The update task must not swap app\ while this copies it: pause it and wait for a running one to finish.
         Disable-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue | Out-Null
         for ($i = 0; $i -lt 120 -and (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue | Where-Object State -eq 'Running'); $i++) { Start-Sleep -Seconds 5 }
         $script:RestartService = $true
+        if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue | Where-Object State -eq 'Running') { Fail 'The update task is still running after 10 minutes: try again later.' }
         Stop-Service -Name $Service -Force -ErrorAction SilentlyContinue
         Install-VcRuntime
         Install-Php

@@ -227,6 +227,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.26.2',
+            'date' => '2026-11-23',
+            'items' => [
+                'Windows agent fixes: a fresh install creates and locks its ProgramData folder itself; -Upgrade only trusts folders it made; nmap installs no longer fail on an empty exit code; an interrupted update no longer leaves the service disabled. Agents installed with 1.26.0: run install-agent.ps1 -Upgrade once.',
+            ],
+        ],
+        [
             'version' => '1.26.1',
             'date' => '2026-11-23',
             'items' => [

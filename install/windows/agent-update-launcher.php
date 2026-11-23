@@ -15,8 +15,8 @@ declare(strict_types=1);
  */
 
 $app = __DIR__ . '\\app';
-if (!is_dir($app) && is_dir($app . '.old')) {
-    rename($app . '.old', $app);
+if (!is_dir($app) && is_dir($app . '.old') && rename($app . '.old', $app)) {
+    define('SENTINEL_UPDATE_REPAIRED', true); // the task starts the service again (under its lock)
 }
 define('SENTINEL_UPDATE_APP', $app);
 require $app . '\\bin\\agent-update-task.php';

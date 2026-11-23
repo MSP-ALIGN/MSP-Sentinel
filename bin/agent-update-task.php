@@ -88,11 +88,15 @@ $result = static function (string $version, bool $ok, string $message) use ($res
     if (!is_dir($resultDir)) {
         mkdir($resultDir, 0755, true);
     }
-    file_put_contents($resultDir . '/result.json.tmp', json_encode(['version' => mb_substr($version, 0, 20), 'ok' => $ok, 'message' => mb_substr($message, 0, 500),
+    $written = file_put_contents($resultDir . '/result.json.tmp', json_encode(['version' => mb_substr($version, 0, 20), 'ok' => $ok, 'message' => mb_substr($message, 0, 500),
         'request' => $requestId, 'at' => gmdate('Y-m-d\TH:i:s\Z')], JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE));
     // The agent may have result.json open for a moment (Windows then refuses the rename): try for up to 10 seconds.
-    for ($i = 0; $i < 20 && !@rename($resultDir . '/result.json.tmp', $resultDir . '/result.json'); $i++) {
+    $moved = false;
+    for ($i = 0; $i < 20 && $written !== false && !($moved = @rename($resultDir . '/result.json.tmp', $resultDir . '/result.json')); $i++) {
         usleep(500000);
+    }
+    if (!$moved) {
+        $say('The result could not be written to ' . $resultDir . '\\result.json.');
     }
     $say(($ok ? 'OK: ' : 'Refused: ') . $message);
     exit($ok ? 0 : 1);
@@ -103,11 +107,19 @@ $result = static function (string $version, bool $ok, string $message) use ($res
  * pipe, say, to catch SYSTEM connecting): then nothing is read.
  */
 $norm = static fn (string $p): string => strtolower(rtrim(str_replace('\\', '/', $p), '/'));
-$readPlain = static function (string $file, int $max) use ($state, $norm): string {
+$readPlain = static function (string $file, int $max) use ($state, $norm, $say): string {
+    clearstatcache(true); // no cached answer from an earlier check (the agent could change things in between)
+    $parent = realpath(dirname($state));
     $real = realpath($state);
     $realFile = realpath($file);
-    if ($real === false || $norm($real) !== $norm($state) || $realFile === false || $norm(dirname($realFile)) !== $norm($state)
-        || is_link($file) || !is_file($file) || (int) @filesize($file) > $max) {
+    // The state folder must resolve to where it sits (compared after resolving its parent, so a legitimate path
+    // spelled differently isn't refused), not be a link or junction, and hold the file directly.
+    $expected = $parent === false ? '' : $norm($parent . '/' . basename($state));
+    if ($real === false || $norm($real) !== $expected || is_link($state) || ($realFile !== false && $norm(dirname($realFile)) !== $expected)) {
+        $say('The agent\'s state folder is redirected (a link or junction): nothing read from it. Inspect this machine.');
+        return '';
+    }
+    if ($realFile === false || is_link($file) || !is_file($file) || (int) @filesize($file) > $max) {
         return '';
     }
     return (string) @file_get_contents($file, false, null, 0, $max);
@@ -176,13 +188,43 @@ if ($lock === false || !flock($lock, LOCK_EX | LOCK_NB)) {
     exit(0);
 }
 
-// 0. An update stopped half-way (power cut): never leave the appliance without its agent.
+$startMode = static function (string $mode) use ($run, $system32, $service, $say): bool {
+    if (!$service) {
+        return true;
+    }
+    [$code] = $run([$system32 . '\\sc.exe', 'config', SERVICE, 'start=', $mode], 30);
+    if ($code !== 0) {
+        $say('Could not set the agent service to start ' . $mode . ' (sc.exe exit ' . $code . ').');
+    }
+    return $code === 0;
+};
+/** Rename with a few retries (antivirus or the search indexer may hold a file for a moment). */
+$renameRetry = static function (string $from, string $to): bool {
+    for ($i = 0; $i < 10; $i++) {
+        if (@rename($from, $to)) {
+            return true;
+        }
+        sleep(1);
+    }
+    return false;
+};
+// While folders are swapped the service is disabled; this marker (in this task's own folder) says so, so that a run
+// after a crash or reboot in the middle sets it back to start and starts it.
+$swapMarker = $resultDir . '/swap-in-progress';
+
+// 0. An update stopped half-way (power cut): never leave the appliance without its agent. The launcher may already
+// have put app.old back (SENTINEL_UPDATE_REPAIRED); the service is started here, under the lock.
+$repaired = defined('SENTINEL_UPDATE_REPAIRED');
 if (!is_dir($app) && is_dir($app . '.old')) {
-    rename($app . '.old', $app);
-    $say('Restored ' . $app . ' from ' . $app . '.old (an earlier update stopped half-way).');
+    $repaired = $renameRetry($app . '.old', $app);
+}
+if ($repaired || is_file($swapMarker)) {
+    $say('An earlier update stopped half-way: ' . $app . ' restored, the service set to start again.');
+    $startMode('delayed-auto');
     if ($service) {
         $serviceCtl('start');
     }
+    @unlink($swapMarker);
 }
 
 // 1. The request (nothing asked: nothing to do; this runs every 5 minutes).
@@ -285,46 +327,48 @@ if ($code !== 0 || trim($check) !== 'selfcheck ok ' . $m['version']) {
 
 // 4. Swap with the service stopped and disabled (so the service manager's restart-on-failure can't start it while the
 // folders move); roll back if it doesn't stay running. Every step is checked.
-$startMode = static function (string $mode) use ($run, $system32, $service): void {
-    if ($service) {
-        $run([$system32 . '\\sc.exe', 'config', SERVICE, 'start=', $mode], 30);
-    }
-};
-$restore = static function (string $why) use ($app, $rm, $result, $wanted, $installed, $startMode, $serviceCtl, $service): never {
+$restore = static function (string $why) use ($app, $new, $rm, $result, $wanted, $installed, $startMode, $serviceCtl, $service, $renameRetry, $swapMarker): never {
     // Put the previous version back: the new folder aside first, then the old one in place.
     $ok = true;
     if (is_dir($app)) {
         $rm($app . '.failed');
-        $ok = @rename($app, $app . '.failed');
+        $ok = $renameRetry($app, $app . '.failed');
     }
-    $ok = $ok && @rename($app . '.old', $app);
+    $ok = $ok && $renameRetry($app . '.old', $app);
     $startMode('delayed-auto');
     if ($service) {
         $serviceCtl('start');
     }
-    $rm($app . '.failed');
+    @unlink($swapMarker);
+    $rm($new);
+    if ($ok) {
+        $rm($app . '.failed'); // kept when the rollback failed: it may be the only copy left
+    }
     $result($wanted, false, $ok ? $why . ' The previous version ' . $installed . ' was put back.'
         : $why . ' Putting the previous version back FAILED: reinstall with install-agent.ps1 -Upgrade.');
 };
 if ($service) {
+    file_put_contents($swapMarker, gmdate('c'));
     $startMode('disabled');
     if (!$serviceCtl('stop')) {
         $startMode('delayed-auto');
         $serviceCtl('start');
+        @unlink($swapMarker);
         $rm($new);
         $result($wanted, false, 'The agent service did not stop; nothing was changed.');
     }
 }
 $rm($app . '.old');
-if (!@rename($app, $app . '.old')) {
+if (!$renameRetry($app, $app . '.old')) {
     $rm($new);
     $startMode('delayed-auto');
     if ($service) {
         $serviceCtl('start');
     }
+    @unlink($swapMarker);
     $result($wanted, false, 'Could not move the current version aside (a file in use?); the previous one was kept.');
 }
-if (!@rename($new, $app)) {
+if (!$renameRetry($new, $app)) {
     $restore('Could not put the new version in place.');
 }
 $startMode('delayed-auto');
@@ -340,4 +384,5 @@ if ($service) {
         $restore('Version ' . $wanted . ' did not keep running.');
     }
 }
+@unlink($swapMarker);
 $result($wanted, true, 'Updated from ' . $installed . ' to ' . $wanted . '.');

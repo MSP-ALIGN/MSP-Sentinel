@@ -68,9 +68,21 @@ Remote updates afterwards are checked with the pinned release key.
 the script it started with open, and Windows can't rename a folder with an open file in it. The launcher also repairs
 an update that stopped half-way.
 
-**The installer never acts through links.** Before changing permissions or deleting anything, it refuses if one of its
-folders is a junction or link. It deletes with `rmdir /s`, which removes links but never what they point to. A fresh
-install also starts from a new ProgramData folder owned by Administrators.
+**The installer never acts through links, and never trusts a folder it didn't make.**
+
+- **Links:** before changing permissions or deleting anything, it refuses if one of its folders is a junction or link.
+  It deletes with `rmdir /s`, which removes links but never what they point to.
+- **Fresh install:** it creates the ProgramData folder itself (failing if someone recreated it in between), replaces
+  its whole permission list in one step (SYSTEM and Administrators only, owner Administrators), and checks that
+  nothing was created inside meanwhile.
+- **`-Upgrade`:** it refuses unless the service exists and the data, config and update folders are still owned and
+  writable only by Administrators and SYSTEM.
+
+**After a crash in the middle of an update:**
+
+- A marker in the update task's own folder makes the next run set the service back to start automatically and start
+  it.
+- If the code folder is missing, the launcher puts the previous one back first.
 
 **Why the Windows update task downloads the release itself:** on Windows the agent's account could create junctions
 in its own folder. If SYSTEM read or deleted staged files there, a compromised agent could redirect it. So the agent
@@ -113,3 +125,12 @@ folder and the files resolve to themselves (no junction, link or pipe).
 3. **Update to x.y.z** from Sentinel installs, and a broken release rolls back.
 4. A release key offer is pinned, and a rotation is followed.
 5. `-Upgrade` and `-Uninstall` work.
+6. `whoami /priv`, run inside the service, shows only SeChangeNotifyPrivilege and SeCreateGlobalPrivilege. Test that
+   the service account can't get its default privileges back by registering a scheduled task as itself (known for
+   LOCAL SERVICE; check `NT SERVICE\SentinelAgent`).
+7. `sc.exe config ... obj= "NT SERVICE\SentinelAgent"` works without a password on PowerShell 5.1 and 7.
+8. A rename of `app\` while the update task runs from the launcher succeeds.
+9. PHP's `realpath` resolves a junction or mount point on the state folder, so the task refuses it.
+
+**Agents installed with 1.26.0:** run `install-agent.ps1 -Upgrade` once. Their update task runs from inside the code
+folder, so it can't swap it, and they don't yet have the launcher or the privilege limits.

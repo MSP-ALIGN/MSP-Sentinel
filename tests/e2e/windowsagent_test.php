@@ -118,6 +118,12 @@ return [
         Assert::contains('not signed by this agent', $out);
         Assert::same($before, file_get_contents($wDir($ctx) . '/config/release-key.pub'));
         unlink($wDir($ctx) . '/state/update-request');
+        // After a crash in the middle of a swap (the marker is left), the next run sets the service back and says so.
+        file_put_contents($wDir($ctx) . '/update/swap-in-progress', 'x');
+        [$code, $out] = $task($ctx, $app);
+        Assert::contains('stopped half-way', $out);
+        clearstatcache();
+        Assert::true(!is_file($wDir($ctx) . '/update/swap-in-progress') && is_file($wDir($ctx) . '/update/task.log'), 'marker cleared, logged');
         // Outside the test suite, the test options are refused.
         [$code, $out] = $task($ctx, $app, ['SENTINEL_TEST_MODE' => '0']);
         Assert::same(2, $code);
