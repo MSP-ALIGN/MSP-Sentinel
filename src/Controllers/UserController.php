@@ -147,11 +147,14 @@ final class UserController extends Controller
             'is_active' => $isSelf ? 1 : ($request->input('is_active') === '1' ? 1 : 0),
             // Nor their own clients (1.41).
             'client_ids' => $isSelf ? App::users()->clientIds($target) : $this->clientsFrom($request, App::users()->clientIds($target)),
+            // Password sign-in (1.43): on unless turned off; never your own (an SSO problem would lock you out).
+            'password_login' => $isSelf || $request->input('password_field') !== '1' ? (int) ($target['password_login'] ?? 1) : ($request->input('password_login') === '1' ? 1 : 0),
         ];
         $roleChanged = (int) $values['role_id'] !== (int) $target['role_id'];
         $oldClients = App::users()->clientIds($target);
         $clientsChanged = $values['client_ids'] !== $oldClients;
-        $accessChanged = $roleChanged || $clientsChanged || $values['is_active'] !== (int) $target['is_active'];
+        $passwordChanged = $values['password_login'] !== (int) ($target['password_login'] ?? 1);
+        $accessChanged = $roleChanged || $clientsChanged || $passwordChanged || $values['is_active'] !== (int) $target['is_active'];
         $errors = $this->validateAccount($values, $roleChanged, $clientsChanged);
         // Changing someone's role or access is confirmed with your own password.
         if ($errors === [] && $accessChanged && ($why = $this->confirmWithOwnPassword($request)) !== null) {
@@ -184,7 +187,15 @@ final class UserController extends Controller
                 $db->rollBack();
                 return $renderErrors(['role_id' => __('This is the last active Admin who sees every client. Make another user such an Admin first.')]);
             }
+            // Break-glass (1.43): an active Admin who sees every client always keeps password sign-in.
+            if ($accessChanged && App::roles()->passwordAdminsAfter($id, (int) $values['role_id'], $values['is_active'] === 1, $values['client_ids'] === null, $values['password_login'] === 1) < 1) {
+                $db->rollBack();
+                return $renderErrors(['role_id' => __('At least one active Admin who sees every client must keep password sign-in (in case Microsoft sign-in is unavailable).')]);
+            }
             App::users()->updateAccount($id, $values['display_name'], $values['email'], (int) $values['role_id'], $values['is_active'] === 1, $accessChanged);
+            if ($passwordChanged) {
+                $db->prepare('UPDATE users SET password_login = :p WHERE id = :id')->execute(['p' => $values['password_login'], 'id' => $id]);
+            }
             if ($clientsChanged) {
                 App::users()->setClients($id, $values['client_ids']);
             }
@@ -207,6 +218,9 @@ final class UserController extends Controller
         if ($clientsChanged) {
             $changes['clients'] = ['from' => $oldClients ?? 'all', 'to' => $values['client_ids'] ?? 'all'];
         }
+        if ($passwordChanged) {
+            $changes['password_login'] = ['from' => (int) ($target['password_login'] ?? 1), 'to' => $values['password_login']];
+        }
         $this->audit($request, 'user.updated', 'user', $id, ['changes' => $changes]);
         if ($isSelf && $accessChanged) {
             // Not reachable today (nobody can change their own access), but keep this session valid if it ever is.
@@ -214,6 +228,26 @@ final class UserController extends Controller
         }
         Session::flash('success', __('User {name} updated.', ['name' => $target['username']]));
         return Response::redirect('/users');
+    }
+
+    /**
+     * POST /users/{id}/sso-unlink: forget the Microsoft account linked to this user (1.43); the next Microsoft sign-in
+     * links again by email. For users you may manage; signs them out.
+     */
+    public function unlinkSso(Request $request, array $params): Response
+    {
+        $target = $this->findOr404($params);
+        $id = (int) $target['id'];
+        if ($id !== (int) $this->user()['id'] && !$this->mayManage($target)) {
+            throw new HttpException(403, __('This user\'s role has permissions you don\'t hold, so you can\'t change their account.'));
+        }
+        App::db()->prepare('UPDATE users SET sso_subject = NULL, session_version = session_version + 1, updated_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['id' => $id]);
+        $this->audit($request, 'user.sso_unlinked', 'user', $id);
+        if ($id === (int) $this->user()['id']) {
+            App::auth()->refreshSessionVersion();
+        }
+        Session::flash('success', __('Microsoft account unlinked from {name}.', ['name' => $target['username']]));
+        return Response::redirect('/users/' . $id);
     }
 
     /** POST /users/{id}/password: set a temporary password. */

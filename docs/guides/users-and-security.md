@@ -66,6 +66,35 @@ given to someone who sees it. A client a limited user adds becomes one of theirs
 
 Lost both your phone and your recovery codes? Ask an admin to reset your two-factor authentication.
 
+## Sign in with Microsoft
+
+Your team can sign in with their Microsoft 365 work account (Microsoft Entra ID). ITFlow itself can't act as a
+sign-in provider, so Sentinel signs in against the same Microsoft tenant your team already uses.
+
+**Set it up** (someone with **Manage integrations** who sees every client):
+
+1. Set Sentinel's public address in the config file (`app.public_url`, for example `https://sentinel.msp.example`).
+2. In the Microsoft Entra admin center, go to **App registrations → New registration**. Name it (e.g. MSP Sentinel),
+   choose **Accounts in this organizational directory only**, and add the redirect URI (platform **Web**)
+   `https://<your Sentinel address>/login/sso/callback`. The exact address is shown on the Integrations page.
+3. Under **Certificates & secrets**, create a client secret and copy its **Value**. From **Overview**, copy the
+   **Directory (tenant) ID** and **Application (client) ID**.
+4. In Sentinel, go to **Administration → Integrations → Sign in with Microsoft**, enter the three values and tick
+   **Show "Sign in with Microsoft"**.
+5. Recommended: in Entra Conditional Access, require MFA for this app.
+
+**How it works:**
+
+- **No new accounts.** Only users who already exist in Sentinel can sign in. The first time, the Microsoft account
+  is linked to the one active user with the same email address; after that the link alone counts. Roles and clients
+  stay managed in Sentinel.
+- **Two-factor.** Sentinel skips its own 6-digit code only when Microsoft confirms MFA was used; otherwise it asks
+  for it, as after a password.
+- **Passwords stay as a fallback.** An admin can turn **Password sign-in allowed** off for a user (SSO only).
+  At least one active Admin who sees every client always keeps it, so a Microsoft outage can't lock you out.
+- **Unlink** a Microsoft account on the user's page. Their next Microsoft sign-in links again by email.
+- Every sign-in, link and failure is in the audit log.
+
 ## Add a user
 
 1. An admin goes to **Administration → Users** and clicks **Add user**.

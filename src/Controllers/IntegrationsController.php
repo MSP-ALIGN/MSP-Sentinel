@@ -56,6 +56,14 @@ final class IntegrationsController extends Controller
                 'tickets_last_ok' => $s->get('itflow_tickets_last_ok') !== '0',
                 'tickets_total' => (int) App::db()->query('SELECT COUNT(*) FROM itflow_tickets')->fetchColumn(),
             ],
+            'sso' => [
+                'enabled' => $s->get('sso_entra_enabled') === '1',
+                'tenant' => $s->get('sso_entra_tenant'),
+                'client' => $s->get('sso_entra_client'),
+                'has_secret' => $s->getSecret('sso_entra_secret') !== '',
+                'redirect' => App::ssoRedirectUri(),
+                'linked' => (int) App::db()->query('SELECT COUNT(*) FROM users WHERE sso_subject IS NOT NULL')->fetchColumn(),
+            ],
             'breach' => [
                 'enabled' => $s->get('breach_enabled') === '1',
                 'has_key' => $s->getSecret('xon_api_key') !== '',
@@ -153,6 +161,56 @@ final class IntegrationsController extends Controller
         $s->set('ninjaone_tested_at', gmdate('Y-m-d H:i:s'));
         $s->set('ninjaone_test_result', mb_substr($result, 0, 500));
         $this->audit($request, 'settings.ninjaone_tested', null, null, ['ok' => $ok]);
+        return $back;
+    }
+
+    /**
+     * POST /admin/integrations/sso: Sign in with Microsoft (1.43): the Entra tenant ID, application (client) ID and
+     * client secret, and on/off. Untrusted: every field (IDs must be GUIDs; the secret is stored encrypted, never
+     * shown again). Turning it on needs Sentinel's public address (app.public_url) for Microsoft's redirect.
+     */
+    public function saveSso(Request $request): Response
+    {
+        $back = Response::redirect('/admin/integrations#sso');
+        $s = App::settings();
+        $tenant = strtolower(trim($request->input('tenant_id')));
+        $client = strtolower(trim($request->input('client_id')));
+        $secret = trim($request->raw('client_secret'));
+        $enabled = $request->input('enabled') === '1';
+        if (($tenant !== '' && !\Sentinel\Auth\EntraSso::validGuid($tenant)) || ($client !== '' && !\Sentinel\Auth\EntraSso::validGuid($client))) {
+            Session::flash('danger', __('The tenant ID and application (client) ID are GUIDs, e.g. 00000000-0000-0000-0000-000000000000 (from the app registration\'s Overview page).'));
+            return $back;
+        }
+        if ($secret !== '' && (strlen($secret) > 200 || preg_match('/[\x00-\x1F\x7F]/', $secret) === 1)) {
+            Session::flash('danger', __('That client secret is not valid. Copy its Value (not its ID) from Certificates & secrets.'));
+            return $back;
+        }
+        $changed = [];
+        foreach (['sso_entra_tenant' => $tenant, 'sso_entra_client' => $client] as $name => $value) {
+            if ($s->get($name) !== $value) {
+                $s->set($name, $value);
+                $changed[$name] = $value;
+            }
+        }
+        if ($request->input('clear_secret') === '1') {
+            $s->setSecret('sso_entra_secret', '');
+            $changed['sso_entra_secret'] = 'cleared';
+        } elseif ($secret !== '') {
+            $s->setSecret('sso_entra_secret', $secret);
+            $changed['sso_entra_secret'] = 'changed';
+        }
+        if ($enabled && (App::ssoRedirectUri() === '' || $s->get('sso_entra_tenant') === '' || $s->get('sso_entra_client') === '' || $s->getSecret('sso_entra_secret') === '')) {
+            $enabled = false;
+            Session::flash('warning', __('Not turned on yet: it needs the tenant ID, application (client) ID, client secret, and Sentinel\'s public address (app.public_url in the config file).'));
+        }
+        if ($s->get('sso_entra_enabled') !== ($enabled ? '1' : '0')) {
+            $s->set('sso_entra_enabled', $enabled ? '1' : '0');
+            $changed['sso_entra_enabled'] = $enabled;
+        }
+        if ($changed !== []) {
+            $this->audit($request, 'settings.sso_updated', null, null, ['changed' => $changed]);
+        }
+        Session::flash('success', __('Sign in with Microsoft settings saved.'));
         return $back;
     }
 

@@ -159,6 +159,24 @@ final class RoleRepository
     }
 
     /**
+     * How many active Admins who see every client would keep password sign-in (1.43 break-glass) if user $userId had
+     * this role, active flag, client scope and password flag.
+     */
+    public function passwordAdminsAfter(int $userId, int $roleId, bool $active, bool $allClients, bool $passwordLogin): int
+    {
+        $admin = (int) $this->db->query("SELECT id FROM roles WHERE role_key = 'admin'")->fetchColumn();
+        $n = 0;
+        foreach ($this->db->query('SELECT id, role_id, is_active, all_clients, password_login FROM users')->fetchAll() as $u) {
+            [$r, $a, $c, $p] = (int) $u['id'] === $userId ? [$roleId, $active, $allClients, $passwordLogin]
+                : [(int) $u['role_id'], (int) $u['is_active'] === 1, (int) $u['all_clients'] === 1, (int) $u['password_login'] === 1];
+            if ($r === $admin && $a && $c && $p) {
+                $n++;
+            }
+        }
+        return $n;
+    }
+
+    /**
      * Active users whose role holds a permission (for alerts, assignment lists and the two-person rule).
      *
      * @return list<array{id:int, username:string, display_name:string}>

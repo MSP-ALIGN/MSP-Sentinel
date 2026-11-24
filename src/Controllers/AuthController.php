@@ -30,7 +30,7 @@ final class AuthController extends Controller
         if (App::auth()->user() !== null) {
             return Response::redirect('/');
         }
-        return $this->authPage('auth/login', __('Sign in'), ['username' => '']);
+        return $this->authPage('auth/login', __('Sign in'), ['username' => '', 'sso' => App::entraSso() !== null]);
     }
 
     /** POST /login */
@@ -39,7 +39,7 @@ final class AuthController extends Controller
         $username = $request->input('username');
         $result = App::auth()->attemptPassword($request, $username, $request->raw('password'));
         if (is_string($result)) {
-            return $this->authPage('auth/login', __('Sign in'), ['username' => $username, 'error' => $result], 422);
+            return $this->authPage('auth/login', __('Sign in'), ['username' => $username, 'error' => $result, 'sso' => App::entraSso() !== null], 422);
         }
         App::auth()->beginPending($result);
         return Response::redirect($result['totp_enabled_at'] === null ? '/2fa/setup' : '/login/2fa');

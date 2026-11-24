@@ -1,5 +1,5 @@
 <?php
-/** Sign-in form. Expects: $username (untrusted, echoed back), optional $error, $flashes. */
+/** Sign-in form. Expects: $username (untrusted, echoed back), optional $error, $flashes, $sso (Sign in with Microsoft is on, 1.43). */
 use Sentinel\Core\Csrf;
 ?>
 <p class="login-box-msg"><?= e(__('Sign in to continue')) ?></p>
@@ -16,3 +16,7 @@ use Sentinel\Core\Csrf;
     </div>
     <button type="submit" class="btn btn-primary w-100"><i class="bi bi-box-arrow-in-right me-1" aria-hidden="true"></i><?= e(__('Sign in')) ?></button>
 </form>
+<?php if (!empty($sso)): ?>
+<div class="text-center text-body-secondary small my-3"><?= e(__('or')) ?></div>
+<a class="btn btn-outline-secondary w-100" href="<?= e(url('/login/sso')) ?>"><i class="bi bi-microsoft me-1" aria-hidden="true"></i><?= e(__('Sign in with Microsoft')) ?></a>
+<?php endif; ?>

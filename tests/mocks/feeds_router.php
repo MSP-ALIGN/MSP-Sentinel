@@ -29,6 +29,9 @@ if (str_starts_with($path, '/align/')) {
 if (str_starts_with($path, '/xon/')) {
     require __DIR__ . '/xon_mock.php'; // mock XposedOrNot API (exits)
 }
+if (str_starts_with($path, '/entra/')) {
+    require __DIR__ . '/entra_mock.php'; // mock Microsoft Entra sign-in (exits)
+}
 if (str_starts_with($path, '/ninja/')) {
     require __DIR__ . '/ninjaone_mock.php'; // mock NinjaOne Public API (exits)
 }

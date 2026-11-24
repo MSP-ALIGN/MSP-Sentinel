@@ -351,6 +351,7 @@ return [
             'section' => 'reference',
             'title' => 'Signing in and 2FA details',
             'paragraphs' => [
+                'Sign in with Microsoft: when an admin has set it up (Administration → Integrations), the sign-in page shows "Sign in with Microsoft" for your Microsoft 365 work account. Only existing Sentinel users can use it: the first time it links to the user with the same email address. Sentinel skips its own code only when Microsoft confirms MFA. Your password keeps working too unless an admin turned password sign-in off for you.',
                 'Every account must use two-factor authentication (2FA). At first sign-in, scan the QR code with an authenticator app and enter the 6-digit code it shows.',
                 'You then get 10 recovery codes: keep them in your password manager. Each signs you in once if you lose your phone. My profile creates new codes, which makes the old ones stop working. If you lose both your phone and your codes, ask an admin to reset your 2FA.',
                 'You are signed out after 30 minutes without activity, and after 12 hours in any case.',
@@ -359,6 +360,13 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.43.0',
+            'date' => '2026-11-24',
+            'items' => [
+                'Sign in with Microsoft: your team signs in with their Microsoft 365 work account (Entra ID; set up under Administration → Integrations). Only existing users, linked by email address the first time; Sentinel\'s code is skipped only when Microsoft confirms MFA; passwords stay as a fallback and can be turned off per user (never for the last Admin).',
+            ],
+        ],
         [
             'version' => '1.42.2',
             'date' => '2026-11-24',

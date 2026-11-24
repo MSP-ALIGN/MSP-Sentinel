@@ -228,3 +228,39 @@ $n = $ninja;
         <?php endif; ?>
     </div>
 </div>
+
+<?php $so = $sso; ?>
+<div class="card mb-3" id="sso">
+    <div class="card-header d-flex align-items-center gap-2">
+        <h2 class="card-title h5 mb-0"><?= e(__('Sign in with Microsoft (Entra ID)')) ?></h2>
+        <span class="badge <?= $so['enabled'] ? 'text-bg-success' : 'text-bg-secondary' ?>"><?= e($so['enabled'] ? __('On') : __('Off')) ?></span>
+        <span class="ms-auto small text-body-secondary"><?= e(__('{n} user(s) linked', ['n' => $so['linked']])) ?></span>
+    </div>
+    <div class="card-body">
+        <p class="small"><?= e(__('Your team signs in with their Microsoft 365 work account. Only users who already exist in Sentinel can sign in: the first time, by the same email address, then by their Microsoft account. Roles and clients stay managed here. Sentinel\'s own code is skipped only when Microsoft confirms MFA. Password sign-in keeps working as a fallback unless you turn it off for a user.')) ?></p>
+        <details class="small mb-3">
+            <summary><?= e(__('How to set it up')) ?></summary>
+            <ol class="mt-2 mb-0">
+                <li><?= e(__('In the Microsoft Entra admin center: App registrations → New registration. Name it (e.g. MSP Sentinel), "Accounts in this organizational directory only".')) ?></li>
+                <li><?= e(__('Redirect URI: platform Web, address:')) ?> <code><?= e($so['redirect'] !== '' ? $so['redirect'] : __('(set app.public_url in the config file first)')) ?></code></li>
+                <li><?= e(__('Certificates & secrets → New client secret; copy its Value. From Overview, copy the Directory (tenant) ID and Application (client) ID.')) ?></li>
+                <li><?= e(__('Recommended: in Conditional Access, require MFA for this app, so Sentinel can skip its own code.')) ?></li>
+            </ol>
+        </details>
+        <form method="post" action="<?= e(url('/admin/integrations/sso')) ?>" autocomplete="off" novalidate>
+            <?= Csrf::field() ?>
+            <div class="row g-3">
+                <div class="col-md-4"><label class="form-label" for="sso-tenant"><?= e(__('Directory (tenant) ID')) ?></label>
+                    <input class="form-control font-monospace" id="sso-tenant" name="tenant_id" value="<?= e($so['tenant']) ?>" maxlength="36" spellcheck="false"></div>
+                <div class="col-md-4"><label class="form-label" for="sso-client"><?= e(__('Application (client) ID')) ?></label>
+                    <input class="form-control font-monospace" id="sso-client" name="client_id" value="<?= e($so['client']) ?>" maxlength="36" spellcheck="false"></div>
+                <div class="col-md-4"><label class="form-label" for="sso-secret"><?= e(__('Client secret')) ?></label>
+                    <input class="form-control" type="password" id="sso-secret" name="client_secret" value="" maxlength="200" autocomplete="new-password" placeholder="<?= e($so['has_secret'] ? __('Saved (leave empty to keep)') : '') ?>">
+                    <?php if ($so['has_secret']): ?><div class="form-check mt-1"><input class="form-check-input" type="checkbox" id="sso-clear" name="clear_secret" value="1"><label class="form-check-label small" for="sso-clear"><?= e(__('Remove the saved secret')) ?></label></div><?php endif; ?></div>
+            </div>
+            <div class="form-check mt-3"><input class="form-check-input" type="checkbox" id="sso-enabled" name="enabled" value="1" <?= $so['enabled'] ? 'checked' : '' ?>>
+                <label class="form-check-label" for="sso-enabled"><?= e(__('Show "Sign in with Microsoft" on the sign-in page')) ?></label></div>
+            <button class="btn btn-primary mt-3" type="submit"><?= e(__('Save')) ?></button>
+        </form>
+    </div>
+</div>

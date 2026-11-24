@@ -109,6 +109,12 @@ final class Auth
             return $generic;
         }
 
+        // Password sign-in turned off for this user (1.43): Sign in with Microsoft only. Said only after a correct
+        // password, so it reveals nothing to someone guessing.
+        if ((int) ($user['password_login'] ?? 1) === 0) {
+            $this->audit->log('auth.login_failed', (int) $user['id'], $auditName, null, null, ['reason' => 'password_off'], $request->ip());
+            return __('Password sign-in is turned off for this account: use "Sign in with Microsoft".');
+        }
         if (Passwords::needsRehash((string) $user['password_hash'])) {
             $this->users->rehashPassword((int) $user['id'], Passwords::hash($password));
         }

@@ -107,6 +107,11 @@ final class Settings
         // client's register. The API key is in xon_api_key (SECRETS).
         'breach_enabled' => '0',
         'xon_api_key' => '',
+        // Sign in with Microsoft (1.43): on/off, the Entra tenant and app (client) IDs; the client secret is a secret.
+        'sso_entra_enabled' => '0',
+        'sso_entra_tenant' => '',
+        'sso_entra_client' => '',
+        'sso_entra_secret' => '',
         'breach_last_run' => '',
         'breach_last_ok_run' => '',
         'breach_last_result' => '',
@@ -130,7 +135,7 @@ final class Settings
     ];
 
     /** Settings that hold secrets: stored encrypted with the app key, never shown again. */
-    public const SECRETS = ['smtp_password', 'webhook_url', 'event_webhook_url', 'event_webhook_secret', 'ninjaone_client_secret', 'mspalign_api_key', 'itflow_api_key', 'agent_move', 'release_key', 'xon_api_key'];
+    public const SECRETS = ['smtp_password', 'webhook_url', 'event_webhook_url', 'event_webhook_secret', 'ninjaone_client_secret', 'mspalign_api_key', 'itflow_api_key', 'agent_move', 'release_key', 'xon_api_key', 'sso_entra_secret'];
 
     /** @var array<string,string>|null */
     private ?array $cache = null;

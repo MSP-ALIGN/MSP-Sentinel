@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.42.2](https://img.shields.io/badge/version-1.42.2-ff5a1f?style=flat-square)
+![Version 1.43.0](https://img.shields.io/badge/version-1.43.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,20 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.43.0 (2026-11-24): Sign in with Microsoft
+
+- **Sign in with Microsoft (Entra ID).** Your team signs in with their Microsoft 365 work account, the same tenant
+  you use with ITFlow (ITFlow can't act as a sign-in provider itself). Set it up under **Administration →
+  Integrations** with the app registration's tenant ID, client ID and secret (stored encrypted); it needs
+  `app.public_url`. OpenID Connect with PKCE; the ID token's signature, issuer, audience, tenant, expiry and nonce
+  are all checked.
+- **Only existing users.** No account is created: the first sign-in links the Microsoft account to the one active
+  user with the same email address, after that the link alone counts. Roles and clients stay managed in Sentinel.
+- **Two-factor:** Sentinel's own code is skipped only when Microsoft confirms MFA; otherwise it is asked as usual.
+- **Passwords stay as a fallback** and can be turned off per user; one active Admin who sees every client always
+  keeps password sign-in. Accounts can be unlinked on the user's page. Sign-ins, links and failures are audited
+  (migration 0049).
+
 ### 1.42.2 (2026-11-24): permissions and client lists fixes from review
 
 - **Breached addresses stay masked** for anyone without **See breached addresses**: in reports (view, download and
@@ -141,16 +155,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 - **Within your clients:** the Unassigned, Overdue and Due-soon counts and the owner list on the Findings page;
   engagement approvers counted for the message; failed report-email and recheck notifications.
 - Narrowing someone's clients clears their earlier notifications; an anonymous request's client list is empty.
-
-### 1.42.0 (2026-11-24): API tokens follow permissions and clients
-
-- **Clients:** a token only covers clients its creator sees ("All clients" only for someone who sees every client),
-  checked when it is made and on every call: if the creator later sees fewer clients, the token is cut down to theirs.
-- **Permissions:** triage and queueing scans need the creator's **Triage findings** and **Run scans and discovery**
-  (since 1.40.1), and breached addresses come back masked unless the creator may see them in full.
-- **The API page:** you see and revoke only tokens whose clients you all see, the scopes name the permission they
-  need, and outbound events (which carry every client's changes) can only be set up by someone who sees every client.
-  Existing tokens keep what they have, within their creator's rights.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

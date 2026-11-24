@@ -45,6 +45,9 @@ $duringPasswordChange = ['allow_password_change' => true];
 $router->add('GET', '/login', [AuthController::class, 'showLogin'], $public);
 $router->add('POST', '/login', [AuthController::class, 'login'], $public);
 $router->add('POST', '/logout', [AuthController::class, 'logout'], $public);
+// Sign in with Microsoft (1.43): public steps; the user then continues like after a password (or straight in with MFA)
+$router->add('GET', '/login/sso', [\Sentinel\Controllers\SsoController::class, 'start'], $public);
+$router->add('GET', '/login/sso/callback', [\Sentinel\Controllers\SsoController::class, 'callback'], $public);
 $router->add('GET', '/login/2fa', [AuthController::class, 'showSecondFactor'], $pending);
 $router->add('POST', '/login/2fa', [AuthController::class, 'verifySecondFactor'], $pending);
 $router->add('GET', '/2fa/setup', [AuthController::class, 'showEnrol'], $pending);
@@ -169,6 +172,7 @@ $router->add('GET', '/users/{id}', [UserController::class, 'edit'], ['perm' => '
 $router->add('POST', '/users/{id}', [UserController::class, 'update'], ['perm' => 'users.manage']);
 $router->add('POST', '/users/{id}/password', [UserController::class, 'resetPassword'], ['perm' => 'users.manage']);
 $router->add('POST', '/users/{id}/2fa-reset', [UserController::class, 'resetTwoFactor'], ['perm' => 'users.manage']);
+$router->add('POST', '/users/{id}/sso-unlink', [UserController::class, 'unlinkSso'], ['perm' => 'users.manage']);
 // Roles (1.40): built-in ones read-only, custom ones made from the permission list
 $router->add('GET', '/admin/roles', [\Sentinel\Controllers\RoleController::class, 'index'], ['perm' => 'users.manage']);
 $router->add('GET', '/admin/roles/new', [\Sentinel\Controllers\RoleController::class, 'create'], ['perm' => 'users.manage']);
@@ -187,6 +191,7 @@ $router->add('POST', '/admin/integrations/itflow/sync', [IntegrationsController:
 $router->add('POST', '/admin/integrations/itflow/tickets', [IntegrationsController::class, 'ticketsItflow'], ['perm' => 'integrations.manage', 'all_clients' => true]);
 $router->add('POST', '/admin/integrations/mspalign', [IntegrationsController::class, 'saveAlign'], ['perm' => 'integrations.manage', 'all_clients' => true]);
 $router->add('POST', '/admin/integrations/mspalign/test', [IntegrationsController::class, 'testAlign'], ['perm' => 'integrations.manage', 'all_clients' => true]);
+$router->add('POST', '/admin/integrations/sso', [IntegrationsController::class, 'saveSso'], ['perm' => 'integrations.manage', 'all_clients' => true]);
 $router->add('POST', '/admin/integrations/breach', [IntegrationsController::class, 'saveBreach'], ['perm' => 'integrations.manage', 'all_clients' => true]);
 $router->add('POST', '/admin/integrations/breach/check', [IntegrationsController::class, 'checkBreach'], ['perm' => 'integrations.manage', 'all_clients' => true]);
 $router->add('POST', '/clients/{id}/compliance/link', [ComplianceController::class, 'link'], ['perm' => 'integrations.link']);

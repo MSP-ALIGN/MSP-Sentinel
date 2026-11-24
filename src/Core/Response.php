@@ -46,6 +46,22 @@ final class Response
         return $response;
     }
 
+    /**
+     * A redirect to an outside address built by Sentinel itself from its settings (1.43: Microsoft's sign-in page),
+     * never from the request: redirect() keeps refusing outside addresses, so no input can become an open redirect.
+     * Only absolute http(s) URLs with a host.
+     */
+    public static function redirectExternal(string $url): self
+    {
+        $p = parse_url($url);
+        if (!is_array($p) || !in_array($p['scheme'] ?? '', ['https', 'http'], true) || ($p['host'] ?? '') === '') {
+            return self::redirect('/');
+        }
+        $response = new self('', 303);
+        $response->header('Location', $url);
+        return $response;
+    }
+
     /** Set a header. Refuses CR/LF to block header injection. */
     public function header(string $name, string $value): self
     {

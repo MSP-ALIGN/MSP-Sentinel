@@ -78,6 +78,11 @@ Each address becomes one finding for the client whose authorisation lists its do
 in the last 12 months, **Warning** if all its breaches are older. Passwords are never stored or shown. Addresses are
 masked in titles and alerts (`j***@client.example`). Verified domains in no client's register are listed and ignored.
 
+## Sign in with Microsoft
+
+Your team signs in with their Microsoft 365 work account (Entra ID). Set-up steps and how accounts are matched:
+[Users and security](users-and-security.md#sign-in-with-microsoft).
+
 ## API and outbound events
 
 - Admins create API tokens under **Administration → API** (your own password is needed). **API reference** on that
