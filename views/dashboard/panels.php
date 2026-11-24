@@ -27,7 +27,9 @@ $feedOk = static fn (?int $age): bool => $age !== null && $age <= 2 * 86400;
     <section class="hud hud-gauge" aria-labelledby="h-threat">
         <h2 id="h-threat" class="hud-title"><?= e(__('Threat level')) ?></h2>
         <?php if ($worst === null): ?>
-        <p class="hud-empty"><?= e(__('No clients yet. Add one under Clients to start.')) ?></p>
+        <p class="hud-empty"><?= e(__('No clients yet.')) ?>
+            <?php if (($currentUser['role'] ?? '') === 'admin'): ?><a class="btn btn-primary btn-sm ms-1" href="<?= e(url('/clients/new')) ?>"><i class="bi bi-plus-lg me-1" aria-hidden="true"></i><?= e(__('Add your first client')) ?></a>
+            <?php else: ?><?= e(__('An admin adds clients.')) ?><?php endif; ?></p>
         <?php else: ?>
         <?= Svg::gauge($worst['score'], $worst['level'], __('Highest client risk')) ?>
         <p class="gauge-level level-<?= e($worst['level']) ?>"><i class="bi <?= e($levelIcon($worst['level'])) ?>" aria-hidden="true"></i> <?= e($levelWord($worst['level'])) ?></p>
@@ -63,7 +65,7 @@ $feedOk = static fn (?int $age): bool => $age !== null && $age <= 2 * 86400;
             <a class="risk-tile level-<?= e($c['level']) ?>" href="<?= e(url('/clients/' . $c['id'])) ?>">
                 <span class="rt-score"><?= (int) $c['score'] ?></span>
                 <span class="rt-name"><?= e($c['name']) ?></span>
-                <span class="rt-meta"><i class="bi <?= e($levelIcon($c['level'])) ?>" aria-hidden="true"></i> <?= e($levelWord($c['level'])) ?> · <?= e(__('{f} Fail, {w} Warning', ['f' => $c['fail'], 'w' => $c['warn']])) ?><?= $c['paused'] ? ' · ' . e(__('paused')) : '' ?></span>
+                <span class="rt-meta"><i class="bi <?= e($levelIcon($c['level'])) ?>" aria-hidden="true"></i> <?= e(($c['last_scan'] ?? null) === null && (int) $c['fail'] === 0 && (int) $c['warn'] === 0 ? __('Not scanned yet') : $levelWord($c['level'])) ?> · <?= e(__('{f} Fail, {w} Warning', ['f' => $c['fail'], 'w' => $c['warn']])) ?><?= $c['paused'] ? ' · ' . e(__('paused')) : '' ?></span>
                 <svg class="rt-bar" viewBox="0 0 100 4" preserveAspectRatio="none" aria-hidden="true"><rect class="rt-track" width="100" height="4"/><rect class="rt-fill" width="<?= max(1, (int) $c['score']) ?>" height="4"/></svg>
             </a>
             <?php endforeach; ?>

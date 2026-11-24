@@ -122,7 +122,7 @@ $now = time();
                 </select></div>
             <label for="token_mine" class="form-label small mt-2"><?= e(__('Your own password (to confirm)')) ?></label>
             <input type="password" class="form-control form-control-sm" id="token_mine" name="my_password" required autocomplete="current-password">
-            <p class="small text-body-secondary mt-2 mb-0"><?= e(__('A token acts as you. It stops working if you are deactivated or are no longer an admin. Documentation: /api/v1/openapi.json and Help.')) ?></p>
+            <p class="small text-body-secondary mt-2 mb-0"><?= e(__('A token acts as you. It stops working if you are deactivated or are no longer an admin.')) ?> <a href="<?= e(url('/admin/api/docs')) ?>"><?= e(__('API reference')) ?></a></p>
         </div>
         <div class="card-footer"><button type="submit" class="btn btn-primary btn-sm"><?= e(__('Create token')) ?></button></div>
     </form>

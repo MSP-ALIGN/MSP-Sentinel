@@ -200,7 +200,10 @@ return [
         @unlink(dirname($ctx->nmapLog) . '/nmap-closed.json');
         Assert::same('resolved', (string) $ctx->db->query("SELECT status FROM findings WHERE id = {$id}")->fetchColumn(), 'fixed');
         Assert::contains('no longer reachable from the internet', (string) $ctx->db->query("SELECT note FROM finding_events WHERE finding_id = {$id} AND event = 'verified' ORDER BY id DESC LIMIT 1")->fetchColumn());
-        Assert::contains('Fixed', $tech->get('/findings/' . $id)->body);
+        $fpage = $tech->get('/findings/' . $id)->body;
+        Assert::contains('Fixed', $fpage);
+        Assert::contains('How to fix', $fpage, 'the finding page shows the guidance the report has');
+        Assert::contains('Remote Desktop', $fpage);
 
         // An admin's recheck may run outside the scan window (as an admin's "scan now" can).
         $id2 = $fid($ctx, $cid, 'site:203.0.113.190:443:missing_hsts');

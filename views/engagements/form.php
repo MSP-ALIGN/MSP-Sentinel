@@ -61,7 +61,7 @@ $clientId = (int) $client['id'];
                 <div class="mb-3">
                     <label for="document" class="form-label"><?= e(__('Signed authorisation (PDF, at most 10 MB)')) ?></label>
                     <input type="file" class="form-control<?= $invalid('document') ?>" id="document" name="document" accept="application/pdf,.pdf" required>
-                    <div class="form-text"><?= e(__('It should name the targets, the tests, the window and who may run them. A template is in docs/authorisation-form.md.')) ?></div>
+                    <div class="form-text"><?= e(__('It should name the targets, the tests, the window and who may run them. A sample form (with an annex for pen tests) is in the documentation: docs/authorisation-form.md on GitHub.')) ?></div>
                     <?php $field = 'document'; require __DIR__ . '/../partials/field_error.php'; ?>
                 </div>
                 <div class="row g-2">
@@ -120,7 +120,7 @@ $clientId = (int) $client['id'];
                 </div>
                 <div class="form-check mb-3">
                     <input class="form-check-input<?= $invalid('creds_confirm') ?>" type="checkbox" id="creds_confirm" name="creds_confirm" value="1" <?= $val('creds_confirm') === '1' ? 'checked' : '' ?>>
-                    <label class="form-check-label" for="creds_confirm"><?= e(__('Only with "Vendor default passwords": the signed authorisation explicitly allows trying vendor default passwords (annex P3).')) ?></label>
+                    <label class="form-check-label" for="creds_confirm"><?= e(__('Only with "Vendor default passwords": the signed authorisation explicitly allows trying vendor default passwords (in the sample form: the pen-test annex, point P3, "Tests the Client allows").')) ?></label>
                     <?php $field = 'creds_confirm'; require __DIR__ . '/../partials/field_error.php'; ?>
                 </div>
                 <button class="btn btn-primary" type="submit"><?= e(__('Create engagement (needs another admin\'s approval)')) ?></button>

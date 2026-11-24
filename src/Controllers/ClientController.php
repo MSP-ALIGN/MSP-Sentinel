@@ -68,7 +68,7 @@ final class ClientController extends Controller
         }
         $id = App::clients()->create($clean, (int) $this->user()['id']);
         $this->audit($request, 'client.created', 'client', $id, ['name' => $clean['name']]);
-        Session::flash('success', __('Client {name} created. Next, record who authorised scanning and what may be scanned.', ['name' => $clean['name']]));
+        Session::flash('success', __('Client {name} created. Next, choose Record authorisation (below) to note who approved scanning and what may be scanned.', ['name' => $clean['name']]));
         return Response::redirect('/clients/' . $id);
     }
 

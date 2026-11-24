@@ -10,7 +10,7 @@ use Sentinel\Core\Csrf;
 
 $n = $ninja;
 ?>
-<p class="text-body-secondary"><?= e(__('Systems Sentinel reads from. Sentinel only reads: it never changes anything in them.')) ?></p>
+<p class="text-body-secondary"><?= e(__('Systems Sentinel works with. Sentinel only reads from them, except ITFlow tickets: when ticketing is turned on, Sentinel opens, updates and closes tickets for findings. It never changes anything else.')) ?></p>
 <?php $it = $itflow; ?>
 <div class="card mb-3" id="itflow">
     <div class="card-header d-flex align-items-center gap-2">
@@ -190,7 +190,7 @@ $n = $ninja;
         <span class="ms-auto small text-body-secondary"><?= e(__('{n} breached address(es) on file', ['n' => $br['addresses']])) ?></span>
     </div>
     <div class="card-body">
-        <p class="small"><?= e(__('Once a week, Sentinel reads which addresses of your verified domains appear in known data breaches, and adds them to the client whose authorisation lists that domain. A breach in the last 12 months is a Fail, older ones a Warning. Only breach names, dates and what was exposed are kept: never a password.')) ?></p>
+        <p class="small"><?= e(__('Once a week, Sentinel reads which addresses of your verified domains (domains you have proved you own in your XposedOrNot account, by a DNS record or email) appear in known data breaches, and adds them to the client whose authorisation lists that domain. A breach in the last 12 months is a Fail, older ones a Warning. Only breach names, dates and what was exposed are kept: never a password.')) ?></p>
         <details class="small mb-3">
             <summary><?= e(__('How to set it up')) ?></summary>
             <ol class="mt-2 mb-0">

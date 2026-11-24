@@ -20,7 +20,8 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
 <div class="card mb-3" id="agents">
     <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('On-premises agents (internal scans)')) ?></h2></div>
     <div class="card-body">
-        <?php if ($isAdmin && $agentRelease !== null): ?>
+        <?php $hasAgents = array_filter($agentSites, static fn (array $s): bool => $s['agents'] !== []) !== []; ?>
+        <?php if ($isAdmin && $agentRelease !== null && $hasAgents): ?>
         <form method="post" action="<?= e(url('/clients/' . $cid . '/agents-update')) ?>" class="float-end ms-2" data-confirm="<?= e(__('Update every agent of this client that runs an older version to {v}?', ['v' => $agentRelease])) ?>"><?= Csrf::field() ?>
             <button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-cloud-arrow-down me-1" aria-hidden="true"></i><?= e(__('Update all agents to {v}', ['v' => $agentRelease])) ?></button></form>
         <?php endif; ?>
@@ -95,7 +96,7 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                         <?php if ($agentRelease !== null && \Sentinel\System\ReleaseManifest::newer($agentRelease, (string) $a['version']) && \Sentinel\Agent\AgentRepository::canUpdateRemotely((string) $a['version']) && (string) ($a['update_to'] ?? '') !== $agentRelease): ?>
                         <form method="post" action="<?= e(url('/clients/' . $cid . '/agents/' . (int) $a['id'] . '/update')) ?>" data-confirm="<?= e(__('Update this agent to {v} at its next check-in between scans?', ['v' => $agentRelease])) ?>"><?= Csrf::field() ?><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-cloud-arrow-down me-1" aria-hidden="true"></i><?= e(__('Update to {v}', ['v' => $agentRelease])) ?></button></form>
                         <?php endif; ?>
-                        <form method="post" action="<?= e(url('/clients/' . $cid . '/agents/' . (int) $a['id'] . '/diagnostics')) ?>"><?= Csrf::field() ?><button class="btn btn-sm btn-outline-secondary" type="submit"><i class="bi bi-clipboard-pulse me-1" aria-hidden="true"></i><?= e(__('Diagnostics')) ?></button></form>
+                        <form method="post" action="<?= e(url('/clients/' . $cid . '/agents/' . (int) $a['id'] . '/diagnostics')) ?>" data-confirm="<?= e(__('Ask this agent for a diagnostics report at its next check-in? It reports its version, settings and health, never passwords.')) ?>"><?= Csrf::field() ?><button class="btn btn-sm btn-outline-secondary" type="submit"><i class="bi bi-clipboard-pulse me-1" aria-hidden="true"></i><?= e(__('Diagnostics')) ?></button></form>
                         <form method="post" action="<?= e(url('/clients/' . $cid . '/agents/' . (int) $a['id'] . '/restart')) ?>" data-confirm="<?= e(__('Restart this agent at its next check-in? A running scan finishes first.')) ?>"><?= Csrf::field() ?><button class="btn btn-sm btn-outline-secondary" type="submit"><i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i><?= e(__('Restart')) ?></button></form>
                         <form method="post" action="<?= e(url('/clients/' . $cid . '/agents/' . (int) $a['id'] . '/revoke')) ?>" data-confirm="<?= e(__('Revoke this agent? Its token stops working immediately.')) ?>"><?= Csrf::field() ?><button class="btn btn-sm btn-outline-secondary" type="submit"><?= e(__('Revoke')) ?></button></form>
                         </div>
@@ -139,7 +140,11 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                 <button class="btn btn-sm btn-outline-primary" type="submit"><?= e(__('Save agent settings')) ?></button>
             </form>
             <div class="d-flex flex-wrap gap-2 mb-2">
+                <?php if ($s['active'] === null): ?>
+                <span class="small text-body-secondary align-self-center"><?= e(__('Record an internal authorisation for this site first; then you can create an enrolment code.')) ?></span>
+                <?php else: ?>
                 <form method="post" action="<?= e(url('/clients/' . $cid . '/sites/' . $sid . '/enrol')) ?>"><?= Csrf::field() ?><button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-key me-1" aria-hidden="true"></i><?= e(__('Create an enrolment code')) ?></button></form>
+                <?php endif; ?>
                 <form method="post" data-confirm="<?= e(__('Start an internal scan of this site now? Its agent scans the authorised ranges at the site\'s pace.')) ?>" action="<?= e(url('/clients/' . $cid . '/sites/' . $sid . '/scan')) ?>" class="d-flex gap-2"><?= Csrf::field() ?>
                     <input class="form-control form-control-sm" name="reason" maxlength="300" placeholder="<?= e(__('Reason for a scan now')) ?>" aria-label="<?= e(__('Reason for a scan now')) ?>">
                     <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-radar me-1" aria-hidden="true"></i><?= e(__('Scan now')) ?></button></form>

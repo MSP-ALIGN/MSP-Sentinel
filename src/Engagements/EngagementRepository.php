@@ -104,6 +104,33 @@ final class EngagementRepository
     }
 
     /**
+     * Every engagement across clients, newest first (the Engagements page, 1.34), at most $limit.
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function all(int $limit = 200): array
+    {
+        return $this->db->query('SELECT e.*, c.name AS client_name, uc.display_name AS created_by_name, ua.display_name AS approved_by_name FROM engagements e
+            JOIN clients c ON c.id = e.client_id LEFT JOIN users uc ON uc.id = e.created_by LEFT JOIN users ua ON ua.id = e.approved_by
+            ORDER BY e.id DESC LIMIT ' . max(1, $limit))->fetchAll();
+    }
+
+    /**
+     * Engagements waiting for a second admin, that $userId may approve (not their own), window not over (1.34).
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function awaitingApprovalBy(int $userId): array
+    {
+        $stmt = $this->db->prepare('SELECT e.id, e.name, e.window_start, e.window_end, c.name AS client_name, uc.display_name AS created_by_name
+            FROM engagements e JOIN clients c ON c.id = e.client_id LEFT JOIN users uc ON uc.id = e.created_by
+            WHERE e.approved_at IS NULL AND e.stopped_at IS NULL AND e.cancelled_at IS NULL AND e.window_end > UTC_TIMESTAMP() AND e.created_by <> :u
+            ORDER BY e.window_start LIMIT 20');
+        $stmt->execute(['u' => $userId]);
+        return $stmt->fetchAll();
+    }
+
+    /**
      * Approve (two-person rule: never by its creator). Only while awaiting approval and before the window ends.
      * Returns whether it was approved now.
      */

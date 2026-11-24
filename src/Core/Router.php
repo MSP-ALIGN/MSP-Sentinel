@@ -75,4 +75,24 @@ final class Router
         }
         throw new HttpException($pathMatched ? 405 : 404);
     }
+
+    /**
+     * For a GET on an address that only takes form posts (/clients/7/sites, /admin/alerts), the nearest page above it
+     * that can be opened (/clients/7, /admin), or '/' (1.34: a bookmarked or typed form address used to show
+     * "Method not allowed"). Only paths of known routes are returned, so the redirect stays inside Sentinel.
+     */
+    public function formPage(string $path): string
+    {
+        $parts = explode('/', trim($path, '/'));
+        while (count($parts) > 1) {
+            array_pop($parts);
+            $candidate = '/' . implode('/', $parts);
+            foreach ($this->routes as $route) {
+                if ($route['method'] === 'GET' && preg_match($route['regex'], $candidate) === 1) {
+                    return $candidate;
+                }
+            }
+        }
+        return '/';
+    }
 }

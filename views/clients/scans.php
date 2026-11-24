@@ -95,7 +95,7 @@ $canQueue = $isTech && !$archived && !$paused && !$globallyPaused;
             </tbody>
         </table>
         </div>
-        <p class="small text-body-secondary"><?= e(__('Product and version are what the service itself reports, and can be wrong. Vulnerability matching comes in a later release.')) ?></p>
+        <p class="small text-body-secondary"><?= e(__('Product and version are what the service itself reports, and can be wrong. Known vulnerabilities for these versions are on the Vulnerabilities page.')) ?></p>
         <?php endif; ?>
 
         <?php if ($recentJobs !== []): ?>

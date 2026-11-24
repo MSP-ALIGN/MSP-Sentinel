@@ -52,7 +52,10 @@ $flatRow = static function (array $f) use ($findingSeverityBadge, $findingStatus
 </nav>
 <div class="card">
     <div class="card-header">
-        <form method="get" action="<?= e(url('/findings')) ?>" class="row g-2 align-items-end">
+        <?php // Phones: the filters fold away behind a button (open when a filter is in use), so the list comes first (1.34). ?>
+        <?php $filtersInUse = array_filter($filters, static fn ($v): bool => is_string($v) && $v !== '' && $v !== 'open') !== []; ?>
+        <button class="btn btn-outline-secondary btn-sm d-md-none mb-2" type="button" data-bs-toggle="collapse" data-bs-target="#findings-filters" aria-expanded="<?= $filtersInUse ? 'true' : 'false' ?>" aria-controls="findings-filters"><i class="bi bi-funnel me-1" aria-hidden="true"></i><?= e(__('Filters')) ?></button>
+        <form method="get" action="<?= e(url('/findings')) ?>" class="row g-2 align-items-end collapse d-md-flex<?= $filtersInUse ? ' show' : '' ?>" id="findings-filters">
             <div class="col-12 col-md-6">
                 <label class="form-label small mb-0" for="f-q"><?= e(__('Contains')) ?></label>
                 <input class="form-control form-control-sm" type="search" id="f-q" name="q" maxlength="100" value="<?= e($filters['q']) ?>" placeholder="<?= e(__('Title, target or CVE')) ?>">
@@ -85,7 +88,7 @@ $flatRow = static function (array $f) use ($findingSeverityBadge, $findingStatus
                 <select class="form-select form-select-sm" id="f-assignee" name="assignee">
                     <option value=""><?= e(__('Anyone')) ?></option>
                     <option value="none" <?= $filters['assignee'] === 'none' ? 'selected' : '' ?>><?= e(__('Unassigned')) ?></option>
-                    <?php foreach ($assignable as $u): ?><option value="<?= e($u['id']) ?>" <?= $filters['assignee'] === (string) $u['id'] ? 'selected' : '' ?>><?= e($u['username']) ?></option><?php endforeach; ?>
+                    <?php foreach ($assignable as $u): ?><option value="<?= e($u['id']) ?>" <?= $filters['assignee'] === (string) $u['id'] ? 'selected' : '' ?>><?= e($u['display_name'] !== '' ? $u['display_name'] . ' (' . $u['username'] . ')' : $u['username']) ?></option><?php endforeach; ?>
                 </select>
             </div>
             <div class="col-6 col-md-3">
@@ -173,7 +176,7 @@ $flatRow = static function (array $f) use ($findingSeverityBadge, $findingStatus
                                 <div class="col-sm-4"><label class="form-label small mb-0" for="ba-<?= e($g['group_key']) ?>"><?= e(__('Owner')) ?></label>
                                     <select class="form-select form-select-sm" id="ba-<?= e($g['group_key']) ?>" name="assignee">
                                         <option value="me"><?= e(__('Me')) ?></option><option value=""><?= e(__('Unassigned')) ?></option>
-                                        <?php foreach ($assignable as $u): ?><option value="<?= e($u['id']) ?>"><?= e($u['username']) ?></option><?php endforeach; ?>
+                                        <?php foreach ($assignable as $u): ?><option value="<?= e($u['id']) ?>"><?= e($u['display_name'] !== '' ? $u['display_name'] . ' (' . $u['username'] . ')' : $u['username']) ?></option><?php endforeach; ?>
                                     </select></div>
                                 <div class="col-sm-5"><label class="form-label small mb-0" for="ban-<?= e($g['group_key']) ?>"><?= e(__('Note (optional)')) ?></label><input class="form-control form-control-sm" id="ban-<?= e($g['group_key']) ?>" name="note" maxlength="500"></div>
                                 <div class="col-sm-3"><button class="btn btn-sm btn-outline-primary w-100" type="submit"><?= e(__('Assign all')) ?></button></div>

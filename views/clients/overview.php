@@ -12,8 +12,14 @@ $w = $ov['window'];
 <div class="client-console">
     <section class="hud hud-gauge" aria-labelledby="h-c-risk">
         <h2 id="h-c-risk" class="hud-title"><?= e(__('Risk')) ?></h2>
+        <?php if (($c['last_scan'] ?? null) === null && (int) $c['fail'] === 0 && (int) $c['warn'] === 0): ?>
+        <?php // Never scanned: no score (an empty client is not a "good" one, 1.34). ?>
+        <p class="gauge-level mt-3"><i class="bi bi-hourglass" aria-hidden="true"></i> <?= e(__('Not scanned yet')) ?></p>
+        <p class="small text-body-secondary mb-0"><?= e(__('The risk score appears after the first scan.')) ?></p>
+        <?php else: ?>
         <?= Svg::gauge($c['score'], $c['level'], __('Client risk')) ?>
         <p class="gauge-level level-<?= e($c['level']) ?>"><i class="bi <?= e($levelIcon($c['level'])) ?>" aria-hidden="true"></i> <?= e($levelWord($c['level'])) ?></p>
+        <?php endif; ?>
     </section>
     <section class="hud hud-kpis" aria-label="<?= e(__('Totals')) ?>">
         <a class="kpi kpi-fail" href="<?= e(url('/clients/' . (int) $client['id'] . '/findings')) ?>"><span class="kpi-n"><?= (int) $c['fail'] ?></span><span class="kpi-l"><i class="bi bi-x-octagon" aria-hidden="true"></i> <?= e(__('Open Fail')) ?></span></a>

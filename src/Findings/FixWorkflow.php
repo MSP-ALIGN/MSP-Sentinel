@@ -77,7 +77,7 @@ final class FixWorkflow
     public function assignableUsers(): array
     {
         return array_map(static fn (array $r): array => ['id' => (int) $r['id'], 'username' => (string) $r['username'], 'display_name' => (string) ($r['display_name'] ?? '')],
-            $this->db->query("SELECT id, username, display_name FROM users WHERE is_active = 1 AND role IN ('technician','admin') ORDER BY username")->fetchAll());
+            $this->db->query("SELECT id, username, display_name FROM users WHERE is_active = 1 AND role IN ('technician','admin') ORDER BY COALESCE(NULLIF(display_name, ''), username)")->fetchAll());
     }
 
     /** True if the user exists, is active and is a technician or admin. */

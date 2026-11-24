@@ -1,12 +1,18 @@
 <?php
 /** Audit log (read-only). Expects: $entries (rows), $page, $pages, $q (text filter, 1.34), $total. All values escaped. */
 $q ??= '';
+$auditValue = static fn (mixed $v): string => match (true) {
+    $v === null => '–',
+    is_bool($v) => $v ? __('yes') : __('no'),
+    is_scalar($v) => (string) $v,
+    default => (string) json_encode($v, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+};
 ?>
 <div class="card">
     <div class="card-header">
         <form method="get" action="<?= e(url('/admin/audit')) ?>" role="search" class="d-flex flex-wrap gap-2 align-items-center">
             <label class="visually-hidden" for="audit-q"><?= e(__('Filter the audit log')) ?></label>
-            <input class="form-control form-control-sm" style="max-width: 24rem" type="search" id="audit-q" name="q" maxlength="100" value="<?= e($q) ?>" placeholder="<?= e(__('Action, user or details contain…')) ?>">
+            <input class="form-control form-control-sm sn-w-24" type="search" id="audit-q" name="q" maxlength="100" value="<?= e($q) ?>" placeholder="<?= e(__('Action, user or details contain…')) ?>">
             <button class="btn btn-sm btn-primary" type="submit"><?= e(__('Filter')) ?></button>
             <?php if ($q !== ''): ?><a class="small" href="<?= e(url('/admin/audit')) ?>"><?= e(__('Clear')) ?></a> <span class="small text-body-secondary"><?= e(__('{n} matching entries', ['n' => (int) ($total ?? 0)])) ?></span><?php endif; ?>
         </form>
@@ -31,10 +37,12 @@ $q ??= '';
             <tr>
                 <td class="text-nowrap"><?= e($row['created_at']) ?></td>
                 <td><?= e($row['username'] ?? '—') ?></td>
-                <td><code><?= e($row['action']) ?></code></td>
+                <?php // Readable action ("finding.assigned" -> "Finding assigned"); the exact key stays visible for searching. ?>
+                <td><?= e(ucfirst(str_replace(['.', '_'], ' ', (string) $row['action']))) ?><br><code class="small text-body-secondary"><?= e($row['action']) ?></code></td>
                 <td><?= e($row['target_type'] !== null ? $row['target_type'] . ' #' . $row['target_id'] : '') ?></td>
                 <td><?= e($row['ip'] ?? '') ?></td>
-                <td class="small text-break audit-details"><?= e($row['details'] ?? '') ?></td>
+                <?php $det = json_decode((string) ($row['details'] ?? ''), true); ?>
+                <td class="small text-break audit-details"><?php if (is_array($det) && $det !== []): ?><?php foreach ($det as $dk => $dv): ?><span class="me-2"><span class="text-body-secondary"><?= e(str_replace('_', ' ', (string) $dk)) ?>:</span> <?= e($auditValue($dv)) ?></span><?php endforeach; ?><?php else: ?><?= e($row['details'] ?? '') ?><?php endif; ?></td>
             </tr>
             <?php endforeach; ?>
             </tbody>

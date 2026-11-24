@@ -40,14 +40,19 @@ $badge = static function (string $severity, string $text) use ($sevBadge): strin
             <tr>
                 <td><code><?= e($t['ip']) ?>:<?= e($t['port']) ?></code><?php if ($t['sni'] !== ''): ?><div class="small text-body-secondary"><?= e($t['sni']) ?></div><?php endif; ?></td>
                 <td class="small">
+                    <?php if ($t['not_after'] === null && $t['subject_cn'] === '' && $t['issuer'] === ''): ?>
+                    <span class="text-body-secondary"><?= e(__('No certificate read (not reachable at the last check)')) ?></span>
+                    <?php else: ?>
                     <?= e($t['subject_cn'] !== '' ? $t['subject_cn'] : '—') ?>
                     <div class="text-body-secondary"><?= e(__('Issuer: {i}', ['i' => $t['issuer'] !== '' ? $t['issuer'] : '?'])) ?> · <?= e(trim($t['key_type'] . ' ' . ($t['key_bits'] ?? ''))) ?> · <?= e($t['protocol']) ?></div>
+                    <?php endif; ?>
                     <?php if ($t['last_error'] !== ''): ?><div class="text-danger"><?= e($t['last_error']) ?></div><?php endif; ?>
                 </td>
                 <td class="small text-nowrap"><?= e($t['not_after'] ?? '—') ?></td>
                 <td>
                     <?php foreach ($issues as $issue): ?><?= $badge($issue['severity'], $issue['text']) ?><?php endforeach; ?>
                     <?php if ($issues === [] && $t['not_after'] !== null): ?><span class="badge text-bg-success"><i class="bi bi-check-circle me-1" aria-hidden="true"></i><?= e(__('OK')) ?></span><?php endif; ?>
+                    <?php if ($issues === [] && $t['not_after'] === null): ?><span class="badge text-bg-secondary"><?= e(__('Not reachable')) ?></span><?php endif; ?>
                     <div class="small text-body-secondary"><?= e(__('Checked {date}', ['date' => $t['last_checked']])) ?></div>
                 </td>
             </tr>
@@ -72,11 +77,12 @@ $badge = static function (string $severity, string $text) use ($sevBadge): strin
             <tr>
                 <td><code><?= e($w['scheme']) ?>://<?= e($w['ip']) ?>:<?= e($w['port']) ?></code><?php if ($w['host_header'] !== ''): ?><div class="small text-body-secondary"><?= e($w['host_header']) ?></div><?php endif; ?></td>
                 <td class="small">
-                    <?= e($w['title'] !== '' ? $w['title'] : __('(no title)')) ?>
-                    <div class="text-body-secondary"><?= e(__('HTTP {code}', ['code' => $w['status_code'] ?? '?'])) ?><?= $w['server_header'] !== '' ? ' · ' . e($w['server_header']) : '' ?><?= $w['redirect_to'] !== '' ? ' · ' . e(__('redirects to {url}', ['url' => $w['redirect_to']])) : '' ?></div>
+                    <?php $unreachable = ($w['status_code'] ?? null) === null; ?>
+                    <?= e($unreachable ? __('No answer (not reachable at the last check)') : ($w['title'] !== '' ? $w['title'] : __('(no title)'))) ?>
+                    <div class="text-body-secondary"><?= $unreachable ? '' : e(__('HTTP {code}', ['code' => $w['status_code']])) ?><?= $w['server_header'] !== '' ? ' · ' . e($w['server_header']) : '' ?><?= $w['redirect_to'] !== '' ? ' · ' . e(__('redirects to {url}', ['url' => $w['redirect_to']])) : '' ?></div>
                     <?php if ($w['last_error'] !== ''): ?><div class="text-danger"><?= e($w['last_error']) ?></div><?php endif; ?>
                 </td>
-                <td><?= $issue !== null ? $badge($issue['severity'], $issue['text']) : '<span class="small text-body-secondary">' . e(__('Nothing notable')) . '</span>' ?></td>
+                <td><?= $issue !== null ? $badge($issue['severity'], $issue['text']) : ($unreachable ? '<span class="badge text-bg-secondary">' . e(__('Not reachable')) . '</span>' : '<span class="small text-body-secondary">' . e(__('Nothing notable')) . '</span>') ?></td>
             </tr>
             <?php endforeach; ?>
             </tbody>

@@ -52,6 +52,20 @@ final class ReportController extends Controller
         ]);
     }
 
+    /**
+     * POST /reports: the same, from the Reports page with a client picker (1.34). Untrusted: client_id (must be a
+     * known client; the store checks archive state as from the client page).
+     */
+    public function storeFromList(Request $request): Response
+    {
+        $id = (int) $request->input('client_id');
+        if ($id <= 0 || App::clients()->find($id) === null) {
+            Session::flash('danger', __('Choose a client for the report.'));
+            return Response::redirect('/reports');
+        }
+        return $this->store($request, ['id' => (string) $id]);
+    }
+
     /** POST /clients/{id}/reports: create an executive and/or technical report now. */
     public function store(Request $request, array $params): Response
     {
@@ -81,7 +95,9 @@ final class ReportController extends Controller
             $this->audit($request, 'report.created', 'report', $id, ['client' => (int) $client['id'], 'kind' => $kind, 'period' => $start . '..' . $end]);
         }
         Session::flash('success', count($ids) === 1 ? __('Report created.') : __('{n} reports created.', ['n' => count($ids)]));
-        return Response::redirect(count($ids) === 1 ? '/reports/' . $ids[0] : '/reports?client=' . (int) $client['id']);
+        // From the client's page, stay there (1.34); from the Reports page, show that client's reports.
+        return Response::redirect(count($ids) === 1 ? '/reports/' . $ids[0]
+            : ($request->input('back') === 'client' ? '/clients/' . (int) $client['id'] . '/reports' : '/reports?client=' . (int) $client['id']));
     }
 
     /** POST /clients/{id}/report-schedule: monthly reports on/off and their MSP-staff recipients. */

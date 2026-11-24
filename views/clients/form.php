@@ -28,11 +28,12 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
         <div class="row g-3 mb-3">
             <div class="col-md-6">
                 <label for="timezone" class="form-label"><?= e(__('Client timezone')) ?></label>
-                <select class="form-select<?= $invalid('timezone') ?>" id="timezone" name="timezone">
-                    <?php foreach (\DateTimeZone::listIdentifiers() as $tz): ?>
-                    <option value="<?= e($tz) ?>" <?= $values['timezone'] === $tz ? 'selected' : '' ?>><?= e($tz) ?></option>
-                    <?php endforeach; ?>
-                </select>
+                <?php // Type to search the 400+ zones (1.34); the server accepts only a zone from this list. ?>
+                <input class="form-control<?= $invalid('timezone') ?>" id="timezone" name="timezone" list="timezone-list" value="<?= e($values['timezone']) ?>" required autocomplete="off" spellcheck="false" placeholder="<?= e(__('Type a city, e.g. New_York or London')) ?>">
+                <datalist id="timezone-list">
+                    <?php foreach (\DateTimeZone::listIdentifiers() as $tz): ?><option value="<?= e($tz) ?>"></option><?php endforeach; ?>
+                </datalist>
+                <div class="form-text"><?= e(__('Type part of a city or region and pick from the list (for example America/New_York).')) ?></div>
                 <?php $field = 'timezone'; require __DIR__ . '/../partials/field_error.php'; ?>
             </div>
             <div class="col-6 col-md-3">

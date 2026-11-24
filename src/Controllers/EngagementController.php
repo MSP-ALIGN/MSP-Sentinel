@@ -50,7 +50,7 @@ final class EngagementController extends Controller
     public function create(Request $request, array $params): Response
     {
         $client = $this->clientOr404($params);
-        return $this->form($client, ['intensity' => 'gentle', 'tests' => ['tcp_full', 'nse_safe']], []);
+        return $this->form($client, ['intensity' => 'normal', 'tests' => ['tcp_full', 'nse_safe']], []);
     }
 
     /** POST /clients/{id}/engagements (multipart: the signed document) */
@@ -239,8 +239,26 @@ final class EngagementController extends Controller
         $this->audit($request, 'engagement.created', 'engagement', $id, ['client_id' => $clientId, 'tests' => $v['tests'], 'intensity' => $v['intensity'],
             'default_passwords_confirmed' => in_array('default_creds', $v['tests'], true),
             'external' => count($external), 'internal' => count(array_filter($targets, static fn (array $t): bool => $t['kind'] === 'internal')), 'document_sha256' => $sha]);
-        Session::flash('success', __('Engagement created. Another admin must approve it before anything runs.'));
+        // Tell the other admins: the engagement can't run until one of them approves it (1.34).
+        $admins = (int) App::db()->query("SELECT COUNT(*) FROM users WHERE is_active = 1 AND role = 'admin'")->fetchColumn();
+        App::alerts()->notifyUsers('engagement', 'warn', __('Engagement awaiting approval: {name}', ['name' => $v['name']]),
+            __('{user} created it for {client}. A different admin must approve it before anything runs.', ['user' => (string) ($this->user()['display_name'] ?? ''), 'client' => (string) $client['name']]),
+            '/engagements/' . $id, 'admin');
+        Session::flash('success', $admins >= 2 || !\Sentinel\Auth\Role::atLeast((string) $this->user()['role'], \Sentinel\Auth\Role::ADMIN)
+            ? __('Engagement created. Another admin must approve it before anything runs; the admins were notified.')
+            : __('Engagement created. It needs a second admin to approve it, and you are the only one: add another admin under Users first.'));
         return Response::redirect('/engagements/' . $id);
+    }
+
+    /** GET /engagements: every engagement across clients, with those awaiting the viewer's approval first (1.34). */
+    public function index(Request $request): Response
+    {
+        $isAdmin = \Sentinel\Auth\Role::atLeast((string) $this->user()['role'], \Sentinel\Auth\Role::ADMIN);
+        return $this->page('engagements/index', __('Pen-test engagements'), [
+            'engagements' => App::engagements()->all(),
+            'awaiting' => $isAdmin ? App::engagements()->awaitingApprovalBy((int) $this->user()['id']) : [],
+            'adminCount' => (int) App::db()->query("SELECT COUNT(*) FROM users WHERE is_active = 1 AND role = 'admin'")->fetchColumn(),
+        ]);
     }
 
     /** GET /engagements/{id} */
@@ -374,11 +392,19 @@ final class EngagementController extends Controller
         foreach ($bySite as $siteId => $ranges) {
             $auth = App::agents()->activeAuthorisation($siteId, ScopeService::today((string) $client['timezone']));
             if ($auth === null || isset($open[$siteId])) {
-                $notes[] = $auth === null ? __('A site has no valid internal authorisation now.') : __('A site already has internal tests queued or running.');
+                $siteName = (string) ($this->siteName($siteId) ?: '#' . $siteId);
+                $notes[] = $auth === null ? __('Site {s} has no valid internal authorisation today: record one under the client\'s Agents page.', ['s' => $siteName])
+                    : __('Site {s} already has internal tests queued or running.', ['s' => $siteName]);
                 continue;
             }
             $agent = null;
-            foreach (App::agents()->agents($siteId) as $a) {
+            $siteAgents = App::agents()->agents($siteId);
+            $siteName = (string) ($this->siteName($siteId) ?: '#' . $siteId);
+            if (array_filter($siteAgents, static fn (array $a): bool => $a['status'] === 'active') === []) {
+                $notes[] = __('No agent is enrolled at site {s}: enrol one under the client\'s Agents page first.', ['s' => $siteName]);
+                continue;
+            }
+            foreach ($siteAgents as $a) {
                 if ($a['status'] === 'active' && preg_match('/^\d+\.\d+\.\d+$/', (string) $a['version']) === 1
                     && version_compare((string) $a['version'], $minVersion, '>=')) {
                     $agent = $a;
@@ -386,7 +412,7 @@ final class EngagementController extends Controller
                 }
             }
             if ($agent === null) {
-                $notes[] = __('A site has no agent of version {v} or later: update it first.', ['v' => $minVersion]);
+                $notes[] = __('The agent at site {s} is older than {v}: update it from the client\'s Agents page first.', ['s' => $siteName, 'v' => $minVersion]);
                 continue;
             }
             $queued[] = App::agents()->queueEngagementJob((int) $agent['id'], (int) $client['id'], $siteId, (int) $auth['id'], (int) $e['id'], (int) $this->user()['id'],
@@ -516,5 +542,13 @@ final class EngagementController extends Controller
         $id = (string) ($params['id'] ?? '');
         $e = ctype_digit($id) ? App::engagements()->find((int) $id) : null;
         return $e ?? throw new HttpException(404, __('Engagement not found.'));
+    }
+
+    /** A site's name for messages ('' when unknown). */
+    private function siteName(int $siteId): string
+    {
+        $stmt = App::db()->prepare('SELECT name FROM sites WHERE id = :id');
+        $stmt->execute(['id' => $siteId]);
+        return (string) ($stmt->fetchColumn() ?: '');
     }
 }

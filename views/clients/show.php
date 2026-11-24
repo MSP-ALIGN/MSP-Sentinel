@@ -19,7 +19,7 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
 ?>
 <?php if ($globallyPaused): ?><?php require __DIR__ . '/../partials/kill_switch.php'; ?><?php endif; ?>
 <?php if ((int) ($client['is_demo'] ?? 0) === 1): ?>
-<div class="alert alert-info"><i class="bi bi-easel me-1" aria-hidden="true"></i><?= e(__('Demo client: made-up data for trying Sentinel out. It is never scanned. Remove all demo data under Administration, System.')) ?></div>
+<div class="alert alert-info"><i class="bi bi-easel me-1" aria-hidden="true"></i><?= e(__('Demo client: made-up data for trying Sentinel out. It is never scanned.')) ?><?php if ($isAdmin): ?> <?= e(__('Remove all demo data under Administration, System.')) ?><?php endif; ?></div>
 <?php endif; ?>
 <?php if ($archived): ?>
 <div class="alert alert-secondary"><i class="bi bi-archive me-1" aria-hidden="true"></i><?= e(__('This client is archived. It will not be scanned.')) ?></div>
@@ -27,7 +27,7 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
 
 <?php if ($section === 'overview'): ?>
 <?php if (!$archived): ?>
-<div class="dash-actions"><button type="button" class="btn btn-sm btn-outline-secondary refresh-toggle" data-refresh-toggle aria-pressed="false" data-label-pause="<?= e(__('Pause updates')) ?>" data-label-resume="<?= e(__('Resume updates')) ?>"><?= e(__('Pause updates')) ?></button></div>
+<div class="dash-actions"><button type="button" class="btn btn-sm btn-outline-secondary refresh-toggle" data-refresh-toggle aria-pressed="false" data-label-pause="<?= e(__('Pause live refresh')) ?>" data-label-resume="<?= e(__('Resume live refresh')) ?>" title="<?= e(__('Stops this page refreshing itself every minute. Scans are not affected.')) ?>"><?= e(__('Pause live refresh')) ?></button></div>
 <div id="live-client" data-refresh-url="<?= e(url('/clients/' . $clientId . '/overview')) ?>" aria-live="off">
     <?php $ov = $overview; require __DIR__ . '/overview.php'; ?>
 </div>
@@ -83,6 +83,11 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
                     } else {
                         echo e(__('Cannot be scanned: there is no active authorisation.'));
                     } ?></p>
+                <?php if ($activeCount === 0 && !$archived && $isAdmin): ?>
+                <p><a href="<?= e(url('/clients/' . $clientId . '/authorisations/new')) ?>" class="btn btn-primary btn-sm"><i class="bi bi-file-earmark-plus me-1" aria-hidden="true"></i><?= e(__('Record authorisation')) ?></a></p>
+                <?php elseif ($activeCount === 0 && !$archived): ?>
+                <p class="small text-body-secondary"><?= e(__('An admin records the client\'s authorisation first.')) ?></p>
+                <?php endif; ?>
                 <?php if ($isTech): ?>
                 <form method="post" action="<?= e(url('/clients/' . $clientId . '/pause')) ?>" data-confirm="<?= e(__('Pause all scanning for this client now?')) ?>">
                     <?= Csrf::field() ?>

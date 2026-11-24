@@ -321,4 +321,15 @@ return [
         App::events()->publish('scan.finished', ['scan_id' => 1]);
         Assert::same($before, (int) $ctx->db->query("SELECT COUNT(*) FROM deliveries WHERE channel = 'event'")->fetchColumn());
     },
+    'the API reference is a readable page for admins, with the OpenAPI JSON to download' => function (TestContext $ctx): void {
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $page = $admin->get('/admin/api/docs');
+        Assert::status(200, $page);
+        Assert::contains('/api/v1/findings/{id}/triage', $page->body);
+        Assert::contains('/admin/api/docs', $admin->get('/admin/api')->body, 'linked from the API page');
+        $json = $admin->get('/admin/api/docs?format=json');
+        Assert::same('3.1.0', json_decode($json->body, true)['openapi'] ?? null);
+        $ctx->createUser('apidocsviewer', 'viewer', 'Apidocs-Pass-0001!');
+        Assert::status(403, $ctx->login('apidocsviewer', 'Apidocs-Pass-0001!')->get('/admin/api/docs'), 'admins only');
+    },
 ];

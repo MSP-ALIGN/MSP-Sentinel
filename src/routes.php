@@ -87,6 +87,7 @@ $router->add('POST', '/sites/{id}', [ClientController::class, 'updateSite'], $ad
 // Pen-test engagements: technicians and admins create, stop and cancel; a DIFFERENT admin approves (two-person rule).
 $router->add('GET', '/clients/{id}/engagements/new', [\Sentinel\Controllers\EngagementController::class, 'create'], $technician);
 $router->add('POST', '/clients/{id}/engagements', [\Sentinel\Controllers\EngagementController::class, 'store'], $technician);
+$router->add('GET', '/engagements', [\Sentinel\Controllers\EngagementController::class, 'index']);
 $router->add('GET', '/engagements/{id}', [\Sentinel\Controllers\EngagementController::class, 'show']);
 $router->add('GET', '/engagements/{id}/document', [\Sentinel\Controllers\EngagementController::class, 'document'], $technician);
 $router->add('POST', '/engagements/{id}/approve', [\Sentinel\Controllers\EngagementController::class, 'approve'], $admin);
@@ -146,6 +147,7 @@ $router->add('POST', '/findings/bulk', [FindingController::class, 'bulk'], $tech
 // Reports: everyone views and downloads saved reports; technicians and admins create; admins delete and set schedules and branding
 $router->add('GET', '/reports', [ReportController::class, 'index']);
 $router->add('POST', '/clients/{id}/reports', [ReportController::class, 'store'], $technician);
+$router->add('POST', '/reports', [ReportController::class, 'storeFromList'], $technician);
 $router->add('POST', '/clients/{id}/report-schedule', [ReportController::class, 'schedule'], $admin);
 $router->add('GET', '/reports/{id}', [ReportController::class, 'show']);
 $router->add('GET', '/reports/{id}/view', [ReportController::class, 'view']);
@@ -198,6 +200,7 @@ $router->add('POST', '/admin/system/agents-move', [SystemController::class, 'mov
 $router->add('POST', '/admin/system/release-key', [SystemController::class, 'releaseKey'], $admin);
 $router->add('POST', '/admin/system/release-sign', [SystemController::class, 'releaseSign'], $admin);
 $router->add('GET', '/admin/api', [ApiAdminController::class, 'index'], $admin);
+$router->add('GET', '/admin/api/docs', [ApiAdminController::class, 'docs'], $admin);
 $router->add('POST', '/admin/api/tokens', [ApiAdminController::class, 'create'], $admin);
 $router->add('POST', '/admin/api/tokens/{id}/revoke', [ApiAdminController::class, 'revoke'], $admin);
 $router->add('POST', '/admin/api/events', [ApiAdminController::class, 'events'], $admin);

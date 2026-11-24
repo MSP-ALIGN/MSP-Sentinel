@@ -102,6 +102,17 @@ final class FindingController extends Controller
             'values' => $values + ['status' => '', 'note' => ''],
             'assignable' => App::fixWorkflow()->assignableUsers(),
             'verifiable' => VerifyTarget::fromKey((string) $finding['finding_key']) !== null,
+            // The same "Why it matters / How to fix" text the client report shows (1.34).
+            'guidance' => (static function (array $f): array {
+                $vuln = [];
+                if ((string) ($f['cve_id'] ?? '') !== '') {
+                    $k = App::db()->prepare('SELECT required_action FROM kev_catalog WHERE cve_id = :c');
+                    $k->execute(['c' => $f['cve_id']]);
+                    $action = $k->fetchColumn();
+                    $vuln = ['in_kev' => $action !== false ? 1 : 0, 'kev_action' => $action !== false ? (string) $action : ''];
+                }
+                return \Sentinel\Reports\Guidance::for($f, $vuln + $f);
+            })($finding),
             // This finding's ITFlow tickets (the current one first, then ones it replaced), with a link to ITFlow's
             // agent view built from the ticket number (never ITFlow's guest link, which holds a secret key).
             'itflowTickets' => (static function (int $id): array {

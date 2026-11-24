@@ -651,7 +651,14 @@ final class App
      */
     private static function dispatch(Router $router, Request $request): Response
     {
-        $route = $router->match($request->method, $request->path);
+        try {
+            $route = $router->match($request->method, $request->path);
+        } catch (HttpException $ex) {
+            if ($ex->status === 405 && $request->method === 'GET') {
+                return Response::redirect($router->formPage($request->path)); // a form's address opened as a page
+            }
+            throw $ex;
+        }
         $opts = $route['opts'];
 
         // CSRF: every state-changing request, on every route (public ones too, such as login).

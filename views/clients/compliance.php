@@ -29,7 +29,9 @@ $statusBadge = ['met' => ['success', __('Met')], 'partial' => ['warning', __('Pa
     </div>
     <div class="card-body">
     <?php if (!$alignOn && !$linked): ?>
-        <p class="mb-0 text-body-secondary"><?= e(__('Connect MSP Align under Administration, Integrations to see this client\'s compliance frameworks here, with Sentinel\'s findings matched to their controls.')) ?></p>
+        <p class="mb-0 text-body-secondary"><?= e(($currentUser['role'] ?? '') === 'admin'
+            ? __('Connect MSP Align under Administration, Integrations to see this client\'s compliance frameworks here, with Sentinel\'s findings matched to their controls.')
+            : __('Compliance frameworks appear here once an admin connects MSP Align.')) ?></p>
     <?php elseif (!$linked): ?>
         <p class="small"><?= e(__('Link this client to its MSP Align client to see its compliance frameworks here.')) ?></p>
         <?php if ($alignClients['error'] !== ''): ?>

@@ -147,11 +147,11 @@ final class ScopeParser
             return $range->isV6 ? __('Range too large. The largest allowed is /120.') : __('Range too large. The largest allowed is /24.');
         }
         if ($range->isV6 && !$range->within(IpRange::parse(self::IPV6_GLOBAL_UNICAST))) {
-            return __('Private, internal or reserved addresses cannot be scanned from outside. Internal scanning arrives with the on-site agent.');
+            return __('Private, internal or reserved addresses cannot be scanned from outside. Approve internal networks per site on the client\'s Agents page (on-premises agent).');
         }
         foreach (self::reservedRanges() as $reserved) {
             if ($range->overlaps($reserved)) {
-                return __('Private, internal or reserved addresses cannot be scanned from outside. Internal scanning arrives with the on-site agent.');
+                return __('Private, internal or reserved addresses cannot be scanned from outside. Approve internal networks per site on the client\'s Agents page (on-premises agent).');
             }
         }
         if (!$this->allowDocumentation) {

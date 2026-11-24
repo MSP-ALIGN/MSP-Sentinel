@@ -1,8 +1,8 @@
 <?php
 /**
- * One finding: details, the fix card (owner, due date, verify fix), history and the
+ * One finding: details, guidance (why it matters, how to fix), the fix card (owner, due date, verify fix), history and the
  * triage form (technicians and admins).
- * Expects: $finding, $events, $errors, $values, $assignable, $verifiable, $currentUser.
+ * Expects: $finding, $events, $errors, $values, $assignable, $verifiable, $guidance (meaning, fix), $currentUser.
  */
 use Sentinel\Auth\Role;
 use Sentinel\Core\Csrf;
@@ -33,6 +33,12 @@ $eventLabels = [
                 <p class="mb-2"><code><?= e($finding['target']) ?></code>
                     <?php if (($finding['device_id'] ?? null) !== null): ?> · <a href="<?= e(url('/clients/' . (int) $finding['client_id'] . '/devices/' . (int) $finding['device_id'])) ?>"><i class="bi bi-pc-display me-1" aria-hidden="true"></i><?= e(__('Device details')) ?></a> <span class="badge text-bg-dark"><?= e(__('Internal')) ?></span><?php endif; ?></p>
                 <p class="text-pre-line"><?= e($finding['detail']) ?></p>
+                <?php if (($guidance['meaning'] ?? '') !== '' || ($guidance['fix'] ?? '') !== ''): ?>
+                <div class="border rounded p-2 mb-3 bg-body-tertiary">
+                    <p class="mb-1"><strong><?= e(__('Why it matters')) ?></strong><br><?= e($guidance['meaning']) ?></p>
+                    <p class="mb-0"><strong><?= e(__('How to fix')) ?></strong><br><?= e($guidance['fix']) ?></p>
+                </div>
+                <?php endif; ?>
                 <?php $stateText = ['pending' => __('being opened'), 'failed' => __('ITFlow refused it; retried later'), 'open' => __('open'),
                     'sentinel_resolved' => __('resolved by Sentinel (fixed)'), 'awaiting_check' => __('closed in ITFlow; Sentinel is checking'),
                     'done' => __('done'), 'replaced' => __('closed in ITFlow; replaced by a new ticket'), 'unconfirmed' => __('closed in ITFlow; fix not confirmed'),
@@ -116,7 +122,7 @@ $eventLabels = [
                     <div class="input-group input-group-sm">
                         <select class="form-select" id="assignee" name="assignee">
                             <option value=""><?= e(__('Nobody (unassigned)')) ?></option>
-                            <?php foreach ($assignable as $u): ?><option value="<?= e($u['id']) ?>" <?= (int) ($finding['assigned_to'] ?? 0) === $u['id'] ? 'selected' : '' ?>><?= e($u['username']) ?></option><?php endforeach; ?>
+                            <?php foreach ($assignable as $u): ?><option value="<?= e($u['id']) ?>" <?= (int) ($finding['assigned_to'] ?? 0) === $u['id'] ? 'selected' : '' ?>><?= e($u['display_name'] !== '' ? $u['display_name'] . ' (' . $u['username'] . ')' : $u['username']) ?></option><?php endforeach; ?>
                         </select>
                         <button type="submit" class="btn btn-outline-primary"><?= e(__('Assign')) ?></button>
                     </div>

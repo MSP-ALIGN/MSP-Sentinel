@@ -45,7 +45,7 @@ $chip = static function (string $sev, string $text): string {
         <?php endforeach; ?>
         <?php if ($devices !== []): ?>
         <div class="table-responsive">
-        <div class="d-flex align-items-center gap-2 mb-2"><label class="visually-hidden" for="devices-filter"><?= e(__('Filter this list')) ?></label><input class="form-control form-control-sm" style="max-width: 20rem" type="search" id="devices-filter" maxlength="100" data-filter-list="#devices-table" data-filter-count="#devices-filter-count" placeholder="<?= e(__('Filter devices by name, address or problem…')) ?>"><span class="small text-body-secondary" id="devices-filter-count" aria-live="polite"></span></div>
+        <div class="d-flex align-items-center gap-2 mb-2"><label class="visually-hidden" for="devices-filter"><?= e(__('Filter this list')) ?></label><input class="form-control form-control-sm sn-w-20" type="search" id="devices-filter" maxlength="100" data-filter-list="#devices-table" data-filter-count="#devices-filter-count" placeholder="<?= e(__('Filter devices by name, address or problem…')) ?>"><span class="small text-body-secondary" id="devices-filter-count" aria-live="polite"></span></div>
         <table class="table table-sm align-middle small mb-0" id="devices-table">
             <thead><tr><th><?= e(__('Device')) ?></th><th><?= e(__('Operating system')) ?></th><th><?= e(__('Problems')) ?></th><th class="text-end"><?= e(__('Vulnerabilities')) ?></th><th class="text-nowrap"><?= e(__('Last contact (UTC)')) ?></th></tr></thead>
             <tbody>

@@ -60,6 +60,14 @@ return [
         Assert::true((int) $ctx->db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'report.created'")->fetchColumn() > 0, 'audited');
         $tech->submit('/clients/' . $cid, '/clients/' . $cid . '/reports', ['kind' => 'everything', 'period' => '30']);
         Assert::same(2, (int) $ctx->db->query("SELECT COUNT(*) FROM reports WHERE client_id = {$cid}")->fetchColumn(), 'an unknown type creates nothing');
+        // From the Reports page with a client picker (1.34), and staying on the client's page when created there.
+        $before = (int) $ctx->db->query("SELECT COUNT(*) FROM reports WHERE client_id = {$cid}")->fetchColumn();
+        $res = $tech->submit('/reports', '/reports', ['client_id' => (string) $cid, 'kind' => 'executive', 'period' => '30']);
+        Assert::true(str_starts_with((string) $res->location(), '/reports/'), 'one report: opened');
+        Assert::same($before + 1, (int) $ctx->db->query("SELECT COUNT(*) FROM reports WHERE client_id = {$cid}")->fetchColumn());
+        Assert::redirect('/reports', $tech->submit('/reports', '/reports', ['client_id' => '999999', 'kind' => 'both', 'period' => '30']), 'unknown client');
+        Assert::redirect('/clients/' . $cid . '/reports', $tech->submit('/clients/' . $cid, '/clients/' . $cid . '/reports', ['kind' => 'both', 'period' => '30', 'back' => 'client']));
+        Assert::status(403, $view->post('/reports', ['_csrf' => $view->get('/reports')->csrf(), 'client_id' => (string) $cid, 'kind' => 'both', 'period' => '30']), 'viewers cannot create');
     },
     'the report document: frozen, escaped, strict CSP, accepted risks separate, no other client' => function (TestContext $ctx) use ($setup): void {
         $cid = $setup($ctx);

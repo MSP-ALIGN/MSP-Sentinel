@@ -118,7 +118,7 @@ return [
     },
     'sign-out needs POST with CSRF and ends the session' => function (TestContext $ctx): void {
         $c = $ctx->login('admin', 'Admin-Pass-0001!');
-        Assert::status(405, $c->get('/logout'), 'GET logout is not allowed');
+        Assert::redirect('/', $c->get('/logout'), 'GET logout does not sign out (sent to the dashboard)');
         Assert::status(400, $c->post('/logout', []), 'logout without CSRF');
         Assert::status(200, $c->get('/'), 'still signed in after a forged logout');
         Assert::redirect('/login', $c->submit('/', '/logout', []));

@@ -139,10 +139,10 @@ footer.doc-footer .right { margin-left: auto; }
         <tr><th><?= e(__('How to fix')) ?></th><td><?= e($f['fix']) ?></td></tr>
     </table>
     <table class="data">
-        <tr><th><?= e(__('Target')) ?></th><th><?= e(__('Details and evidence')) ?></th><th><?= e(__('First / last seen')) ?></th></tr>
+        <tr><th><?= e(__('Target')) ?></th><th><?= e(__('Details')) ?></th><th><?= e(__('First / last seen')) ?></th></tr>
         <?php foreach ($f['items'] as $it): ?>
         <tr><td><code><?= e($it['target']) ?></code></td>
-            <td><?= e($it['detail']) ?><?php if ((string) $it['evidence'] !== ''): ?><br><code><?= e($it['evidence']) ?></code><?php endif; ?>
+            <td><?= e($it['detail']) ?><?php $ev = \Sentinel\Reports\ReportBuilder::readableEvidence((string) $it['finding_type'], (string) $it['evidence']); if ($ev !== ''): ?><br><span class="small"><?= e($ev) ?></span><?php endif; ?>
                 <?php if ($it['finding_type'] === 'vuln'): ?><br><span class="small muted"><?= e(match ($it['confidence']) { 'confirmed' => __('Confirmed for the reported version'), 'distro' => __('Possible: distribution build, the fix may be backported'), default => __('Possible: version unknown') }) ?></span><?php endif; ?></td>
             <td><?= e($date($it['first_seen'])) ?> / <?= e($date($it['last_seen'])) ?><?= (int) $it['reappeared'] === 1 ? ' · ' . e(__('reappeared after being fixed')) : '' ?></td></tr>
         <?php endforeach; ?>

@@ -52,7 +52,7 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
             <?php if (!$wu['available']): ?>
             <p class="mb-0 text-body-secondary"><?= e($build !== null
                 ? __('Updating from the web interface is turned off on this server. Run sudo msp-sentinel-update on the server.')
-                : __('This server was installed from a release download, so it is updated on the server: see docs/upgrade.md.')) ?></p>
+                : __('Update now is not available here: this server was installed from a release download. To update, download the new release and run its installer on the server (docs/upgrade.md, "With the installer").')) ?></p>
             <?php else: ?>
             <?php if ($wu['pending'] && $wu['unclaimed']): ?>
             <div class="alert alert-warning py-2 mb-2"><?= e(__('The update request was not picked up: the update helper on the server is stopped. On the server, run: sudo systemctl reset-failed msp-sentinel-web-update.path && sudo systemctl restart msp-sentinel-web-update.path (or run sudo msp-sentinel-update).')) ?>

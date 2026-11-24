@@ -22,7 +22,7 @@ return [
             'title' => 'Roles',
             'paragraphs' => [
                 'Viewer: can see everything but change nothing.',
-                'Technician: everything a viewer can do, plus running scans and triaging findings (arriving in later releases).',
+                'Technician: everything a viewer can do, plus running scans, triaging and assigning findings, creating reports and engagements.',
                 'Admin: everything, including managing users, settings, API tokens and approving which client systems may be scanned.',
             ],
         ],
@@ -39,7 +39,7 @@ return [
             'paragraphs' => [
                 'Opening a client switches the left menu to that client: Overview, Findings, External (scans and ports, vulnerabilities, certificates and web, website and email), Internal (agents, devices) and Manage (authorisations, discovery, reports). All clients at the top goes back.',
                 'Sentinel only ever scans systems a client has authorised. Before anything is scanned for a client, an admin records who at the client approved it (name, role, date), for which dates, and exactly which IP addresses, ranges and domains are covered. Open the client and choose "Record authorisation".',
-                'Scope entries: one per line. Public IP addresses (for example 203.0.113.10), ranges up to /24, and domain names. Write *.client-domain.com to include all subdomains; list the bare domain separately if it should be scanned too. Private and internal addresses are refused, because this version only scans from the internet. Shared suffixes such as *.co.uk or *.github.io are refused too, because they belong to many unrelated owners.',
+                'Scope entries: one per line. Public IP addresses (for example 203.0.113.10), ranges up to /24, and domain names. Write *.client-domain.com to include all subdomains; list the bare domain separately if it should be scanned too. Private and internal addresses are refused here, because this register is for scans from the internet; internal networks are approved per site on the Agents page. Shared suffixes such as *.co.uk or *.github.io are refused too, because they belong to many unrelated owners.',
                 'Authorisations cannot be edited. If the scope changes, revoke the old authorisation (with a reason) and record a new one. That way the register always shows exactly what was approved and when.',
                 'An authorisation is valid for at most 2 years, using dates in the client\'s timezone. The dashboard shows authorisations ending within 30 days, so you can ask the client to renew in time.',
                 'If you add an address that is already in another client\'s scope, Sentinel warns you. That is usually a typo that would point scans at the wrong client.',
@@ -610,7 +610,7 @@ return [
                 'On-premises agents: internal network scans from a small Linux appliance at the client\'s site, with signed internal authorisations and signed jobs.',
                 'Internal devices with open services, certificates and web pages; vulnerable services and certificate problems become findings.',
                 'New-device alerts after a site\'s first scan, and a kill switch per site.',
-                'Groundwork for NinjaOne: installed software matched to vulnerabilities, unsupported Windows, antivirus, encryption and missing updates (the connector follows in a later release).',
+                'Groundwork for NinjaOne: installed software matched to vulnerabilities, unsupported Windows, antivirus, encryption and missing updates (from the NinjaOne connector under Administration, Integrations).',
             ],
         ],
         [

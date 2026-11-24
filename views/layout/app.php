@@ -70,7 +70,7 @@ try {
             <span class="badge text-bg-warning ms-2" title="<?= e(__('Installed from the {b} branch at commit {c}: newest changes, not a release. Use it for testing, not for production.', ['b' => $build['branch'], 'c' => $build['commit']])) ?>"><i class="bi bi-cone-striped" aria-hidden="true"></i> <?= e(__('Development build')) ?> · <?= e($build['branch']) ?></span>
             <?php endif; ?>
             <?php if ($currentUser !== null): ?>
-            <form class="d-none d-md-flex ms-3 flex-grow-1 sn-search" role="search" method="get" action="<?= e(url('/search')) ?>" style="max-width: 32rem">
+            <form class="d-none d-md-flex ms-3 flex-grow-1 sn-search" role="search" method="get" action="<?= e(url('/search')) ?>">
                 <label class="visually-hidden" for="sn-search-q"><?= e(__('Search')) ?></label>
                 <div class="input-group input-group-sm">
                     <span class="input-group-text"><i class="bi bi-search" aria-hidden="true"></i></span>
@@ -171,7 +171,12 @@ try {
                     <?= $navItem('/', 'bi-speedometer2', __('Dashboard')) ?>
                     <?= $navItem('/clients', 'bi-building', __('Clients')) ?>
                     <?= $navItem('/findings', 'bi-exclamation-diamond', __('Findings')) ?>
+                    <?= $navItem('/engagements', 'bi-crosshair', __('Engagements')) ?>
                     <?= $navItem('/reports', 'bi-file-earmark-text', __('Reports')) ?>
+                    <?php if ($isAdmin): ?>
+                    <li class="nav-header"><?= e(__('ADMINISTRATION')) ?></li>
+                    <?= $navItem('/admin', 'bi-gear', __('Administration')) ?>
+                    <?php endif; ?>
                     <li class="nav-header"><?= e(__('SUPPORT')) ?></li>
                     <?= $navItem('/help', 'bi-question-circle', __('Help')) ?>
                 </ul>

@@ -113,6 +113,16 @@ return [
         $admin->post('/engagements/' . $id . '/approve', ['_csrf' => $admin->get('/engagements/' . $id)->csrf(), 'password' => 'Admin-Pass-0001!']);
         Assert::same(null, App::engagements()->find($id)['approved_at'], 'never by its creator');
         Assert::status(403, $tech->post('/engagements/' . $id . '/approve', ['_csrf' => $tech->get('/engagements/' . $id)->csrf(), 'password' => 'Engtech-Pass-0001!']), 'technicians cannot approve');
+        // The second admin is told and sees it waiting (1.34): a notification, the dashboard and the Engagements page.
+        $admin2Id = (int) $ctx->db->query("SELECT id FROM users WHERE username = 'engadmin2'")->fetchColumn();
+        Assert::same(1, (int) $ctx->db->query("SELECT COUNT(*) FROM notifications WHERE user_id = {$admin2Id} AND kind = 'engagement' AND link = '/engagements/{$id}'")->fetchColumn(), 'other admins notified');
+        Assert::contains('awaiting your approval', $admin2->get('/')->body, 'on the dashboard');
+        $adminId = (int) $ctx->db->query("SELECT id FROM users WHERE username = 'admin'")->fetchColumn();
+        Assert::true(!in_array($id, array_map(static fn (array $a): int => (int) $a['id'], App::engagements()->awaitingApprovalBy($adminId)), true), 'not for its creator');
+        $list = $admin2->get('/engagements');
+        Assert::contains('Awaiting your approval', $list->body);
+        Assert::contains('Two-person rule', $list->body);
+        Assert::status(200, $tech->get('/engagements'), 'everyone can list engagements');
         $admin2->post('/engagements/' . $id . '/approve', ['_csrf' => $admin2->get('/engagements/' . $id)->csrf(), 'password' => 'wrong']);
         Assert::same(null, App::engagements()->find($id)['approved_at'], 'the password is required');
         $admin2->post('/engagements/' . $id . '/approve', ['_csrf' => $admin2->get('/engagements/' . $id)->csrf(), 'password' => 'Engadmin2-Pass-0001!']);

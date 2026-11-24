@@ -17,7 +17,7 @@ $rRole = (string) $currentUser['role'];
     <div class="card-body">
         <?php if (Role::atLeast($rRole, Role::TECHNICIAN)): ?>
         <form method="post" action="<?= e(url('/clients/' . (int) $client['id'] . '/reports')) ?>" class="row g-2 align-items-end mb-3">
-            <?= Csrf::field() ?>
+            <?= Csrf::field() ?><input type="hidden" name="back" value="client">
             <div class="col-sm-5">
                 <label class="form-label small mb-0" for="report-kind"><?= e(__('Report')) ?></label>
                 <select class="form-select form-select-sm" id="report-kind" name="kind">

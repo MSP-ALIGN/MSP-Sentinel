@@ -21,13 +21,16 @@ final class PageController extends Controller
     /** GET /: the main dashboard ("command view"). */
     public function dashboard(Request $request): Response
     {
-        return $this->page('dashboard', __('Dashboard'), ['d' => self::dashboardData(), 'globallyPaused' => App::scope()->globallyPaused()]);
+        $isAdmin = \Sentinel\Auth\Role::atLeast((string) $this->user()['role'], \Sentinel\Auth\Role::ADMIN);
+        return $this->page('dashboard', __('Dashboard'), ['d' => self::dashboardData(), 'globallyPaused' => App::scope()->globallyPaused(),
+            // Engagements another admin created that this admin can approve (1.34: approvals were easy to miss).
+            'awaitingApproval' => $isAdmin ? App::engagements()->awaitingApprovalBy((int) $this->user()['id']) : []]);
     }
 
     /** GET /dashboard/live: the dashboard panels alone, for the 60-second refresh (any signed-in role). */
     public function live(Request $request): Response
     {
-        return Response::html(View::render('dashboard/panels', ['d' => self::dashboardData()], null))->header('X-Sentinel-Fragment', '1');
+        return Response::html(View::render('dashboard/panels', ['d' => self::dashboardData(), 'currentUser' => $this->user()], null))->header('X-Sentinel-Fragment', '1');
     }
 
     /**

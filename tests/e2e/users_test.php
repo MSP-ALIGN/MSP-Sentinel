@@ -167,7 +167,7 @@ return [
         Assert::status(404, $admin->get('/no-such-page'));
         Assert::status(404, $admin->get('/users/999999'));
         Assert::status(404, $admin->get('/users/abc'));
-        Assert::status(405, $admin->get('/users/1/password'));
+        Assert::redirect('/users/1', $admin->get('/users/1/password'), 'a form address opened as a page goes to the page holding the form');
         $res = $admin->get('/users/999999');
         Assert::contains('Page not found', $res->body);
         Assert::notContains('Stack trace', $res->body);

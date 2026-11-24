@@ -83,7 +83,7 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
                 <div class="form-text">
                     <?= e(__('Public IP addresses (203.0.113.10), ranges up to /24 (198.51.100.0/24) and domains (client-domain.com, or *.client-domain.com for all subdomains). Up to {n} entries. Lines starting with # are ignored.', ['n' => ScopeParser::MAX_ENTRIES])) ?>
                 </div>
-                <div class="form-text"><?= e(__('Private and internal addresses are refused: this version only scans from the internet.')) ?></div>
+                <div class="form-text"><?= e(__('Private and internal addresses are refused here: this register is for scans from the internet. Internal networks are approved per site on the client\'s Agents page.')) ?></div>
             </div>
         </div>
     </div>

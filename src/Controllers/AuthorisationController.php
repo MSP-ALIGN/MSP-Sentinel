@@ -194,7 +194,7 @@ final class AuthorisationController extends Controller
         ]);
 
         Session::flash('success', $replaceIds === []
-            ? __('Authorisation recorded with {n} scope entries.', ['n' => count($parsed['entries'])])
+            ? __('Authorisation recorded with {n} scope entries. Next: open the client\'s Overview and choose Scan now, or wait for the weekly scan.', ['n' => count($parsed['entries'])])
             : __('Authorisation recorded with {n} scope entries. It replaces authorisation(s) #{ids}, which are now revoked.', ['n' => count($parsed['entries']), 'ids' => implode(', #', $replaceIds)]));
         foreach (array_slice($overlaps, 0, 10) as $hit) {
             Session::flash('warning', __('{value} is also in scope for client "{client}". Check that this is not a typo.', $hit));

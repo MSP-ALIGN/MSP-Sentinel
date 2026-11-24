@@ -25,7 +25,7 @@
     }
 
     // Auto-refresh. Skips while the user is working inside a panel (focus or text selection),
-    // can be paused with the "Pause updates" button, never overlaps requests, retries on network
+    // can be paused with the "Pause live refresh" button, never overlaps requests, retries on network
     // or server errors with a growing gap, and stops after 30 minutes without input (so an
     // unattended screen is not kept looking alive; the server also ignores these requests
     // for the idle sign-out).
@@ -40,7 +40,7 @@
             paused = !paused;
             document.querySelectorAll('[data-refresh-toggle]').forEach(function (b) {
                 b.setAttribute('aria-pressed', paused ? 'true' : 'false');
-                b.textContent = paused ? (b.getAttribute('data-label-resume') || 'Resume updates') : (b.getAttribute('data-label-pause') || 'Pause updates');
+                b.textContent = paused ? (b.getAttribute('data-label-resume') || 'Resume live refresh') : (b.getAttribute('data-label-pause') || 'Pause live refresh');
             });
         });
     });
@@ -189,7 +189,7 @@
             el.innerHTML = '<div class="modal-dialog modal-dialog-centered"><div class="modal-content">'
                 + '<div class="modal-header"><h2 class="modal-title h5" id="sn-confirm-title"></h2>'
                 + '<button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>'
-                + '<div class="modal-body"><p class="mb-0" id="sn-confirm-text"></p></div>'
+                + '<div class="modal-body"><p class="mb-0 sn-confirm-message" id="sn-confirm-text"></p></div>'
                 + '<div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" id="sn-confirm-no"></button>'
                 + '<button type="button" class="btn btn-primary" id="sn-confirm-yes"></button></div></div></div>';
             document.body.appendChild(el);

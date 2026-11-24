@@ -230,4 +230,22 @@ final class ReportBuilder
             'paper' => $this->settings->get('report_paper') === 'Letter' ? 'Letter' : 'A4',
         ];
     }
+
+    /**
+     * A finding's evidence as a client-facing line, or '' (1.34). The stored evidence is an internal fingerprint used to
+     * notice changes ("3389|ms-wbt-server", "spf_missing||"); only the parts a reader can use are shown: the product a
+     * vulnerability was matched on, and a certificate's name and expiry. Everything else is already in the detail.
+     */
+    public static function readableEvidence(string $type, string $evidence): string
+    {
+        $p = explode('|', $evidence);
+        if ($type === 'vuln' && isset($p[1]) && trim($p[1]) !== '') {
+            $product = str_starts_with($p[1], 'cpe:') ? implode(' ', array_slice(explode(':', $p[1]), 3, 3)) : $p[1];
+            return __('Matched on: {p}', ['p' => trim(str_replace('_', ' ', $product))]);
+        }
+        if ($type === 'tls' && (trim($p[1] ?? '') !== '' || trim($p[2] ?? '') !== '')) {
+            return trim(__('Certificate: {cn}', ['cn' => trim($p[1] ?? '') ?: '?']) . (trim($p[2] ?? '') !== '' ? ' · ' . __('valid until {d}', ['d' => substr(trim($p[2]), 0, 10)]) : ''));
+        }
+        return '';
+    }
 }

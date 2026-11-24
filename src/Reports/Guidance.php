@@ -351,7 +351,7 @@ Turn off NetBIOS over TCP/IP (network adapter settings, or the DHCP option 001),
                 : __('The software version reported has a published security flaw that an attacker could use.'),
             'fix' => $action !== ''
                 ? __('Update the software to a fixed version. Official guidance: {action}', ['action' => mb_strimwidth($action, 0, 300, '…')])
-                : __('Update the software to a version that fixes this flaw. If the vendor\'s build carries a backported fix, record that and mark it as a false positive.'),
+                : __('Update the software to a version that fixes this flaw. If the vendor\'s build already carries a backported fix, tell your IT provider so they can record it.'),
         ];
     }
 }

@@ -88,7 +88,9 @@ final class ScanController extends Controller
         ]);
         Session::flash('success', $outside
             ? __('Scan queued to run as soon as the worker picks it up (outside the window).')
-            : __('Scan queued. It will run in the client\'s scan window.'));
+            : (\Sentinel\Scanning\ScanWindow::isOpen($client)
+                ? __('Scan queued. The scan window is open, so it starts within a minute or two.')
+                : __('Scan queued. It starts when the client\'s scan window opens.')));
         return $back;
     }
 
