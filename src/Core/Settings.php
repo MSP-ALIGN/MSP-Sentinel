@@ -121,6 +121,12 @@ final class Settings
         'sso_entra_tenant' => '',
         'sso_entra_client' => '',
         'sso_entra_secret' => '',
+        // Automatic setup (1.46): when the script-made secret expires, the one-time setup code (HMAC), and warnings.
+        'sso_entra_secret_expires' => '',
+        'sso_setup_code' => '',
+        'sso_setup_expires' => '',
+        'sso_setup_by' => '',
+        'sso_secret_warned' => '',
         'breach_last_run' => '',
         'breach_last_ok_run' => '',
         'breach_last_result' => '',

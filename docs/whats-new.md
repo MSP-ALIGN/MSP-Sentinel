@@ -2,6 +2,17 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.45.1 (2026-11-24): ITFlow tag filter fixes from review
+
+- **No mass archive.** The sync also stops, changing nothing, when no client the key can see has the tag, or when
+  ITFlow finds the tag but doesn't say which clients have it. Only client tags count: a contact or location tag of
+  the same name is ignored.
+- **"Don't sync with ITFlow" goes further.** An ITFlow client with the same name is no longer added beside it, it is
+  not linked to MSP Align by ITFlow ID, and tickets waiting to be confirmed are left alone. When the switch is turned
+  off again, only findings from then on get ITFlow tickets (no backlog). The form says that open tickets are no longer
+  followed.
+- The tag name refuses invisible and invalid characters.
+
 ### 1.45.0 (2026-11-24): Choose which ITFlow clients sync
 
 - **Only tagged clients.** Under **Administration → Integrations → ITFlow**, tick **Only sync ITFlow clients with this

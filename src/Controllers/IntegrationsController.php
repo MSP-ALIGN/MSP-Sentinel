@@ -75,6 +75,16 @@ final class IntegrationsController extends Controller
                 'has_secret' => $s->getSecret('sso_entra_secret') !== '',
                 'redirect' => App::ssoRedirectUri(),
                 'linked' => (int) App::db()->query('SELECT COUNT(*) FROM users WHERE sso_subject IS NOT NULL')->fetchColumn(),
+                // Automatic setup (1.46): a code just created is shown once; when the script-made secret expires.
+                'setup' => (static function (): ?array {
+                    $show = Session::get('sso_setup_show');
+                    Session::remove('sso_setup_show');
+                    return is_array($show) && is_string($show['code'] ?? null) && is_int($show['until'] ?? null) && $show['until'] > time() ? $show : null;
+                })(),
+                'setup_pending' => \Sentinel\Auth\SsoSetup::pending(),
+                'secret_expires' => $s->get('sso_entra_secret_expires'),
+                'secret_days' => \Sentinel\Auth\SsoSetup::secretDaysLeft(),
+                'public_url' => rtrim((string) App::config()->get('app.public_url', ''), '/'),
             ],
             'breach' => [
                 'enabled' => $s->get('breach_enabled') === '1',
@@ -220,9 +230,11 @@ final class IntegrationsController extends Controller
         }
         if ($request->input('clear_secret') === '1') {
             $s->setSecret('sso_entra_secret', '');
+            $s->set('sso_entra_secret_expires', '');
             $changed['sso_entra_secret'] = 'cleared';
         } elseif ($secret !== '') {
             $s->setSecret('sso_entra_secret', $secret);
+            $s->set('sso_entra_secret_expires', ''); // typed in by hand: its expiry date is unknown (1.46)
             $changed['sso_entra_secret'] = 'changed';
         }
         if ($enabled && (App::ssoRedirectUri() === '' || $s->get('sso_entra_tenant') === '' || $s->get('sso_entra_client') === '' || $s->getSecret('sso_entra_secret') === '')) {
@@ -237,6 +249,31 @@ final class IntegrationsController extends Controller
             $this->audit($request, 'settings.sso_updated', null, null, ['changed' => $changed]);
         }
         Session::flash('success', __('Sign in with Microsoft settings saved.'));
+        return $back;
+    }
+
+    /**
+     * POST /admin/integrations/sso/setup-code: a one-time code (30 minutes) for entra-sso-setup.ps1, which creates the
+     * Entra app and sends its details back with it (1.46, see SsoSetup). Same rule as saveSso: only an Admin who holds
+     * every permission and sees every client, with their own password. The code is shown once, on the next page.
+     */
+    public function ssoSetupCode(Request $request): Response
+    {
+        $back = Response::redirect('/admin/integrations#sso');
+        if (!\Sentinel\Auth\Permissions::isComplete((array) ($this->user()['permissions'] ?? [])) || ($this->user()['client_ids'] ?? null) !== null) {
+            throw new HttpException(403, __('Only someone who holds every permission (an Admin) and sees every client can change Sign in with Microsoft.'));
+        }
+        if (App::ssoRedirectUri() === '') {
+            Session::flash('warning', __('Set Sentinel\'s public address first (app.public_url in the config file): the Entra app is registered for it.'));
+            return $back;
+        }
+        if (($why = $this->confirmWithOwnPassword($request)) !== null) {
+            Session::flash('danger', $why);
+            return $back;
+        }
+        $code = \Sentinel\Auth\SsoSetup::issue((int) $this->user()['id']);
+        Session::set('sso_setup_show', ['code' => $code, 'until' => time() + \Sentinel\Auth\SsoSetup::TTL]);
+        $this->audit($request, 'settings.sso_setup_code', null, null, []);
         return $back;
     }
 
