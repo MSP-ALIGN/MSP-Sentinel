@@ -82,6 +82,7 @@ return [
         Assert::same('anonymous', $smb['session'] ?? null);
         $byName = array_column((array) ($smb['shares'] ?? []), null, 'name');
         Assert::same(250, $byName['Scans']['items'] ?? null, 'counted over several answers');
+        Assert::same(true, $byName['Scans']['complete'] ?? null, 'counted to the end');
         Assert::same(false, $byName['Finance']['readable'] ?? null);
         Assert::true(isset($byName['Printer']) && $byName['Printer']['readable'] === null, 'printers are not opened');
         Assert::true(!in_array('TREE_CONNECT Printer', $log, true) && !in_array('TREE_CONNECT IPC$x', $log, true), 'printer shares never connected');
@@ -125,9 +126,11 @@ return [
         $byIp = array_column(App::engagements()->results($id), null, 'ip');
         Assert::same('refused', $byIp['10.88.0.41']['checks_list']['smb_shares']['session'] ?? null, 'anonymous logon refused');
         Assert::same(false, $byIp['10.88.0.42']['checks_list']['smb_shares']['listed'] ?? null, 'share list refused');
+        Assert::same(false, $byIp['10.88.0.43']['checks_list']['smb_shares']['listed'] ?? null, 'an empty "access denied" answer is not a share list');
         $page = $tech->get('/engagements/' . $id)->body;
         Assert::contains('File share \\\\10.88.0.40\\Scans can be read without a password', $page);
         Assert::notContains('10.88.0.41\\', $page);
         Assert::notContains('10.88.0.42\\', $page);
+        Assert::same(1, substr_count($page, 's file shares without a password'), 'one "anyone can list" finding (10.88.0.40), none for the server that refused the list');
     },
 ];

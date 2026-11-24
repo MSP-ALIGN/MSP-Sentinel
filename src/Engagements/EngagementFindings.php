@@ -111,7 +111,10 @@ final class EngagementFindings
                 if (is_array($sh) && ($sh['readable'] ?? null) === true) {
                     $share = '\\\\' . $ip . '\\' . (string) ($sh['name'] ?? '');
                     $add('fail', 'smb_share_open', __('File share {s} can be read without a password', ['s' => $share]), $share, $origin,
-                        __('{n} item(s) in its top folder, listed by an anonymous session; nothing was opened.', ['n' => (int) ($sh['items'] ?? 0)]),
+                        ($sh['items'] ?? null) === null ? __('Its top folder could be opened for listing by an anonymous session (the item count did not finish); nothing was opened.')
+                            : (($sh['complete'] ?? true) === false
+                                ? __('At least {n} item(s) in its top folder, listed by an anonymous session; nothing was opened.', ['n' => (int) $sh['items']])
+                                : __('{n} item(s) in its top folder, listed by an anonymous session; nothing was opened.', ['n' => (int) $sh['items']])),
                         __('Remove "Everyone", "Anonymous" and "Guest" from the share and folder permissions (Samba: "guest ok = no"); give access only to the groups that need it.'));
                 }
             }

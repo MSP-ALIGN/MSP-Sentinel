@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.30.0](https://img.shields.io/badge/version-1.30.0-ff5a1f?style=flat-square)
+![Version 1.30.1](https://img.shields.io/badge/version-1.30.1-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -149,6 +149,20 @@ curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install
 The same help is built into the app (**Help** in the menu), with a "What's new" page for every release.
 
 ## What's new
+
+### 1.30.1 (2026-11-24): share check, fixes from review
+
+- **No false "anyone can list the shares" finding.** A server that refuses the list answers an empty list with
+  "access denied" (Samba's "restrict anonymous = 1"). Before, that empty answer counted as a list.
+- **Counts are honest.**
+  - An empty drive root counts as readable with 0 items. Before, it was "not readable".
+  - A count that didn't reach the end says "at least N".
+  - A share that opened but couldn't be counted in time says so, instead of showing 0.
+- **Long share names** (over 80 characters) are opened with their full name. Only the evidence is shortened.
+- **Samba's anonymous sessions** are labelled anonymous, not guest.
+- **Unsolicited server notices** no longer end the check for that host.
+- **Docs:** servers that require SMB encryption show as refused. The check can miss an open share there, but never
+  invents one.
 
 ### 1.30.0 (2026-11-24): safe SMB share check
 

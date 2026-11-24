@@ -238,7 +238,7 @@ try {
     }
     $cfg['testing']['creds_spacing'] = 0.3;
     // Safe SMB share check (engagements): fake SMB2 servers; every request is logged so tests can prove nothing is written.
-    foreach (['203.0.113.76:445' => 'open', '10.88.0.40:445' => 'open', '10.88.0.41:445' => 'noanon', '10.88.0.42:445' => 'restricted'] as $target => $smbMode) {
+    foreach (['203.0.113.76:445' => 'open', '10.88.0.40:445' => 'open', '10.88.0.41:445' => 'noanon', '10.88.0.42:445' => 'restricted', '10.88.0.43:445' => 'enumdenied'] as $target => $smbMode) {
         $p = $freePort();
         $mocks[] = proc_open([PHP_BINARY, __DIR__ . '/mocks/smb_server.php', (string) $p, $smbMode, $outDir . '/smb-requests.log'],
             [0 => ['file', '/dev/null', 'r'], 1 => ['file', $outDir . '/mock-smb.log', 'a'], 2 => ['file', $outDir . '/mock-smb.log', 'a']], $pipes);

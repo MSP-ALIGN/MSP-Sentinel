@@ -9,7 +9,8 @@ declare(strict_types=1);
  *
  * Modes: open (anonymous sessions allowed; shares Public (3 items), Scans (250 items, answered in two parts), Finance
  * and C$ (refused), IPC$, Printer), restricted (anonymous session allowed, IPC$ refused: no share list), noanon
- * (anonymous logon refused).
+ * (anonymous logon refused), enumdenied (the share list call answers an empty list with "access denied", as Samba's
+ * "restrict anonymous = 1" does).
  * Every request is logged as one line ("<command> <details>") so tests can prove nothing was written or opened
  * beyond the top folders. The share list answer is split into two DCE/RPC fragments.
  */
@@ -145,6 +146,11 @@ while (true) {
                         $o = pack('VVV', $n, 0, $n) . $u;
                         return $o . str_repeat("\0", (4 - strlen($o) % 4) % 4);
                     };
+                    if ($mode === 'enumdenied') {
+                        $pending = $hdr(2, 3, pack('VvCC', 32, 0, 0, 0) . pack('VVVVVVVV', 1, 1, 0x20000, 0, 0, 0, 0, 5));
+                        $reply(0, pack('vvVVvv', 17, 0, $dlen, 0, 0, 0));
+                        break;
+                    }
                     $n = count($shares);
                     $stub = pack('VVVVVV', 1, 1, 0x20000, $n, 0x20004, $n);
                     foreach ($shares as $i => [$sn, $st]) {

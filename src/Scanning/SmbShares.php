@@ -52,8 +52,9 @@ final class SmbShares
 
     /**
      * @param callable():bool $shouldStop true when the engagement must stop (checked between steps)
-     * @return array{session:string, listed:bool, shares:list<array{name:string, type:string, readable:?bool, items:?int}>}
-     *         session: 'anonymous' | 'guest' (the server treated the anonymous session as its guest) | 'refused' |
+     * @return array{session:string, listed:bool, shares:list<array{name:string, type:string, readable:?bool, items:?int, complete:bool}>}
+     *         items: entries counted (null: opened, but not counted); complete: the count reached the end (else "at
+     *         least items"); session: 'anonymous' | 'guest' (the server treated the anonymous session as its guest) | 'refused' |
      *         'error'; listed: the share list was handed out; readable null: not tested (not a disk share, or the cap)
      */
     public function check(string $ip, callable $shouldStop, int $port = 445): array
@@ -82,14 +83,16 @@ final class SmbShares
             if ($list === null) {
                 return $out;
             }
-            $out['listed'] = true;
+            $out['listed'] = $list !== []; // an empty list proves nothing
             $tested = 0;
             foreach (array_slice($list, 0, self::MAX_SHARES) as $s) {
-                $entry = ['name' => $s['name'], 'type' => $s['type'], 'readable' => null, 'items' => null];
+                $entry = ['name' => $s['name'], 'type' => $s['type'], 'readable' => null, 'items' => null, 'complete' => false];
                 if ($s['type'] === 'disk' && $tested < self::MAX_TESTED && !$shouldStop() && microtime(true) < $this->deadline) {
                     $tested++;
-                    $entry['items'] = $this->countTopFolder($ip, $s['name']);
-                    $entry['readable'] = $entry['items'] !== null;
+                    $c = $this->countTopFolder($ip, $s['path']);
+                    $entry['readable'] = $c !== null;
+                    $entry['items'] = $c['items'] ?? null;
+                    $entry['complete'] = $c['complete'] ?? false;
                 }
                 $out['shares'][] = $entry;
             }
@@ -162,6 +165,9 @@ final class SmbShares
             $status = unpack('V', substr($raw, 8, 4))[1];
             $flags = unpack('V', substr($raw, 16, 4))[1];
             $mid = unpack('P', substr($raw, 24, 8))[1];
+            if ($mid === -1) {
+                continue; // an unsolicited notice (oplock/lease break, MessageId 0xFFFFFFFFFFFFFFFF): not our answer
+            }
             if (($flags & 0x1) === 0 || $mid !== $id) {
                 throw new \RuntimeException('unexpected message');
             }
@@ -216,7 +222,8 @@ final class SmbShares
             return in_array($r['status'], [0xC0000022, 0xC000006D, 0xC0000072, 0xC000015B], true) ? 'refused' : 'error';
         }
         $sessionFlags = strlen($r['body']) >= 4 ? unpack('v', substr($r['body'], 2, 2))[1] : 0;
-        return ($sessionFlags & 0x1) !== 0 ? 'guest' : 'anonymous';
+        // Samba sets both IS_GUEST and IS_NULL for anonymous logons: IS_NULL decides.
+        return ($sessionFlags & 0x2) !== 0 || ($sessionFlags & 0x1) === 0 ? 'anonymous' : 'guest';
     }
 
     /** Tree connect; the tree id or null when refused. */
@@ -351,7 +358,8 @@ final class SmbShares
     /**
      * Read NetrShareEnum's level-1 answer (NDR): share names and types. Counts capped; bounds checked throughout.
      *
-     * @return list<array{name:string, type:string}>|null
+     * @return list<array{name:string, path:string, type:string}>|null null: malformed, or the server refused (non-zero
+     *         result code)
      */
     public static function parseShareEnum(string $s): ?array
     {
@@ -385,16 +393,19 @@ final class SmbShares
                 return null; // no container
             }
             $entries = $u32();
-            if ($u32() === 0 || $entries > 10000) {
-                return $entries === 0 ? [] : null;
-            }
-            $max = $u32();
-            if ($max < $entries) {
+            $buffer = $u32();
+            if ($entries > 10000 || ($buffer === 0 && $entries !== 0)) {
                 return null;
             }
             $items = [];
-            for ($i = 0; $i < $entries; $i++) {
-                $items[] = ['name' => $u32(), 'type' => $u32(), 'remark' => $u32()];
+            if ($buffer !== 0) {
+                $max = $u32();
+                if ($max < $entries) {
+                    return null;
+                }
+                for ($i = 0; $i < $entries; $i++) {
+                    $items[] = ['name' => $u32(), 'type' => $u32(), 'remark' => $u32()];
+                }
             }
             $out = [];
             foreach ($items as $it) {
@@ -402,6 +413,7 @@ final class SmbShares
                 if ($it['remark'] !== 0) {
                     $str();
                 }
+                $full = (string) preg_replace('/[\x00-\x1F\x7F\\\\\/]/u', '', $name);
                 $base = $it['type'] & 0x0FFFFFFF;
                 $type = match ($base) {
                     0 => 'disk',
@@ -409,19 +421,30 @@ final class SmbShares
                     3 => 'ipc',
                     default => 'other',
                 };
-                $clean = mb_substr((string) preg_replace('/[\x00-\x1F\x7F\\\\\/]/u', '', $name), 0, 80);
-                if ($clean !== '' && count($out) < self::MAX_SHARES) {
-                    $out[] = ['name' => $clean, 'type' => $type];
+                if ($full !== '' && count($out) < self::MAX_SHARES) {
+                    // 'name' for the evidence (80 characters); 'path' (the whole name) only for opening the share.
+                    $out[] = ['name' => mb_substr($full, 0, 80), 'path' => $full, 'type' => $type];
                 }
             }
-            return $out;
+            // After the strings: TotalEntries, the resume handle (a pointer) and the call's own result. A server that
+            // refuses the list (e.g. Samba's "restrict anonymous = 1") answers an empty container with an error code.
+            $u32();
+            if ($u32() !== 0) {
+                $u32();
+            }
+            return $u32() === 0 ? $out : null;
         } catch (\RuntimeException) {
             return null;
         }
     }
 
-    /** Open the share and count the entries of its top folder (read only); null when it can't be read. */
-    private function countTopFolder(string $ip, string $share): ?int
+    /**
+     * Open the share and count the entries of its top folder (read only); null when it can't be opened for listing.
+     * Opening the folder for listing already proves it is readable; the count may be partial.
+     *
+     * @return array{items:?int, complete:bool}|null items null: opened, but no listing answer came back in time
+     */
+    private function countTopFolder(string $ip, string $share): ?array
     {
         $tree = $this->treeConnect($ip, $share);
         if ($tree === null) {
@@ -435,21 +458,28 @@ final class SmbShares
             }
             try {
                 $count = 0;
+                $answered = 0;
                 $pattern = self::utf16('*');
                 for ($q = 0; $q < 50 && microtime(true) < $this->deadline; $q++) {
                     $body = pack('vCCVa16vvV', 33, 0x0C, $q === 0 ? 0x01 : 0x00, 0, $dir, 96, strlen($pattern), 65536) . $pattern;
-                    $r = $this->call(0x0E, $body, $tree);
-                    if ($r['status'] === self::STATUS_NO_MORE_FILES) {
-                        break;
+                    try {
+                        $r = $this->call(0x0E, $body, $tree);
+                    } catch (\RuntimeException) {
+                        break; // the budget ran out mid-answer: the count so far, marked incomplete
+                    }
+                    // The end of the listing; an empty drive root (no "." or "..") says "no such file" at once.
+                    if ($r['status'] === self::STATUS_NO_MORE_FILES || ($q === 0 && $r['status'] === 0xC000000F)) {
+                        return ['items' => $count, 'complete' => true];
                     }
                     if ($r['status'] !== self::STATUS_SUCCESS || strlen($r['body']) < 8) {
-                        return $q === 0 ? null : $count;
+                        break;
                     }
                     $off = unpack('v', substr($r['body'], 2, 2))[1];
                     $len = unpack('V', substr($r['body'], 4, 4))[1];
                     if ($off < 64 || $off + $len > strlen($r['raw'])) {
-                        return $q === 0 ? null : $count;
+                        break;
                     }
+                    $answered++;
                     $data = substr($r['raw'], $off, $len);
                     // FileNamesInformation: NextEntryOffset, FileIndex, FileNameLength, FileName. Names are only
                     // compared with "." and "..", never kept.
@@ -470,7 +500,7 @@ final class SmbShares
                         break;
                     }
                 }
-                return min($count, self::MAX_COUNT);
+                return ['items' => $answered > 0 ? min($count, self::MAX_COUNT) : null, 'complete' => false];
             } finally {
                 $this->close($tree, $dir);
             }
@@ -483,7 +513,7 @@ final class SmbShares
      * Results received from an agent (untrusted), reduced to check()'s shape.
      *
      * @param array<mixed> $raw
-     * @return array{session:string, listed:bool, shares:list<array{name:string, type:string, readable:?bool, items:?int}>}
+     * @return array{session:string, listed:bool, shares:list<array{name:string, type:string, readable:?bool, items:?int, complete:bool}>}
      */
     public static function cleanResults(array $raw): array
     {
@@ -497,7 +527,7 @@ final class SmbShares
             $readable = is_bool($s['readable'] ?? null) ? $s['readable'] : null;
             $items = $readable === true && is_int($s['items'] ?? null) ? max(0, min(self::MAX_COUNT, $s['items'])) : null;
             $shares[] = ['name' => $name, 'type' => in_array($s['type'] ?? null, ['disk', 'printer', 'ipc', 'other'], true) ? (string) $s['type'] : 'other',
-                'readable' => $readable, 'items' => $items];
+                'readable' => $readable, 'items' => $items, 'complete' => $items !== null && ($s['complete'] ?? false) === true];
         }
         return ['session' => $session, 'listed' => ($raw['listed'] ?? false) === true && $shares !== [], 'shares' => $shares];
     }

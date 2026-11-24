@@ -99,6 +99,8 @@ earlier report is then marked:
 
 - **No UDP port scan.** nmap runs unprivileged (TCP connect scans), as in day-to-day scanning. Common UDP services are
   checked with Sentinel's own read-only probes instead.
+- **SMB servers or shares that require encryption** (Windows "EncryptData" or "RejectUnencryptedAccess") show as
+  refused or not readable: the share check doesn't encrypt. It can miss an open share there; it never invents one.
 - **No breached-credential checks yet.** These are next on the [security roadmap](ROADMAP-security.md). Zone
   transfers and subdomain takeover are checked every day for every client (1.28), not only in engagements.
 - **Not a replacement for an independent test.** Where a regulator or insurer requires an independent third-party

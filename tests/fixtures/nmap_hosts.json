@@ -452,5 +452,16 @@
       }
     ],
     "hostscripts": []
+  },
+  "10.88.0.43": {
+    "mac": "02:00:00:00:88:43",
+    "open": [
+      {
+        "port": 445,
+        "name": "microsoft-ds",
+        "product": "Samba smbd"
+      }
+    ],
+    "hostscripts": []
   }
 }

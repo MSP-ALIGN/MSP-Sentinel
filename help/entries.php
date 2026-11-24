@@ -238,6 +238,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.30.1',
+            'date' => '2026-11-24',
+            'items' => [
+                'Share check fixes: a server that refuses the share list (an empty answer with "access denied") is no longer reported as listing its shares; empty drive roots count as readable with 0 items; a count that didn\'t finish says "at least"; long share names are opened correctly; Samba\'s anonymous sessions are labelled anonymous.',
+            ],
+        ],
+        [
             'version' => '1.30.0',
             'date' => '2026-11-24',
             'items' => [
