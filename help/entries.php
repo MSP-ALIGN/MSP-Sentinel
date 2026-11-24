@@ -106,7 +106,7 @@ return [
                 'To run one: 1. Open the client → Pen-test engagements → New engagement (Technician or Admin). 2. Enter the name, window (at most 14 days), tests, pace (gentle or normal; all ports needs normal), targets inside the authorised scope, exclusions by address or range, and upload the client\'s signed PDF. 3. Wait for a second admin to approve it. 4. Inside the window, run the external tests (from Sentinel) and the internal tests (through each site\'s agent, 1.27.0 or later). 5. Issue penetration test report.',
                 'Approval: a different admin approves, with their password, after checking that the signed document matches the scope. Nothing runs before. The other admins get a notification and a banner on the dashboard, and the Engagements page lists what awaits them. An account the creator created, or whose password or 2FA the creator reset, in the last 30 days cannot approve. With only one admin, add another first.',
                 'Stop engagement (kill switch) ends it for good within a minute. Technicians and admins can stop or cancel an engagement. Demo and archived clients have no New engagement button.',
-                'Results: the engagement page lists findings with evidence and fixes. Fails and Warnings also become findings of type "Pen test" (triage, owners, due dates, groups, ITFlow tickets), unless the regular checks already raise the same problem; worth-knowing results stay in the report. For each host and test the newest engagement that ran it decides: a retest that no longer finds a problem resolves its finding, one that did not run that test leaves it open. The client\'s services and inventory are not changed. The report is branded and frozen (summary, how findings chain together, scope and authorisation, method, findings, systems tested). After fixes, create a retest engagement (This is a retest of) and issue its retest letter: each earlier finding is marked fixed, still open or not retested.',
+                'Results: the engagement page lists findings with evidence and fixes. Fails and Warnings also become findings of type "Pen test" (triage, owners, due dates, groups, ITFlow tickets), unless the regular checks already raise the same problem; worth-knowing results stay in the report. For each host and test the newest engagement that ran it decides: a retest that no longer finds a problem resolves its finding; one that did not run that test, or was stopped before that host finished, leaves it open, and open ports from an all-ports test need an all-ports retest. Once the regular scan or the agent has looked again, its result decides. The masked default password stays in the pen-test report. The client\'s services and inventory are not changed. The report is branded and frozen (summary, how findings chain together, scope and authorisation, method, findings, systems tested). After fixes, create a retest engagement (This is a retest of) and issue its retest letter: each earlier finding is marked fixed, still open or not retested.',
             ],
         ],
         [
@@ -357,6 +357,13 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.39.1',
+            'date' => '2026-11-24',
+            'items' => [
+                'Pen-test findings: a retest stopped before a host finished, or that skipped a test, no longer resolves findings; open ports from an all-ports test need an all-ports retest; once the regular scan or the agent has looked again, its result decides (no old result comes back after a fix); the masked default password stays in the pen-test report; a long share name with accents no longer stops the client\'s findings from updating.',
+            ],
+        ],
         [
             'version' => '1.39.0',
             'date' => '2026-11-24',

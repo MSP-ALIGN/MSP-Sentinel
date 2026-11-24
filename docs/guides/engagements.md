@@ -63,8 +63,14 @@ Pausing all scanning, or the client, stops engagements too. Before approval, **C
 - **No doubles:** a result the regular checks already raise (a risky port open to the internet, or a protocol problem
   an agent already reports on that address) isn't added a second time.
 - **Retests resolve them.** For each host and test, the newest engagement that ran that test on that host decides: a
-  retest that no longer finds the problem resolves the finding; a retest that didn't run that test, or didn't reach
-  that host, leaves it open.
+  retest that no longer finds the problem resolves the finding; a retest that didn't run that test, didn't reach that
+  host, or was stopped before the host finished, leaves it open. Open ports found by an all-ports test need an
+  all-ports retest.
+- **The regular checks take over.** Once the external scan has looked at that port again, or the agent has swept that
+  address again (for the protocol problems it checks itself), its result decides, so an old pen-test result never
+  comes back after you fix something.
+- A working vendor default password shows the account and service in the finding; the masked password stays in the
+  pen-test report. Pen-test findings aren't linked to a device or host page; they are on the client's Findings page.
 - Cancelled engagements, and engagements never approved, never create findings. The client's services, certificates
   and device inventory are still not changed by an engagement.
 

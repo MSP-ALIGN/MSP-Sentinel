@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.39.0](https://img.shields.io/badge/version-1.39.0-ff5a1f?style=flat-square)
+![Version 1.39.1](https://img.shields.io/badge/version-1.39.1-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,20 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.39.1 (2026-11-24): pen-test findings fixes from review
+
+- **Retests only resolve what they really tested.** A host whose retest was stopped (kill switch), timed out or failed
+  no longer resolves its findings, and neither does a retest that skipped a check on a host (UDP, the share check, the
+  default-password test). Open ports found by an all-ports test need an all-ports retest, as in the retest letter.
+- **No old results coming back.** Once the external scan has looked at a port again, or the agent has swept an address
+  again (for the protocol problems it checks itself), that result decides. Before, fixing something the regular check
+  reported could reopen the months-old pen-test result.
+- **The masked default password stays in the pen-test report.** The finding (and so the API, ITFlow tickets and client
+  reports) shows the account and service only.
+- **A long share name with accents no longer breaks the client's findings refresh** (long keys are now shortened
+  without cutting a character in two).
+- A device whose name is one of several addresses gets its NTLM name too.
+
 ### 1.39.0 (2026-11-24): pen-test results become findings
 
 - **Pen-test findings.** Each Fail and Warning of an approved engagement is now a finding (type **Pen test**), with the
@@ -154,15 +168,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
   - **Backups are made another way** on the System page stops backup warnings and alerts;
   - a backup run stopped by a missing or short encryption passphrase is recorded as failed;
   - two backup runs at once both stay in the history.
-
-### 1.37.0 (2026-11-24): backup status, picked findings, client risk at a glance
-
-- **Backups you can see.** Each nightly backup records when it ran, whether it worked, its size and whether it was
-  encrypted. **Administration → System → Backups** lists the last runs. The health check turns red, and admins get an
-  alert (in-app and email, at most once a day), when the last backup failed or the last good one is over 2 days old.
-- **Pick findings yourself.** In **One row per target**, tick findings (or a whole page) and apply one action to all of
-  them: assign, accept risk / false positive / reopen, due date (admins) or verify fix.
-- **The Clients list shows risk and open findings** for each client, with a link to its findings.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

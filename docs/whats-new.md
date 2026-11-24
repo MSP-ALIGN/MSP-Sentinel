@@ -2,6 +2,15 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.37.0 (2026-11-24): backup status, picked findings, client risk at a glance
+
+- **Backups you can see.** Each nightly backup records when it ran, whether it worked, its size and whether it was
+  encrypted. **Administration → System → Backups** lists the last runs. The health check turns red, and admins get an
+  alert (in-app and email, at most once a day), when the last backup failed or the last good one is over 2 days old.
+- **Pick findings yourself.** In **One row per target**, tick findings (or a whole page) and apply one action to all of
+  them: assign, accept risk / false positive / reopen, due date (admins) or verify fix.
+- **The Clients list shows risk and open findings** for each client, with a link to its findings.
+
 ### 1.36.1 (2026-11-24): Docker and Proxmox agents, fixes from review
 
 - **Docker:** `docker compose up`, `pull` and `logs` no longer need `SENTINEL_SERVER` (only enrolling does). A revoked

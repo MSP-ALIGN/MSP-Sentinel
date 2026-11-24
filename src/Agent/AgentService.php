@@ -672,7 +672,7 @@ final class AgentService
         $dns = InventoryRepository::clean($ntlm['dns_name'] ?? '', 255);
         if ($nb !== '' || $dns !== '') {
             // The agent stores the address as the name when it had no host name: that counts as empty (1.39).
-            $this->db->prepare("UPDATE devices SET name = IF(name = '' OR name = ip_addresses, :n, name), dns_name = IF(dns_name = '', :d, dns_name) WHERE id = :id")
+            $this->db->prepare("UPDATE devices SET name = IF(name = '' OR FIND_IN_SET(name, REPLACE(ip_addresses, ' ', '')) > 0, :n, name), dns_name = IF(dns_name = '', :d, dns_name) WHERE id = :id")
                 ->execute(['n' => $nb !== '' ? $nb : $dns, 'd' => strtolower($dns), 'id' => $deviceId]);
         }
     }

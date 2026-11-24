@@ -217,7 +217,7 @@ final class FindingsEngine
         $add = static function (string $key, array $issue) use (&$issues): void {
             // Long keys (IPv6 + long hostnames) keep a readable prefix plus a hash of the whole key, so they never collide.
             if (strlen($key) > 190) {
-                $key = substr($key, 0, 120) . '#' . hash('sha256', $key);
+                $key = mb_strcut($key, 0, 120, 'UTF-8') . '#' . hash('sha256', $key); // never cut inside a character (1.39.1)
             }
             foreach (['title' => 300, 'detail' => 1000, 'target' => 320, 'evidence' => 500] as $field => $max) {
                 $issue[$field] = mb_substr((string) $issue[$field], 0, $max);
@@ -512,7 +512,27 @@ final class FindingsEngine
         return $issues;
     }
 
+    /** Codes the agent's own protocol checks (ProtocolRules) judge on every sweep: newer agent data wins over a pen test. */
+    private const AGENT_PROTOCOL_CODES = ['ftp', 'http_login', 'rdp_no_nla', 'smb1', 'smb_signing', 'snmp_private', 'snmp_public', 'telnet'];
+
     /**
+     * Pen-test findings (1.39; rules tightened in 1.39.1 after review).
+     *
+     * - Only approved, not cancelled engagements; only Fail and Warning results.
+     * - For each origin, host and test, the newest engagement that really ran that test on that host decides: a host
+     *   result counts for a test only when it is complete (nmap finished: not stopped, timed out or failed) and holds
+     *   that test's evidence (UDP answers, the share check where port 445 was open, the credential results). So a
+     *   retest that was stopped, or skipped a test, never resolves that test's findings.
+     * - Open-port results (test ''): a retest decides them only if it scanned all ports, or the engagement that found
+     *   them didn't either (the same rule as the retest letter, EngagementReport::compare).
+     * - Not repeated, and never revived from old evidence: a problem a regular check covers with data at least as new
+     *   as the pen test (the external scan saw that port, open or closed, since; the agent swept that address since,
+     *   for the codes its protocol checks judge).
+     * - The masked default password stays in the pen-test report: the finding keeps only the account and service.
+     *
+     * Untrusted: the result rows (from the network, through Sentinel's scanner or an agent): analysed with fixed rules
+     * (EngagementFindings), texts cut to length, escaped where shown.
+     *
      * @param \Closure(string, array<string,mixed>):void $add
      * @param array<string, array<string,mixed>> $issues  what the other checks found (to avoid repeating them)
      * @param array<string, array<string,true>> $protoByIp  the agent's protocol issue codes per address
@@ -521,38 +541,83 @@ final class FindingsEngine
     {
         $engs = $this->db->prepare("SELECT id, name, tests, window_start FROM engagements WHERE client_id = :c AND cancelled_at IS NULL AND approved_at IS NOT NULL ORDER BY window_start DESC, id DESC");
         $engs->execute(['c' => $clientId]);
+        $engagements = $engs->fetchAll();
+        if ($engagements === []) {
+            return;
+        }
+        // When the regular checks last looked: the external scan per address and port, the agent's sweep per address.
+        $svc = $this->db->prepare('SELECT a.ip, s.port, GREATEST(s.last_seen, COALESCE(s.closed_at, s.last_seen)) AS seen FROM services s JOIN assets a ON a.id = s.asset_id
+                                   WHERE a.client_id = :c AND s.protocol = \'tcp\'');
+        $svc->execute(['c' => $clientId]);
+        $externalSeen = [];
+        foreach ($svc->fetchAll() as $r) {
+            $externalSeen[$r['ip'] . ':' . $r['port']] = (string) $r['seen'];
+        }
+        $dev = $this->db->prepare("SELECT ip_addresses, last_full_seen FROM devices WHERE client_id = :c AND source = 'agent' AND removed_at IS NULL AND last_full_seen IS NOT NULL");
+        $dev->execute(['c' => $clientId]);
+        $agentSeen = [];
+        foreach ($dev->fetchAll() as $r) {
+            foreach (explode(',', (string) $r['ip_addresses']) as $ip) {
+                $ip = trim($ip);
+                if ($ip !== '' && strcmp((string) $r['last_full_seen'], $agentSeen[$ip] ?? '') > 0) {
+                    $agentSeen[$ip] = (string) $r['last_full_seen'];
+                }
+            }
+        }
         $repo = new \Sentinel\Engagements\EngagementRepository($this->db);
-        $decided = []; // origin|ip|test => engagement id that decides
-        foreach ($engs->fetchAll() as $e) {
-            $tests = array_merge([''], array_values(array_filter(explode(',', (string) $e['tests']))));
+        $decided = []; // origin|ip|test => ['id' => engagement that decides, 'full' => it scanned all ports]
+        foreach ($engagements as $e) {
+            $tests = array_values(array_filter(explode(',', (string) $e['tests'])));
+            $full = in_array('tcp_full', $tests, true);
             $results = $repo->results((int) $e['id']);
             if ($results === []) {
                 continue;
+            }
+            $scannedAt = [];
+            foreach ($results as $r) {
+                $scannedAt[(string) $r['origin'] . '|' . (string) $r['ip']] = (string) $r['scanned_at'];
             }
             foreach (\Sentinel\Engagements\EngagementFindings::analyse($results) as $f) {
                 if (!in_array($f['severity'], ['fail', 'warn'], true)) {
                     continue; // "worth knowing" stays in the pen-test report only
                 }
                 $slot = $f['origin'] . '|' . $f['host'] . '|' . $f['test'];
-                if (isset($decided[$slot]) && $decided[$slot] !== (int) $e['id']) {
-                    continue; // a newer engagement ran this test on this host
+                $d = $decided[$slot] ?? null;
+                if ($d !== null && $d['id'] !== (int) $e['id'] && !($f['test'] === '' && !$d['full'] && $full)) {
+                    continue; // a newer engagement ran this test on this host (all ports found here need an all-ports retest)
                 }
-                $covered = ($f['origin'] === 'external' && (str_starts_with($f['key'], 'exposed_') || $f['key'] === 'telnet')
-                        && isset($issues['port:' . $f['target']]))
+                $at = $scannedAt[$f['origin'] . '|' . $f['host']] ?? '';
+                $port = (int) (explode(':', $f['target'])[1] ?? 0);
+                $regularNewer = $f['origin'] === 'external'
+                    ? (str_starts_with($f['key'], 'exposed_') || $f['key'] === 'telnet') && strcmp($externalSeen[$f['host'] . ':' . $port] ?? '', $at) >= 0
+                    : in_array($f['key'], self::AGENT_PROTOCOL_CODES, true) && strcmp($agentSeen[$f['host']] ?? '', $at) >= 0;
+                $covered = ($f['origin'] === 'external' && (str_starts_with($f['key'], 'exposed_') || $f['key'] === 'telnet') && isset($issues['port:' . $f['target']]))
                     || ($f['origin'] === 'internal' && isset($protoByIp[$f['host']][$f['key']]));
-                if ($covered) {
+                if ($covered || $regularNewer) {
                     continue;
                 }
+                $evidence = $f['key'] === 'default_login'
+                    ? __('A published vendor default password worked (the masked password is in the pen-test report only).')
+                    : $f['evidence'];
                 $add('pentest:' . $f['key'] . ':' . $f['origin'] . ':' . $f['target'], [
                     'type' => 'pentest', 'severity' => $f['severity'], 'title' => $f['title'],
                     'detail' => $f['fix'] . ' ' . __('Found by the pen-test engagement "{name}" (#{id}).', ['name' => (string) $e['name'], 'id' => (int) $e['id']]),
-                    'target' => $f['target'], 'evidence' => $f['key'] . '|' . mb_substr($f['evidence'], 0, 400), 'source' => $f['origin'] === 'internal' ? 'agent' : 'external',
+                    'target' => $f['target'], 'evidence' => $f['key'] . '|' . mb_substr($evidence, 0, 400), 'source' => $f['origin'] === 'internal' ? 'agent' : 'external',
                 ]);
             }
-            // This engagement decides every slot it covered for its hosts (also those where it found nothing).
+            // This engagement decides the slots it really covered for each host (also where it found nothing).
             foreach ($results as $r) {
-                foreach ($tests as $t) {
-                    $decided[(string) $r['origin'] . '|' . (string) $r['ip'] . '|' . $t] ??= (int) $e['id'];
+                if ((int) ($r['complete'] ?? 0) !== 1) {
+                    continue; // stopped, timed out or failed: proves nothing about what is absent
+                }
+                $c = (array) ($r['checks_list'] ?? []);
+                $smb = in_array(445, array_map(static fn ($p): int => (int) ($p['port'] ?? 0), (array) ($r['ports_list'] ?? [])), true);
+                $ran = ['' => true, 'nse_safe' => in_array('nse_safe', $tests, true), 'udp_common' => isset($c['udp']),
+                        'anon_access' => in_array('anon_access', $tests, true) && (!$smb || isset($c['smb_shares'])), 'default_creds' => isset($c['creds'])];
+                foreach ($ran as $t => $yes) {
+                    if ($yes) {
+                        $decided[(string) $r['origin'] . '|' . (string) $r['ip'] . '|' . $t] ??= ['id' => (int) $e['id'], 'full' => $full];
+                    }
                 }
             }
         }
