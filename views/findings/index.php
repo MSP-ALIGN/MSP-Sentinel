@@ -25,7 +25,7 @@ $quick = [
     ['label' => __('Overdue'), 'n' => $fixCounts['overdue'], 'params' => ['due' => 'overdue'], 'active' => $filters['due'] === 'overdue', 'icon' => 'bi-alarm'],
     ['label' => __('Due within {d} days', ['d' => \Sentinel\Findings\FixWorkflow::DUE_SOON_DAYS]), 'n' => $fixCounts['due_soon'], 'params' => ['due' => 'soon'], 'active' => $filters['due'] === 'soon', 'icon' => 'bi-hourglass-split'],
 ];
-$typeLabels = ['port' => __('Exposed service'), 'tls' => __('Certificate'), 'web' => __('Web page'), 'vuln' => __('Vulnerability'), 'email' => __('Email security'), 'patch' => __('Missing updates'), 'device' => __('Device security'), 'directory' => __('Active Directory'), 'dns' => __('DNS')];
+$typeLabels = ['port' => __('Exposed service'), 'tls' => __('Certificate'), 'web' => __('Web page'), 'vuln' => __('Vulnerability'), 'email' => __('Email security'), 'patch' => __('Missing updates'), 'device' => __('Device security'), 'directory' => __('Active Directory'), 'dns' => __('DNS'), 'breach' => __('Breached account')];
 ?>
 <?php
 // One finding as a row (the flat list, and groups of one in the grouped list).

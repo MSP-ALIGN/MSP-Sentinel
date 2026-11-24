@@ -204,6 +204,28 @@ Once a day at most, Sentinel also checks DNS (1.28):
 
 Both are Fails, and the results are in the DNS table on the same page.
 
+## Breach monitoring
+
+Once a week, Sentinel asks XposedOrNot which addresses of your verified domains appear in known data breaches
+(**Administration → Integrations → Breach monitoring**). To set it up:
+
+1. Sign in at xposedornot.com.
+2. Verify each client domain in their dashboard (they check that you control it).
+3. Copy the API key into Sentinel and tick **Check weekly**.
+
+How the results are used:
+
+- An address goes to the client whose authorisation lists its domain (exactly, or under a `*.` entry). Verified
+  domains in no client's register are listed on the settings card and otherwise ignored.
+- One finding per address: **Fail** when a breach happened in the last 12 months, **Warning** when all its breaches
+  are older. The finding lists each breach, its date and what was exposed. Passwords are never stored or shown.
+- An address the provider no longer lists resolves on the next check. A check that fails (provider unreachable, the
+  key refused, its daily limit) changes nothing.
+- The client's **Website & email** page lists the breached addresses.
+
+XposedOrNot's free key is meant for personal, low-volume use. For monitoring clients they offer paid xonAPI+ keys,
+which work the same way here. **Check now** runs at most once an hour.
+
 ## Grades
 
 - **Fail:** fix now. For example: Remote Desktop or a database open to the internet, an expired certificate, an

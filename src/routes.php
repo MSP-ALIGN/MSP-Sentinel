@@ -175,6 +175,8 @@ $router->add('POST', '/admin/integrations/itflow/sync', [IntegrationsController:
 $router->add('POST', '/admin/integrations/itflow/tickets', [IntegrationsController::class, 'ticketsItflow'], $admin);
 $router->add('POST', '/admin/integrations/mspalign', [IntegrationsController::class, 'saveAlign'], $admin);
 $router->add('POST', '/admin/integrations/mspalign/test', [IntegrationsController::class, 'testAlign'], $admin);
+$router->add('POST', '/admin/integrations/breach', [IntegrationsController::class, 'saveBreach'], $admin);
+$router->add('POST', '/admin/integrations/breach/check', [IntegrationsController::class, 'checkBreach'], $admin);
 $router->add('POST', '/clients/{id}/compliance/link', [ComplianceController::class, 'link'], $admin);
 $router->add('POST', '/clients/{id}/compliance/unlink', [ComplianceController::class, 'unlink'], $admin);
 $router->add('POST', '/clients/{id}/compliance/refresh', [ComplianceController::class, 'refresh'], $technician);

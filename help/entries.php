@@ -169,6 +169,13 @@ return [
             ],
         ],
         [
+            'title' => 'Breach monitoring',
+            'paragraphs' => [
+                'Once a week Sentinel asks XposedOrNot which addresses of your verified domains appear in known data breaches (Administration, Integrations, Breach monitoring). Verify each client domain in your XposedOrNot dashboard, then paste the API key and tick Check weekly. The free key is meant for low-volume use; paid xonAPI+ keys work the same way.',
+                'An address goes to the client whose authorisation lists its domain (exactly, or under a *. entry); other verified domains are listed on the settings card and ignored. Each address is one finding: Fail when a breach happened in the last 12 months, Warning when all its breaches are older, with the breach names, dates and what was exposed. Passwords are never stored or shown. An address no longer listed resolves; a failed check changes nothing. The client\'s Website & email page lists the breached addresses.',
+            ],
+        ],
+        [
             'title' => 'Findings and triage',
             'paragraphs' => [
                 'Findings bring together everything Sentinel grades as Fail or Warning for a client: high-risk services open to the internet, certificate problems, exposed admin pages and portals, and vulnerabilities. Info items are not findings; they stay visible in the client panels.',
@@ -239,6 +246,13 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.33.0',
+            'date' => '2026-11-24',
+            'items' => [
+                'Breach monitoring: once a week, addresses of your verified domains found in known data breaches (XposedOrNot) become findings for the client whose authorisation lists the domain: Fail for a breach in the last 12 months, Warning for older ones. Breach names, dates and what was exposed only; never passwords. Set it up under Administration, Integrations.',
+            ],
+        ],
         [
             'version' => '1.32.1',
             'date' => '2026-11-24',

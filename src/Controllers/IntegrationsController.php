@@ -56,6 +56,15 @@ final class IntegrationsController extends Controller
                 'tickets_last_ok' => $s->get('itflow_tickets_last_ok') !== '0',
                 'tickets_total' => (int) App::db()->query('SELECT COUNT(*) FROM itflow_tickets')->fetchColumn(),
             ],
+            'breach' => [
+                'enabled' => $s->get('breach_enabled') === '1',
+                'has_key' => $s->getSecret('xon_api_key') !== '',
+                'last_run' => $s->get('breach_last_run'),
+                'last_result' => $s->get('breach_last_result'),
+                'last_ok' => $s->get('breach_last_ok') !== '0',
+                'unmatched' => array_values(array_filter(explode(',', $s->get('breach_unmatched')))),
+                'addresses' => (int) App::db()->query('SELECT COUNT(*) FROM breach_exposures')->fetchColumn(),
+            ],
             'align' => [
                 'enabled' => $s->get('mspalign_enabled') === '1',
                 'url' => $s->get('mspalign_url'),
@@ -144,6 +153,56 @@ final class IntegrationsController extends Controller
         $s->set('ninjaone_tested_at', gmdate('Y-m-d H:i:s'));
         $s->set('ninjaone_test_result', mb_substr($result, 0, 500));
         $this->audit($request, 'settings.ninjaone_tested', null, null, ['ok' => $ok]);
+        return $back;
+    }
+
+    /** POST /admin/integrations/breach: save the XposedOrNot API key and on/off (breach monitoring, 1.33). */
+    public function saveBreach(Request $request): Response
+    {
+        $back = Response::redirect('/admin/integrations#breach');
+        $s = App::settings();
+        $enabled = $request->input('enabled') === '1';
+        $changed = [];
+        if ($s->get('breach_enabled') !== ($enabled ? '1' : '0')) {
+            $s->set('breach_enabled', $enabled ? '1' : '0');
+            $changed['breach_enabled'] = $enabled;
+        }
+        $apiKey = trim($request->raw('api_key'));
+        if ($request->input('clear_key') === '1') {
+            $s->setSecret('xon_api_key', '');
+            $changed['xon_api_key'] = 'cleared';
+        } elseif ($apiKey !== '') {
+            if (!\Sentinel\Breach\XonClient::validKey($apiKey)) {
+                Session::flash('danger', __('That doesn\'t look like an XposedOrNot API key. Copy it from your XposedOrNot dashboard (API Key Management).'));
+                return $back;
+            }
+            $s->setSecret('xon_api_key', $apiKey);
+            $changed['xon_api_key'] = 'changed';
+        }
+        if ($changed !== []) {
+            $this->audit($request, 'settings.breach_updated', null, null, ['changed' => $changed]);
+        }
+        Session::flash('success', __('Breach monitoring settings saved.'));
+        return $back;
+    }
+
+    /** POST /admin/integrations/breach/check: check now (at most once an hour: the provider allows few calls a day). */
+    public function checkBreach(Request $request): Response
+    {
+        $back = Response::redirect('/admin/integrations#breach');
+        $s = App::settings();
+        if ($s->getSecret('xon_api_key') === '') {
+            Session::flash('warning', __('Save an XposedOrNot API key first.'));
+            return $back;
+        }
+        $last = $s->fresh('breach_last_run');
+        if ($last !== '' && strtotime($last . ' UTC') > time() - 3600) {
+            Session::flash('warning', __('Checked less than an hour ago. Try again later (the provider allows only a few checks a day).'));
+            return $back;
+        }
+        $summary = App::breachMonitor()->run();
+        $this->audit($request, 'breach.check_requested', null, null, []);
+        Session::flash(str_starts_with($summary, 'Stopped') ? 'warning' : 'success', $summary);
         return $back;
     }
 

@@ -3,7 +3,7 @@
  * Administration > Integrations: outside systems Sentinel reads from (NinjaOne first).
  * Expects: $itflow (enabled, url, has_key, tested_at, test_result, last_sync, last_result, last_ok, linked, tickets,
  *          tickets_last_run, tickets_last_result, tickets_last_ok, tickets_total), $ninja (enabled, host, client_id, has_secret, tested_at, test_result, linked), $align (enabled, url, has_key,
- *          tested_at, test_result, linked).
+ *          tested_at, test_result, linked), $breach (enabled, has_key, last_run, last_result, last_ok, unmatched, addresses: 1.33).
  * Every value is escaped. The client secret is never sent back to the browser.
  */
 use Sentinel\Core\Csrf;
@@ -176,5 +176,55 @@ $n = $ninja;
             <span class="small"><?= e($a['test_result']) ?> <span class="text-body-secondary">(<?= e($a['tested_at']) ?> UTC)</span></span>
             <?php endif; ?>
         </form>
+    </div>
+</div>
+<?php $br = $breach; ?>
+<div class="card mb-3" id="breach">
+    <div class="card-header d-flex align-items-center gap-2">
+        <h2 class="card-title h5 mb-0"><?= e(__('Breach monitoring (XposedOrNot)')) ?></h2>
+        <?php if ($br['enabled'] && $br['has_key']): ?>
+        <span class="badge text-bg-success"><?= e(__('On')) ?></span>
+        <?php else: ?>
+        <span class="badge text-bg-secondary"><?= e(__('Off')) ?></span>
+        <?php endif; ?>
+        <span class="ms-auto small text-body-secondary"><?= e(__('{n} breached address(es) on file', ['n' => $br['addresses']])) ?></span>
+    </div>
+    <div class="card-body">
+        <p class="small"><?= e(__('Once a week, Sentinel reads which addresses of your verified domains appear in known data breaches, and adds them to the client whose authorisation lists that domain. A breach in the last 12 months is a Fail, older ones a Warning. Only breach names, dates and what was exposed are kept: never a password.')) ?></p>
+        <details class="small mb-3">
+            <summary><?= e(__('How to set it up')) ?></summary>
+            <ol class="mt-2 mb-0">
+                <li><?= e(__('Sign in at xposedornot.com and open the dashboard.')) ?></li>
+                <li><?= e(__('Verify each client domain you want to monitor (XposedOrNot proves you control it).')) ?></li>
+                <li><?= e(__('Open API Key Management, copy the key into the form below and tick "Check weekly".')) ?></li>
+            </ol>
+            <p class="mt-2 mb-0"><?= e(__('The free key is meant for personal, low-volume use; for monitoring clients, XposedOrNot offers paid xonAPI+ keys, which work the same way here.')) ?></p>
+        </details>
+        <form method="post" action="<?= e(url('/admin/integrations/breach')) ?>" autocomplete="off" novalidate>
+            <?= Csrf::field() ?>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label" for="xon-key"><?= e(__('API key')) ?></label>
+                    <input class="form-control" type="password" id="xon-key" name="api_key" value="" maxlength="128" autocomplete="new-password" placeholder="<?= e($br['has_key'] ? __('Saved (leave empty to keep)') : '') ?>">
+                    <?php if ($br['has_key']): ?>
+                    <div class="form-check mt-1"><input class="form-check-input" type="checkbox" id="xon-clear" name="clear_key" value="1"><label class="form-check-label small" for="xon-clear"><?= e(__('Remove the saved key')) ?></label></div>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <div class="form-check mt-3"><input class="form-check-input" type="checkbox" id="xon-enabled" name="enabled" value="1" <?= $br['enabled'] ? 'checked' : '' ?>>
+                <label class="form-check-label" for="xon-enabled"><?= e(__('Check weekly')) ?></label></div>
+            <button type="submit" class="btn btn-primary btn-sm mt-3"><?= e(__('Save')) ?></button>
+        </form>
+        <hr>
+        <form method="post" action="<?= e(url('/admin/integrations/breach/check')) ?>" class="d-flex flex-wrap align-items-center gap-2">
+            <?= Csrf::field() ?>
+            <button type="submit" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i><?= e(__('Check now')) ?></button>
+            <?php if ($br['last_result'] !== ''): ?>
+            <span class="small <?= $br['last_ok'] ? '' : 'text-danger' ?>"><?= e($br['last_result']) ?> <span class="text-body-secondary">(<?= e($br['last_run']) ?> UTC)</span></span>
+            <?php endif; ?>
+        </form>
+        <?php if ($br['unmatched'] !== []): ?>
+        <p class="small mt-2 mb-0"><i class="bi bi-info-circle me-1" aria-hidden="true"></i><?= e(__('Verified domains in no client\'s authorisation (ignored until one lists them): {list}', ['list' => implode(', ', $br['unmatched'])])) ?></p>
+        <?php endif; ?>
     </div>
 </div>

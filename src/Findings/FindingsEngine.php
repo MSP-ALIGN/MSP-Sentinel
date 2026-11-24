@@ -328,6 +328,23 @@ final class FindingsEngine
                     'target' => "{$v['ip']}:{$v['port']}", 'evidence' => $v['confidence'] . '|' . $v['name'] . ' ' . $v['version'], 'asset_id' => (int) $v['asset_id'], 'cve_id' => (string) $v['cve_id'],
                 ]);
             }
+            // Breached addresses of the client's verified domains (1.33): a breach in the last 12 months is a Fail.
+            foreach (\Sentinel\Breach\BreachMonitor::forClient($this->db, $clientId) as $b) {
+                $list = array_values(array_filter($b['breaches'], 'is_array'));
+                if ($list === []) {
+                    continue;
+                }
+                $recent = array_filter($list, static fn (array $x): bool => \Sentinel\Breach\BreachMonitor::recent((string) ($x['date'] ?? '')));
+                $latest = $list[0];
+                $add('breach:' . $b['email'], [
+                    'type' => 'breach', 'severity' => $recent !== [] ? 'fail' : 'warn',
+                    'title' => __('{email} appeared in {n} data breach(es) (latest: {name}{date})', ['email' => $b['email'], 'n' => count($list),
+                        'name' => (string) ($latest['name'] ?? '?'), 'date' => (string) ($latest['date'] ?? '') !== '' ? ', ' . substr((string) $latest['date'], 0, 7) : '']),
+                    'detail' => implode('; ', array_map(static fn (array $x): string => (string) ($x['name'] ?? '?') . ((string) ($x['date'] ?? '') !== '' ? ' (' . $x['date'] . ')' : '')
+                        . ((array) ($x['data'] ?? []) !== [] ? ': ' . implode(', ', array_slice((array) $x['data'], 0, 8)) : ''), array_slice($list, 0, 20))),
+                    'target' => $b['email'], 'evidence' => implode('|', array_map(static fn (array $x): string => (string) ($x['name'] ?? ''), $list)),
+                ]);
+            }
             // DNS: zone transfers and subdomain takeover (1.28).
             foreach ($this->website->domainChecksForClient($clientId) as $dc) {
                 $r = $dc['result'];

@@ -103,6 +103,14 @@ final class Settings
         'itflow_tickets_last_run' => '',
         'itflow_tickets_last_result' => '',
         'itflow_tickets_last_ok' => '',
+        // Breach monitoring (1.33, XposedOrNot): on/off, the last weekly check and its result, verified domains in no
+        // client's register. The API key is in xon_api_key (SECRETS).
+        'breach_enabled' => '0',
+        'xon_api_key' => '',
+        'breach_last_run' => '',
+        'breach_last_result' => '',
+        'breach_last_ok' => '',
+        'breach_unmatched' => '',
         // Git-based installs: commits the followed branch is ahead of the installed commit, its newest commit, and
         // the installed commit the answer is for (so an answer for an older commit is never shown after updating).
         'update_branch_behind' => '',
@@ -117,7 +125,7 @@ final class Settings
     ];
 
     /** Settings that hold secrets: stored encrypted with the app key, never shown again. */
-    public const SECRETS = ['smtp_password', 'webhook_url', 'event_webhook_url', 'event_webhook_secret', 'ninjaone_client_secret', 'mspalign_api_key', 'itflow_api_key', 'agent_move', 'release_key'];
+    public const SECRETS = ['smtp_password', 'webhook_url', 'event_webhook_url', 'event_webhook_secret', 'ninjaone_client_secret', 'mspalign_api_key', 'itflow_api_key', 'agent_move', 'release_key', 'xon_api_key'];
 
     /** @var array<string,string>|null */
     private ?array $cache = null;

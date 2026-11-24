@@ -288,7 +288,20 @@ final class App
     public static function housekeeping(): Housekeeping
     {
         return new Housekeeping(self::settings(), self::updates(), self::retention(), static fn (): ?string => self::itflowSync()->syncIfDue(),
-            static fn (): ?string => self::itflowTickets()->runIfDue());
+            static fn (): ?string => self::itflowTickets()->runIfDue(), static fn (): ?string => self::breachMonitor()->runIfDue());
+    }
+
+    /**
+     * Breach monitoring (1.33) with the XposedOrNot key from Administration > Integrations (null client while no key).
+     * The test suite may point it at its mock (testing.xon_base_url).
+     */
+    public static function breachMonitor(): \Sentinel\Breach\BreachMonitor
+    {
+        $key = self::settings()->getSecret('xon_api_key');
+        $base = self::webhookTestMode() ? (string) self::config()->get('testing.xon_base_url', \Sentinel\Breach\XonClient::DEFAULT_BASE) : \Sentinel\Breach\XonClient::DEFAULT_BASE;
+        return new \Sentinel\Breach\BreachMonitor(self::db(), self::settings(), self::audit(), self::authorisations(),
+            $key === '' ? null : new \Sentinel\Breach\XonClient($key, $base, self::webhookTestMode()),
+            static fn (int $clientId): array => self::findingsEngine()->refreshClient($clientId));
     }
 
     /** Install health checks (bin/doctor.php, admin System page). */

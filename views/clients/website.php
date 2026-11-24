@@ -2,7 +2,7 @@
 /**
  * Website and email security card on the client's pages.
  * Expects: $websiteChecks (WebsiteRepository::checksForClient), $emailChecks (emailForClient), $domainChecks
- * (domainChecksForClient, 1.28: zone transfers and subdomain takeover).
+ * (domainChecksForClient, 1.28: zone transfers and subdomain takeover), $breaches (BreachMonitor::forClient, 1.33).
  * Everything shown comes from scanned sites and DNS (untrusted) and is escaped.
  * Each status has an icon and a word, never colour alone.
  */
@@ -59,6 +59,27 @@ $chip = static function (string $sev, string $text): string {
                 <td class="text-break sn-records"><?php if (($m['spf'] ?? '') !== ''): ?><span class="d-block"><b>SPF</b> <code><?= e($m['spf']) ?></code></span><?php endif; ?>
                     <?php if (($m['dmarc'] ?? '') !== ''): ?><span class="d-block"><b>DMARC</b><?php if (($m['dmarc_from'] ?? '') !== ''): ?> <?= e(__('(from {domain})', ['domain' => (string) $m['dmarc_from']])) ?><?php endif; ?> <code><?= e($m['dmarc']) ?></code></span><?php endif; ?>
                     <?php if (!empty($m['dkim'])): ?><span class="d-block"><b>DKIM</b> <?= e(implode(', ', (array) $m['dkim'])) ?></span><?php endif; ?></td>
+            </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+        </div>
+        <?php endif; ?>
+        <h3 class="h6 mt-3"><?= e(__('Breached accounts')) ?></h3>
+        <?php $breaches ??= []; if ($breaches === []): ?>
+        <p class="small text-body-secondary"><?= e(__('No breached addresses known. Addresses come from breach monitoring (Administration, Integrations) for the client\'s verified domains.')) ?></p>
+        <?php else: ?>
+        <div class="table-responsive">
+        <table class="table table-sm align-middle small">
+            <thead><tr><th><?= e(__('Address')) ?></th><th><?= e(__('Breaches (newest first)')) ?></th></tr></thead>
+            <tbody>
+            <?php foreach ($breaches as $b): ?>
+            <tr>
+                <td><code><?= e($b['email']) ?></code><br><span class="text-body-secondary"><?= e(__('Known since {d} UTC', ['d' => $b['first_seen']])) ?></span></td>
+                <td><?php foreach (array_slice($b['breaches'], 0, 10) as $x): $recent = \Sentinel\Breach\BreachMonitor::recent((string) ($x['date'] ?? '')); ?>
+                    <?= $chip($recent ? 'fail' : 'warn', (string) ($x['name'] ?? '?') . ((string) ($x['date'] ?? '') !== '' ? ' (' . $x['date'] . ')' : '')) ?>
+                    <?php if ((array) ($x['data'] ?? []) !== []): ?><span class="text-body-secondary"><?= e(implode(', ', array_slice((array) $x['data'], 0, 8))) ?></span><?php endif; ?><br>
+                <?php endforeach; ?></td>
             </tr>
             <?php endforeach; ?>
             </tbody>

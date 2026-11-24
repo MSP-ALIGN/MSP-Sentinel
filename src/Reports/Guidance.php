@@ -38,6 +38,8 @@ final class Guidance
             'vuln' => self::vuln($vuln),
             'email' => self::email(substr($key, (int) strrpos($key, ':') + 1)),
             // Long keys are shortened with a hash (FindingsEngine), losing the code: the evidence names the check too.
+            'breach' => ['meaning' => __('This address was in a data breach at another company: its password there (and often its name, phone or address) is in criminals\' hands. If the same password is used anywhere else, including the company\'s own email, attackers try it first.'),
+                'fix' => __("Make sure the person has changed that password, and any reused copy of it, and that multi-factor sign-in is on for their work account. Check the account's recent sign-ins for anything unusual. Tell them to expect convincing phishing emails that use the leaked details.")],
             'dns' => self::dns(str_starts_with((string) ($f['evidence'] ?? ''), 'takeover|') ? 'takeover' : substr($key, (int) strrpos($key, ':') + 1)),
             'device', 'patch' => self::device(substr($key, (int) strrpos($key, ':') + 1)),
             'directory' => self::directory(substr($key, (int) strrpos($key, ':') + 1)),

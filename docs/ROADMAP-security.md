@@ -34,6 +34,8 @@ Subdomain takeover (DNS names pointing at unclaimed cloud services) and open DNS
 authorised domain's own nameservers. Hypervisor, out-of-band (iDRAC, iLO, IPMI) and NAS admin pages are recognised,
 with their ports in the default list. See the user guide, "Website and email security".
 
-## 4. Breached credentials
+## 4. Breached credentials (1.33.0, done)
 
-Client email addresses found in known breaches, through a breach-lookup service with a paid API key.
+Addresses of the client's verified domains found in known data breaches, through XposedOrNot (free key; paid
+xonAPI+ keys for commercial volume work the same way). A breach in the last 12 months is a Fail, older ones a Warning;
+checked weekly. Have I Been Pwned has the widest coverage but needs a paid key; it can be added as a second provider.
