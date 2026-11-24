@@ -87,6 +87,15 @@ board:
   exploited. The ticket says what was found, where, the evidence, why it matters, how to fix it step by step, the
   due date, and links to the finding in Sentinel (which shows the ticket number).
 - A finding never gets two tickets. If it becomes known-exploited later, Sentinel adds an internal note.
+- **One ticket per issue** (1.32). The same problem on another target of the same client (the same CVE, or the same
+  title) joins the open ticket with an "also found on" note instead of opening a ticket of its own. The ticket follows
+  every target:
+  - a target that is fixed or decided while others are still open gets a note;
+  - the ticket is resolved only when every target is fixed or decided;
+  - closed in ITFlow, each open target is rechecked, and the ticket is reopened (or replaced, with the targets still
+    open) if any is still there.
+
+  Tickets opened before 1.32 work the same way: new targets of their issue join them.
 - **Warnings** are grouped: one ticket per client, at most once a week, when there are new warnings since the last
   one (it lists all open warnings, the new ones marked).
 - Tickets are internal: ITFlow doesn't email the client.

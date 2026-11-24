@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.31.1](https://img.shields.io/badge/version-1.31.1-ff5a1f?style=flat-square)
+![Version 1.32.0](https://img.shields.io/badge/version-1.32.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -149,6 +149,19 @@ curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install
 The same help is built into the app (**Help** in the menu), with a "What's new" page for every release.
 
 ## What's new
+
+### 1.32.0 (2026-11-24): one ITFlow ticket per issue
+
+- **The same problem on several targets is one ITFlow ticket.** A finding with the same issue as an open ticket of
+  the same client (the same CVE, or the same title) joins it with an internal "also found on <target>" note,
+  instead of opening a ticket of its own. The finding page shows the shared ticket.
+- **The ticket follows every target:**
+  - a target fixed or decided while others are still open gets a note (and another if it comes back);
+  - the ticket is resolved only when every target is fixed or decided, with one note listing them.
+- **Closed in ITFlow** while targets are open: each open target is rechecked. If any is still there, a resolved
+  ticket is reopened naming them. A closed ticket is replaced by one new ticket for the targets still open; the
+  fixed ones stay with the old ticket.
+- **Existing tickets work the same way:** new targets of their issue join them. Weekly Warnings tickets don't change.
 
 ### 1.31.1 (2026-11-24): grouped findings, fixes from review
 

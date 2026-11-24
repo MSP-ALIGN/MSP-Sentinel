@@ -156,6 +156,7 @@ return [
             'paragraphs' => [
                 'With ITFlow connected (Administration, Integrations), Sentinel adds new ITFlow clients every 15 minutes, applies renames, and archives or restores clients when they are archived or unarchived in ITFlow. A client added from ITFlow is not scanned until its written authorisation is recorded. A client you archived yourself in Sentinel stays archived. Changes appear in the audit log as itflow-sync.',
                 'With tickets turned on, each Fail and known-exploited finding opens its own internal ITFlow ticket (High, or Urgent when exploited) with what was found, why it matters and how to fix it, and a link back. Warnings go into one ticket per client a week when there are new ones. A finding never gets two tickets; the finding page shows its ticket number.',
+                'One ticket per issue (1.32): the same problem on another target of the same client (the same CVE, or the same title) joins the open ticket with an "also found on" note instead of a ticket of its own. The ticket follows every target: a target fixed or decided while others are open gets a note, the ticket is resolved only when all of them are fixed or decided, and when it is closed in ITFlow every open target is rechecked; any still there reopens it (or a new ticket is opened for the targets still open).',
                 'Status goes both ways. When Sentinel no longer sees the problem (or it is marked accepted risk or false positive), the ticket gets a note and is resolved in ITFlow. When a ticket is resolved or closed in ITFlow while the problem is open, Sentinel checks again: a port or email problem gets a recheck (in the client\'s scan window, with the same limits as the button), a device problem waits for the device\'s next data. Only a recheck or new device data that still sees the problem counts as still there. Gone: the finding closes. Still there: a resolved ticket is reopened with what Sentinel sees; a closed one (ITFlow cannot reopen those) is replaced by a new ticket naming the old one. Without a clear answer within 10 days Sentinel stops waiting and says so on the finding.',
                 'A ticket ITFlow refuses (a deleted client, no access) is retried after 1, 2, 4 hours and so on, and the reason shows on the finding; the other tickets carry on. Weekly Warnings tickets are informational and are not followed.',
             ],
@@ -238,6 +239,13 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.32.0',
+            'date' => '2026-11-24',
+            'items' => [
+                'ITFlow: one ticket per issue. The same problem on another target of a client joins the open ticket with an "also found on" note; the ticket follows every target, gets a note when one is fixed, is resolved only when all are fixed or decided, and is reopened (or replaced for the targets still open) when one is still there after ITFlow closes it.',
+            ],
+        ],
         [
             'version' => '1.31.1',
             'date' => '2026-11-24',

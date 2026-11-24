@@ -106,7 +106,7 @@ final class FindingController extends Controller
             'itflowTickets' => (static function (int $id): array {
                 $t = App::db()->prepare("SELECT t.reference, t.itflow_ticket_id, t.created_at, t.state, t.itflow_status, t.last_error, t.finding_id, c.itflow_client_id
                                          FROM itflow_tickets t JOIN clients c ON c.id = t.client_id
-                                         WHERE t.kind = 'finding' AND (t.finding_id = :f OR t.history_finding_id = :h) ORDER BY t.finding_id IS NULL, t.id DESC LIMIT 10");
+                                         WHERE t.kind IN ('finding', 'member') AND (t.finding_id = :f OR t.history_finding_id = :h) ORDER BY t.finding_id IS NULL, t.id DESC LIMIT 10");
                 $t->execute(['f' => $id, 'h' => $id]);
                 $base = App::settings()->get('itflow_url');
                 $http = App::webhookTestMode();

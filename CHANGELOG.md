@@ -2,6 +2,19 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.32.0 (2026-11-24): one ITFlow ticket per issue
+
+- **The same problem on several targets is one ITFlow ticket.** A finding with the same issue as an open ticket of
+  the same client (the same CVE, or the same title) joins it with an internal "also found on <target>" note,
+  instead of opening a ticket of its own. The finding page shows the shared ticket.
+- **The ticket follows every target:**
+  - a target fixed or decided while others are still open gets a note (and another if it comes back);
+  - the ticket is resolved only when every target is fixed or decided, with one note listing them.
+- **Closed in ITFlow** while targets are open: each open target is rechecked. If any is still there, a resolved
+  ticket is reopened naming them. A closed ticket is replaced by one new ticket for the targets still open; the
+  fixed ones stay with the old ticket.
+- **Existing tickets work the same way:** new targets of their issue join them. Weekly Warnings tickets don't change.
+
 ### 1.31.1 (2026-11-24): grouped findings, fixes from review
 
 - **Reports group exactly like the Findings list.** An issue with both Fail and Warning targets is one entry, under

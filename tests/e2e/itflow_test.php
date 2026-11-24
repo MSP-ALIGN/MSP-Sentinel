@@ -413,4 +413,85 @@ return [
         App::settings()->set('itflow_tickets_enabled', '0');
         @unlink($dir . '/nmap-closed.json');
     },
+    'ITFlow: one ticket per issue; it follows every target, resolves when all are fixed, and moves on when replaced' => function (TestContext $ctx) use ($base, $setItflow, $key): void {
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $dir = dirname($ctx->feedsLog);
+        $setItflow($ctx, [[830, 'Grouped Ticket Example Ltd']]);
+        @unlink($dir . '/itflow-tickets.json');
+        @unlink($dir . '/itflow-fail.json');
+        $admin->submit('/admin/integrations', '/admin/integrations/itflow', ['url' => $base($ctx), 'api_key' => $key, 'enabled' => '1']);
+        App::itflowSync()->sync();
+        $admin->submit('/admin/integrations', '/admin/integrations/itflow', ['url' => $base($ctx), 'api_key' => $key, 'enabled' => '1', 'tickets' => '1']);
+        $cid = (int) $ctx->db->query('SELECT id FROM clients WHERE itflow_client_id = 830')->fetchColumn();
+        $finding = static function (string $key, string $type, string $title, string $target, ?string $cve) use ($ctx, $cid): int {
+            $ctx->db->prepare("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, detail, target, evidence, cve_id, status, first_seen, last_seen, opened_at)
+                               VALUES (:c, :k, :t, 'fail', :ti, 'Made-up detail.', :tg, 'made-up evidence', :cve, 'open', UTC_TIMESTAMP(), UTC_TIMESTAMP() - INTERVAL 1 HOUR, UTC_TIMESTAMP())")
+                ->execute(['c' => $cid, 'k' => $key, 't' => $type, 'ti' => $title, 'tg' => $target, 'cve' => $cve]);
+            return (int) $ctx->db->lastInsertId();
+        };
+        $sent = static fn (): array => json_decode((string) @file_get_contents($dir . '/itflow-tickets.json'), true) ?: ['tickets' => [], 'replies' => [], 'log' => []];
+        $setStatus = static function (int $ticket, string $status) use ($dir, $sent): void {
+            $st = $sent();
+            foreach ($st['tickets'] as &$t) {
+                if ((int) $t['id'] === $ticket) {
+                    $t['status'] = $status;
+                }
+            }
+            unset($t);
+            file_put_contents($dir . '/itflow-tickets.json', json_encode($st));
+        };
+        $replies = static fn (int $ticket): string => implode("\n", array_map(static fn (array $r): string => $r['ticket_reply'], array_filter($sent()['replies'], static fn (array $r): bool => (int) $r['ticket_id'] === $ticket)));
+        $rowOf = static fn (int $f): array|false => $ctx->db->query("SELECT * FROM itflow_tickets WHERE finding_id = {$f}")->fetch();
+        $title = 'Known exploited: CVE-2099-0950 in Example SSH (8.1 High)';
+
+        // The first target opens the ticket; the same CVE on a second server joins it with a note; another issue gets its own.
+        $a = $finding('vuln:203.0.113.170:22:CVE-2099-0950', 'vuln', $title, '203.0.113.170:22', 'CVE-2099-0950');
+        App::itflowTickets()->run();
+        $t = (int) $rowOf($a)['itflow_ticket_id'];
+        Assert::true($t > 0, 'ticket opened');
+        $b = $finding('vuln:203.0.113.171:22:CVE-2099-0950', 'vuln', $title, '203.0.113.171:22', 'CVE-2099-0950');
+        $other = $finding('port:203.0.113.170:3389', 'port', 'Remote Desktop open to the internet', '203.0.113.170:3389', null);
+        App::itflowTickets()->run();
+        Assert::same(2, count($sent()['tickets']), 'one ticket for the CVE on two servers, one for the other issue');
+        $mb = $rowOf($b);
+        Assert::true($mb !== false && $mb['kind'] === 'member' && (int) $mb['itflow_ticket_id'] === $t, 'the second server rides on the first ticket');
+        Assert::contains('Also found on 203.0.113.171:22', $replies($t));
+        Assert::contains('ticket_id=' . $t, $admin->get('/findings/' . $b)->body, 'the finding page links the shared ticket');
+        App::itflowTickets()->run();
+        Assert::same(1, substr_count($replies($t), 'Also found on 203.0.113.171:22'), 'joined once');
+
+        // One server fixed: a note, the ticket stays open. Both fixed: resolved, with one note for all.
+        $ctx->db->exec("UPDATE findings SET status = 'resolved', resolved_at = UTC_TIMESTAMP() WHERE id = {$a}");
+        App::itflowTickets()->run();
+        Assert::contains('203.0.113.170:22:</strong> verified fixed by Sentinel', $replies($t));
+        Assert::contains('Other targets of this ticket are still open', $replies($t));
+        Assert::notContains('resolve:' . $t, json_encode($sent()['log'] ?? []), 'not resolved while a target is open');
+        App::itflowTickets()->run();
+        Assert::same(1, substr_count($replies($t), 'verified fixed by Sentinel (no longer seen'), 'noted once');
+        $ctx->db->exec("UPDATE findings SET status = 'resolved', resolved_at = UTC_TIMESTAMP() WHERE id = {$b}");
+        App::itflowTickets()->run();
+        Assert::contains('resolve:' . $t, json_encode($sent()['log']));
+        Assert::contains('Every target of this ticket is fixed or decided in Sentinel', $replies($t));
+
+        // The second server comes back: the resolved ticket is reopened, naming it.
+        $ctx->db->exec("UPDATE findings SET status = 'open', resolved_at = NULL, reappeared = 1 WHERE id = {$b}");
+        App::itflowTickets()->run();
+        Assert::contains('reopen:' . $t, json_encode($sent()['log']));
+        Assert::same('open', $rowOf($a)['state']);
+
+        // Closed in ITFlow while the second server is still affected: a conclusive recheck says so, and a new ticket is
+        // opened that the still-open server leads (the fixed first server stays with the old ticket).
+        $setStatus($t, 'closed');
+        App::itflowTickets()->run();
+        Assert::same('awaiting_check', $rowOf($a)['state']);
+        $job = App::scans()->queue($cid, 'manual', null, true, 'test', ['finding_id' => $b, 'ips' => ['203.0.113.171'], 'ports' => [22]], 'verify');
+        $ctx->db->exec("UPDATE scan_jobs SET status = 'done', created_at = UTC_TIMESTAMP() + INTERVAL 1 SECOND WHERE id = {$job}");
+        $ctx->db->exec("UPDATE findings SET verify_job_id = {$job}, verify_result = 'still_present', verify_result_at = UTC_TIMESTAMP() + INTERVAL 2 SECOND WHERE id = {$b}");
+        App::itflowTickets()->run();
+        $nb = $rowOf($b);
+        Assert::true($nb !== false && $nb['kind'] === 'finding' && (int) $nb['itflow_ticket_id'] > 0 && (int) $nb['itflow_ticket_id'] !== $t, 'the open server leads a new ticket');
+        Assert::same('replaced', (string) $ctx->db->query("SELECT state FROM itflow_tickets WHERE history_finding_id = {$a} AND kind = 'finding'")->fetchColumn());
+        Assert::same(3, count($sent()['tickets']), 'one new ticket, not one per server');
+        Assert::same(1, (int) $ctx->db->query("SELECT COUNT(*) FROM itflow_tickets WHERE finding_id = {$other}")->fetchColumn(), 'the other issue is untouched');
+    },
 ];
