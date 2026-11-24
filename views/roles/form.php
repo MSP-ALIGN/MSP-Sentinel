@@ -44,7 +44,7 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
                 <?php $mine = in_array($p['name'], $held, true); $on = in_array($p['name'], $values['permissions'], true); ?>
                 <div class="form-check mb-2">
                     <input class="form-check-input" type="checkbox" name="permissions[]" value="<?= e($p['name']) ?>" id="perm-<?= e($p['name']) ?>" <?= $on ? 'checked' : '' ?> <?= $readOnly || !$mine ? 'disabled' : '' ?>>
-                    <label class="form-check-label" for="perm-<?= e($p['name']) ?>"><?= e($p['label']) ?><?php if (!$mine && !$readOnly): ?> <span class="badge text-bg-secondary"><?= e(__('You don\'t hold this')) ?></span><?php endif; ?></label>
+                    <label class="form-check-label" for="perm-<?= e($p['name']) ?>"><?= e($p['label']) ?><?php if ($p['powerful']): ?> <span class="badge text-bg-warning"><?= e(__('Near full control')) ?></span><?php endif; ?><?php if (!$mine && !$readOnly): ?> <span class="badge text-bg-secondary"><?= e(__('You don\'t hold this')) ?></span><?php endif; ?></label>
                     <div class="form-text mt-0"><?= e($p['help']) ?></div>
                 </div>
                 <?php endforeach; ?>

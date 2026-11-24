@@ -231,7 +231,7 @@ return [
                 'Each user has one role, and a role is a set of permissions. Everyone can see clients, findings, scans, devices, reports and engagements; permissions decide what a user may change (and a few sensitive views: breached addresses in full, the signed engagement document, the audit log).',
                 'Built-in roles (can\'t be changed): Viewer sees everything and changes nothing. Technician also runs scans and discovery, triages, assigns and verifies findings, sees breached addresses, creates reports, runs engagements and pauses scanning. Admin holds every permission.',
                 'Your own roles: Administration → Roles → New role (or Copy a built-in role), tick the permissions, confirm with your password, then give the role to users on their account page. The "Who can do what" table lists every permission and the roles that hold it.',
-                'Never more than you hold: you can only tick permissions you hold, give roles whose permissions you all hold, and change, reset or disable users whose role you could give. You can\'t change your own role, built-in roles never change, and at least one active user always holds every permission. Everyone with a changed role is signed out so the change applies at once.',
+                'Never more than you hold: you can only tick permissions you hold, give roles whose permissions you all hold, and change, reset or disable users whose role you could give. You can\'t change your own role, built-in roles never change, and at least one active Admin always stays. Permissions marked "Near full control" (agent releases, the system, the API, integrations, users) reach the whole system: give them only to people you would make Admin. API tokens never do more than the person who made them. Everyone with a changed role is signed out so the change applies at once.',
             ],
         ],
         [
@@ -358,6 +358,13 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.40.1',
+            'date' => '2026-11-24',
+            'items' => [
+                'Roles fixes: API tokens can only triage or start scans if their creator may (and lose those rights when the creator does); one active built-in Admin always stays; checks run again at the moment of saving; the Administration overview and System page show only what you may use; breached addresses on a finding are masked without "See breached addresses"; powerful permissions are marked "Near full control".',
+            ],
+        ],
         [
             'version' => '1.40.0',
             'date' => '2026-11-24',

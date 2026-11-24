@@ -111,8 +111,8 @@ $now = time();
                 </select></fieldset>
             <fieldset class="mb-2"><legend class="form-label small mb-0"><?= e(__('Permissions')) ?></legend>
                 <div class="small text-body-secondary"><?= e(__('Every token can read. Changes are opt-in:')) ?></div>
-                <div class="form-check"><input class="form-check-input" type="checkbox" id="can_triage" name="can_triage" value="1"><label class="form-check-label small" for="can_triage"><?= e(__('Triage findings (accept or mark false positive, with a note)')) ?></label></div>
-                <div class="form-check"><input class="form-check-input" type="checkbox" id="can_scan" name="can_scan" value="1"><label class="form-check-label small" for="can_scan"><?= e(__('Queue scans (they still run only in scope and in the scan window)')) ?></label></div>
+                <div class="form-check"><input class="form-check-input" type="checkbox" id="can_triage" name="can_triage" value="1"<?= can('findings.triage') ? '' : ' disabled' ?>><label class="form-check-label small" for="can_triage"><?= e(__('Triage findings (accept or mark false positive, with a note)')) ?></label></div>
+                <div class="form-check"><input class="form-check-input" type="checkbox" id="can_scan" name="can_scan" value="1"<?= can('scans.run') ? '' : ' disabled' ?>><label class="form-check-label small" for="can_scan"><?= e(__('Queue scans (they still run only in scope and in the scan window)')) ?></label></div>
             </fieldset>
             <div class="mb-2"><label class="form-label small mb-0" for="ip_allowlist"><?= e(__('Only allow these IP addresses or networks (optional)')) ?></label>
                 <input class="form-control form-control-sm" id="ip_allowlist" name="ip_allowlist" maxlength="1000" placeholder="203.0.113.10, 198.51.100.0/24"></div>

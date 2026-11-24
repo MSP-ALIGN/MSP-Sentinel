@@ -27,8 +27,13 @@ The **Who can do what** table on the Roles page lists every permission and which
 **Never more than you hold.** You can only tick permissions you hold yourself, give roles whose permissions you all
 hold, and change, reset or disable users whose role you could give. So someone allowed to manage users can't make
 anyone (or themselves, through a role) more powerful than they are, and can't take over a more powerful account.
-You can't change your own role. Built-in roles never change. At least one active user always holds every permission.
-When a role changes, everyone with it is signed out so the change applies at once.
+You can't change your own role. Built-in roles never change. At least one active **Admin** always stays (only the
+built-in Admin counts: it also gets every permission a later release adds). When a role changes, everyone with it is signed out so the change applies at once.
+
+Some permissions come close to full control and are marked **Near full control** on the Roles page: managing agent
+releases (signed releases run on every agent), the system, the API, integrations and users. Give them only to people
+you would make Admin. API tokens never do more than the person who made them: a token can only triage or start scans
+if its creator may, and loses those rights when its creator does.
 
 ## Sign in and two-factor authentication
 
@@ -57,8 +62,7 @@ them.
    two-factor authentication**, enter **your own password** to confirm.
 3. The user is signed out everywhere straight away.
 
-You can't change your own role or disable yourself, and the last active user who holds every permission can't be
-demoted or disabled. A user whose role has permissions you don't hold is shown read-only.
+You can't change your own role or disable yourself, and the last active Admin can't be demoted or disabled. A user whose role has permissions you don't hold is shown read-only.
 
 ## Create an API token
 

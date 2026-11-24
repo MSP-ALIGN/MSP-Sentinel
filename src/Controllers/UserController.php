@@ -26,8 +26,11 @@ use Sentinel\Core\Session;
  * - Never more than you hold (1.40): you can only give a role whose permissions you all hold yourself, and only edit,
  *   reset or disable a user whose role you could give. So someone allowed to manage users can't make anyone, or
  *   take over anyone, more powerful than themselves.
- * - Nobody changes their own role or disables themselves, and at least one active user always holds every
- *   permission (checked with the rows locked, so two people can't race it), so nobody gets locked out.
+ * - Nobody changes their own role or disables themselves, and at least one active user always has the built-in Admin
+ *   role (which holds every permission, now and in later releases; checked with the rows locked, so two people can't
+ *   race it), so nobody gets locked out.
+ * - Who may manage whom, and which role may be given, is checked again with the rows locked (1.40.1), so a role
+ *   changed meanwhile by someone more powerful can't slip through.
  * - Every change is written to the audit log, without passwords.
  */
 final class UserController extends Controller
@@ -78,7 +81,23 @@ final class UserController extends Controller
             return $this->page('users/form', __('Add user'), ['mode' => 'create', 'values' => $values, 'errors' => $errors, 'roles' => $this->roleChoices()], 422);
         }
 
-        $id = App::users()->create($values['username'], $values['display_name'], $values['email'], (int) $values['role_id'], Passwords::hash($password), true);
+        // The role is checked again with the role rows locked (1.40.1): it may have been changed or deleted meanwhile.
+        $db = App::db();
+        $db->beginTransaction();
+        try {
+            App::roles()->lockForUpdate();
+            if (($again = $this->validateAccount($values)) !== []) {
+                $db->rollBack();
+                return $this->page('users/form', __('Add user'), ['mode' => 'create', 'values' => $values, 'errors' => $again, 'roles' => $this->roleChoices()], 422);
+            }
+            $id = App::users()->create($values['username'], $values['display_name'], $values['email'], (int) $values['role_id'], Passwords::hash($password), true);
+            $db->commit();
+        } catch (\Throwable $ex) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $ex;
+        }
         $this->audit($request, 'user.created', 'user', $id, ['username' => $values['username'], 'role' => $this->roleName((int) $values['role_id'])]);
         Session::flash('success', __('User {name} created. They must change the temporary password and set up two-factor authentication at first sign-in.', ['name' => $values['username']]));
         return Response::redirect('/users');
@@ -132,15 +151,24 @@ final class UserController extends Controller
             return $renderErrors($errors);
         }
 
-        // The "someone always holds every permission" check and the update run in one transaction with the role and
+        // The "one active Admin always stays" check and the update run in one transaction with the role and
         // user rows locked, so two people demoting each other at once can't leave nobody able to do everything.
         $db = App::db();
         $db->beginTransaction();
         try {
             App::roles()->lockForUpdate();
+            $fresh = App::users()->find($id) ?? throw new HttpException(404);
+            if (!$isSelf && !$this->mayManage($fresh)) {
+                $db->rollBack();
+                throw new HttpException(403, __('This user\'s role has permissions you don\'t hold, so you can\'t change their account.'));
+            }
+            if ($roleChanged && ($again = $this->validateAccount($values)) !== []) {
+                $db->rollBack();
+                return $renderErrors($again);
+            }
             if ($accessChanged && App::roles()->completeHoldersAfter($id, (int) $values['role_id'], $values['is_active'] === 1) < 1) {
                 $db->rollBack();
-                return $renderErrors(['role_id' => __('This is the last active user who holds every permission. Give another user such a role (e.g. Admin) first.')]);
+                return $renderErrors(['role_id' => __('This is the last active Admin. Make another user an Admin first.')]);
             }
             App::users()->updateAccount($id, $values['display_name'], $values['email'], (int) $values['role_id'], $values['is_active'] === 1, $accessChanged);
             $db->commit();

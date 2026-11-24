@@ -10,7 +10,7 @@
         <a href="<?= e(url('/admin/roles/new')) ?>" class="btn btn-primary btn-sm ms-auto"><i class="bi bi-plus-lg me-1" aria-hidden="true"></i><?= e(__('New role')) ?></a>
     </div>
     <div class="card-body pb-0">
-        <p class="small text-body-secondary"><?= e(__('A role is a set of permissions; each user has one role. Viewer, Technician and Admin are built in and can\'t be changed: copy one to start your own. Everyone can see clients and their findings; permissions decide what they may change. You can only give permissions you hold yourself.')) ?></p>
+        <p class="small text-body-secondary"><?= e(__('A role is a set of permissions; each user has one role. Viewer, Technician and Admin are built in and can\'t be changed: copy one to start your own. Everyone can see clients and their findings; permissions decide what they may change. You can only give permissions you hold yourself. Permissions marked "Near full control" reach the whole system (agent releases, updates, the API, integrations, users): give them only to people you would make Admin.')) ?></p>
     </div>
     <div class="card-body p-0 table-responsive">
         <table class="table table-hover align-middle mb-0">
@@ -50,7 +50,7 @@
             <tr class="table-active"><th scope="rowgroup" colspan="<?= e(count($roles) + 1) ?>"><?= e(\Sentinel\Auth\Permissions::groupLabel($group)) ?></th></tr>
             <?php foreach ($perms as $p): ?>
             <tr>
-                <th scope="row" class="fw-normal"><?= e($p['label']) ?><div class="small text-body-secondary"><?= e($p['help']) ?></div></th>
+                <th scope="row" class="fw-normal"><?= e($p['label']) ?><?php if ($p['powerful']): ?> <span class="badge text-bg-warning"><?= e(__('Near full control')) ?></span><?php endif; ?><div class="small text-body-secondary"><?= e($p['help']) ?></div></th>
                 <?php foreach ($roles as $r): ?>
                 <td class="text-center"><?php if (in_array($p['name'], $r['permissions'], true)): ?><i class="bi bi-check-lg text-success" aria-hidden="true"></i><span class="visually-hidden"><?= e(__('Yes')) ?></span><?php else: ?><span class="text-body-secondary" aria-hidden="true">–</span><span class="visually-hidden"><?= e(__('No')) ?></span><?php endif; ?></td>
                 <?php endforeach; ?>

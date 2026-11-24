@@ -2,6 +2,25 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.39.0 (2026-11-24): pen-test results become findings
+
+- **Pen-test findings.** Each Fail and Warning of an approved engagement is now a finding (type **Pen test**), with the
+  usual triage, owners, due dates, groups and ITFlow tickets; the engagement page keeps the raw results and the
+  report is unchanged. "Worth knowing" results stay in the report. A problem the regular checks already raise (a risky
+  port open to the internet, or an agent's protocol finding on the same address) isn't doubled. For each host and test
+  the newest engagement that ran it decides: a retest that no longer finds a problem resolves its finding, and one
+  that didn't run that test leaves it open (migration 0045).
+- **Fixes to 1.38 from review:**
+  - unlinking NinjaOne, or its organisation moving to another client, shows the agent's merged devices again at once
+    (they were hidden, and their findings resolved, until the next agent check-in);
+  - a Windows version seen from the network no longer raises a Fail: it is a Warning saying the edition is unknown,
+    and builds that also ship as long-term (LTSC) editions are not judged;
+  - Samba servers (NTLM build 0) are no longer shown as Windows 7, and a NAS banner wins;
+  - a device without a host name gets its NTLM name and can be matched by address;
+  - a scan where the NTLM answer is missing no longer replaces the known Windows build with a vaguer guess;
+  - the combined device page lists each port once and shows the merged agent device's SNMP issues;
+  - the device list counts open findings with an index instead of scanning them per device.
+
 ### 1.38.0 (2026-11-24): device OS from the network, one device per machine
 
 - **Operating system and type for agent devices.** The agent reads a Windows machine's version and build over SMB

@@ -95,6 +95,12 @@ final class FindingController extends Controller
      */
     private function showPage(array $finding, array $errors, array $values = [], int $status = 200): Response
     {
+        // A breached address is shown in full only with 'breach.addresses' (1.40.1); others see it masked, as on the
+        // client's Website & email page. The detail starts with the address (FindingsEngine).
+        if ((string) $finding['finding_type'] === 'breach' && !App::auth()->can('breach.addresses')) {
+            $finding['detail'] = (string) preg_replace_callback('/[^\s:;,]+@[^\s:;,]+/u',
+                static fn (array $m): string => \Sentinel\Breach\BreachMonitor::masked($m[0]), (string) $finding['detail']);
+        }
         return $this->page('findings/show', __('Finding #{id}', ['id' => $finding['id']]), [
             'finding' => $finding,
             'events' => App::findings()->events((int) $finding['id']),

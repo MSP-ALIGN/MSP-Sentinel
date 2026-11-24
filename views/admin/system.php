@@ -12,6 +12,7 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
 ?>
 <div class="row g-3">
 <div class="col-xl-8">
+<?php if (can('system.manage')): ?>
 <div class="card mb-3" id="health">
     <div class="card-header d-flex align-items-center"><h2 class="card-title h5 mb-0"><?= e(__('Health')) ?></h2>
         <span class="ms-auto small text-body-secondary"><?= e(__('Same checks from the command line: php bin/doctor.php')) ?></span></div>
@@ -27,8 +28,10 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
         </table>
     </div>
 </div>
+<?php endif; ?>
 </div>
 <div class="col-xl-4">
+<?php if (can('system.manage')): ?>
 <div class="card mb-3" id="updates">
     <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Version and updates')) ?></h2></div>
     <div class="card-body small">
@@ -99,6 +102,7 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
         <?php endif; ?>
     </div>
 </div>
+<?php endif; ?>
 <div class="card mb-3" id="agents">
     <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('On-premises agent updates')) ?></h2></div>
     <div class="card-body small">
@@ -122,6 +126,7 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
         $sentinelPw = '<div class="col-md-4"><label class="form-label">' . e(__('Your Sentinel password')) . '</label><input class="form-control form-control-sm" type="password" name="password" autocomplete="current-password" required></div>';
         $note = '<div class="col-12"><div class="alert alert-warning py-1 px-2 mb-0 d-none" data-key-note role="status"></div></div>';
         ?>
+<?php if (can('release.manage')): ?>
         <h3 class="h6 mt-2"><?= e(__('Release key')) ?></h3>
         <p class="text-body-secondary"><?= e(__('Agents install only releases signed with this key. It is made in your browser: the private key goes into a password-protected file on YOUR computer and never to Sentinel; Sentinel keeps only the public half and gives it to agents. It does not expire. Keep the file and its password safe: without them you can\'t sign releases.')) ?></p>
         <?php if ($rk['key'] === ''): ?>
@@ -181,7 +186,9 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
         <?php endif; ?>
         <?php endif; ?>
         <script src="<?= e(asset('js/release-key.js')) ?>"></script>
+<?php endif; ?>
 
+<?php if (can('system.manage')): ?>
         <h3 class="h6 mt-3"><?= e(__('Move agents to a new Sentinel address')) ?></h3>
         <p class="text-body-secondary"><?= e(__('When Sentinel gets a new address or certificate authority: agents switch at their next check-in between scans, only after the new address proves it is this Sentinel (it signs a challenge for that address with this Sentinel\'s key; nothing is sent to it before). Shortly after a move, an agent goes back on its own if the new address keeps failing; while moved, it checks with its original address every 6 hours so it can always be recalled. Keep the old address working. Agents need version 1.23.1 or later.')) ?></p>
         <?php if ($agentMove['url'] !== ''): ?>
@@ -216,9 +223,11 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
         <form method="post" action="<?= e(url('/admin/system/agents-update')) ?>" data-confirm="<?= e(__('Update every agent that runs an older version to {v}, at each one\'s next check-in between scans?', ['v' => $rel])) ?>"><?= \Sentinel\Core\Csrf::field() ?>
             <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-cloud-arrow-down me-1" aria-hidden="true"></i><?= e(__('Update all agents to {v}', ['v' => $rel])) ?></button></form>
         <?php endif; ?>
+<?php endif; ?>
     </div>
 </div>
 
+<?php if (can('system.manage')): ?>
 <div class="card mb-3" id="backups">
     <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Backups')) ?></h2></div>
     <div class="card-body">
@@ -279,5 +288,6 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
         <div class="card-footer"><button type="submit" class="btn btn-primary btn-sm"><?= e(__('Save retention')) ?></button></div>
     </form>
 </div>
+<?php endif; ?>
 </div>
 </div>

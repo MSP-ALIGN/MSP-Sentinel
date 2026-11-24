@@ -99,14 +99,18 @@ final class ApiAdminController extends Controller
         if (count($ips) > 20 || strlen(implode(',', $ips)) > 1000) {
             $errors[] = __('At most 20 addresses or networks.');
         }
+        $triage = $request->input('can_triage') === '1';
+        $scan = $request->input('can_scan') === '1';
+        // Never more than you hold (1.40.1): a token can't triage or scan unless its creator may.
+        if (($triage && !App::auth()->can('findings.triage')) || ($scan && !App::auth()->can('scans.run'))) {
+            $errors[] = __('A token can only triage findings or start scans if you may do that yourself.');
+        }
         if ($errors !== []) {
             foreach ($errors as $e) {
                 Session::flash('danger', $e);
             }
             return Response::redirect('/admin/api');
         }
-        $triage = $request->input('can_triage') === '1';
-        $scan = $request->input('can_scan') === '1';
         [$id, $token] = App::apiTokens()->create($name, $all, $clientIds, $triage, $scan, $ips, $days, (int) $this->user()['id']);
         $this->audit($request, 'api.token_created', 'api_token', $id, ['name' => $name, 'all_clients' => $all, 'clients' => $all ? [] : $clientIds,
             'triage' => $triage, 'scan' => $scan, 'ip_allowlist' => $ips, 'days' => $days]);

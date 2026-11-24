@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.40.0](https://img.shields.io/badge/version-1.40.0-ff5a1f?style=flat-square)
+![Version 1.40.1](https://img.shields.io/badge/version-1.40.1-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,21 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.40.1 (2026-11-24): roles and permissions fixes from review
+
+- **API tokens never do more than their creator.** Only someone who may triage findings or start scans can give a
+  token those rights, and a token loses them when its creator does (read access stays).
+- **One active Admin always stays.** The lock-out guard now counts only the built-in Admin, which also gets every
+  permission a later release adds; a custom role with every permission today would fall short then.
+- **Checked again when saving.** Who may change a user or a role, and which role may be given, is checked again
+  with the rows locked, so a role changed meanwhile by someone more powerful can't slip through or be saved over; a
+  role deleted meanwhile gives a form error.
+- **Pages show only what you may use:** the Administration overview shows only your areas, and the System page shows
+  a release signer only the release key.
+- **Breached addresses** on a finding's page are masked unless you may see them in full.
+- Permissions that reach the whole system are marked **Near full control** on the Roles page. The demo data command
+  picks an Admin by role.
+
 ### 1.40.0 (2026-11-24): roles and permissions
 
 - **Permissions.** Every action now needs a permission: 29 of them in 7 groups (clients and scope, scanning,
@@ -149,25 +164,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 - **A long share name with accents no longer breaks the client's findings refresh** (long keys are now shortened
   without cutting a character in two).
 - A device whose name is one of several addresses gets its NTLM name too.
-
-### 1.39.0 (2026-11-24): pen-test results become findings
-
-- **Pen-test findings.** Each Fail and Warning of an approved engagement is now a finding (type **Pen test**), with the
-  usual triage, owners, due dates, groups and ITFlow tickets; the engagement page keeps the raw results and the
-  report is unchanged. "Worth knowing" results stay in the report. A problem the regular checks already raise (a risky
-  port open to the internet, or an agent's protocol finding on the same address) isn't doubled. For each host and test
-  the newest engagement that ran it decides: a retest that no longer finds a problem resolves its finding, and one
-  that didn't run that test leaves it open (migration 0045).
-- **Fixes to 1.38 from review:**
-  - unlinking NinjaOne, or its organisation moving to another client, shows the agent's merged devices again at once
-    (they were hidden, and their findings resolved, until the next agent check-in);
-  - a Windows version seen from the network no longer raises a Fail: it is a Warning saying the edition is unknown,
-    and builds that also ship as long-term (LTSC) editions are not judged;
-  - Samba servers (NTLM build 0) are no longer shown as Windows 7, and a NAS banner wins;
-  - a device without a host name gets its NTLM name and can be matched by address;
-  - a scan where the NTLM answer is missing no longer replaces the known Windows build with a vaguer guess;
-  - the combined device page lists each port once and shows the merged agent device's SNMP issues;
-  - the device list counts open findings with an index instead of scanning them per device.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

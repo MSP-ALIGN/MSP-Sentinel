@@ -45,8 +45,9 @@ try {
     $db = App::db();
     $username = is_string($opts['user'] ?? null) ? $opts['user'] : null;
     $stmt = $username === null
-        ? $db->query("SELECT id, username FROM users WHERE role = 'admin' AND is_active = 1 ORDER BY id LIMIT 1")
-        : $db->prepare("SELECT id, username FROM users WHERE username = :u AND role = 'admin' AND is_active = 1");
+        // The built-in Admin role (1.40.1: by role, no longer the old role column).
+        ? $db->query("SELECT u.id, u.username FROM users u JOIN roles r ON r.id = u.role_id AND r.role_key = 'admin' WHERE u.is_active = 1 ORDER BY u.id LIMIT 1")
+        : $db->prepare("SELECT u.id, u.username FROM users u JOIN roles r ON r.id = u.role_id AND r.role_key = 'admin' WHERE u.username = :u AND u.is_active = 1");
     if ($username !== null) {
         $stmt->execute(['u' => $username]);
     }

@@ -101,6 +101,14 @@ final class TokenService
         if ((int) $t['creator_active'] !== 1 || !in_array('api.manage', $creatorPerms, true)) {
             return $this->fail($ip, 401, 'The person who created this token is no longer active or may no longer manage the API.');
         }
+        // A token never does more than its creator may do now (1.40.1): its triage and scan rights lapse when the
+        // creator loses them (read access stays).
+        if (!in_array('findings.triage', $creatorPerms, true)) {
+            $t['can_triage'] = 0;
+        }
+        if (!in_array('scans.run', $creatorPerms, true)) {
+            $t['can_scan'] = 0;
+        }
         if (!self::ipAllowed((string) $t['ip_allowlist'], $ip)) {
             // Same answer as a wrong token, so a leaked token used elsewhere doesn't reveal that it is live.
             return ['error' => [401, 'Invalid token.']];

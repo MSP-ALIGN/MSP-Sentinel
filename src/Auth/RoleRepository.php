@@ -127,18 +127,18 @@ final class RoleRepository
     }
 
     /**
-     * How many active users would hold every permission if user $userId had role $roleId (and active flag $active),
-     * or if role $roleId held $rolePermissions instead. Null arguments mean "as it is now". Call inside the transaction
-     * after lockForUpdate().
+     * How many active users would have the built-in Admin role if user $userId had role $userRoleId (and active flag
+     * $userActive). Null arguments mean "as it is now". Call inside the transaction after lockForUpdate().
      *
-     * @param list<string>|null $rolePermissions
+     * Only the built-in Admin counts (1.40.1): it holds every permission now and any permission a later release adds,
+     * so as long as one active Admin is left, someone can always give any right. A custom role that happens to hold
+     * every permission today would fall short the day a new permission appears, and nobody could give it then.
      */
-    public function completeHoldersAfter(?int $userId = null, ?int $userRoleId = null, ?bool $userActive = null, ?int $roleId = null, ?array $rolePermissions = null): int
+    public function completeHoldersAfter(?int $userId = null, ?int $userRoleId = null, ?bool $userActive = null): int
     {
         $complete = [];
-        foreach ($this->db->query('SELECT * FROM roles')->fetchAll() as $r) {
-            $held = ($roleId !== null && (int) $r['id'] === $roleId && $rolePermissions !== null) ? $rolePermissions : $this->permissionsOf($r);
-            $complete[(int) $r['id']] = Permissions::isComplete($held);
+        foreach ($this->db->query('SELECT id, role_key FROM roles')->fetchAll() as $r) {
+            $complete[(int) $r['id']] = $r['role_key'] === 'admin';
         }
         $n = 0;
         foreach ($this->db->query('SELECT id, role_id, is_active FROM users')->fetchAll() as $u) {

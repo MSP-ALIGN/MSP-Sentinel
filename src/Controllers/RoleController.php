@@ -23,7 +23,10 @@ use Sentinel\Core\Session;
  *   rights, nor strip rights from someone more powerful.
  * - You can't change the role you have yourself (that would change your own rights).
  * - Built-in roles never change: what they hold is defined in code.
- * - At least one active user always holds every permission: checked with the role and user rows locked.
+ * - Custom roles never affect the "one active Admin is always left" rule (UserController): only the built-in Admin
+ *   counts, since it also holds every permission a later release adds.
+ * - The checks run again inside the transaction with the role rows locked, so a role changed meanwhile by someone
+ *   more powerful isn't saved over.
  * - Creating or changing a role is confirmed with your own password, and audited with what was added and removed.
  *   Everyone who has a changed role is signed out, so the change applies at once.
  */
@@ -90,10 +93,14 @@ final class RoleController extends Controller
         $db = App::db();
         $db->beginTransaction();
         try {
+            // Checked again with the rows locked (1.40.1): the role may have changed since the form was read, e.g.
+            // someone more powerful added a permission you don't hold.
             App::roles()->lockForUpdate();
-            if (App::roles()->completeHoldersAfter(null, null, null, $id, $values['permissions']) < 1) {
+            $role = App::roles()->find($id) ?? throw new HttpException(404);
+            $why = $this->whyLocked($role) ?? ($this->validate($values, $id)['permissions'] ?? null);
+            if ($why !== null) {
                 $db->rollBack();
-                return $this->form($role, $values, ['permissions' => __('Nobody else would hold every permission. Give another user a role that holds them all (e.g. Admin) first.')], 422);
+                return $this->form($role, $values, ['permissions' => $why], 422);
             }
             App::roles()->update($id, $values['name'], $values['description'], $values['permissions']);
             $db->commit();

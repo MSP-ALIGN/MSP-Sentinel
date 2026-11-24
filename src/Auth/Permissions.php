@@ -72,6 +72,13 @@ final class Permissions
         'reports.create', 'engagements.run',
     ];
 
+    /**
+     * Permissions that come close to full control, whatever else a role holds (1.40.1; flagged on the Roles page):
+     * signing agent releases runs code on every agent; system updates, backups and moving agents reach the whole
+     * system; the API and webhooks send data out; integrations hold other systems' keys; managing users gives roles.
+     */
+    public const POWERFUL = ['release.manage', 'system.manage', 'api.manage', 'integrations.manage', 'users.manage'];
+
     /** The built-in role keys, most powerful last. */
     public const BUILTIN = ['viewer', 'technician', 'admin'];
 
@@ -136,13 +143,13 @@ final class Permissions
     /**
      * The catalogue grouped for display, translated.
      *
-     * @return array<string, list<array{name:string, label:string, help:string}>>
+     * @return array<string, list<array{name:string, label:string, help:string, powerful:bool}>>
      */
     public static function grouped(): array
     {
         $out = array_fill_keys(self::GROUPS, []);
         foreach (self::ALL as $name => [$group, $label, $help]) {
-            $out[$group][] = ['name' => $name, 'label' => __($label), 'help' => __($help)];
+            $out[$group][] = ['name' => $name, 'label' => __($label), 'help' => __($help), 'powerful' => in_array($name, self::POWERFUL, true)];
         }
         return $out;
     }

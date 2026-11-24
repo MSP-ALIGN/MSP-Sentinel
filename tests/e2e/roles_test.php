@@ -124,10 +124,13 @@ return [
         if ($lead > 0) {
             Assert::status(403, $m->post('/admin/roles/' . $lead . '/delete', ['_csrf' => $csrf]), 'a role above them');
         }
-        // The Administration menu shows only what they may open.
+        // The Administration menu and overview show only what they may open (1.40.1: the overview cards too).
         $menu = $m->get('/profile')->body;
         Assert::contains('/admin/roles', $menu);
         Assert::notContains('href="/admin/settings"', $menu);
+        $overview = $m->get('/admin')->body;
+        Assert::contains('href="/users"', $overview);
+        Assert::notContains('href="/admin/audit"', $overview, 'no audit card without audit.view');
     },
 
     'roles: changing a role signs its users out; roles in use are kept; someone always holds everything' => function (TestContext $ctx) use ($permFields, $roleId): void {
@@ -150,17 +153,45 @@ return [
         $unused = $roleId($ctx, 'Unused role');
         $admin->post('/admin/roles/' . $unused . '/delete', ['_csrf' => $admin->get('/admin/roles')->csrf()]);
         Assert::same(null, App::roles()->find($unused), 'an unused role is deleted');
-        // Someone always holds every permission: the count the guard uses.
+        // One active Admin always stays: the count the guard uses. Only the built-in Admin counts (1.40.1): a custom
+        // role with every permission today would fall short when a later release adds one.
         $holders = App::roles()->completeHoldersAfter();
         Assert::true($holders >= 1, 'admins hold everything');
         $adminId = (int) $ctx->db->query("SELECT id FROM users WHERE username = 'admin'")->fetchColumn();
         Assert::same($holders - 1, App::roles()->completeHoldersAfter($adminId, (int) App::roles()->idForKey('viewer'), true), 'demoting one admin');
         Assert::same($holders - 1, App::roles()->completeHoldersAfter($adminId, null, false), 'disabling one admin');
-        $everything = App::roles()->create('Everything', '', Permissions::names(), $adminId);
+        App::roles()->create('Everything', '', Permissions::names(), $adminId);
         $ctx->createUser('fulluser', 'Everything', 'Fulluser-Pass-0001!');
-        Assert::same($holders + 1, App::roles()->completeHoldersAfter(), 'a custom role with every permission counts');
-        Assert::same($holders, App::roles()->completeHoldersAfter(null, null, null, $everything, ['scans.run']), 'and stops counting without them');
+        Assert::same($holders, App::roles()->completeHoldersAfter(), 'a custom role with every permission does not count');
         // The legacy column only ever under-grants for a custom role.
         Assert::same('viewer', (string) $ctx->db->query("SELECT role FROM users WHERE username = 'fulluser'")->fetchColumn());
+    },
+
+    'roles (1.40.1): API tokens never do more than their creator; release signers see only the release key' => function (TestContext $ctx) use ($permFields, $roleId): void {
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $admin->submit('/admin/roles/new', '/admin/roles', ['name' => 'API keeper', 'my_password' => 'Admin-Pass-0001!'] + $permFields(['api.manage']));
+        $ctx->createUser('apikeeper', 'API keeper', 'Apikeeper-Pass-0001!');
+        $k = $ctx->login('apikeeper', 'Apikeeper-Pass-0001!');
+        $before = (int) $ctx->db->query('SELECT COUNT(*) FROM api_tokens')->fetchColumn();
+        $k->submit('/admin/api', '/admin/api/tokens', ['my_password' => 'Apikeeper-Pass-0001!', 'name' => 'Too strong', 'all_clients' => '1', 'expires_days' => '30', 'can_triage' => '1']);
+        Assert::same($before, (int) $ctx->db->query('SELECT COUNT(*) FROM api_tokens')->fetchColumn(), 'a triage token is refused');
+        $k->submit('/admin/api', '/admin/api/tokens', ['my_password' => 'Apikeeper-Pass-0001!', 'name' => 'Read only', 'all_clients' => '1', 'expires_days' => '30']);
+        Assert::same($before + 1, (int) $ctx->db->query('SELECT COUNT(*) FROM api_tokens')->fetchColumn(), 'a read token is fine');
+        // A token made earlier with triage rights loses them when its creator can't triage (read access stays).
+        $tok = App::apiTokens();
+        [$tid, $secret] = $tok->create('Old triage token', true, [], true, true, [], 30, (int) $ctx->db->query("SELECT id FROM users WHERE username = 'apikeeper'")->fetchColumn());
+        $auth = $tok->authenticate('Bearer ' . $secret, '192.0.2.50');
+        Assert::true(!isset($auth['error']), 'still authenticates');
+        Assert::same([0, 0], [(int) $auth['can_triage'], (int) $auth['can_scan']], 'its triage and scan rights lapsed');
+        // A release signer sees the release key on the System page, not the update, backup or retention forms.
+        $admin->submit('/admin/roles/new', '/admin/roles', ['name' => 'Release signer', 'my_password' => 'Admin-Pass-0001!'] + $permFields(['release.manage']));
+        $ctx->createUser('relsigner', 'Release signer', 'Relsigner-Pass-0001!');
+        $r = $ctx->login('relsigner', 'Relsigner-Pass-0001!');
+        $sys = $r->get('/admin/system');
+        Assert::status(200, $sys);
+        Assert::contains('Release key', $sys->body);
+        Assert::notContains('/admin/system/retention', $sys->body);
+        Assert::notContains('/admin/system/update"', $sys->body);
+        Assert::notContains('/admin/system/backups', $sys->body);
     },
 ];
