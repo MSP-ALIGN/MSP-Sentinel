@@ -24,7 +24,7 @@ final class PageController extends Controller
         $isAdmin = App::auth()->can('engagements.approve');
         return $this->page('dashboard', __('Dashboard'), ['d' => self::dashboardData(), 'globallyPaused' => App::scope()->globallyPaused(),
             // Engagements someone else created that this user can approve (1.34: approvals were easy to miss).
-            'awaitingApproval' => $isAdmin ? App::engagements()->awaitingApprovalBy((int) $this->user()['id'], App::auth()->clientIds()) : []]);
+            'awaitingApproval' => $isAdmin ? App::engagements()->awaitingApprovalBy((int) $this->user()['id'], App::auth()->clientIds(), \Sentinel\Controllers\EngagementController::twoPerson()) : []]);
     }
 
     /** GET /dashboard/live: the dashboard panels alone, for the 60-second refresh (any signed-in role). */

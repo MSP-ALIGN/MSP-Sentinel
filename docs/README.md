@@ -9,7 +9,7 @@ New to MSP Sentinel? Follow these steps on your first day. Each one links to a s
 2. **Sign in and set up two-factor authentication.** Scan the QR code with an authenticator app, then keep your 10
    recovery codes somewhere safe. See [Users and security](guides/users-and-security.md#sign-in-and-two-factor-authentication).
 3. **Add a second admin.** Two admins mean nobody is locked out, and pen-test engagements need a second admin to
-   approve them. See [Users and security](guides/users-and-security.md#add-a-user).
+   approve them (unless you turn two-person approval off under Settings). See [Users and security](guides/users-and-security.md#add-a-user).
 4. **Add a client.** Give it a name, its time zone and a scan window (when scans may run). See
    [Your first client](guides/first-client.md#add-the-client).
 5. **Record the client's authorisation.** Enter who approved scanning, the dates and exactly which addresses and

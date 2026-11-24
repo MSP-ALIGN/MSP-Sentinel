@@ -62,6 +62,8 @@ final class EngagementReport
                 'signer' => (string) $engagement['signer_name'], 'signer_role' => (string) $engagement['signer_role'], 'signed_on' => (string) $engagement['signed_on'],
                 'document_sha256' => (string) $engagement['document_sha256'], 'created_by' => (string) ($engagement['created_by_name'] ?? ''),
                 'approved_by' => (string) ($engagement['approved_by_name'] ?? ''), 'approved_at' => $local($engagement['approved_at']),
+                // Approved by its own creator (1.47: two-person approval was off): the report says so.
+                'self_approved' => $engagement['approved_by'] !== null && (int) $engagement['approved_by'] === (int) $engagement['created_by'],
                 'stopped' => $engagement['stopped_at'] !== null ? ['at' => $local((string) $engagement['stopped_at']), 'by' => (string) ($engagement['stopped_by_name'] ?? ''), 'reason' => (string) $engagement['stop_reason']] : null,
             ],
             'scope' => $scope,

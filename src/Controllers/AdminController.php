@@ -89,8 +89,40 @@ final class AdminController extends Controller
             'alerts' => self::alertSettings(),
             'branding' => ReportController::brandingSettings(),
             'duePolicy' => App::fixWorkflow()->policy(),
+            'twoPerson' => EngagementController::twoPerson(),
+            'mayChangeTwoPerson' => \Sentinel\Auth\Permissions::isComplete((array) ($this->user()['permissions'] ?? [])) && ($this->user()['client_ids'] ?? null) === null,
             'feedsRefresh' => (new \Sentinel\Vulns\FeedSchedule(App::settings()))->status(),
         ]);
+    }
+
+    /** POST /admin/settings/engagements: whether pen-test engagements need a second person to approve (1.47). */
+    public function saveEngagementPolicy(Request $request): Response
+    {
+        $back = Response::redirect('/admin/settings#engagements');
+        // It weakens a safety control: only an Admin who holds every permission and sees every client, with their own
+        // password (1.47). Audited, and everyone who may approve engagements is told.
+        if (!\Sentinel\Auth\Permissions::isComplete((array) ($this->user()['permissions'] ?? [])) || ($this->user()['client_ids'] ?? null) !== null) {
+            throw new \Sentinel\Core\HttpException(403, __('Only someone who holds every permission (an Admin) and sees every client can change engagement approval.'));
+        }
+        if (($why = $this->confirmWithOwnPassword($request)) !== null) {
+            Session::flash('danger', $why);
+            return $back;
+        }
+        $twoPerson = $request->input('two_person') === '1';
+        if ($twoPerson === EngagementController::twoPerson()) {
+            Session::flash('info', __('Nothing changed.'));
+            return $back;
+        }
+        App::settings()->set('engagement_two_person', $twoPerson ? '1' : '0');
+        $this->audit($request, 'settings.engagement_approval', null, null, ['two_person' => $twoPerson]);
+        $who = (string) ($this->user()['display_name'] ?: $this->user()['username']);
+        App::alerts()->notifyUsers('security', $twoPerson ? 'info' : 'warn',
+            $twoPerson ? __('Pen-test engagements need two people to approve again') : __('Pen-test engagements no longer need a second person to approve'),
+            $twoPerson ? __('{who} turned two-person approval back on. Every engagement now needs someone other than its creator to approve it.', ['who' => $who])
+                : __('{who} turned two-person approval off. From now on, whoever creates an engagement may approve it themselves if they may approve engagements. Engagements created before still need a second person.', ['who' => $who]),
+            '/admin/settings#engagements', 'engagements.approve');
+        Session::flash('success', $twoPerson ? __('Two-person approval is on.') : __('Two-person approval is off for new engagements.'));
+        return $back;
     }
 
     /** POST /admin/settings/due-dates: days to fix by severity (known-exploited, Fail, Warning). */
@@ -154,6 +186,8 @@ final class AdminController extends Controller
             return $this->page('settings/index', __('Settings'), ['values' => $values, 'errors' => $errors,
                 'feeds' => App::vulns()->feedStatuses(), 'nvdKeySet' => trim((string) App::config()->get('nvd.api_key', '')) !== '',
                 'nvdKeyUsable' => \Sentinel\Vulns\FeedUpdater::usableKey(App::config()) !== null, 'alerts' => self::alertSettings(), 'branding' => ReportController::brandingSettings(), 'duePolicy' => App::fixWorkflow()->policy(),
+                'twoPerson' => EngagementController::twoPerson(),
+                'mayChangeTwoPerson' => \Sentinel\Auth\Permissions::isComplete((array) ($this->user()['permissions'] ?? [])) && ($this->user()['client_ids'] ?? null) === null,
                 'feedsRefresh' => (new \Sentinel\Vulns\FeedSchedule(App::settings()))->status()], 422);
         }
 

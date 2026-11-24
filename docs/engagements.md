@@ -38,8 +38,14 @@ Nothing faster exists. All 65,535 ports need the normal pace: at the gentle pace
 - **The client's signed authorisation** is attached as a PDF when the engagement is created. Sentinel keeps it as a
   download (never shown in the browser) and records its SHA-256 in the report. A template is in
   [authorisation-form.md](authorisation-form.md#annex-penetration-test-engagement).
-- **Two people.** A technician or admin creates it; a different admin approves it, with their password. Nothing runs
-  before approval.
+- **Two people (by default).** A technician or admin creates it; a different admin approves it, with their password.
+  Nothing runs before approval. An Admin who holds every permission and sees every client can turn this off under
+  **Administration → Settings → Pen-test engagements** (with their own password; everyone who may approve is told).
+  With it off, the creator may approve their own engagement if their role may approve engagements, still with their
+  password and still before anything runs, and the engagement page, audit log and pen-test report say
+  "single-person approval". A technician who can't approve still needs someone who can. Each engagement keeps the rule
+  in force when it was created: one created under the two-person rule always needs a second person, and one created
+  while it was off needs a second person again once the rule is back on.
 - **A window of at most 14 days.** Nothing runs outside it.
 - **Kill switch.** **Stop engagement** (technicians and admins, with a reason) ends it for good. Sentinel's own tests
   stop within seconds; a UDP check already sent finishes first. Agents stop at their next check-in (within a minute),

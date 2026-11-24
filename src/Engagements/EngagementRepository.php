@@ -19,7 +19,8 @@ use Sentinel\Scope\ScopeService;
  * host when a test runs).
  *
  * Rules enforced here:
- * - two-person rule: approve() only succeeds for an admin who did not create it (the controller checks the role);
+ * - two-person rule: approve() only succeeds for an admin who did not create it (the controller checks the role),
+ *   unless the engagement was created while two-person approval was off AND it is still off (1.47, single_approval);
  * - nothing runs before approval, outside the window, after a stop (kill switch) or a cancel;
  * - approved engagements are never edited: they can only be stopped. A cancel is only possible before approval.
  *
@@ -57,11 +58,12 @@ final class EngagementRepository
         $this->db->beginTransaction();
         try {
             $this->db->prepare('INSERT INTO engagements (client_id, name, window_start, window_end, intensity, tests, signer_name, signer_role, signed_on,
-                document_sha256, document_name, document_bytes, notes, retest_of, created_by, created_at)
-                VALUES (:c, :n, :ws, :we, :i, :t, :sn, :sr, :so, :dh, :dn, :db, :no, :rt, :u, UTC_TIMESTAMP())')->execute([
+                document_sha256, document_name, document_bytes, notes, retest_of, single_approval, created_by, created_at)
+                VALUES (:c, :n, :ws, :we, :i, :t, :sn, :sr, :so, :dh, :dn, :db, :no, :rt, :sa, :u, UTC_TIMESTAMP())')->execute([
                 'c' => $clientId, 'n' => $e['name'], 'ws' => $e['window_start'], 'we' => $e['window_end'], 'i' => $e['intensity'], 't' => implode(',', $e['tests']),
                 'sn' => $e['signer_name'], 'sr' => $e['signer_role'], 'so' => $e['signed_on'], 'dh' => $e['document_sha256'], 'dn' => $e['document_name'],
                 'db' => $e['document_bytes'], 'no' => $e['notes'] !== '' ? $e['notes'] : null, 'rt' => $e['retest_of'] ?? null, 'u' => $userId,
+                'sa' => !empty($e['single_approval']) ? 1 : 0,
             ]);
             $id = (int) $this->db->lastInsertId();
             $stmt = $this->db->prepare('INSERT INTO engagement_targets (engagement_id, kind, site_id, entry_type, value, range_start, range_end) VALUES (:e, :k, :s, :t, :v, :rs, :re)');
@@ -152,28 +154,37 @@ final class EngagementRepository
      *
      * @return list<array<string,mixed>>
      */
-    public function awaitingApprovalBy(int $userId, ?array $clientIds = null): array
+    public function awaitingApprovalBy(int $userId, ?array $clientIds = null, bool $twoPersonNow = true): array
     {
-        $stmt = $this->db->prepare('SELECT e.id, e.name, e.window_start, e.window_end, e.created_by, c.name AS client_name, uc.display_name AS created_by_name
+        // With two-person approval off (1.47), their own single-approval engagements are listed too.
+        $stmt = $this->db->prepare('SELECT e.id, e.name, e.window_start, e.window_end, e.created_by, e.single_approval, c.name AS client_name, uc.display_name AS created_by_name
             FROM engagements e JOIN clients c ON c.id = e.client_id LEFT JOIN users uc ON uc.id = e.created_by
-            WHERE e.approved_at IS NULL AND e.stopped_at IS NULL AND e.cancelled_at IS NULL AND e.window_end > UTC_TIMESTAMP() AND e.created_by <> :u'
-            . \Sentinel\Auth\ClientAccess::sql('e.client_id', $clientIds) . ' ORDER BY e.window_start LIMIT 20'); // only their clients (1.41)
-        $stmt->execute(['u' => $userId]);
-        // Only those this admin may really approve (not linked to the creator; see linkedAccounts()).
+            WHERE e.approved_at IS NULL AND e.stopped_at IS NULL AND e.cancelled_at IS NULL AND e.window_end > UTC_TIMESTAMP()'
+            . \Sentinel\Auth\ClientAccess::sql('e.client_id', $clientIds) . ' ORDER BY e.window_start LIMIT 50'); // only their clients (1.41)
+        $stmt->execute();
+        // Only those this admin may really approve (not linked to the creator; see linkedAccounts()), unless self-approval applies.
         $linked = $this->linkedAccounts($userId);
-        return array_values(array_filter($stmt->fetchAll(), static fn (array $e): bool => !in_array((int) $e['created_by'], $linked, true)));
+        return array_slice(array_values(array_filter($stmt->fetchAll(), static fn (array $e): bool =>
+            self::selfApprovalAllowed($e, $twoPersonNow) || ((int) $e['created_by'] !== $userId && !in_array((int) $e['created_by'], $linked, true)))), 0, 20);
     }
 
     /**
      * Approve (two-person rule: never by its creator). Only while awaiting approval and before the window ends.
-     * Returns whether it was approved now.
+     * $selfAllowed (1.47): two-person approval is off now; the creator may then approve an engagement that was ALSO
+     * created while it was off (single_approval = 1). Returns whether it was approved now.
      */
-    public function approve(int $id, int $userId): bool
+    public function approve(int $id, int $userId, bool $selfAllowed = false): bool
     {
         $stmt = $this->db->prepare('UPDATE engagements SET approved_by = :u, approved_at = UTC_TIMESTAMP() WHERE id = :id AND approved_at IS NULL
-            AND stopped_at IS NULL AND cancelled_at IS NULL AND created_by <> :u2 AND window_end > UTC_TIMESTAMP()');
-        $stmt->execute(['u' => $userId, 'u2' => $userId, 'id' => $id]);
+            AND stopped_at IS NULL AND cancelled_at IS NULL AND (created_by <> :u2 OR (single_approval = 1 AND :self = 1)) AND window_end > UTC_TIMESTAMP()');
+        $stmt->execute(['u' => $userId, 'u2' => $userId, 'self' => $selfAllowed ? 1 : 0, 'id' => $id]);
         return $stmt->rowCount() === 1;
+    }
+
+    /** May the creator approve this engagement themselves (1.47)? Only if created while two-person was off, and still off. */
+    public static function selfApprovalAllowed(array $engagement, bool $twoPersonNow): bool
+    {
+        return !$twoPersonNow && (int) ($engagement['single_approval'] ?? 0) === 1;
     }
 
     /** The kill switch: stop for good (running tests stop at their next check). Returns whether it was stopped now. */

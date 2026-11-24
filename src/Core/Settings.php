@@ -117,6 +117,8 @@ final class Settings
         // the sync, Test connection and ticket runs, so the Integrations page never waits on ITFlow.
         'itflow_boards_cache' => '',
         // Sign in with Microsoft (1.43): on/off, the Entra tenant and app (client) IDs; the client secret is a secret.
+        // Pen-test engagements need a second person to approve them (1.47: '0' lets the creator approve their own).
+        'engagement_two_person' => '1',
         'sso_entra_enabled' => '0',
         'sso_entra_tenant' => '',
         'sso_entra_client' => '',

@@ -2,6 +2,14 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.45.3 (2026-11-24): Windows agent installer and nmap
+
+- **nmap's setup opens for you.** The free nmap installer has no silent mode (nmap.org keeps that for the paid OEM
+  edition), so the Windows installer stopped after 5 minutes. It now says the nmap setup window is opening, to untick
+  Npcap, and waits up to 30 minutes for you to click through. An nmap that is already installed is used as it is.
+- **Unattended installs.** Run through an RMM tool as SYSTEM (no desktop), the installer stops at once when nmap is
+  missing and says to install nmap first, instead of waiting for a window nobody can see.
+
 ### 1.45.2 (2026-11-24): Windows agent installer fix
 
 - **The Windows installer runs again.** `install-agent.ps1` stopped with a parse error ("Unexpected token 'PHP'")

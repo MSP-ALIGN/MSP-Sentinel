@@ -2,7 +2,7 @@
 /**
  * One pen-test engagement: state, window, tests, scope, the signed authorisation, and the actions (approve by a
  * different admin, stop, cancel).
- * Expects: $client, $engagement (with 'targets', 'tests_list'), $state, $siteNames, $testLabels, $currentUser, $results
+ * Expects: $client, $engagement (with 'targets', 'tests_list'), $state, $selfApproval (1.47: the creator may approve), $siteNames, $testLabels, $currentUser, $results
  * (latest per host), $findings (EngagementFindings::analyse), $externalJobs, $agentJobs, $reports, $retestOf.
  * Every value is escaped; results came from the tested hosts and are untrusted. Actions are shown only to roles allowed to use them (the routes enforce it too).
  */
@@ -51,17 +51,19 @@ foreach ($e['targets'] as $t) {
                     <?php if ($isTech || $isAdmin): ?><a href="<?= e(url('/engagements/' . (int) $e['id'] . '/document')) ?>"><?= e(__('Download the signed document')) ?></a><?php endif; ?></p>
                 <p class="small text-body-secondary font-monospace text-break mb-2">SHA-256 <?= e($e['document_sha256']) ?></p>
                 <p class="mb-1"><?= e(__('Created by {u} at {t}.', ['u' => $e['created_by_name'] ?? '?', 't' => $local((string) $e['created_at'])])) ?></p>
-                <p class="mb-1"><?= e($e['approved_at'] !== null ? __('Approved by {u} at {t}.', ['u' => $e['approved_by_name'] ?? '?', 't' => $local((string) $e['approved_at'])]) : __('Not approved yet.')) ?></p>
+                <p class="mb-1"><?= e($e['approved_at'] !== null ? __('Approved by {u} at {t}.', ['u' => $e['approved_by_name'] ?? '?', 't' => $local((string) $e['approved_at'])]) : __('Not approved yet.')) ?>
+                    <?php if ($e['approved_at'] !== null && (int) $e['approved_by'] === (int) $e['created_by']): ?><span class="badge text-bg-warning"><?= e(__('Single-person approval')) ?></span><?php endif; ?></p>
                 <?php if ($e['stopped_at'] !== null): ?><p class="mb-1"><?= e(__('Stopped by {u} at {t}: {r}', ['u' => $e['stopped_by_name'] ?? '?', 't' => $local((string) $e['stopped_at']), 'r' => $e['stop_reason']])) ?></p><?php endif; ?>
 
-                <?php if ($state === ER::STATE_AWAITING && $isAdmin && !$mine): ?>
+                <?php if ($state === ER::STATE_AWAITING && $isAdmin && (!$mine || ($selfApproval ?? false))): ?>
+                <?php if ($mine): ?><p class="small text-body-secondary mt-3 mb-0"><?= e(__('Two-person approval is off, so you may approve your own engagement. Check the signed document against the scope first.')) ?></p><?php endif; ?>
                 <form method="post" data-confirm="<?= e(__('Approve this engagement? Its tests can run as soon as its window opens.')) ?>" action="<?= e(url('/engagements/' . (int) $e['id'] . '/approve')) ?>" class="mt-3"><?= Csrf::field() ?>
                     <label for="password" class="form-label"><?= e(__('Your Sentinel password')) ?></label>
                     <input type="password" class="form-control form-control-sm mb-2" id="password" name="password" autocomplete="current-password" required>
                     <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-check2-circle me-1" aria-hidden="true"></i><?= e(__('Approve: I checked the signed document matches this scope')) ?></button>
                 </form>
                 <?php elseif ($state === ER::STATE_AWAITING && $mine): ?>
-                <p class="small text-body-secondary mt-3"><?= e(__('You created it, so a different admin must approve it.')) ?></p>
+                <p class="small text-body-secondary mt-3"><?= e(($selfApproval ?? false) ? __('Someone who may approve engagements must approve it (you can\'t).') : __('You created it, so a different admin must approve it.')) ?></p>
                 <?php endif; ?>
                 <?php if ($state === ER::STATE_AWAITING && $isTech): ?>
                 <form method="post" action="<?= e(url('/engagements/' . (int) $e['id'] . '/cancel')) ?>" class="mt-2" data-confirm="<?= e(__('Cancel this engagement?')) ?>"><?= Csrf::field() ?>
