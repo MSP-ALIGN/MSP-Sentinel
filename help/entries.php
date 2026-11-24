@@ -362,6 +362,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.45.3',
+            'date' => '2026-11-24',
+            'items' => [
+                'Windows agent installer: the free nmap has no silent install, so the installer now opens nmap\'s setup window, says to untick Npcap, and waits up to 30 minutes instead of stopping after 5. Without a desktop (an RMM tool running as SYSTEM) it stops at once and says to install nmap first.',
+            ],
+        ],
+        [
             'version' => '1.45.2',
             'date' => '2026-11-24',
             'items' => [

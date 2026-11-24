@@ -2,6 +2,15 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.45.0 (2026-11-24): Choose which ITFlow clients sync
+
+- **Only tagged clients.** Under **Administration → Integrations → ITFlow**, tick **Only sync ITFlow clients with this
+  tag** (default **Sentinel**, any case) and tag those clients in ITFlow. Untagged clients are not added; ones already
+  in Sentinel are archived, and restored when the tag is added back. If the tags can't be read, or no client tag has
+  that name, the sync stops and changes nothing. Needs an ITFlow with the tags API.
+- **Leave a client out.** **Don't sync with ITFlow** on a client's Edit page: the sync never renames, archives or
+  restores it, and Sentinel opens no ITFlow tickets for it.
+
 ### 1.44.1 (2026-11-24): ITFlow boards fixes from review
 
 - **The Integrations page never waits on ITFlow.** The board list is read by **Test connection**, the client sync and

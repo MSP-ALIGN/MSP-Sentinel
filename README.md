@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.45.2](https://img.shields.io/badge/version-1.45.2-ff5a1f?style=flat-square)
+![Version 1.45.3](https://img.shields.io/badge/version-1.45.3-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,14 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.45.3 (2026-11-24): Windows agent installer and nmap
+
+- **nmap's setup opens for you.** The free nmap installer has no silent mode (nmap.org keeps that for the paid OEM
+  edition), so the Windows installer stopped after 5 minutes. It now says the nmap setup window is opening, to untick
+  Npcap, and waits up to 30 minutes for you to click through. An nmap that is already installed is used as it is.
+- **Unattended installs.** Run through an RMM tool as SYSTEM (no desktop), the installer stops at once when nmap is
+  missing and says to install nmap first, instead of waiting for a window nobody can see.
+
 ### 1.45.2 (2026-11-24): Windows agent installer fix
 
 - **The Windows installer runs again.** `install-agent.ps1` stopped with a parse error ("Unexpected token 'PHP'")
@@ -137,15 +145,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
   off again, only findings from then on get ITFlow tickets (no backlog). The form says that open tickets are no longer
   followed.
 - The tag name refuses invisible and invalid characters.
-
-### 1.45.0 (2026-11-24): Choose which ITFlow clients sync
-
-- **Only tagged clients.** Under **Administration → Integrations → ITFlow**, tick **Only sync ITFlow clients with this
-  tag** (default **Sentinel**, any case) and tag those clients in ITFlow. Untagged clients are not added; ones already
-  in Sentinel are archived, and restored when the tag is added back. If the tags can't be read, or no client tag has
-  that name, the sync stops and changes nothing. Needs an ITFlow with the tags API.
-- **Leave a client out.** **Don't sync with ITFlow** on a client's Edit page: the sync never renames, archives or
-  restores it, and Sentinel opens no ITFlow tickets for it.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

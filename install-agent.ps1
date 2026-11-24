@@ -12,8 +12,9 @@
   - checks Windows (64-bit; Server 2022/2025 or Windows 11) and that it runs as administrator;
   - installs the Microsoft Visual C++ runtime PHP needs, if missing (only when signed by Microsoft);
   - downloads PHP 8.4 (NTS x64) from windows.php.net and checks it against the SHA-256 windows.php.net publishes;
-  - downloads nmap from nmap.org and checks it against nmap.org's published SHA-256 and its Authenticode signature,
-    and installs it silently WITHOUT Npcap (the agent only uses unprivileged TCP connect scans);
+  - if nmap is missing, downloads it from nmap.org, checks it against nmap.org's published SHA-256 and its
+    Authenticode signature, and opens its setup: click through and untick Npcap (the agent only uses unprivileged TCP
+    connect scans). The free nmap has no silent install, so for an unattended install put nmap on first;
   - downloads the agent code (this repository) and WinSW (the service wrapper; SHA-256 pinned below);
   - puts code, PHP and WinSW in C:\Program Files\MSP Sentinel Agent (Administrators and SYSTEM can change it), and
     config, state, logs and update results in C:\ProgramData\MSP Sentinel Agent with tight permissions: the agent's
@@ -185,13 +186,18 @@ function Install-Nmap {
     if ($sha.Length -ne 64) { Fail 'nmap.org published no SHA-256 for that file.' }
     Assert-Sha256 $exe $sha
     Assert-Signed $exe 'Insecure\.Com|Nmap Software'
-    # /S: silent (it skips Npcap; the agent doesn't need it). If this nmap installer doesn't support a silent install,
-    # it waits for someone at the screen: stop after 5 minutes and say how to install nmap by hand.
-    $p = Start-Process -FilePath $exe -ArgumentList '/S' -PassThru
+    # The free nmap installer has no silent mode (nmap.org keeps that, and the command-line zip, for the OEM edition),
+    # so (1.45.3) it runs with its window and someone clicks through it. Nobody can do that in a session without a
+    # desktop (an RMM tool running this as SYSTEM): stop at once and say to install nmap first.
+    if (-not [Environment]::UserInteractive) {
+        Fail 'nmap is not installed, and its installer needs someone at the screen. Install nmap from nmap.org first (untick Npcap), then run this again.'
+    }
+    Say 'The nmap setup window opens now: click through it and UNTICK "Npcap" on the components page (the agent does not need it).'
+    $p = Start-Process -FilePath $exe -PassThru
     $null = $p.Handle  # keep the process handle, or ExitCode reads as empty after WaitForExit
-    if (-not $p.WaitForExit(300000)) {
+    if (-not $p.WaitForExit(1800000)) {
         Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
-        Fail "nmap's installer did not finish silently. Install nmap from nmap.org by hand (Npcap is not needed: untick it), then run this again."
+        Fail "nmap's setup was not finished within 30 minutes. Install nmap from nmap.org by hand (untick Npcap), then run this again."
     }
     $found = @("${env:ProgramFiles(x86)}\Nmap\nmap.exe", "$env:ProgramFiles\Nmap\nmap.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
     if (-not $found -or ($null -ne $p.ExitCode -and $p.ExitCode -ne 0)) { Fail "nmap did not install (exit $($p.ExitCode))." }
