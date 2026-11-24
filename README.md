@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.47.1](https://img.shields.io/badge/version-1.47.1-ff5a1f?style=flat-square)
+![Version 1.47.2](https://img.shields.io/badge/version-1.47.2-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,16 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.47.2 (2026-11-24): Windows agent scans start
+
+- **"Could not start nmap" on Windows is fixed.** The agent asked Windows to read nmap's input from `/dev/null`,
+  which only exists on Linux, so every scan failed before it began. It now uses Windows' null device, gives nmap the
+  environment Windows networking needs (without `SystemRoot`, Winsock can't start), and collects nmap's output in
+  private temporary files, because PHP can't read process pipes on Windows without blocking. The stop check, kill
+  switch and time limits keep working during a scan. Linux agents and Sentinel's own scans are unchanged.
+- To get the fix, upgrade the Windows agent: run the install command again with `-Upgrade`, or send a signed remote
+  update from the agent's page.
+
 ### 1.47.1 (2026-11-24): Engagement approval fixes from review
 
 - **Back on means back on.** Approving checks the setting again in the same database statement, so turning
@@ -140,20 +150,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 - **Never weaker after the fact.** Each engagement keeps the rule in force when it was created. One made under the
   two-person rule always needs a second person, and one made while it was off needs a second person again once the
   rule is back on.
-
-### 1.46.1 (2026-11-24): Sign in with Microsoft setup fixes from review
-
-- **No lock-out from the wrong tenant.** Once a tenant is saved, the setup script's details must come from that same
-  tenant (409 otherwise), so a run signed in to the wrong one changes nothing. Switching needs **Switch to another
-  Microsoft tenant** ticked for the code. Switching tenants, here or by hand, now also turns password sign-in back on
-  for everyone whose Microsoft link it clears.
-- **All or nothing.** Using the code and saving the details is one transaction. The code only works while the Admin
-  who made it is still an active Admin with every client. Wrong details sent with the right code no longer count
-  toward the address's rate limit.
-- **The script.** The command shown works on Windows PowerShell 5.1 (TLS 1.2 first). The script shows the tenant and
-  asks before changing it, keeps the app's other web settings, waits for a new app to be ready, accepts a Sentinel
-  address with a sub-folder, and sends the expiry date in a format every regional setting gets right.
-- Expiry reminders also come while sign-in is switched off.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

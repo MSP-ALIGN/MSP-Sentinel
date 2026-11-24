@@ -31,6 +31,10 @@ use Sentinel\Core\Config;
  *   applies as well, and nmap is always terminated and reaped, even when
  *   something goes wrong (try/finally), so no nmap can outlive the worker's control.
  * - nmap is not bundled (its licence is the NPSL). The MSP installs it, and its path comes from config.
+ * - Windows (1.47.2): the null device is NUL (not /dev/null, which made nmap fail to start), nmap gets the Windows
+ *   environment it needs (SystemRoot, or Winsock can't start; PATH; TEMP), and its output goes to two private
+ *   temporary files instead of pipes, because PHP on Windows can't read process pipes without blocking (no
+ *   stream_select or non-blocking mode there): the stop check must keep running every second while nmap works.
  */
 final class NmapRunner
 {
@@ -45,7 +49,9 @@ final class NmapRunner
     ];
 
     /** Use fromConfig() normally. */
-    public function __construct(private readonly string $nmapPath, private readonly int $hostTimeoutSeconds = 1500, private readonly string $profile = 'gentle')
+    /** $fileCapture: collect output in temporary files (null: on Windows only; tests can force it to check that path). */
+    public function __construct(private readonly string $nmapPath, private readonly int $hostTimeoutSeconds = 1500, private readonly string $profile = 'gentle',
+        private readonly ?bool $fileCapture = null)
     {
         if (!isset(self::PROFILES[$profile])) {
             throw new \InvalidArgumentException('Unknown timing profile.');
@@ -55,7 +61,7 @@ final class NmapRunner
     /** The same runner with another timing profile (agents: the site's setting from the signed job). */
     public function withProfile(string $profile): self
     {
-        return new self($this->nmapPath, $this->hostTimeoutSeconds, $profile);
+        return new self($this->nmapPath, $this->hostTimeoutSeconds, $profile, $this->fileCapture);
     }
 
     /** Build from config: scanner.nmap_path (default /usr/bin/nmap). */
@@ -70,14 +76,13 @@ final class NmapRunner
         if (!$this->available()) {
             return '';
         }
-        $p = @proc_open([$this->nmapPath, '--version'], [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes);
-        if (!is_resource($p)) {
+        // Through the same runner as scans (1.47.2): Windows-safe, and a hung nmap can't block diagnostics (15 s limit).
+        try {
+            $r = $this->run([$this->nmapPath, '--version'], static fn (): bool => false, 15, 100_000);
+        } catch (\RuntimeException) {
             return '';
         }
-        $line = (string) fgets($pipes[1], 200);
-        fclose($pipes[1]);
-        proc_close($p);
-        return trim($line);
+        return trim(mb_substr(strtok($r['xml'], "\n") ?: '', 0, 200));
     }
 
     /** True if the configured nmap binary exists and is executable. */
@@ -241,7 +246,11 @@ final class NmapRunner
      */
     private function run(array $args, callable $shouldStop, int $timeoutSeconds, int $maxBytes): array
     {
-        $proc = proc_open($args, [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, ['PATH' => '/usr/bin:/bin', 'LANG' => 'C']);
+        // Always on Windows (its pipes can't be read without blocking); elsewhere only when a test asks for it.
+        if (PHP_OS_FAMILY === 'Windows' || $this->fileCapture === true) {
+            return $this->runToFiles($args, $shouldStop, $timeoutSeconds, $maxBytes);
+        }
+        $proc = proc_open($args, [0 => ['file', self::nullDevice(), 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, self::environment($this->nmapPath));
         if (!is_resource($proc)) {
             throw new \RuntimeException('Could not start nmap.');
         }
@@ -312,5 +321,100 @@ final class NmapRunner
             $exit = proc_close($proc);
         }
         return ['exit' => $exit, 'xml' => $xml, 'stderr' => mb_substr($stderr, 0, 2000), 'stopped' => $stopped, 'timed_out' => $timedOut, 'overflow' => $overflow];
+    }
+
+    /**
+     * Run nmap with its output going to two private temporary files (Windows, see the class notes): the loop only
+     * polls whether nmap is still running, so the stop check runs every second. Same result and limits as run().
+     *
+     * @param list<string> $args
+     * @return array{exit:int, xml:string, stderr:string, stopped:bool, timed_out:bool, overflow:bool}
+     */
+    private function runToFiles(array $args, callable $shouldStop, int $timeoutSeconds, int $maxBytes): array
+    {
+        // The service account's temp folder: only that account, SYSTEM and Administrators can read files made there.
+        $out = tempnam(sys_get_temp_dir(), 'snx');
+        $err = tempnam(sys_get_temp_dir(), 'sne');
+        if ($out === false || $err === false) {
+            throw new \RuntimeException('Could not start nmap: no temporary file for its output.');
+        }
+        $proc = proc_open($args, [0 => ['file', self::nullDevice(), 'r'], 1 => ['file', $out, 'w'], 2 => ['file', $err, 'w']], $pipes, null,
+            self::environment($this->nmapPath), ['bypass_shell' => true]);
+        if (!is_resource($proc)) {
+            @unlink($out);
+            @unlink($err);
+            throw new \RuntimeException('Could not start nmap.');
+        }
+        $stopped = false;
+        $timedOut = false;
+        $overflow = false;
+        $exit = -1;
+        $deadline = time() + $timeoutSeconds;
+        $lastPoll = 0.0;
+        try {
+            while (proc_get_status($proc)['running']) {
+                usleep(200000);
+                clearstatcache();
+                if ((int) @filesize($out) > $maxBytes || (int) @filesize($err) > 1_000_000) {
+                    $overflow = true; // runaway output (results or errors): stop rather than fill the disk
+                }
+                if (microtime(true) - $lastPoll >= 1.0) {
+                    $lastPoll = microtime(true);
+                    try {
+                        if (!$stopped && $shouldStop()) {
+                            $stopped = true;
+                        }
+                    } catch (\Throwable $ex) {
+                        $stopped = true; // if we can't check whether we may continue, we don't
+                        error_log('[msp-sentinel] stop check failed, stopping nmap: ' . $ex->getMessage());
+                    }
+                }
+                if (time() > $deadline) {
+                    $timedOut = true;
+                }
+                if ($stopped || $timedOut || $overflow) {
+                    break;
+                }
+            }
+        } finally {
+            // Always make sure nmap is gone before returning or throwing (bypass_shell: this is nmap itself, not a shell).
+            if (proc_get_status($proc)['running']) {
+                proc_terminate($proc, 15);
+                for ($i = 0; $i < 10 && proc_get_status($proc)['running']; $i++) {
+                    usleep(100000);
+                }
+                if (proc_get_status($proc)['running']) {
+                    proc_terminate($proc, 9);
+                }
+            }
+            $exit = proc_close($proc);
+            $xml = (string) @file_get_contents($out, false, null, 0, $maxBytes + 1);
+            $stderr = (string) @file_get_contents($err, false, null, 0, 20000);
+            @unlink($out);
+            @unlink($err);
+        }
+        return ['exit' => $exit, 'xml' => $xml, 'stderr' => mb_substr($stderr, 0, 2000), 'stopped' => $stopped, 'timed_out' => $timedOut, 'overflow' => $overflow];
+    }
+
+    /** The null device: NUL on Windows (no /dev/null there), /dev/null elsewhere. */
+    private static function nullDevice(): string
+    {
+        return PHP_OS_FAMILY === 'Windows' ? 'NUL' : '/dev/null';
+    }
+
+    /**
+     * nmap's environment: nothing inherited but what it needs. Windows: SystemRoot (without it Winsock can't start),
+     * PATH (nmap's own folder for its DLLs, then System32) and TEMP; elsewhere a fixed PATH.
+     *
+     * @return array<string,string>
+     */
+    private static function environment(string $nmapPath): array
+    {
+        if (PHP_OS_FAMILY !== 'Windows') {
+            return ['PATH' => '/usr/bin:/bin', 'LANG' => 'C'];
+        }
+        $root = (string) (getenv('SystemRoot') ?: 'C:\\Windows');
+        $tmp = sys_get_temp_dir();
+        return ['SystemRoot' => $root, 'WINDIR' => $root, 'PATH' => dirname($nmapPath) . ';' . $root . '\\System32', 'TEMP' => $tmp, 'TMP' => $tmp];
     }
 }
