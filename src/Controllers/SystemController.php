@@ -27,6 +27,7 @@ final class SystemController extends Controller
         $s = App::settings();
         return $this->page('admin/system', __('System'), [
             'checks' => App::health()->run(),
+            'backups' => (new \Sentinel\System\BackupStatus(App::settings()))->history(),
             'version' => App::version(),
             'build' => App::build(),
             'demoLoaded' => (new \Sentinel\Demo\DemoData(App::db(), (int) $this->user()['id']))->isLoaded(),

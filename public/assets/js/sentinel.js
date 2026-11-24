@@ -144,6 +144,23 @@
         });
     });
 
+    // Select all (1.37): <input type="checkbox" data-select-all="FORMID"> ticks every checkbox that belongs to that form
+    // (form="FORMID"); <span data-select-count="FORMID"> shows how many are ticked.
+    document.querySelectorAll('input[data-select-all]').forEach(function (all) {
+        var formId = all.getAttribute('data-select-all');
+        var boxes = function () { return document.querySelectorAll('input[type=checkbox][form="' + formId + '"]'); };
+        var count = document.querySelector('[data-select-count="' + formId + '"]');
+        var update = function () {
+            var n = Array.prototype.filter.call(boxes(), function (b) { return b.checked; }).length;
+            if (count) { count.textContent = n > 0 ? '(' + n + ' selected)' : ''; }
+        };
+        all.addEventListener('change', function () {
+            boxes().forEach(function (b) { b.checked = all.checked; });
+            update();
+        });
+        boxes().forEach(function (b) { b.addEventListener('change', update); });
+    });
+
     // Instant list filters (1.34): <input data-filter-list="#container" [data-filter-count="#el"]> hides the
     // container's items (elements with data-filter-item, else its table body rows) whose text doesn't contain what was
     // typed. Text comparison only; nothing is sent anywhere. A ?q= in the address pre-fills it (search results link here).

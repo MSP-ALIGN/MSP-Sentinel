@@ -1,8 +1,10 @@
 <?php
-/** Client list. Expects: $clients (rows + site_count + auth_summary), $showArchived, $globallyPaused, $currentUser. */
+/** Client list. Expects: $clients (rows + site_count + auth_summary), $risk (DashboardData::clients by id, 1.37), $showArchived, $globallyPaused, $currentUser. */
 use Sentinel\Auth\Role;
 
 $isAdmin = Role::atLeast((string) $currentUser['role'], Role::ADMIN);
+require __DIR__ . '/../dashboard/helpers.php'; // $levelWord, $levelIcon
+$risk ??= [];
 ?>
 <?php if ($globallyPaused): ?><?php require __DIR__ . '/../partials/kill_switch.php'; ?><?php endif; ?>
 <div class="card">
@@ -21,6 +23,8 @@ $isAdmin = Role::atLeast((string) $currentUser['role'], Role::ADMIN);
             <thead>
             <tr>
                 <th scope="col"><?= e(__('Client')) ?></th>
+                <th scope="col"><?= e(__('Risk')) ?></th>
+                <th scope="col"><?= e(__('Open findings')) ?></th>
                 <th scope="col"><?= e(__('Scan authorisation')) ?></th>
                 <th scope="col"><?= e(__('Scanning')) ?></th>
                 <th scope="col"><?= e(__('Sites')) ?></th>
@@ -29,7 +33,7 @@ $isAdmin = Role::atLeast((string) $currentUser['role'], Role::ADMIN);
             </thead>
             <tbody>
             <?php if ($clients === []): ?>
-            <tr><td colspan="5" class="text-center text-body-secondary py-4">
+            <tr><td colspan="7" class="text-center text-body-secondary py-4">
                 <?= e(__('No clients yet.')) ?>
                 <?php if ($isAdmin): ?><a href="<?= e(url('/clients/new')) ?>"><?= e(__('Add your first client.')) ?></a><?php endif; ?>
             </td></tr>
@@ -41,6 +45,12 @@ $isAdmin = Role::atLeast((string) $currentUser['role'], Role::ADMIN);
                     <?php if ((int) $c['is_archived'] === 1): ?><span class="badge text-bg-secondary ms-1"><?= e(__('Archived')) ?></span><?php endif; ?>
                     <?php if ((int) ($c['is_demo'] ?? 0) === 1): ?><span class="badge text-bg-info ms-1"><?= e(__('Demo')) ?></span><?php endif; ?>
                 </td>
+                <?php $rk = $risk[(int) $c['id']] ?? null; ?>
+                <td class="small text-nowrap"><?php if ($rk === null): ?><span class="text-body-secondary">–</span>
+                    <?php elseif ($rk['last_scan'] === null && (int) $rk['fail'] === 0 && (int) $rk['warn'] === 0): ?><span class="text-body-secondary"><?= e(__('Not scanned yet')) ?></span>
+                    <?php else: ?><span class="gauge-level level-<?= e($rk['level']) ?>"><i class="bi <?= e($levelIcon($rk['level'])) ?>" aria-hidden="true"></i> <?= e($levelWord($rk['level'])) ?></span> <span class="text-body-secondary"><?= e((int) $rk['score']) ?>/100</span><?php endif; ?></td>
+                <td class="small text-nowrap"><?php if ($rk !== null && ((int) $rk['fail'] > 0 || (int) $rk['warn'] > 0)): ?><a href="<?= e(url('/findings', ['client' => (int) $c['id']])) ?>"><?= e(__('{f} Fail, {w} Warning', ['f' => (int) $rk['fail'], 'w' => (int) $rk['warn']])) ?></a>
+                    <?php elseif ($rk !== null): ?><span class="text-body-secondary"><?= e(__('None')) ?></span><?php else: ?><span class="text-body-secondary">–</span><?php endif; ?></td>
                 <td>
                     <?php $status = $c['auth_summary']['status']; require __DIR__ . '/../partials/auth_status.php'; ?>
                     <?php if ($c['auth_summary']['valid_until'] !== null && $status === 'active'): ?>

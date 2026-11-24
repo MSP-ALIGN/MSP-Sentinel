@@ -29,8 +29,12 @@ $typeLabels = ['port' => __('Exposed service'), 'tls' => __('Certificate'), 'web
 ?>
 <?php
 // One finding as a row (the flat list, and groups of one in the grouped list).
-$flatRow = static function (array $f) use ($findingSeverityBadge, $findingStatusBadge, $findingDueBadge, $typeLabels): string {
-    return '<tr><td>' . $findingSeverityBadge((string) $f['severity']) . '</td>'
+// Picking findings for a bulk action (1.37): in the one-row-per-target view, technicians and admins tick rows; the
+// boxes belong to the form "sel-bulk" above the table (HTML form attribute), which posts to /findings/bulk.
+$selectable = $canAct && !$grouped;
+$flatRow = static function (array $f) use ($findingSeverityBadge, $findingStatusBadge, $findingDueBadge, $typeLabels, $selectable): string {
+    return '<tr>' . ($selectable ? '<td><input class="form-check-input" type="checkbox" name="ids[]" value="' . e((int) $f['id']) . '" form="sel-bulk" aria-label="' . e(__('Select finding #{id}', ['id' => (int) $f['id']])) . '"></td>' : '')
+        . '<td>' . $findingSeverityBadge((string) $f['severity']) . '</td>'
         . '<td><a href="' . e(url('/findings/' . (int) $f['id'])) . '">' . e($f['title']) . '</a><div class="small text-body-secondary">' . e($typeLabels[$f['finding_type']] ?? '') . ' · <code>' . e($f['target']) . '</code></div></td>'
         . '<td><a href="' . e(url('/clients/' . (int) $f['client_id'])) . '">' . e($f['client_name']) . '</a></td>'
         . '<td>' . $findingStatusBadge((string) $f['status'], (int) $f['reappeared'] === 1) . '</td>'
@@ -124,15 +128,39 @@ $flatRow = static function (array $f) use ($findingSeverityBadge, $findingStatus
             <?php if ($filters['group'] !== ''): ?><span class="badge text-bg-info"><?= e(__('One issue')) ?> <a class="link-light ms-1" href="<?= e(url('/findings', $q(['group' => null, 'view' => null]))) ?>"><?= e(__('clear')) ?></a></span><?php endif; ?>
         </div>
     </div>
+    <?php if ($selectable && $rows !== []): ?>
+    <div class="card-body border-bottom">
+        <form method="post" id="sel-bulk" action="<?= e(url('/findings/bulk')) ?>" class="row g-2 align-items-end" data-confirm="<?= e(__('Apply this action to the selected findings?')) ?>">
+            <?= Csrf::field() ?><input type="hidden" name="return" value="<?= e($returnTo) ?>">
+            <div class="col-12 small text-body-secondary"><?= e(__('Tick findings below, then choose what to do with them (at most 500 at once).')) ?> <span data-select-count="sel-bulk"></span></div>
+            <div class="col-sm-3"><label class="form-label small mb-0" for="sel-action"><?= e(__('Action')) ?></label>
+                <select class="form-select form-select-sm" id="sel-action" name="action">
+                    <option value="assign"><?= e(__('Assign')) ?></option>
+                    <option value="triage"><?= e(__('Accept risk / false positive / reopen')) ?></option>
+                    <?php if ($isAdmin): ?><option value="due"><?= e(__('Set due date')) ?></option><?php endif; ?>
+                    <option value="verify"><?= e(__('Verify fix')) ?></option>
+                </select></div>
+            <div class="col-sm-2"><label class="form-label small mb-0" for="sel-assignee"><?= e(__('Owner (assign)')) ?></label>
+                <select class="form-select form-select-sm" id="sel-assignee" name="assignee"><option value="me"><?= e(__('Me')) ?></option><option value=""><?= e(__('Nobody')) ?></option>
+                    <?php foreach ($assignable as $u): ?><option value="<?= e($u['id']) ?>"><?= e($u['display_name'] !== '' ? $u['display_name'] . ' (' . $u['username'] . ')' : $u['username']) ?></option><?php endforeach; ?></select></div>
+            <div class="col-sm-2"><label class="form-label small mb-0" for="sel-status"><?= e(__('Decision (triage)')) ?></label>
+                <select class="form-select form-select-sm" id="sel-status" name="status"><option value="accepted"><?= e(__('Accept the risk')) ?></option><option value="false_positive"><?= e(__('False positive')) ?></option><option value="open"><?= e(__('Reopen')) ?></option></select></div>
+            <?php if ($isAdmin): ?><div class="col-sm-2"><label class="form-label small mb-0" for="sel-due"><?= e(__('Due date (due)')) ?></label><input class="form-control form-control-sm" type="date" id="sel-due" name="due_date"></div><?php endif; ?>
+            <div class="col-sm-3"><label class="form-label small mb-0" for="sel-note"><?= e(__('Note (triage and due date need one)')) ?></label><input class="form-control form-control-sm" id="sel-note" name="note" maxlength="2000"></div>
+            <div class="col-12"><button class="btn btn-sm btn-primary" type="submit"><?= e(__('Apply to selected')) ?></button></div>
+        </form>
+    </div>
+    <?php endif; ?>
     <div class="card-body p-0 table-responsive">
         <table class="table table-hover align-middle mb-0">
             <thead><tr>
+                <?php if ($selectable): ?><th scope="col"><input class="form-check-input" type="checkbox" data-select-all="sel-bulk" aria-label="<?= e(__('Select all findings on this page')) ?>"></th><?php endif; ?>
                 <th scope="col"><?= e(__('Grade')) ?></th><th scope="col"><?= e(__('Finding')) ?></th><th scope="col"><?= e(__('Client')) ?></th>
                 <th scope="col"><?= e(__('Status')) ?></th><th scope="col"><?= e(__('Owner')) ?></th><th scope="col"><?= e(__('Due')) ?></th><th scope="col"><?= e(__('First seen (UTC)')) ?></th>
             </tr></thead>
             <tbody>
             <?php if ($rows === [] && $groups === []): ?>
-            <tr><td colspan="7" class="text-center text-body-secondary py-4"><?= e(__('No findings match these filters.')) ?></td></tr>
+            <tr><td colspan="<?= $selectable ? 8 : 7 ?>" class="text-center text-body-secondary py-4"><?= e(__('No findings match these filters.')) ?></td></tr>
             <?php endif; ?>
             <?php foreach ($groups as $g):
                 $members = $g['members'];

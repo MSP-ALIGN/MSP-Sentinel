@@ -9,6 +9,7 @@ declare(strict_types=1);
  */
 
 use Sentinel\System\Backup;
+use Sentinel\Core\App;
 use Sentinel\Tests\Assert;
 use Sentinel\Tests\TestContext;
 
@@ -180,5 +181,35 @@ return [
         file_put_contents($ctx->configPath, $orig);
         Assert::same(200, $ctx->login('admin', 'Admin-Pass-0001!')->get('/')->status, 'still works with the restored config');
         array_map('unlink', glob($d . '/*') ?: []);
+    },
+    'backup status: each run is recorded, shown on the System page and in the health check; failed or stale ones alert admins once a day' => function (TestContext $ctx) use ($dir): void {
+        App::settings()->set('backup_history', '');
+        $ctx->db->exec("DELETE FROM notifications WHERE kind = 'backup'");
+        $health = static fn (): array => array_values(array_filter(App::health()->run(), static fn (array $c): bool => $c['key'] === 'backups'))[0];
+        Assert::same('warn', $health()['status'], 'nothing recorded yet');
+        $d = $dir();
+        [$code, $out] = $ctx->cli('bin/backup.php', ['--dir=' . $d, '--keep=2']);
+        Assert::same(0, $code, $out);
+        $h = (new \Sentinel\System\BackupStatus(App::settings()))->history();
+        Assert::true($h[0]['ok'] && $h[0]['bytes'] > 0 && !$h[0]['encrypted'] && str_starts_with($h[0]['file'], 'msp-sentinel-backup-'), 'recorded: ' . json_encode($h[0]));
+        Assert::same('ok', $health()['status']);
+        $page = $ctx->login('admin', 'Admin-Pass-0001!')->get('/admin/system')->body;
+        Assert::contains('id="backups"', $page);
+        Assert::contains(htmlspecialchars($h[0]['file']), $page);
+        // A failed run (an unwritable folder): recorded with its error, the health check fails, admins are alerted once.
+        [$code] = $ctx->cli('bin/backup.php', ['--dir=/proc/no-such-folder']);
+        Assert::true($code !== 0, 'failed run');
+        $status = new \Sentinel\System\BackupStatus(App::settings());
+        Assert::same(false, $status->history()[0]['ok']);
+        Assert::same('fail', $health()['status']);
+        Assert::contains('failed', (string) $status->problem());
+        $ctx->cli('bin/worker.php', ['--no-schedule']);
+        $ctx->cli('bin/worker.php', ['--no-schedule']);
+        Assert::same(1, (int) $ctx->db->query("SELECT COUNT(*) FROM notifications n JOIN users u ON u.id = n.user_id WHERE n.kind = 'backup' AND u.username = 'admin'")->fetchColumn(), 'alerted once');
+        // Stale: the last good backup is over 2 days old.
+        $old = [['at' => gmdate('Y-m-d H:i:s', time() - 3 * 86400), 'ok' => true, 'file' => 'x.tar.gz', 'bytes' => 1, 'encrypted' => true, 'error' => '']];
+        App::settings()->set('backup_history', json_encode($old));
+        Assert::contains('No good backup in the last 48 hours', (string) (new \Sentinel\System\BackupStatus(App::settings()))->problem());
+        App::settings()->set('backup_history', '');
     },
 ];

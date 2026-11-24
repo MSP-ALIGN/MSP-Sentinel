@@ -60,6 +60,7 @@ return [
                 'Open Findings (all clients) or a client\'s Findings. The same problem on several targets of one client is one row ("on 3 targets"); "One row per target" shows them separately. Filter by client, status, grade, type, owner and due date, or type part of a title, target or CVE in Contains.',
                 'Open a finding to see its evidence, Why it matters and How to fix, its owner, due date and history.',
                 'To decide (Technician or Admin, always with a note): Accepted risk means the client knows and accepts it; it stays accepted until the problem goes away. False positive means it isn\'t really a problem; it reopens by itself if the evidence changes, for example a different version. Reopen undoes either decision. Every decision is in the finding\'s history and the audit log.',
+                'To act on findings you pick: switch to One row per target, tick them (or the header box for the whole page), choose the action above the list and click Apply to selected.',
                 'To act on a whole group, open its row: assign, accept risk / false positive / reopen with one note, verify fix on each, and (admins) set one due date. Each target stays its own finding: checked, resolved and audited on its own, exactly as if you had clicked each one.',
                 'Nobody resolves a finding by hand: it resolves when a check really sees the problem gone, for example a port a complete scan finds closed. A host that wasn\'t scanned keeps its findings, and vulnerability findings wait while new vulnerability data is fetched. A problem that comes back reopens the same finding, marked "Reappeared"; an accepted risk or false positive with the same evidence stays decided.',
             ],
@@ -214,6 +215,7 @@ return [
             'paragraphs' => [
                 'Administration → System shows the health of this install: PHP, the database, migrations, nmap, the scan worker and daily feeds job, storage, disk space, HTTPS, email and updates. Fix anything marked Problem first. On the server, php bin/doctor.php runs the same checks.',
                 'Updates: once a day Sentinel asks the releases feed for the latest version (nothing else is sent; you can turn this off). Servers installed with the one-line command also show how many new commits their branch has, the installed commit and the newest one. Update now runs the same update as sudo msp-sentinel-update on the server, backing up first, and shows its progress. Branch code is not signed: it is whatever the repository holds when the update runs, so check the commit first if in doubt.',
+                'Backups card (Administration → System): the last runs with result, size and encryption. The health check fails, and admins are alerted once a day, when the last backup failed or the last good one is over 2 days old.',
                 'Backups are made on the server with bin/backup.php (daily, if installed with the installer). They contain all client data and the app key, so encrypt any copy that leaves the server. A restore with the config keeps this server\'s own program, folder, trust and update settings. See docs/backup.md.',
                 'Data retention: choose how many months to keep finished scan history, resolved findings and reports (0 keeps them forever). Older data is removed once a day and the counts go into the audit log. The audit log itself is always kept.',
                 'Demo data: load four made-up clients (findings in every state, an agent and devices, scan history, trends and reports) to try Sentinel or train technicians, and remove them again. Demo clients use *.example names and documentation addresses, show a Demo badge and are never scanned. On the server: php bin/demo.php --load or --remove.',
@@ -353,6 +355,15 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.37.0',
+            'date' => '2026-11-24',
+            'items' => [
+                'Backups card on Administration → System (each run: result, size, encryption); the health check and a daily admin alert say when a backup failed or the last good one is over 2 days old.',
+                'Pick findings yourself: in One row per target, tick findings and apply one action to them (assign, triage, due date, verify fix).',
+                'The Clients list shows each client\'s risk and open findings.',
+            ],
+        ],
         [
             'version' => '1.36.1',
             'date' => '2026-11-24',

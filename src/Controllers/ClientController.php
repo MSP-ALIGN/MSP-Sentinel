@@ -41,8 +41,14 @@ final class ClientController extends Controller
             $client['auth_summary'] = $this->authSummary($authRepo->forClient((int) $client['id']), (string) $client['timezone']);
         }
         unset($client);
+        // Risk and open findings per client (1.37), from the dashboard's own figures (archived clients have none).
+        $risk = [];
+        foreach (App::dashboard()->clients() as $r) {
+            $risk[$r['id']] = $r;
+        }
         return $this->page('clients/index', __('Clients'), [
             'clients' => $clients,
+            'risk' => $risk,
             'showArchived' => $showArchived,
             'globallyPaused' => App::scope()->globallyPaused(),
         ]);

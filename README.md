@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.36.1](https://img.shields.io/badge/version-1.36.1-ff5a1f?style=flat-square)
+![Version 1.37.0](https://img.shields.io/badge/version-1.37.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,15 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.37.0 (2026-11-24): backup status, picked findings, client risk at a glance
+
+- **Backups you can see.** Each nightly backup records when it ran, whether it worked, its size and whether it was
+  encrypted. **Administration → System → Backups** lists the last runs. The health check turns red, and admins get an
+  alert (in-app and email, at most once a day), when the last backup failed or the last good one is over 2 days old.
+- **Pick findings yourself.** In **One row per target**, tick findings (or a whole page) and apply one action to all of
+  them: assign, accept risk / false positive / reopen, due date (admins) or verify fix.
+- **The Clients list shows risk and open findings** for each client, with a link to its findings.
+
 ### 1.36.1 (2026-11-24): Docker and Proxmox agents, fixes from review
 
 - **Docker:** `docker compose up`, `pull` and `logs` no longer need `SENTINEL_SERVER` (only enrolling does). A revoked
@@ -147,22 +156,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
   relaxes only that if the container has no nesting, with a warning. `install/proxmox-agent-ct.sh` creates a suitable
   container on the Proxmox host. See [the Proxmox guide](docs/guides/proxmox-agent.md).
 - Agents report how they are installed: the Agents page shows a **Docker** or **LXC** badge (migration 0043).
-
-### 1.35.1 (2026-11-24): update hardening, fixes from review
-
-- **Windows: no new code as SYSTEM during an update either.** The update task's pre-flight used to run the new
-  release's self-check as SYSTEM; it now asks PHP for its version and extensions with its own fixed code.
-- **Giving agents a replaced release key needs no installed code:** `echo NEWKEY | sudo tee
-  /etc/sentinel-agent/release-key.pub`. The installed copy of `agent-install.sh` refuses `--upgrade` (it is code a
-  remote update delivered); upgrade from a downloaded, checked release.
-- **The change-over to the frozen helper has a limit:** the update from 1.34 or older is still installed by the old
-  helper, so the protection starts with the next update. Upgrade agents to 1.35 by hand once where that matters.
-- **Smaller fixes:**
-  - a Windows launcher that can't be swapped, or an update folder that can't be prepared, is logged in `update\task.log`;
-  - half-made frozen copies are cleaned up;
-  - `release-sign.php hash --ref` reads files without line-ending conversion and refuses an empty `--ref`;
-  - `SHA256SUMS` now covers `AGENT-MANIFEST-SHA256`;
-  - the docs say signing off the server is the strongest option.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

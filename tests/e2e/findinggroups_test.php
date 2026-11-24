@@ -125,4 +125,24 @@ return [
         Assert::same(1, substr_count($eh, 'CVE-2099-0901 in Example SSH'), 'the executive summary lists the issue once');
         Assert::contains('203.0.113.95:22, 203.0.113.96:22', $eh, 'with every target');
     },
+    'picked findings: in the one-row-per-target view, technicians tick rows and apply one action to them' => function (TestContext $ctx) use ($grpSetup, $bulk): void {
+        [$cid, $vuln, $site, $port] = $grpSetup($ctx);
+        $tech = $ctx->login('grptech', 'Grptech-Pass-0001!');
+        $flat = $tech->get('/findings?view=flat&client=' . $cid)->body;
+        Assert::contains('id="sel-bulk"', $flat, 'the action panel');
+        Assert::contains('name="ids[]" value="' . $site[0] . '" form="sel-bulk"', $flat, 'a box per row');
+        Assert::contains('data-select-all="sel-bulk"', $flat);
+        Assert::notContains('id="sel-bulk"', $tech->get('/findings?client=' . $cid)->body, 'not in the grouped view');
+        Assert::notContains('id="sel-bulk"', $ctx->login('grpview', 'Grpview-Pass-0001!')->get('/findings?view=flat&client=' . $cid)->body, 'viewers get no boxes');
+        // Two findings from different issues, picked by hand: one action for both.
+        $res = $bulk($tech, [$site[1], $port[0]], ['action' => 'triage', 'status' => 'accepted', 'note' => 'Client accepts these two for now.']);
+        Assert::redirect('/findings?view=flat', $res);
+        Assert::same(2, (int) $ctx->db->query('SELECT COUNT(*) FROM findings WHERE status = \'accepted\' AND id IN (' . (int) $site[1] . ',' . (int) $port[0] . ')')->fetchColumn());
+        $bulk($tech, [$site[1], $port[0]], ['action' => 'triage', 'status' => 'open', 'note' => 'Back to open for the next test.']);
+        // The Clients list shows each client's risk and open findings, linking to them (1.37).
+        $list = $tech->get('/clients')->body;
+        Assert::contains('Open findings', $list);
+        Assert::contains('/findings?client=' . $cid, $list);
+        Assert::contains('3 Fail, 2 Warning', $list);
+    },
 ];

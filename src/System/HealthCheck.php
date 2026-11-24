@@ -89,6 +89,17 @@ final class HealthCheck
             $age === null ? __('Has never run. Add the worker cron job (every minute).') : __('Last run {n} minute(s) ago.', ['n' => intdiv($age, 60)]));
         });
 
+        // Backups (1.37): the nightly job's last runs (BackupStatus).
+        $safe('backups', __('Backups'), function () use ($add): void {
+            $status = new BackupStatus($this->settings);
+            $h = $status->history();
+            $problem = $status->problem();
+            $add('backups', __('Backups'), $h === [] ? 'warn' : ($problem === null ? 'ok' : 'fail'),
+                $h === [] ? __('No backup recorded yet. The installer adds a nightly backup job; the first one runs tonight (or run bin/backup.php).')
+                    : ($problem ?? __('Last good backup {t} UTC ({mb} MB, {enc}).', ['t' => $h[0]['at'], 'mb' => round($h[0]['bytes'] / 1_000_000, 1),
+                        'enc' => $h[0]['encrypted'] ? __('encrypted') : __('not encrypted')])));
+        });
+
         // Feeds
         $safe('feeds', __('Threat feeds'), function () use ($add): void {
         $feeds = $this->db->query('SELECT name, last_success FROM feed_status')->fetchAll(PDO::FETCH_KEY_PAIR);

@@ -1,7 +1,7 @@
 <?php
 /**
  * System page (admins): health checks, version/updates, data retention.
- * Expects: $checks, $demoLoaded (bool), $version, $build (null or branch/commit/development), $branchStatus (null or branch/behind/head),
+ * Expects: $checks, $backups (BackupStatus::history, 1.37), $demoLoaded (bool), $version, $build (null or branch/commit/development), $branchStatus (null or branch/behind/head),
  *          $webUpdate (available, pending, status, log), $newer, $updateEnabled, $checkedAt, $retention, $retentionLast, $sourceUrl.
  * Every value is escaped. Status is shown with an icon and a word, not colour alone.
  */
@@ -216,6 +216,29 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
         <form method="post" action="<?= e(url('/admin/system/agents-update')) ?>" data-confirm="<?= e(__('Update every agent that runs an older version to {v}, at each one\'s next check-in between scans?', ['v' => $rel])) ?>"><?= \Sentinel\Core\Csrf::field() ?>
             <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-cloud-arrow-down me-1" aria-hidden="true"></i><?= e(__('Update all agents to {v}', ['v' => $rel])) ?></button></form>
         <?php endif; ?>
+    </div>
+</div>
+
+<div class="card mb-3" id="backups">
+    <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Backups')) ?></h2></div>
+    <div class="card-body">
+        <?php if (($backups ?? []) === []): ?>
+        <p class="text-body-secondary mb-0"><?= e(__('No backup recorded yet. The nightly backup job (added by the installer) records each run here; run bin/backup.php to make one now.')) ?></p>
+        <?php else: ?>
+        <div class="table-responsive"><table class="table table-sm mb-2">
+            <thead><tr><th><?= e(__('When (UTC)')) ?></th><th><?= e(__('Result')) ?></th><th><?= e(__('Size')) ?></th><th><?= e(__('Encrypted')) ?></th><th><?= e(__('File or error')) ?></th></tr></thead>
+            <tbody>
+            <?php foreach ($backups as $b): ?>
+            <tr><td><?= e($b['at']) ?></td>
+                <td><span class="badge <?= $b['ok'] ? 'text-bg-success' : 'text-bg-danger' ?>"><?= e($b['ok'] ? __('OK') : __('Failed')) ?></span></td>
+                <td><?= e($b['ok'] ? round($b['bytes'] / 1_000_000, 1) . ' MB' : '–') ?></td>
+                <td><?= e($b['encrypted'] ? __('yes') : __('no')) ?></td>
+                <td class="small text-break"><?= e($b['ok'] ? $b['file'] : $b['error']) ?></td></tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table></div>
+        <?php endif; ?>
+        <p class="small text-body-secondary mb-0"><?= e(__('Backups are kept on the server in /var/backups/msp-sentinel: copy them off the server too. Admins are alerted when a backup fails or the last good one is more than 2 days old.')) ?></p>
     </div>
 </div>
 

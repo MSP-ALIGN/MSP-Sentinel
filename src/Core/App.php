@@ -288,7 +288,14 @@ final class App
     public static function housekeeping(): Housekeeping
     {
         return new Housekeeping(self::settings(), self::updates(), self::retention(), static fn (): ?string => self::itflowSync()->syncIfDue(),
-            static fn (): ?string => self::itflowTickets()->runIfDue(), static fn (): ?string => self::breachMonitor()->runIfDue());
+            static fn (): ?string => self::itflowTickets()->runIfDue(), static fn (): ?string => self::breachMonitor()->runIfDue(),
+            // A failed or stale backup alerts admins (in-app and email, at most once a day; 1.37).
+            static function (): void {
+                $problem = (new \Sentinel\System\BackupStatus(self::settings()))->problem();
+                if ($problem !== null) {
+                    self::alerts()->backupProblem($problem);
+                }
+            });
     }
 
     /**

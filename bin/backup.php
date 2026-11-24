@@ -49,6 +49,12 @@ try {
     App::boot();
     $file = (new Backup(App::config(), SENTINEL_ROOT, App::version()))->create($dir, $passphrase);
     $removed = Backup::prune($dir, $keep);
+    // Recorded for the System page, the health check and the stale-backup alert (1.37). A failure to record never
+    // turns a good backup into a failed run.
+    try {
+        (new \Sentinel\System\BackupStatus(App::settings()))->record(true, $file, (int) filesize($file), $passphrase !== null);
+    } catch (\Throwable) {
+    }
     fwrite(STDOUT, 'Backup written: ' . $file . ' (' . round(filesize($file) / 1_000_000, 1) . " MB)\n");
     if ($removed > 0) {
         fwrite(STDOUT, "Removed {$removed} older backup(s) (keeping {$keep}).\n");
@@ -59,6 +65,11 @@ try {
     exit(0);
 } catch (\Throwable $ex) {
     fwrite(STDERR, 'Backup failed: ' . $ex->getMessage() . "\n");
+    try {
+        (new \Sentinel\System\BackupStatus(App::settings()))->record(false, '', 0, $passphrase !== null, $ex->getMessage());
+    } catch (\Throwable) {
+        // the database may be what failed
+    }
     exit(1);
 }
 

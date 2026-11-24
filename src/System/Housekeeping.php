@@ -22,7 +22,7 @@ final class Housekeeping
      * @param (callable(): ?string)|null $itflowTickets ITFlow tickets from findings (when due: every 5 minutes).
      */
     public function __construct(private readonly Settings $settings, private readonly UpdateChecker $updates, private readonly Retention $retention,
-        private $itflowSync = null, private $itflowTickets = null, private $breach = null)
+        private $itflowSync = null, private $itflowTickets = null, private $breach = null, private $backupWatch = null)
     {
     }
 
@@ -31,7 +31,8 @@ final class Housekeeping
     {
         $this->settings->set('worker_last_tick', gmdate('Y-m-d H:i:s'));
         foreach ([fn () => $this->updates->check(), fn () => $this->retention->run(), fn () => $this->itflowSync === null ? null : ($this->itflowSync)(),
-                  fn () => $this->itflowTickets === null ? null : ($this->itflowTickets)(), fn () => $this->breach === null ? null : ($this->breach)()] as $job) {
+                  fn () => $this->itflowTickets === null ? null : ($this->itflowTickets)(), fn () => $this->breach === null ? null : ($this->breach)(),
+                  fn () => $this->backupWatch === null ? null : ($this->backupWatch)()] as $job) {
             try {
                 $job();
             } catch (\Throwable $ex) {

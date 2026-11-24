@@ -125,6 +125,17 @@ final class AlertService
         $this->queueEmail($this->teamAddresses(), '[Sentinel] ' . $title, $title . "\n\n" . $message . "\n\n" . $this->absolute('/clients/' . $clientId . '/scans'));
     }
 
+    /** Backups failed or are stale (1.37): admins in-app and the team by email, at most once a day. */
+    public function backupProblem(string $message): void
+    {
+        $title = __('Sentinel backups need attention');
+        if ((int) $this->db->query("SELECT COUNT(*) FROM notifications WHERE kind = 'backup' AND created_at > UTC_TIMESTAMP() - INTERVAL 20 HOUR")->fetchColumn() > 0) {
+            return;
+        }
+        $this->notifyUsers('backup', 'warn', $title, $message, '/admin/system#backups', 'admin');
+        $this->queueEmail($this->teamAddresses(), '[Sentinel] ' . $title, $title . "\n\n" . $message . "\n\n" . $this->absolute('/admin/system#backups'));
+    }
+
     /** A threat feed refresh failed: tell admins in-app (at most once a day per feed). */
     public function feedFailed(string $feed, string $message): void
     {

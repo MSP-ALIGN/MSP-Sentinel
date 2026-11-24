@@ -50,6 +50,10 @@ row, "on 3 targets". **One row per target** switches back to the plain list.
 
 Each target is still its own finding: it is checked, rechecked, resolved and audited on its own.
 
+**Pick findings yourself:** in **One row per target**, tick the findings you want (or the box in the header for the
+whole page), choose an action above the list (assign, accept risk / false positive / reopen, due date for admins,
+verify fix) and click **Apply to selected**. Up to 500 at once; each is checked and audited on its own.
+
 ## Triage a finding
 
 1. On the finding (or a group), choose a decision and write a note:

@@ -2,6 +2,22 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.35.1 (2026-11-24): update hardening, fixes from review
+
+- **Windows: no new code as SYSTEM during an update either.** The update task's pre-flight used to run the new
+  release's self-check as SYSTEM; it now asks PHP for its version and extensions with its own fixed code.
+- **Giving agents a replaced release key needs no installed code:** `echo NEWKEY | sudo tee
+  /etc/sentinel-agent/release-key.pub`. The installed copy of `agent-install.sh` refuses `--upgrade` (it is code a
+  remote update delivered); upgrade from a downloaded, checked release.
+- **The change-over to the frozen helper has a limit:** the update from 1.34 or older is still installed by the old
+  helper, so the protection starts with the next update. Upgrade agents to 1.35 by hand once where that matters.
+- **Smaller fixes:**
+  - a Windows launcher that can't be swapped, or an update folder that can't be prepared, is logged in `update\task.log`;
+  - half-made frozen copies are cleaned up;
+  - `release-sign.php hash --ref` reads files without line-ending conversion and refuses an empty `--ref`;
+  - `SHA256SUMS` now covers `AGENT-MANIFEST-SHA256`;
+  - the docs say signing off the server is the strongest option.
+
 ### 1.35.0 (2026-11-24): agent updates can't run new code as root; signing checks the release hash
 
 - **The agent update helper is frozen.** Linux agents run the root update helper from a root-owned copy in
