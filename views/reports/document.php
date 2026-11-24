@@ -115,19 +115,19 @@ footer.doc-footer .right { margin-left: auto; }
     <p><span class="label"><?= e(__('What we\'re doing:')) ?></span> <?= e($f['fix']) ?></p>
 </div>
 <?php endforeach; ?>
-<?php $issues = $r['open_issues'] ?? $r['top']; if (count($issues) > count($r['top'])): ?>
-<p class="small muted"><?= e(__('{n} more open issue(s) are listed in the Technical findings report.', ['n' => count($issues) - count($r['top'])])) ?></p>
+<?php $issueCount = (int) ($r['open_issue_count'] ?? count(\Sentinel\Reports\ReportBuilder::byIssue($r['open']))); if ($issueCount > count($r['top'])): ?>
+<p class="small muted"><?= e(__('{n} more open issue(s) are listed in the Technical findings report.', ['n' => $issueCount - count($r['top'])])) ?></p>
 <?php endif; ?>
 <?php else: ?>
 <h2><?= e(__('Open findings')) ?></h2>
 <?php if ($r['open'] === []): ?><p><?= e(__('No open findings.')) ?></p><?php endif; ?>
 <?php foreach (['fail' => __('Fail: fix now'), 'warn' => __('Warning: fix soon')] as $level => $heading):
     // Each issue once, with every target it was found on (1.31); per-target evidence in a small table.
-    $issues = array_values(array_filter($r['open_issues'] ?? \Sentinel\Reports\ReportBuilder::byIssue($r['open']), static fn (array $f): bool => $f['severity'] === $level));
+    $issues = array_values(array_filter(\Sentinel\Reports\ReportBuilder::byIssue($r['open']), static fn (array $f): bool => $f['severity'] === $level));
     if ($issues === []) { continue; }
     $count = array_sum(array_map(static fn (array $f): int => count($f['items']), $issues));
 ?>
-<h3><?= $sev($level) ?> <?= e($heading) ?> (<?= e(__('{i} issue(s) on {n} target(s)', ['i' => count($issues), 'n' => $count])) ?>)</h3>
+<h3><?= $sev($level) ?> <?= e($heading) ?> (<?= e(__('{i} issue(s), {n} finding(s)', ['i' => count($issues), 'n' => $count])) ?>)</h3>
 <?php foreach ($issues as $f): ?>
 <div class="risk <?= e($level) ?>">
     <h3><?= $sev($level) ?> <?= e($f['title']) ?><?= count($f['items']) > 1 ? ' · ' . e(__('{n} targets', ['n' => count($f['items'])])) : '' ?></h3>
@@ -155,7 +155,7 @@ footer.doc-footer .right { margin-left: auto; }
 <h2><?= e(__('Fixed this period')) ?></h2>
 <table class="data">
     <tr><th><?= e(__('Finding')) ?></th><th><?= e(__('Target')) ?></th><th><?= e(__('Fixed on')) ?></th></tr>
-    <?php foreach ($r['fixed_issues'] ?? \Sentinel\Reports\ReportBuilder::byIssue($r['fixed']) as $f): ?>
+    <?php foreach (\Sentinel\Reports\ReportBuilder::byIssue($r['fixed']) as $f): ?>
     <tr><td>&#10004; <?= e($f['title']) ?></td><td><code><?= e(implode(', ', $f['targets'])) ?></code></td><td><?= e($date((string) max(array_column($f['items'], 'resolved_at')))) ?></td></tr>
     <?php endforeach; ?>
 </table>

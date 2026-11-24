@@ -91,11 +91,14 @@ final class ReportBuilder
                 'false_positive' => count(array_filter($decided, static fn (array $f): bool => $f['status'] === 'false_positive')),
                 'certs_expiring' => count($certs),
             ],
-            // The same issue on several targets is listed once, with all its targets (1.31).
-            'top' => array_slice(self::byIssue($open), 0, 5),
+            // The same issue on several targets is listed once, with all its targets (1.31). The template groups
+            // 'open' and 'fixed' itself, so the snapshot holds each finding once; top risks keep only their targets.
+            'top' => array_map(static function (array $g): array {
+                unset($g['items']);
+                return $g;
+            }, array_slice(self::byIssue($open), 0, 5)),
+            'open_issue_count' => count(self::byIssue($open)),
             'open' => $open,
-            'open_issues' => self::byIssue($open),
-            'fixed_issues' => self::byIssue($fixed),
             'decided' => $decided,
             'fixed' => $fixed,
             'scope' => $scope,
@@ -106,8 +109,9 @@ final class ReportBuilder
     }
 
     /**
-     * Findings grouped by issue (same type and CVE, or the same title), in the order of their first finding. Each
-     * group is its first finding plus 'targets' (every target, in order) and 'items' (every finding).
+     * Findings grouped by issue, with the same rule as the findings list (FindingRepository::groupKey: same type and
+     * CVE, or the same title; a report is one client), in the order of their first finding. Each group is its first
+     * finding plus 'targets' (every target, in order) and 'items' (every finding); its severity is the worst of them.
      *
      * @param list<array<string,mixed>> $findings
      * @return list<array<string,mixed>>
@@ -117,9 +121,12 @@ final class ReportBuilder
         $groups = [];
         foreach ($findings as $f) {
             $cve = (string) ($f['cve_id'] ?? '');
-            $key = (string) $f['finding_type'] . '|' . (string) $f['severity'] . '|' . ($cve !== '' ? $cve : (string) $f['title']);
+            $key = (string) $f['finding_type'] . '|' . ($cve !== '' ? $cve : (string) $f['title']);
             if (!isset($groups[$key])) {
                 $groups[$key] = $f + ['targets' => [], 'items' => []];
+            }
+            if ($f['severity'] === 'fail') {
+                $groups[$key]['severity'] = 'fail';
             }
             $groups[$key]['targets'][] = (string) $f['target'];
             $groups[$key]['items'][] = $f;

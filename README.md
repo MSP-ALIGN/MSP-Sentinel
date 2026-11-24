@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.31.0](https://img.shields.io/badge/version-1.31.0-ff5a1f?style=flat-square)
+![Version 1.31.1](https://img.shields.io/badge/version-1.31.1-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -149,6 +149,19 @@ curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install
 The same help is built into the app (**Help** in the menu), with a "What's new" page for every release.
 
 ## What's new
+
+### 1.31.1 (2026-11-24): grouped findings, fixes from review
+
+- **Reports group exactly like the Findings list.** An issue with both Fail and Warning targets is one entry, under
+  Fail. Headings count issues and findings.
+- **Report snapshots hold each finding once** (before, the grouping stored them twice). A report too large to store
+  is refused with a clear message.
+- **The assignment email says how many findings** were assigned ("and N more") and links to the assignee's list.
+- **A group's due date can go back to the policy**, recomputed once per client.
+- **Bulk verify carries on** when one finding can't be rechecked.
+- **Due-date filters** ("Overdue", "Due soon") sort groups by the nearest deadline.
+- **Large groups load faster:** at most 100 targets per group are read (the rest via "Show all").
+- **Layout:** an opened group keeps its other columns at the top.
 
 ### 1.31.0 (2026-11-24): grouped findings
 

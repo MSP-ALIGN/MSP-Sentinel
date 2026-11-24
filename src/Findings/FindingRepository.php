@@ -84,6 +84,10 @@ final class FindingRepository
     {
         [$sqlWhere, $params] = $this->filterSql($f);
         $key = self::GROUP_KEY_SQL;
+        // Due filters: the nearest deadline first (as the flat list); otherwise the most important first.
+        $order = ($f['due'] ?? '') !== ''
+            ? "MIN(CASE WHEN f.status = 'open' THEN f.due_at END), group_key"
+            : "SUM(f.status = 'open') > 0 DESC, MAX(f.severity = 'fail') DESC, COUNT(*) DESC, MIN(f.first_seen) DESC, group_key";
         $count = $this->db->prepare("SELECT COUNT(DISTINCT {$key}) FROM findings f JOIN clients c ON c.id = f.client_id WHERE {$sqlWhere}");
         $count->execute($params);
         $stmt = $this->db->prepare(
@@ -94,7 +98,7 @@ final class FindingRepository
              FROM findings f JOIN clients c ON c.id = f.client_id
              WHERE {$sqlWhere}
              GROUP BY group_key, f.client_id, f.finding_type
-             ORDER BY SUM(f.status = 'open') > 0 DESC, MAX(f.severity = 'fail') DESC, COUNT(*) DESC, MIN(f.first_seen) DESC, group_key
+             ORDER BY {$order}
              LIMIT :lim OFFSET :off"
         );
         foreach ($params as $k => $v) {
@@ -107,18 +111,19 @@ final class FindingRepository
         if ($groups !== []) {
             // The members of this page's groups, with the same filters.
             $in = implode(',', array_map(fn (array $g): string => $this->db->quote((string) $g['group_key']), $groups));
+            // At most MEMBERS_SHOWN per group, capped in SQL (a port open on thousands of hosts stays one small page).
             $m = $this->db->prepare(
-                "SELECT f.*, {$key} AS group_key, au.username AS assignee_username FROM findings f JOIN clients c ON c.id = f.client_id
-                 LEFT JOIN users au ON au.id = f.assigned_to
-                 WHERE {$sqlWhere} AND {$key} IN ({$in})
-                 ORDER BY f.status = 'open' DESC, f.severity = 'fail' DESC, f.target, f.id"
+                "SELECT * FROM (
+                    SELECT f.*, {$key} AS group_key, au.username AS assignee_username,
+                           ROW_NUMBER() OVER (PARTITION BY {$key} ORDER BY f.status = 'open' DESC, f.severity = 'fail' DESC, f.target, f.id) AS member_rank
+                    FROM findings f JOIN clients c ON c.id = f.client_id LEFT JOIN users au ON au.id = f.assigned_to
+                    WHERE {$sqlWhere} AND {$key} IN ({$in})
+                 ) ranked WHERE member_rank <= " . self::MEMBERS_SHOWN . " ORDER BY group_key, member_rank"
             );
             $m->execute($params);
             $members = [];
             foreach ($m->fetchAll() as $row) {
-                if (count($members[$row['group_key']] ?? []) < self::MEMBERS_SHOWN) {
-                    $members[$row['group_key']][] = $row;
-                }
+                $members[$row['group_key']][] = $row;
             }
             foreach ($groups as &$g) {
                 $g['members'] = $members[$g['group_key']] ?? [];

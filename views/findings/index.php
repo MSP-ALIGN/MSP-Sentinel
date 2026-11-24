@@ -141,7 +141,7 @@ $flatRow = static function (array $f) use ($findingSeverityBadge, $findingStatus
                     return $h;
                 };
             ?>
-            <tr class="sn-group">
+            <tr class="sn-group align-top">
                 <td><?= $findingSeverityBadge((string) $g['severity']) ?></td>
                 <td>
                     <details>
@@ -184,7 +184,8 @@ $flatRow = static function (array $f) use ($findingSeverityBadge, $findingStatus
                             </form>
                             <?php if ($isAdmin): ?>
                             <form method="post" action="<?= e(url('/findings/bulk')) ?>" class="row g-1 align-items-end mb-2"><?= $bulkHidden('due') ?>
-                                <div class="col-sm-4"><label class="form-label small mb-0" for="bd-<?= e($g['group_key']) ?>"><?= e(__('Due date')) ?></label><input class="form-control form-control-sm" type="date" id="bd-<?= e($g['group_key']) ?>" name="due_date"></div>
+                                <div class="col-sm-4"><label class="form-label small mb-0" for="bd-<?= e($g['group_key']) ?>"><?= e(__('Due date')) ?></label><input class="form-control form-control-sm" type="date" id="bd-<?= e($g['group_key']) ?>" name="due_date">
+                                    <div class="form-check small"><input class="form-check-input" type="checkbox" id="bdr-<?= e($g['group_key']) ?>" name="reset" value="1"><label class="form-check-label" for="bdr-<?= e($g['group_key']) ?>"><?= e(__('Follow the policy again')) ?></label></div></div>
                                 <div class="col-sm-5"><label class="form-label small mb-0" for="bdn-<?= e($g['group_key']) ?>"><?= e(__('Reason (required)')) ?></label><input class="form-control form-control-sm" id="bdn-<?= e($g['group_key']) ?>" name="note" maxlength="500" required></div>
                                 <div class="col-sm-3"><button class="btn btn-sm btn-outline-primary w-100" type="submit"><?= e(__('Set due date')) ?></button></div>
                             </form>

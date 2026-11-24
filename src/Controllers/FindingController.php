@@ -350,6 +350,7 @@ final class FindingController extends Controller
             }
         }
         $assignedFirst = null;
+        $assignedCount = 0;
         $clientsTouched = [];
         foreach ($ids as $id) {
             $finding = App::findings()->find($id);
@@ -364,12 +365,14 @@ final class FindingController extends Controller
                 try {
                     $lock = $db->prepare('SELECT id FROM clients WHERE id = :c FOR UPDATE');
                     $lock->execute(['c' => $cid]);
-                    $fresh = App::findings()->find($id) ?? throw new HttpException(404);
-                    $why = $this->queueVerify($request, $fresh);
+                    $fresh = App::findings()->find($id);
+                    $why = $fresh === null ? __('This finding no longer exists.') : $this->queueVerify($request, $fresh);
                     $db->commit();
                 } catch (\Throwable $ex) {
                     $db->rollBack();
-                    throw $ex;
+                    // One finding that can't be queued never stops the rest (the earlier ones are already queued).
+                    error_log('[msp-sentinel] bulk verify of finding ' . $id . ' failed: ' . $ex->getMessage());
+                    $why = __('Not possible for this finding.');
                 }
                 if ($why === null) {
                     $done++;
@@ -391,8 +394,10 @@ final class FindingController extends Controller
                 }
                 $this->audit($request, 'finding.assigned', 'finding', $id, ['client_id' => $cid, 'from' => $change['from'], 'to' => $change['to'], 'bulk' => true]);
                 $assignedFirst ??= $id;
+                $assignedCount++;
             } elseif ($action === 'due') {
-                App::fixWorkflow()->setDue($id, $reset ? null : $date, $me, $note);
+                App::fixWorkflow()->setDue($id, $reset ? null : $date, $me, $note, !$reset);
+                $clientsTouched[$cid] = true;
                 $this->audit($request, 'finding.due_changed', 'finding', $id, ['client_id' => $cid, 'from' => $finding['due_at'], 'to' => $reset ? 'policy' : $date,
                     'note' => mb_substr($note, 0, 300), 'bulk' => true]);
             } else {
@@ -407,6 +412,11 @@ final class FindingController extends Controller
             }
             $done++;
         }
+        if ($action === 'due' && $reset) {
+            foreach (array_keys($clientsTouched) as $cid) {
+                App::fixWorkflow()->recomputeDue($cid); // once per client, not once per finding
+            }
+        }
         if ($action === 'triage' && $status === 'open') {
             foreach (array_keys($clientsTouched) as $cid) {
                 App::fixWorkflow()->recomputeDue($cid); // reopened findings are due again
@@ -415,7 +425,7 @@ final class FindingController extends Controller
         // One email for the whole group, not one per finding.
         if ($action === 'assign' && $assignee !== null && $assignedFirst !== null) {
             try {
-                App::alerts()->findingAssigned($assignedFirst, $assignee, $me);
+                App::alerts()->findingAssigned($assignedFirst, $assignee, $me, $assignedCount - 1);
             } catch (\Throwable $ex) {
                 error_log('[msp-sentinel] assignment alert failed: ' . $ex->getMessage());
             }

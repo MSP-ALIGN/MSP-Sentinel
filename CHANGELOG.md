@@ -2,6 +2,19 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.31.1 (2026-11-24): grouped findings, fixes from review
+
+- **Reports group exactly like the Findings list.** An issue with both Fail and Warning targets is one entry, under
+  Fail. Headings count issues and findings.
+- **Report snapshots hold each finding once** (before, the grouping stored them twice). A report too large to store
+  is refused with a clear message.
+- **The assignment email says how many findings** were assigned ("and N more") and links to the assignee's list.
+- **A group's due date can go back to the policy**, recomputed once per client.
+- **Bulk verify carries on** when one finding can't be rechecked.
+- **Due-date filters** ("Overdue", "Due soon") sort groups by the nearest deadline.
+- **Large groups load faster:** at most 100 targets per group are read (the rest via "Show all").
+- **Layout:** an opened group keeps its other columns at the top.
+
 ### 1.31.0 (2026-11-24): grouped findings
 
 - **Repeated findings are one row.** The same CVE, or the same problem, on several targets of one client is grouped

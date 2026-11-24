@@ -239,6 +239,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.31.1',
+            'date' => '2026-11-24',
+            'items' => [
+                'Grouped findings fixes: reports group exactly like the list (an issue with Fail and Warning targets is one entry under Fail) and store each finding once; the assignee\'s email says how many findings were assigned; a group\'s due date can be reset to the policy; one finding that can\'t be rechecked no longer stops a bulk verify; due-date filters sort groups by deadline; large groups load faster.',
+            ],
+        ],
+        [
             'version' => '1.31.0',
             'date' => '2026-11-24',
             'items' => [

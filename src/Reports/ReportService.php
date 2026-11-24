@@ -146,6 +146,10 @@ final class ReportService
         }
         // The logo is already in the HTML; don't store a second copy in the snapshot.
         $snapshot['brand']['logo'] = $snapshot['brand']['logo'] !== '' ? 'embedded' : '';
+        // The snapshot column holds 16 MB: refuse clearly rather than fail on insert.
+        if (strlen((string) json_encode($snapshot)) > self::MAX_HTML_BYTES) {
+            throw new \RuntimeException(__('The report is too large to store. Resolve or triage some findings, or contact support.'));
+        }
         return [$snapshot, $html];
     }
 

@@ -129,16 +129,19 @@ final class FixWorkflow
      * Set a finding's own due date (admins), or go back to the policy with null.
      *
      * @param string|null $date Y-m-d (validated by the caller); the finding is due at the end of that day (UTC).
+     * @param bool $recompute on a reset, recompute the client's policy dates now (a bulk reset does it once afterwards)
      */
-    public function setDue(int $findingId, ?string $date, int $byUserId, string $note): void
+    public function setDue(int $findingId, ?string $date, int $byUserId, string $note, bool $recompute = true): void
     {
         if ($date !== null && !self::validDate($date)) {
             throw new \InvalidArgumentException('Invalid date.');
         }
         if ($date === null) {
             $this->db->prepare('UPDATE findings SET due_custom = 0, updated_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['id' => $findingId]);
-            $client = (int) $this->db->query('SELECT client_id FROM findings WHERE id = ' . $findingId)->fetchColumn();
-            $this->recomputeDue($client);
+            if ($recompute) { // a bulk reset recomputes once per client afterwards
+                $client = (int) $this->db->query('SELECT client_id FROM findings WHERE id = ' . $findingId)->fetchColumn();
+                $this->recomputeDue($client);
+            }
             $this->event($findingId, 'due_changed', $byUserId, trim(__('Due date follows the policy again.') . ' ' . $note));
             return;
         }

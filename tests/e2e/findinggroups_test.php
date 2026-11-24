@@ -96,6 +96,10 @@ return [
         $due = gmdate('Y-m-d', time() + 86400 * 5);
         $bulk($admin, $vuln, ['action' => 'due', 'due_date' => $due, 'note' => 'Agreed with the client']);
         Assert::same(2, (int) $ctx->db->query("SELECT COUNT(*) FROM findings WHERE id IN (" . implode(',', $vuln) . ") AND DATE(due_at) = '{$due}'")->fetchColumn());
+        $bulk($admin, $vuln, ['action' => 'due', 'reset' => '1', 'note' => 'Back to the policy']);
+        Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM findings WHERE id IN (" . implode(',', $vuln) . ") AND due_custom = 1")->fetchColumn(), 'reset to the policy');
+        Assert::same(2, (int) $ctx->db->query("SELECT COUNT(*) FROM findings WHERE id IN (" . implode(',', $vuln) . ") AND due_at IS NOT NULL")->fetchColumn(), 'policy dates recomputed');
+        $bulk($admin, $vuln, ['action' => 'due', 'due_date' => $due, 'note' => 'Agreed with the client']);
         // Verify fix: each finding's own checks apply (no authorisation for these addresses: nothing queued, and why).
         $res = $bulk($tech, $vuln, ['action' => 'verify']);
         Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM scan_jobs WHERE client_id = {$cid} AND job_type = 'verify'")->fetchColumn(), 'nothing outside the authorisation');
@@ -115,7 +119,7 @@ return [
         Assert::same(1, substr_count($html, 'CVE-2099-0901 in Example SSH 1.0 (9.1 Critical) · 2 targets'), 'one block for the CVE, with its target count');
         Assert::contains('203.0.113.95:22', $html);
         Assert::contains('203.0.113.96:22', $html);
-        Assert::contains('2 issue(s) on 3 target(s)', $html, 'the Fail heading counts issues and targets');
+        Assert::contains('2 issue(s), 3 finding(s)', $html, 'the Fail heading counts issues and findings');
         $exec = App::reportService()->generate(App::clients()->find($cid), 'executive', gmdate('Y-m-d'), gmdate('Y-m-d'), null, 'Test');
         $eh = (string) $ctx->db->query("SELECT html FROM reports WHERE id = {$exec}")->fetchColumn();
         Assert::same(1, substr_count($eh, 'CVE-2099-0901 in Example SSH'), 'the executive summary lists the issue once');

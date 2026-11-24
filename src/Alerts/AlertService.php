@@ -141,7 +141,7 @@ final class AlertService
      * A finding was assigned: tell the assignee (in-app; email unless they chose no emails).
      * Nothing when people assign findings to themselves.
      */
-    public function findingAssigned(int $findingId, int $assigneeId, int $byUserId): void
+    public function findingAssigned(int $findingId, int $assigneeId, int $byUserId, int $alsoAssigned = 0): void
     {
         if ($assigneeId === $byUserId || $this->isDemo((int) $this->db->query('SELECT client_id FROM findings WHERE id = ' . $findingId)->fetchColumn())) {
             return;
@@ -153,10 +153,10 @@ final class AlertService
         if ($f === false || (int) $f['is_active'] !== 1) {
             return;
         }
-        $title = __('Assigned to you: {title}', ['title' => $f['title']]);
+        $title = __('Assigned to you: {title}', ['title' => $f['title']]) . ($alsoAssigned > 0 ? ' ' . __('(and {n} more)', ['n' => $alsoAssigned]) : '');
         $text = __('{client}: {target}', ['client' => $f['client_name'], 'target' => $f['target']]) . "\n"
             . __('Assigned by {user}. Due {date} UTC.', ['user' => $f['by_name'] ?? '?', 'date' => $f['due_at'] !== null ? substr((string) $f['due_at'], 0, 10) : '-']);
-        $link = '/findings/' . (int) $f['id'];
+        $link = $alsoAssigned > 0 ? '/findings?view=flat&assignee=' . $assigneeId : '/findings/' . (int) $f['id'];
         $this->notifyUser($assigneeId, 'assigned', (string) $f['severity'], $title, $text, $link);
         if ((string) $f['alert_email'] !== 'none') {
             $this->queueEmail([(string) $f['email']], '[' . $f['client_name'] . '] ' . $title, $title . "\n\n" . $text . "\n\n" . $this->absolute($link));
