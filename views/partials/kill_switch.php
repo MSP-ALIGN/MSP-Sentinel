@@ -4,11 +4,10 @@
  * Expects: $globallyPaused (bool), $currentUser (public fields).
  * Technicians and admins see "Pause all scanning"; only admins see "Resume".
  */
-use Sentinel\Auth\Role;
 use Sentinel\Core\Csrf;
 
-$canPause = Role::atLeast((string) $currentUser['role'], Role::TECHNICIAN);
-$canResume = Role::atLeast((string) $currentUser['role'], Role::ADMIN);
+$canPause = can('scanning.pause');
+$canResume = can('scanning.resume');
 ?>
 <?php if ($globallyPaused): ?>
 <div class="alert alert-danger d-flex align-items-center flex-wrap gap-2" role="status">

@@ -9,7 +9,8 @@ fixes, a retest letter. Every test, rule and finding is described in the [engage
   authorisation and an agent on version 1.27.0 or later). An engagement never widens what may be tested.
 - You need the client's **signed authorisation as a PDF** (at most 10 MB) naming the targets, tests, window and who
   may run them. The [authorisation form](../authorisation-form.md#annex-penetration-test-engagement) has an annex for it.
-- You need **two admins**: a different admin approves each engagement.
+- You need **two people who may approve engagements** (Admins, or a role with **Approve pen-test engagements**): a
+  different person approves each engagement.
 
 ## Create the engagement
 
@@ -24,9 +25,9 @@ fixes, a retest letter. Every test, rule and finding is described in the [engage
 
 ## Get it approved
 
-1. The admins get a notification. Those who may approve it also see a banner on the dashboard, and the
-   **Engagements** page in the sidebar lists the engagements awaiting their approval first.
-2. A **different admin** opens it, downloads the signed document, checks it matches the scope, and clicks
+1. Everyone who may approve engagements gets a notification. Those who may approve this one also see a banner on the
+   dashboard, and the **Engagements** page in the sidebar lists the engagements awaiting their approval first.
+2. **Someone else who may approve** opens it, downloads the signed document, checks it matches the scope, and clicks
    **Approve** with their own password.
 3. Nothing runs before approval, and nothing runs outside the window.
 
@@ -76,7 +77,7 @@ Pausing all scanning, or the client, stops engagements too. Before approval, **C
 
 ## Good to know
 
-- **Who can approve:** any admin except the creator, and except an account the creator created, or whose password or
+- **Who can approve:** anyone whose role may approve engagements, except the creator, and except an account the creator created, or whose password or
   two-factor authentication the creator reset, in the last 30 days.
 - Never done: password guessing beyond the short vendor default list, SSH, Windows or Remote Desktop logins,
   exploits, denial of service, or anything that changes the systems tested.

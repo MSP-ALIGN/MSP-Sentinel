@@ -1,8 +1,7 @@
 <?php
 /** Client list. Expects: $clients (rows + site_count + auth_summary), $risk (DashboardData::clients by id, 1.37), $showArchived, $globallyPaused, $currentUser. */
-use Sentinel\Auth\Role;
 
-$isAdmin = Role::atLeast((string) $currentUser['role'], Role::ADMIN);
+$isAdmin = can('clients.manage');
 require __DIR__ . '/../dashboard/helpers.php'; // $levelWord, $levelIcon
 $risk ??= [];
 ?>

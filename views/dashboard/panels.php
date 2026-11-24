@@ -28,7 +28,7 @@ $feedOk = static fn (?int $age): bool => $age !== null && $age <= 2 * 86400;
         <h2 id="h-threat" class="hud-title"><?= e(__('Threat level')) ?></h2>
         <?php if ($worst === null): ?>
         <p class="hud-empty"><?= e(__('No clients yet.')) ?>
-            <?php if (($currentUser['role'] ?? '') === 'admin'): ?><a class="btn btn-primary btn-sm ms-1" href="<?= e(url('/clients/new')) ?>"><i class="bi bi-plus-lg me-1" aria-hidden="true"></i><?= e(__('Add your first client')) ?></a>
+            <?php if (can('clients.manage')): ?><a class="btn btn-primary btn-sm ms-1" href="<?= e(url('/clients/new')) ?>"><i class="bi bi-plus-lg me-1" aria-hidden="true"></i><?= e(__('Add your first client')) ?></a>
             <?php else: ?><?= e(__('An admin adds clients.')) ?><?php endif; ?></p>
         <?php else: ?>
         <?= Svg::gauge($worst['score'], $worst['level'], __('Highest client risk')) ?>

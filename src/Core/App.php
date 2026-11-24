@@ -12,7 +12,6 @@ use Sentinel\Alerts\Outbox;
 use Sentinel\Alerts\WebhookSender;
 use Sentinel\Auth\Auth;
 use Sentinel\Auth\RecoveryCodes;
-use Sentinel\Auth\Role;
 use Sentinel\Auth\UserRepository;
 use Sentinel\Clients\ClientRepository;
 use Sentinel\System\HealthCheck;
@@ -139,6 +138,12 @@ final class App
     public static function users(): UserRepository
     {
         return new UserRepository(self::db());
+    }
+
+    /** Roles and their permissions (1.40). */
+    public static function roles(): \Sentinel\Auth\RoleRepository
+    {
+        return new \Sentinel\Auth\RoleRepository(self::db());
     }
 
     /** Client and site store. */
@@ -692,9 +697,11 @@ final class App
             if ((int) $user['must_change_password'] === 1 && !$opts['allow_password_change']) {
                 return Response::redirect('/profile/password');
             }
-            if (!Role::atLeast((string) $user['role'], (string) $opts['role'])) {
+            // The route's permission (any one of a list), checked before the controller runs (1.40).
+            $need = (array) $opts['perm'];
+            if ($need !== [] && array_intersect($need, (array) ($user['permissions'] ?? [])) === []) {
                 self::audit()->log('access.denied', (int) $user['id'], (string) $user['username'], null, null,
-                    ['path' => mb_substr($request->path, 0, 200), 'required' => $opts['role']], $request->ip());
+                    ['path' => mb_substr($request->path, 0, 200), 'required' => implode(' or ', $need)], $request->ip());
                 throw new HttpException(403);
             }
         }

@@ -2,14 +2,16 @@
 /**
  * Add or edit a user.
  * Expects: $mode ('create'|'edit'), $values (untrusted form values or public user fields),
- *          $errors (field => message), and in edit mode $target (public fields) and $isSelf.
+ *          $errors (field => message), $roles (UserController::roleChoices: roles you may give are 'allowed'),
+ *          and in edit mode $target (public fields), $isSelf and $outranks (the user's role has permissions you
+ *          don't hold: shown read-only, no resets).
  */
 use Sentinel\Auth\Passwords;
-use Sentinel\Auth\Role;
 use Sentinel\Core\Csrf;
 
 $isEdit = $mode === 'edit';
 $isSelf = $isSelf ?? false;
+$outranks = $outranks ?? false;
 $action = $isEdit ? url('/users/' . (int) $target['id']) : url('/users');
 $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' : '';
 ?>
@@ -40,14 +42,15 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
             <?php $field = 'email'; require __DIR__ . '/../partials/field_error.php'; ?>
         </div>
         <div class="mb-3">
-            <label for="role" class="form-label"><?= e(__('Role')) ?></label>
-            <select class="form-select<?= $invalid('role') ?>" id="role" name="role" <?= $isSelf ? 'disabled' : '' ?>>
-                <?php foreach (Role::labels() as $value => $label): ?>
-                <option value="<?= e($value) ?>" <?= $values['role'] === $value ? 'selected' : '' ?>><?= e($label) ?></option>
+            <label for="role_id" class="form-label"><?= e(__('Role')) ?></label>
+            <select class="form-select<?= $invalid('role_id') ?>" id="role_id" name="role_id" <?= $isSelf || $outranks ? 'disabled' : '' ?>>
+                <?php foreach ($roles as $r): ?>
+                <?php $selected = (int) $values['role_id'] === $r['id']; ?>
+                <option value="<?= e($r['id']) ?>" <?= $selected ? 'selected' : '' ?> <?= !$r['allowed'] && !$selected ? 'disabled' : '' ?>><?= e($r['name']) ?><?= !$r['allowed'] ? ' ' . e(__('(has permissions you don\'t hold)')) : '' ?></option>
                 <?php endforeach; ?>
             </select>
-            <div class="form-text"><?= e(__('Viewer: read-only. Technician: runs scans and triages findings. Admin: everything, including users and scan authorisations.')) ?></div>
-            <?php $field = 'role'; require __DIR__ . '/../partials/field_error.php'; ?>
+            <div class="form-text"><?= e(__('Viewer reads everything and changes nothing; Technician does the day-to-day work; Admin can do everything. What each role allows is on the Roles page.')) ?> <a href="<?= e(url('/admin/roles')) ?>"><?= e(__('Roles')) ?></a></div>
+            <?php $field = 'role_id'; require __DIR__ . '/../partials/field_error.php'; ?>
         </div>
         <?php if ($isEdit): ?>
         <div class="form-check mb-3">
@@ -56,6 +59,8 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
         </div>
         <?php if ($isSelf): ?>
         <p class="form-text"><?= e(__('You cannot change your own role or disable your own account.')) ?></p>
+        <?php elseif ($outranks): ?>
+        <p class="form-text"><?= e(__('This user\'s role has permissions you don\'t hold, so you can\'t change their account, password or two-factor authentication.')) ?></p>
         <?php else: ?>
         <div class="mb-3">
             <label for="my_password" class="form-label"><?= e(__('Your own password (only needed when changing the role or access)')) ?></label>
@@ -78,14 +83,14 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
         <?php endif; ?>
     </div>
     <div class="card-footer">
-        <button type="submit" class="btn btn-primary"><?= e($isEdit ? __('Save changes') : __('Create user')) ?></button>
+        <?php if (!$outranks): ?><button type="submit" class="btn btn-primary"><?= e($isEdit ? __('Save changes') : __('Create user')) ?></button><?php endif; ?>
         <a href="<?= e(url('/users')) ?>" class="btn btn-outline-secondary"><?= e(__('Cancel')) ?></a>
     </div>
     </form>
 </div>
 </div>
 
-<?php if ($isEdit && !$isSelf): ?>
+<?php if ($isEdit && !$isSelf && !$outranks): ?>
 <div class="col-lg-5">
     <div class="card mb-3">
         <div class="card-header"><h2 class="card-title h6 mb-0"><?= e(__('Reset password')) ?></h2></div>

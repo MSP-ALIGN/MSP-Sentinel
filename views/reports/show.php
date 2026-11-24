@@ -4,7 +4,6 @@
  * Expects: $report (without HTML), $counts, $rating, $currentUser. Every value is escaped.
  * Delete is shown to admins only (the route enforces it too).
  */
-use Sentinel\Auth\Role;
 use Sentinel\Core\Csrf;
 
 $id = (int) $report['id'];
@@ -33,7 +32,7 @@ $rt = $rating !== null ? ($ratingLabel[$rating['level']] ?? null) : null;
                     <a class="btn btn-outline-secondary btn-sm" href="<?= e(url('/reports/' . $id . '/csv')) ?>"><i class="bi bi-filetype-csv me-1" aria-hidden="true"></i><?= e(__('Download findings (CSV)')) ?></a>
                 </div>
             </div>
-            <?php if (Role::atLeast((string) $currentUser['role'], Role::ADMIN)): ?>
+            <?php if (can('reports.delete')): ?>
             <div class="card-footer">
                 <form method="post" action="<?= e(url('/reports/' . $id . '/delete')) ?>" data-confirm="<?= e(__('Delete this report? This cannot be undone.')) ?>">
                     <?= Csrf::field() ?>

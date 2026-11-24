@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Sentinel\Controllers;
 
-use Sentinel\Auth\Role;
 use Sentinel\Core\App;
 use Sentinel\Core\HttpException;
 use Sentinel\Core\Request;
@@ -46,7 +45,7 @@ final class ScanController extends Controller
         $outside = $request->input('outside_window') === '1';
         $reason = $request->input('reason');
         if ($outside) {
-            if (!Role::atLeast((string) $user['role'], Role::ADMIN)) {
+            if (!App::auth()->can('scans.outside_window')) {
                 throw new HttpException(403);
             }
             if ($reason === '' || mb_strlen($reason) > 300) {

@@ -1,6 +1,5 @@
 <?php
 /** Own profile. Expects: $currentUser (public fields), $recoveryLeft (int). */
-use Sentinel\Auth\Role;
 use Sentinel\Core\Csrf;
 ?>
 <div class="row g-3">
@@ -12,7 +11,7 @@ use Sentinel\Core\Csrf;
                     <dt class="col-sm-4"><?= e(__('Username')) ?></dt><dd class="col-sm-8"><?= e($currentUser['username']) ?></dd>
                     <dt class="col-sm-4"><?= e(__('Name')) ?></dt><dd class="col-sm-8"><?= e($currentUser['display_name']) ?></dd>
                     <dt class="col-sm-4"><?= e(__('Email')) ?></dt><dd class="col-sm-8"><?= e($currentUser['email'] !== '' ? $currentUser['email'] : '—') ?></dd>
-                    <dt class="col-sm-4"><?= e(__('Role')) ?></dt><dd class="col-sm-8"><?= e(Role::labels()[$currentUser['role']] ?? '') ?></dd>
+                    <dt class="col-sm-4"><?= e(__('Role')) ?></dt><dd class="col-sm-8"><?= e(role_label($currentUser)) ?></dd>
                 </dl>
             </div>
             <div class="card-footer"><a href="<?= e(url('/profile/password')) ?>" class="btn btn-outline-primary btn-sm"><i class="bi bi-key me-1" aria-hidden="true"></i><?= e(__('Change password')) ?></a></div>

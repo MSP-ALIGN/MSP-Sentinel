@@ -5,12 +5,14 @@
  * Security: $content is trusted rendered output. Every other value is escaped.
  */
 
-use Sentinel\Auth\Role;
+use Sentinel\Auth\Permissions;
 use Sentinel\Core\App;
 use Sentinel\Core\Csrf;
 
 $product = App::productName();
-$isAdmin = isset($currentUser['role']) && Role::atLeast((string) $currentUser['role'], Role::ADMIN);
+// The Administration section shows when the user holds any of its permissions (1.40); each item only with its own.
+$held = (array) ($currentUser['permissions'] ?? []);
+$isAdmin = Permissions::anyAdmin($held);
 // Normalise the path exactly as Request::fromGlobals does (decode, strip the base path only if it is
 // a prefix, drop a trailing slash), so menu state always matches the page the router served.
 $path = rawurldecode((string) (parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH) ?? '/'));
@@ -30,15 +32,16 @@ $navItem = static function (string $href, string $icon, string $label) use ($pat
 };
 // Administration is a separate section: its own left menu on admin pages, reached from the user drop-down.
 $inAdmin = $isAdmin && ($path === '/admin' || str_starts_with($path, '/admin/') || $path === '/users' || str_starts_with($path, '/users/'));
-$adminItems = [
-    ['/admin', 'bi-grid-1x2', __('Overview')],
-    ['/users', 'bi-people', __('Users')],
-    ['/admin/settings', 'bi-gear', __('Settings')],
-    ['/admin/integrations', 'bi-puzzle', __('Integrations')],
-    ['/admin/api', 'bi-plug', __('API')],
-    ['/admin/system', 'bi-heart-pulse', __('System')],
-    ['/admin/audit', 'bi-journal-text', __('Audit log')],
-];
+$adminItems = array_values(array_filter([
+    ['/admin', 'bi-grid-1x2', __('Overview'), null],
+    ['/users', 'bi-people', __('Users'), ['users.manage']],
+    ['/admin/roles', 'bi-shield-lock', __('Roles'), ['users.manage']],
+    ['/admin/settings', 'bi-gear', __('Settings'), ['settings.manage']],
+    ['/admin/integrations', 'bi-puzzle', __('Integrations'), ['integrations.manage']],
+    ['/admin/api', 'bi-plug', __('API'), ['api.manage']],
+    ['/admin/system', 'bi-heart-pulse', __('System'), ['system.manage', 'release.manage']],
+    ['/admin/audit', 'bi-journal-text', __('Audit log'), ['audit.view']],
+], static fn (array $i): bool => $i[3] === null || array_intersect($i[3], $held) !== []));
 try {
     $sourceUrl = App::settings()->get('source_url');
 } catch (\Throwable) {
@@ -99,14 +102,14 @@ try {
                 <li class="nav-item dropdown">
                     <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
                         <i class="bi bi-person-circle me-1" aria-hidden="true"></i><?= e($currentUser['display_name']) ?>
-                        <span class="badge text-bg-secondary ms-1"><?= e(Role::labels()[$currentUser['role']] ?? '') ?></span>
+                        <span class="badge text-bg-secondary ms-1"><?= e(role_label($currentUser)) ?></span>
                     </a>
                     <ul class="dropdown-menu dropdown-menu-end">
                         <li><a class="dropdown-item" href="<?= e(url('/profile')) ?>"><i class="bi bi-person me-2" aria-hidden="true"></i><?= e(__('My profile')) ?></a></li>
                         <?php if ($isAdmin): ?>
                         <li><hr class="dropdown-divider"></li>
                         <li><h6 class="dropdown-header"><?= e(__('Administration')) ?></h6></li>
-                        <?php foreach ($adminItems as [$href, $icon, $label]): ?>
+                        <?php foreach ($adminItems as [$href, $icon, $label, $need]): ?>
                         <li><a class="dropdown-item" href="<?= e(url($href)) ?>"><i class="bi <?= e($icon) ?> me-2" aria-hidden="true"></i><?= e($label) ?></a></li>
                         <?php endforeach; ?>
                         <?php endif; ?>

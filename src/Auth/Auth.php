@@ -247,6 +247,9 @@ final class Auth
         if (!$this->passive) {
             Session::set('seen_at', $now);
         }
+        // What the user may do (1.40): read fresh with the role on every request, like the role itself, so a change
+        // to the user or their role applies at once (it also ends their sessions).
+        $user['permissions'] = $this->users->permissions($user);
         return $this->current = $user;
     }
 
@@ -254,6 +257,13 @@ final class Auth
      * Call after the signed-in user changes their own password: their
      * session_version moved, so keep this session valid while other sessions end.
      */
+    /** True when the signed-in user holds a permission (Sentinel\Auth\Permissions). Nobody signed in holds nothing. */
+    public function can(string $permission): bool
+    {
+        $user = $this->user();
+        return $user !== null && in_array($permission, (array) ($user['permissions'] ?? []), true);
+    }
+
     public function refreshSessionVersion(): void
     {
         $id = Session::get('uid');

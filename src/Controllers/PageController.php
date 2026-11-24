@@ -21,9 +21,9 @@ final class PageController extends Controller
     /** GET /: the main dashboard ("command view"). */
     public function dashboard(Request $request): Response
     {
-        $isAdmin = \Sentinel\Auth\Role::atLeast((string) $this->user()['role'], \Sentinel\Auth\Role::ADMIN);
+        $isAdmin = App::auth()->can('engagements.approve');
         return $this->page('dashboard', __('Dashboard'), ['d' => self::dashboardData(), 'globallyPaused' => App::scope()->globallyPaused(),
-            // Engagements another admin created that this admin can approve (1.34: approvals were easy to miss).
+            // Engagements someone else created that this user can approve (1.34: approvals were easy to miss).
             'awaitingApproval' => $isAdmin ? App::engagements()->awaitingApprovalBy((int) $this->user()['id']) : []]);
     }
 

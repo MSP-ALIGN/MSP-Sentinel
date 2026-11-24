@@ -2,13 +2,33 @@
 
 Sign in safely, add and manage the people who use Sentinel, and see who did what.
 
-## Roles
+## Roles and permissions
+
+Each user has one **role**, and a role is a set of **permissions**. Everyone can see clients, findings, scans,
+devices, reports and engagements; permissions decide what a user may *change*, plus a few more sensitive views
+(breached addresses in full, the signed engagement document, the audit log).
+
+Three roles are built in and can't be changed:
 
 | Role | Can |
 |---|---|
-| **Viewer** | See clients, findings, scans and reports. Changes nothing. |
-| **Technician** | Also run scans and discovery, triage and assign findings, verify fixes, create reports and engagements, pause scanning. |
-| **Admin** | Everything: users, clients and authorisations, settings, integrations, API tokens, approving engagements, the System page, resuming scanning. |
+| **Viewer** | See everything. Changes nothing. |
+| **Technician** | Also run scans and discovery, triage, assign and verify findings, see breached addresses, create reports, run engagements, pause scanning. |
+| **Admin** | Every permission: users and roles, clients and authorisations, settings, integrations, the API, agents, approving engagements, the System page, resuming scanning. |
+
+### Make your own role
+
+1. Go to **Administration → Roles** and click **New role**, or **Copy** a built-in role to start from it.
+2. Name it (for example "Lead technician"), tick its permissions and enter your own password.
+3. Give it to users on their account page (**Administration → Users**).
+
+The **Who can do what** table on the Roles page lists every permission and which role holds it.
+
+**Never more than you hold.** You can only tick permissions you hold yourself, give roles whose permissions you all
+hold, and change, reset or disable users whose role you could give. So someone allowed to manage users can't make
+anyone (or themselves, through a role) more powerful than they are, and can't take over a more powerful account.
+You can't change your own role. Built-in roles never change. At least one active user always holds every permission.
+When a role changes, everyone with it is signed out so the change applies at once.
 
 ## Sign in and two-factor authentication
 
@@ -27,7 +47,8 @@ Lost both your phone and your recovery codes? Ask an admin to reset your two-fac
 3. Give the person the temporary password. At first sign-in they must change it and set up two-factor
    authentication.
 
-Add a second admin early: nobody gets locked out, and pen-test engagements need a second admin to approve them.
+Add a second admin early: nobody gets locked out, and pen-test engagements need a second person who may approve
+them.
 
 ## Change a user, reset a password or two-factor
 
@@ -36,7 +57,8 @@ Add a second admin early: nobody gets locked out, and pen-test engagements need 
    two-factor authentication**, enter **your own password** to confirm.
 3. The user is signed out everywhere straight away.
 
-You can't change your own role or disable yourself, and the last active admin can't be removed.
+You can't change your own role or disable yourself, and the last active user who holds every permission can't be
+demoted or disabled. A user whose role has permissions you don't hold is shown read-only.
 
 ## Create an API token
 

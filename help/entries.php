@@ -226,11 +226,12 @@ return [
         // ---------------------------------------------------------------- Reference
         [
             'section' => 'reference',
-            'title' => 'Roles in detail',
+            'title' => 'Roles and permissions',
             'paragraphs' => [
-                'Viewer: can see everything but change nothing.',
-                'Technician: everything a viewer can do, plus running scans and discovery, triaging, assigning and rechecking findings, creating reports, and creating, running and stopping pen-test engagements.',
-                'Admin: everything, including users, settings, integrations, API tokens, recording which client systems may be scanned, scans outside the scan window, due dates, agents, and approving another person\'s engagement.',
+                'Each user has one role, and a role is a set of permissions. Everyone can see clients, findings, scans, devices, reports and engagements; permissions decide what a user may change (and a few sensitive views: breached addresses in full, the signed engagement document, the audit log).',
+                'Built-in roles (can\'t be changed): Viewer sees everything and changes nothing. Technician also runs scans and discovery, triages, assigns and verifies findings, sees breached addresses, creates reports, runs engagements and pauses scanning. Admin holds every permission.',
+                'Your own roles: Administration → Roles → New role (or Copy a built-in role), tick the permissions, confirm with your password, then give the role to users on their account page. The "Who can do what" table lists every permission and the roles that hold it.',
+                'Never more than you hold: you can only tick permissions you hold, give roles whose permissions you all hold, and change, reset or disable users whose role you could give. You can\'t change your own role, built-in roles never change, and at least one active user always holds every permission. Everyone with a changed role is signed out so the change applies at once.',
             ],
         ],
         [
@@ -357,6 +358,15 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.40.0',
+            'date' => '2026-11-24',
+            'items' => [
+                'Roles and permissions: every action needs one of 29 permissions in 7 groups. Viewer, Technician and Admin stay as built-in roles with exactly the rights they had. Make your own roles under Administration → Roles (or copy a built-in one), and see who can do what in one table.',
+                'Never more than you hold: you can only give permissions and roles you hold yourself, and can\'t change, reset or disable a more powerful user. You can\'t change your own role, and someone always holds every permission.',
+                'Alerts, assignment and approvals follow permissions: system alerts go to those who manage the system, findings can be given to anyone who may triage, and any second person who may approve engagements can approve.',
+            ],
+        ],
         [
             'version' => '1.39.1',
             'date' => '2026-11-24',

@@ -4,10 +4,8 @@
  * reports, and the monthly schedule (admins). Expects: $client, $clientReports, $currentUser.
  * Every value is escaped; the routes enforce the roles too.
  */
-use Sentinel\Auth\Role;
 use Sentinel\Core\Csrf;
 
-$rRole = (string) $currentUser['role'];
 ?>
 <div class="card mb-3" id="reports">
     <div class="card-header d-flex align-items-center">
@@ -15,7 +13,7 @@ $rRole = (string) $currentUser['role'];
         <a class="ms-auto small" href="<?= e(url('/reports', ['client' => (int) $client['id']])) ?>"><?= e(__('All reports for this client')) ?></a>
     </div>
     <div class="card-body">
-        <?php if (Role::atLeast($rRole, Role::TECHNICIAN)): ?>
+        <?php if (can('reports.create')): ?>
         <form method="post" action="<?= e(url('/clients/' . (int) $client['id'] . '/reports')) ?>" class="row g-2 align-items-end mb-3">
             <?= Csrf::field() ?><input type="hidden" name="back" value="client">
             <div class="col-sm-5">
@@ -50,7 +48,7 @@ $rRole = (string) $currentUser['role'];
         <?php endif; ?>
     </div>
     <div class="card-footer small">
-        <?php if (Role::atLeast($rRole, Role::ADMIN)): ?>
+        <?php if (can('reports.schedule')): ?>
         <form method="post" action="<?= e(url('/clients/' . (int) $client['id'] . '/report-schedule')) ?>" class="row g-2 align-items-end">
             <?= Csrf::field() ?>
             <div class="col-12 form-check ms-2">

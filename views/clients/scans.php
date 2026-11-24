@@ -2,7 +2,7 @@
 /**
  * Port scan panel on the client's pages.
  * Expects: $client, $openJob (or null), $recentJobs, $services, $scanLog, $ports (list<int>), $windowOpen,
- *          $isAdmin, $isTech, $archived, $paused, $globallyPaused.
+ *          $archived, $paused, $globallyPaused.
  * Values from scanned hosts (product, version, banners) are untrusted and always escaped.
  */
 use Sentinel\Core\Csrf;
@@ -22,7 +22,7 @@ $resultLabels = [
     'timeout' => __('Timed out'), 'error' => __('Error'), 'running' => __('Running'), 'interrupted' => __('Interrupted'),
     'checked' => __('Certificates and web pages checked'),
 ];
-$canQueue = $isTech && !$archived && !$paused && !$globallyPaused;
+$canQueue = can('scans.run') && !$archived && !$paused && !$globallyPaused;
 ?>
 <div class="card mt-3" id="scans">
     <div class="card-header d-flex align-items-center flex-wrap gap-2">
@@ -37,7 +37,7 @@ $canQueue = $isTech && !$archived && !$paused && !$globallyPaused;
         <div class="d-flex align-items-center gap-2 mb-3" data-testid="open-job">
             <span class="badge <?= e($bc) ?>"><i class="bi <?= e($bi) ?> me-1" aria-hidden="true"></i><?= e($bl) ?></span>
             <span class="small"><?= e(__('Scan #{id}, queued {date} UTC', ['id' => $openJob['id'], 'date' => $openJob['created_at']])) ?><?= (int) $openJob['outside_window'] === 1 ? ' · ' . e(__('outside the window: {reason}', ['reason' => (string) $openJob['override_reason']])) : '' ?></span>
-            <?php if ($isTech): ?>
+            <?php if (can('scans.run')): ?>
             <form method="post" action="<?= e(url('/scans/' . (int) $openJob['id'] . '/cancel')) ?>" class="ms-auto" data-confirm="<?= e(__('Cancel this scan?')) ?>">
                 <?= Csrf::field() ?>
                 <button type="submit" class="btn btn-sm btn-outline-danger"><?= e(__('Cancel scan')) ?></button>
@@ -49,7 +49,7 @@ $canQueue = $isTech && !$archived && !$paused && !$globallyPaused;
             <?= Csrf::field() ?>
             <div class="d-flex flex-wrap align-items-center gap-2">
                 <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-broadcast me-1" aria-hidden="true"></i><?= e(__('Scan now')) ?></button>
-                <?php if ($isAdmin && !$windowOpen): ?>
+                <?php if (can('scans.outside_window') && !$windowOpen): ?>
                 <div class="form-check ms-2">
                     <input class="form-check-input" type="checkbox" value="1" id="outside_window" name="outside_window">
                     <label class="form-check-label small" for="outside_window"><?= e(__('Run outside the window (admins)')) ?></label>

@@ -5,11 +5,8 @@
  * Agent-reported names and versions, and the directory certificate subject the agent saw, are untrusted and escaped.
  * The directory password is never on this page: only its sealed state (where it is) is shown.
  */
-use Sentinel\Auth\Role;
 use Sentinel\Core\Csrf;
 
-$isAdmin = Role::atLeast((string) $currentUser['role'], Role::ADMIN);
-$isTech = Role::atLeast((string) $currentUser['role'], Role::TECHNICIAN);
 $agentRelease = \Sentinel\Core\App::agentRelease()->version(); // the signed agent release this Sentinel can hand out
 $cid = (int) $client['id'];
 $jobLabel = static fn (array $j): string => match ($j['status']) {
@@ -21,7 +18,7 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
     <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('On-premises agents (internal scans)')) ?></h2></div>
     <div class="card-body">
         <?php $hasAgents = array_filter($agentSites, static fn (array $s): bool => $s['agents'] !== []) !== []; ?>
-        <?php if ($isAdmin && $agentRelease !== null && $hasAgents): ?>
+        <?php if (can('agents.manage') && $agentRelease !== null && $hasAgents): ?>
         <form method="post" action="<?= e(url('/clients/' . $cid . '/agents-update')) ?>" class="float-end ms-2" data-confirm="<?= e(__('Update every agent of this client that runs an older version to {v}?', ['v' => $agentRelease])) ?>"><?= Csrf::field() ?>
             <button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-cloud-arrow-down me-1" aria-hidden="true"></i><?= e(__('Update all agents to {v}', ['v' => $agentRelease])) ?></button></form>
         <?php endif; ?>
@@ -43,9 +40,9 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                 <h3 class="h6 mb-0"><i class="bi bi-building me-1" aria-hidden="true"></i><?= e($site['name']) ?></h3>
                 <?php if ((int) $site['scanning_paused'] === 1): ?><span class="badge text-bg-warning"><i class="bi bi-pause-circle me-1" aria-hidden="true"></i><?= e(__('Agent scans paused')) ?></span><?php endif; ?>
                 <span class="ms-auto d-flex gap-2">
-                <?php if ((int) $site['scanning_paused'] === 0 && $isTech): ?>
+                <?php if ((int) $site['scanning_paused'] === 0 && can('scanning.pause')): ?>
                     <form method="post" action="<?= e(url('/clients/' . $cid . '/sites/' . $sid . '/pause')) ?>" data-confirm="<?= e(__('Stop agent scans at this site now?')) ?>"><?= Csrf::field() ?><button class="btn btn-sm btn-outline-danger" type="submit"><i class="bi bi-stop-circle me-1" aria-hidden="true"></i><?= e(__('Pause')) ?></button></form>
-                <?php elseif ((int) $site['scanning_paused'] === 1 && $isAdmin): ?>
+                <?php elseif ((int) $site['scanning_paused'] === 1 && can('scanning.resume')): ?>
                     <form method="post" data-confirm="<?= e(__('Resume scanning for this site? Its agent starts taking scans again.')) ?>" action="<?= e(url('/clients/' . $cid . '/sites/' . $sid . '/resume')) ?>"><?= Csrf::field() ?><button class="btn btn-sm btn-outline-primary" type="submit"><?= e(__('Resume')) ?></button></form>
                 <?php endif; ?>
                 </span>
@@ -58,14 +55,14 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                     <span class="font-monospace"><?= e(implode(', ', $s['active']['ranges_list'])) ?></span>
                     <span class="text-body-secondary">· <?= e(__('approved by {name}, valid until {date}', ['name' => $s['active']['approved_by_name'], 'date' => $s['active']['valid_until']])) ?></span>
                     <i class="bi bi-patch-check text-success" aria-hidden="true"></i><span class="visually-hidden"><?= e(__('signed')) ?></span>
-                    <?php if ($isAdmin): ?>
+                    <?php if (can('authorisations.manage')): ?>
                     <details class="d-inline-block ms-2"><summary class="text-danger"><?= e(__('Revoke')) ?></summary>
                         <form method="post" data-confirm="<?= e(__('Revoke this internal authorisation? The site\'s agent stops scanning straight away and nothing internal is scanned until a new one is recorded.')) ?>" action="<?= e(url('/clients/' . $cid . '/internal-authorisations/' . (int) $s['active']['id'] . '/revoke')) ?>" class="d-flex gap-2 mt-1"><?= Csrf::field() ?>
                             <input class="form-control form-control-sm" name="reason" maxlength="500" placeholder="<?= e(__('Reason (required)')) ?>" required aria-label="<?= e(__('Reason')) ?>">
                             <button class="btn btn-sm btn-danger" type="submit"><?= e(__('Revoke')) ?></button></form></details>
                     <?php endif; ?>
                 <?php endif; ?>
-                <?php if ($isAdmin): ?> <a class="ms-2" href="<?= e(url('/clients/' . $cid . '/sites/' . $sid . '/internal-authorisations/new')) ?>"><?= e(__('Record a new internal authorisation')) ?></a><?php endif; ?>
+                <?php if (can('authorisations.manage')): ?> <a class="ms-2" href="<?= e(url('/clients/' . $cid . '/sites/' . $sid . '/internal-authorisations/new')) ?>"><?= e(__('Record a new internal authorisation')) ?></a><?php endif; ?>
             </div>
             <div class="table-responsive">
             <table class="table table-sm small align-middle mb-2">
@@ -78,7 +75,7 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                         <?php if ($a['status'] === 'active' && (string) $a['box_public_key'] !== ''): ?><div class="text-body-secondary small"><?= e(__('Key')) ?> <span class="font-monospace"><?= e(\Sentinel\AgentClient\AgentKey::fingerprint((string) $a['box_public_key'])) ?></span></div><?php endif; ?>
                         <?php if ($a['status'] === 'active' && (string) ($a['box_key_pending'] ?? '') !== ''): $pfp = \Sentinel\AgentClient\AgentKey::fingerprint((string) $a['box_key_pending']); ?>
                         <div class="alert alert-warning small py-1 px-2 mt-1 mb-0"><?= e(__('The agent reported a NEW key {fp} ({t} UTC). Passwords are not sealed to it until an admin approves it. Approve only if the agent was reinstalled and its status command shows this fingerprint.', ['fp' => $pfp, 't' => $a['box_key_pending_at']])) ?>
-                            <?php if ($isAdmin): ?><form method="post" action="<?= e(url('/clients/' . $cid . '/agents/' . (int) $a['id'] . '/approve-key')) ?>" class="mt-1" data-confirm="<?= e(__('Approve this new agent key? Compare the fingerprint with the agent\'s status output first.')) ?>"><?= Csrf::field() ?>
+                            <?php if (can('agents.manage')): ?><form method="post" action="<?= e(url('/clients/' . $cid . '/agents/' . (int) $a['id'] . '/approve-key')) ?>" class="mt-1" data-confirm="<?= e(__('Approve this new agent key? Compare the fingerprint with the agent\'s status output first.')) ?>"><?= Csrf::field() ?>
                                 <input type="hidden" name="fingerprint" value="<?= e($pfp) ?>"><button class="btn btn-sm btn-outline-warning" type="submit"><?= e(__('Approve new key')) ?></button></form><?php endif; ?></div>
                         <?php endif; ?></td>
                     <td class="font-monospace"><?= e($a['version'] ?: '?') ?>
@@ -94,7 +91,7 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                     <td><?php if ($a['status'] === 'revoked'): ?><span class="badge text-bg-secondary"><?= e(__('Revoked')) ?></span>
                         <?php elseif ($online): ?><span class="badge text-bg-success"><i class="bi bi-wifi me-1" aria-hidden="true"></i><?= e(__('Online')) ?></span>
                         <?php else: ?><span class="badge text-bg-warning"><i class="bi bi-wifi-off me-1" aria-hidden="true"></i><?= e(__('Offline')) ?></span><?php endif; ?></td>
-                    <td class="text-end"><?php if ($isAdmin && $a['status'] === 'active'): ?>
+                    <td class="text-end"><?php if (can('agents.manage') && $a['status'] === 'active'): ?>
                         <div class="d-flex flex-wrap gap-1 justify-content-end">
                         <?php if ((string) ($a['install_type'] ?? '') !== 'docker' && $agentRelease !== null && \Sentinel\System\ReleaseManifest::newer($agentRelease, (string) $a['version']) && \Sentinel\Agent\AgentRepository::canUpdateRemotely((string) $a['version']) && (string) ($a['update_to'] ?? '') !== $agentRelease): ?>
                         <form method="post" action="<?= e(url('/clients/' . $cid . '/agents/' . (int) $a['id'] . '/update')) ?>" data-confirm="<?= e(__('Update this agent to {v} at its next check-in between scans?', ['v' => $agentRelease])) ?>"><?= Csrf::field() ?><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-cloud-arrow-down me-1" aria-hidden="true"></i><?= e(__('Update to {v}', ['v' => $agentRelease])) ?></button></form>
@@ -128,7 +125,7 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                 </tbody>
             </table>
             </div>
-            <?php if ($isAdmin): ?>
+            <?php if (can('agents.manage')): ?>
             <form method="post" action="<?= e(url('/clients/' . $cid . '/sites/' . $sid . '/agent-settings')) ?>" class="d-flex flex-wrap align-items-end gap-2 mb-2 small"><?= Csrf::field() ?>
                 <div><label class="form-label mb-0" for="timing-<?= $sid ?>"><?= e(__('Scan gentleness')) ?></label>
                     <select class="form-select form-select-sm" id="timing-<?= $sid ?>" name="timing">
@@ -184,7 +181,7 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                         <?php if ($dir['cert_seen'] !== '' && $dir['cert_seen'] !== $dir['cert_trusted']): ?>
                             <span class="text-warning"><?= e($dir['cert_trusted'] === '' ? __('waiting for you to trust it') : __('CHANGED since you trusted it: the agent will not sign in until you trust the new one')) ?></span>
                             <div class="font-monospace text-break ps-3"><?= e($dir['cert_seen_subject']) ?><br>SHA-256 <?= e($fp($dir['cert_seen'])) ?></div>
-                            <?php if ($isAdmin): ?>
+                            <?php if (can('directory.manage')): ?>
                             <form method="post" action="<?= e(url('/clients/' . $cid . '/sites/' . $sid . '/directory/trust')) ?>" class="ps-3 mt-1" data-confirm="<?= e(__('Trust this certificate? Check that the fingerprint matches the domain controller\'s certificate first.')) ?>"><?= Csrf::field() ?>
                                 <input type="hidden" name="fingerprint" value="<?= e($dir['cert_seen']) ?>">
                                 <button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-patch-check me-1" aria-hidden="true"></i><?= e(__('Trust this certificate')) ?></button></form>
@@ -196,7 +193,7 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                         <?php if ($dir['last_error'] !== ''): ?><div class="text-danger ps-3"><?= e($dir['last_error']) ?> <?= e($dir['last_attempt_at'] !== null ? '(' . $dir['last_attempt_at'] . ' UTC)' : '') ?></div><?php endif; ?></li>
                 </ul>
                 <?php endif; ?>
-                <?php if ($isAdmin): ?>
+                <?php if (can('directory.manage')): ?>
                 <details><summary class="small"><?= e($dir === null ? __('Set up Active Directory checks') : __('Change settings or replace the password')) ?></summary>
                 <?php if ($siteAgent === null): ?>
                     <p class="small text-body-secondary mt-2"><?= e(__('Enrol an agent for this site first: the password is sealed for that agent.')) ?></p>
@@ -238,4 +235,4 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
         <?php endforeach; ?>
     </div>
 </div>
-<?php if ($isAdmin): ?><script src="<?= e(asset('js/agent-seal.js')) ?>"></script><?php endif; ?>
+<?php if ((can('agents.manage') || can('directory.manage'))): ?><script src="<?= e(asset('js/agent-seal.js')) ?>"></script><?php endif; ?>

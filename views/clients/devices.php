@@ -5,12 +5,11 @@
  * $devices (InventoryRepository::devicesForClient, first 500), $deviceTotal, $devicePatches (by device ID), $currentUser.
  * Device data comes from the source (untrusted) and is always escaped.
  */
-use Sentinel\Auth\Role;
 use Sentinel\Core\Csrf;
 use Sentinel\Inventory\DeviceRules;
 
-$isAdmin = Role::atLeast((string) $currentUser['role'], Role::ADMIN);
-$isTech = Role::atLeast((string) $currentUser['role'], Role::TECHNICIAN);
+$isAdmin = can('integrations.link'); // link or unlink an inventory source
+$isTech = can('scans.run'); // sync now
 $chip = static function (string $sev, string $text): string {
     [$cls, $icon] = match ($sev) { 'fail' => ['danger', 'bi-x-octagon'], 'warn' => ['warning', 'bi-exclamation-triangle'], 'ok' => ['success', 'bi-check-circle'], default => ['secondary', 'bi-info-circle'] };
     return '<span class="badge text-bg-' . $cls . ' me-1 mb-1 text-wrap text-start"><i class="bi ' . $icon . ' me-1" aria-hidden="true"></i>' . e($text) . '</span>';

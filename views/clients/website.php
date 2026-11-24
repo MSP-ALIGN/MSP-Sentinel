@@ -66,7 +66,7 @@ $chip = static function (string $sev, string $text): string {
         </div>
         <?php endif; ?>
         <h3 class="h6 mt-3"><?= e(__('Breached accounts')) ?></h3>
-        <?php $breaches ??= []; $canSeeAddresses = \Sentinel\Auth\Role::atLeast((string) ($currentUser['role'] ?? ''), \Sentinel\Auth\Role::TECHNICIAN); // viewers see masked addresses
+        <?php $breaches ??= []; $canSeeAddresses = can('breach.addresses'); // others see masked addresses
         if ($breaches === []): ?>
         <p class="small text-body-secondary"><?= e(__('No breached addresses known. Addresses come from breach monitoring (Administration, Integrations) for the client\'s verified domains.')) ?></p>
         <?php else: ?>

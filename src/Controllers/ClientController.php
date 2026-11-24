@@ -127,10 +127,10 @@ final class ClientController extends Controller
             'compliance' => ['alignOn' => fn () => App::align() !== null,
                              'compliance' => fn () => (int) ($client['align_client_id'] ?? 0) > 0 ? (new \Sentinel\Compliance\AlignCompliance(App::db(), App::align()))->forClient($client) : null,
                              'alignClients' => function () use ($client): array {
-                                 // Choices for linking (admins, unlinked clients only); the exact-name match first.
-                                 // Only when an admin could link this client: nobody else needs the list.
+                                 // Choices for linking (unlinked clients only); the exact-name match first.
+                                 // Only for someone who may link this client: nobody else needs the list.
                                  if ((int) ($client['align_client_id'] ?? 0) > 0 || App::align() === null || (int) $client['is_archived'] === 1
-                                     || (int) ($client['is_demo'] ?? 0) === 1 || !\Sentinel\Auth\Role::atLeast((string) ($this->user()['role'] ?? ''), \Sentinel\Auth\Role::ADMIN)) {
+                                     || (int) ($client['is_demo'] ?? 0) === 1 || !App::auth()->can('integrations.link')) {
                                      return ['list' => [], 'error' => ''];
                                  }
                                  $s = App::settings();

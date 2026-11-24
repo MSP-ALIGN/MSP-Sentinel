@@ -304,14 +304,21 @@ final class TestContext
         $this->db->prepare('UPDATE users SET totp_last_step = NULL WHERE username = :u')->execute(['u' => $username]);
     }
 
-    /** Create a user straight in the database (fast test setup). */
+    /**
+     * Create a user straight in the database (fast test setup). $role is a built-in role key (viewer, technician,
+     * admin) or the name of a custom role (1.40).
+     */
     public function createUser(string $username, string $role, string $password, bool $mustChange = false): int
     {
+        $rid = $this->db->prepare('SELECT id, role_key FROM roles WHERE role_key = :k OR (role_key IS NULL AND name = :n) LIMIT 1');
+        $rid->execute(['k' => $role, 'n' => $role]);
+        $r = $rid->fetch() ?: throw new \RuntimeException('No such role: ' . $role);
         $stmt = $this->db->prepare(
-            "INSERT INTO users (username, display_name, email, role, password_hash, must_change_password, is_active, session_version, created_at, updated_at)
-             VALUES (:u, :d, '', :r, :p, :m, 1, 1, UTC_TIMESTAMP(), UTC_TIMESTAMP())"
+            "INSERT INTO users (username, display_name, email, role, role_id, password_hash, must_change_password, is_active, session_version, created_at, updated_at)
+             VALUES (:u, :d, '', :r, :rid, :p, :m, 1, 1, UTC_TIMESTAMP(), UTC_TIMESTAMP())"
         );
-        $stmt->execute(['u' => $username, 'd' => ucfirst($username) . ' Example', 'r' => $role, 'p' => password_hash($password, PASSWORD_ARGON2ID), 'm' => $mustChange ? 1 : 0]);
+        $stmt->execute(['u' => $username, 'd' => ucfirst($username) . ' Example', 'r' => $r['role_key'] ?? 'viewer', 'rid' => (int) $r['id'],
+            'p' => password_hash($password, PASSWORD_ARGON2ID), 'm' => $mustChange ? 1 : 0]);
         return (int) $this->db->lastInsertId();
     }
 

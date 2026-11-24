@@ -20,7 +20,7 @@ $kindLabel = static fn (string $k): string => match ($k) { 'executive' => __('Ex
             <div class="col-auto"><button type="submit" class="btn btn-sm btn-outline-primary"><?= e(__('Filter')) ?></button></div>
         </form>
     </div>
-    <?php if (in_array($currentUser['role'] ?? '', ['technician', 'admin'], true)): ?>
+    <?php if (can('reports.create')): ?>
     <div class="card-body border-bottom">
         <h2 class="h6"><?= e(__('Create a report')) ?></h2>
         <form method="post" action="<?= e(url('/reports')) ?>" class="row g-2 align-items-end">

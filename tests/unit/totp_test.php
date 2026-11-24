@@ -8,7 +8,7 @@ declare(strict_types=1);
  */
 
 use Sentinel\Auth\Auth;
-use Sentinel\Auth\Role;
+use Sentinel\Auth\Permissions;
 use Sentinel\Auth\Totp;
 use Sentinel\Core\Crypto;
 use Sentinel\Core\HttpException;
@@ -86,12 +86,21 @@ return [
         }
         Assert::true($threw, 'wrong key must be rejected');
     },
-    'Router defaults to signed-in viewer and validates {id}' => function (TestContext $ctx): void {
+    'Router defaults to any signed-in user and validates {id}' => function (TestContext $ctx): void {
         $r = new Router();
         $r->add('GET', '/things/{id}', ['X', 'y']);
         $m = $r->match('GET', '/things/42');
         Assert::same('user', $m['opts']['auth']);
-        Assert::same(Role::VIEWER, $m['opts']['role']);
+        Assert::same([], $m['opts']['perm'], 'no permission needed by default');
+        foreach ([['perm' => 'no.such'], ['role' => 'admin']] as $bad) {
+            $threw = false;
+            try {
+                $r->add('GET', '/bad', ['X', 'y'], $bad);
+            } catch (\InvalidArgumentException) {
+                $threw = true;
+            }
+            Assert::true($threw, 'unknown permissions and old role options are refused: ' . json_encode($bad));
+        }
         Assert::same('42', $m['params']['id']);
         foreach (['/things/abc', '/things/0', '/things/1/../2', '/things/'] as $bad) {
             try {
@@ -115,9 +124,12 @@ return [
             Assert::true(!Auth::isValidUsername($bad), json_encode($bad));
         }
     },
-    'Role ranking' => function (TestContext $ctx): void {
-        Assert::true(Role::atLeast('admin', 'technician'), 'admin >= technician');
-        Assert::true(!Role::atLeast('viewer', 'technician'), 'viewer < technician');
-        Assert::true(!Role::atLeast('bogus', 'viewer'), 'unknown role gets nothing');
+    'Built-in roles: Admin holds everything, Technician a subset, Viewer nothing; unknown names never granted' => function (TestContext $ctx): void {
+        Assert::true(Permissions::isComplete(Permissions::builtin('admin')), 'admin holds every permission');
+        Assert::same([], array_diff(Permissions::builtin('technician'), Permissions::builtin('admin')), 'technician within admin');
+        Assert::true(!in_array('users.manage', Permissions::builtin('technician'), true), 'technician cannot manage users');
+        Assert::same([], Permissions::builtin('viewer'));
+        Assert::same([], Permissions::builtin('bogus'), 'unknown role gets nothing');
+        Assert::same(['clients.manage', 'findings.due'], Permissions::clean(['findings.due', 'no.such', 7, 'clients.manage', 'findings.due']), 'cleaned and ordered');
     },
 ];

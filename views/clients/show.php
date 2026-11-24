@@ -6,12 +6,8 @@
  * (ClientController::show loads it): e.g. $sites/$authorisations/$overview for the overview.
  * Every value is escaped. Actions are shown only to roles allowed to use them (the routes enforce it too).
  */
-use Sentinel\Auth\Role;
 use Sentinel\Core\Csrf;
 
-$role = (string) $currentUser['role'];
-$isAdmin = Role::atLeast($role, Role::ADMIN);
-$isTech = Role::atLeast($role, Role::TECHNICIAN);
 $clientId = (int) $client['id'];
 $archived = (int) $client['is_archived'] === 1;
 $paused = (int) $client['scanning_paused'] === 1;
@@ -19,7 +15,7 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
 ?>
 <?php if ($globallyPaused): ?><?php require __DIR__ . '/../partials/kill_switch.php'; ?><?php endif; ?>
 <?php if ((int) ($client['is_demo'] ?? 0) === 1): ?>
-<div class="alert alert-info"><i class="bi bi-easel me-1" aria-hidden="true"></i><?= e(__('Demo client: made-up data for trying Sentinel out. It is never scanned.')) ?><?php if ($isAdmin): ?> <?= e(__('Remove all demo data under Administration, System.')) ?><?php endif; ?></div>
+<div class="alert alert-info"><i class="bi bi-easel me-1" aria-hidden="true"></i><?= e(__('Demo client: made-up data for trying Sentinel out. It is never scanned.')) ?><?php if (can('system.manage')): ?> <?= e(__('Remove all demo data under Administration, System.')) ?><?php endif; ?></div>
 <?php endif; ?>
 <?php if ($archived): ?>
 <div class="alert alert-secondary"><i class="bi bi-archive me-1" aria-hidden="true"></i><?= e(__('This client is archived. It will not be scanned.')) ?></div>
@@ -37,7 +33,7 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
         <div class="card mb-3">
             <div class="card-header d-flex align-items-center">
                 <h2 class="card-title h5 mb-0"><?= e(__('Details')) ?></h2>
-                <?php if ($isAdmin): ?><a href="<?= e(url('/clients/' . $clientId . '/edit')) ?>" class="btn btn-outline-primary btn-sm ms-auto"><i class="bi bi-pencil me-1" aria-hidden="true"></i><?= e(__('Edit')) ?></a><?php endif; ?>
+                <?php if (can('clients.manage')): ?><a href="<?= e(url('/clients/' . $clientId . '/edit')) ?>" class="btn btn-outline-primary btn-sm ms-auto"><i class="bi bi-pencil me-1" aria-hidden="true"></i><?= e(__('Edit')) ?></a><?php endif; ?>
             </div>
             <div class="card-body">
                 <dl class="row mb-0 small">
@@ -48,7 +44,7 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
                 </dl>
                 <?php if (!empty($client['notes'])): ?><p class="small mt-2 mb-0 text-pre-line"><?= e($client['notes']) ?></p><?php endif; ?>
             </div>
-            <?php if ($isAdmin): ?>
+            <?php if (can('clients.manage')): ?>
             <div class="card-footer">
                 <form method="post" action="<?= e(url('/clients/' . $clientId . '/archive')) ?>" data-confirm="<?= e($archived ? __('Restore this client?') : __('Archive this client? It will no longer be scanned. History is kept.')) ?>">
                     <?= Csrf::field() ?>
@@ -66,7 +62,7 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
             <div class="card-body">
                 <?php if ($paused): ?>
                 <p><span class="badge text-bg-danger"><i class="bi bi-pause-circle me-1" aria-hidden="true"></i><?= e(__('Paused for this client')) ?></span></p>
-                <?php if ($isAdmin): ?>
+                <?php if (can('scanning.resume')): ?>
                 <form method="post" action="<?= e(url('/clients/' . $clientId . '/resume')) ?>" data-confirm="<?= e(__('Resume scanning for this client?')) ?>">
                     <?= Csrf::field() ?>
                     <button type="submit" class="btn btn-sm btn-success"><i class="bi bi-play-fill me-1" aria-hidden="true"></i><?= e(__('Resume scanning')) ?></button>
@@ -83,12 +79,12 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
                     } else {
                         echo e(__('Cannot be scanned: there is no active authorisation.'));
                     } ?></p>
-                <?php if ($activeCount === 0 && !$archived && $isAdmin): ?>
+                <?php if ($activeCount === 0 && !$archived && can('authorisations.manage')): ?>
                 <p><a href="<?= e(url('/clients/' . $clientId . '/authorisations/new')) ?>" class="btn btn-primary btn-sm"><i class="bi bi-file-earmark-plus me-1" aria-hidden="true"></i><?= e(__('Record authorisation')) ?></a></p>
                 <?php elseif ($activeCount === 0 && !$archived): ?>
                 <p class="small text-body-secondary"><?= e(__('An admin records the client\'s authorisation first.')) ?></p>
                 <?php endif; ?>
-                <?php if ($isTech): ?>
+                <?php if (can('scanning.pause')): ?>
                 <form method="post" action="<?= e(url('/clients/' . $clientId . '/pause')) ?>" data-confirm="<?= e(__('Pause all scanning for this client now?')) ?>">
                     <?= Csrf::field() ?>
                     <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-pause-fill me-1" aria-hidden="true"></i><?= e(__('Pause scanning for this client')) ?></button>
@@ -103,7 +99,7 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
             <ul class="list-group list-group-flush">
                 <?php foreach ($sites as $site): ?>
                 <li class="list-group-item">
-                    <?php if ($isAdmin): ?>
+                    <?php if (can('clients.manage')): ?>
                     <form method="post" action="<?= e(url('/sites/' . (int) $site['id'])) ?>" class="row g-2 align-items-center" novalidate>
                         <?= Csrf::field() ?>
                         <div class="col-7"><input type="text" class="form-control form-control-sm" name="name" value="<?= e($site['name']) ?>" maxlength="150" aria-label="<?= e(__('Site name')) ?>"></div>
@@ -117,7 +113,7 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
                 </li>
                 <?php endforeach; ?>
             </ul>
-            <?php if ($isAdmin): ?>
+            <?php if (can('clients.manage')): ?>
             <div class="card-footer">
                 <form method="post" action="<?= e(url('/clients/' . $clientId . '/sites')) ?>" class="row g-2" novalidate>
                     <?= Csrf::field() ?>
@@ -134,7 +130,7 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
         <div class="card">
             <div class="card-header d-flex align-items-center flex-wrap gap-2">
                 <h2 class="card-title h5 mb-0"><?= e(__('Authorised to scan')) ?></h2>
-                <?php if ($isAdmin && !$archived): ?>
+                <?php if (can('authorisations.manage') && !$archived): ?>
                 <div class="ms-auto d-flex gap-2">
                     <?php if ($activeCount > 0): ?>
                     <a href="<?= e(url('/clients/' . $clientId . '/authorisations/new', ['replace' => '1'])) ?>" class="btn btn-outline-primary btn-sm"><i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i><?= e(__('Change scope / renew')) ?></a>
@@ -174,7 +170,7 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
                         <li class="list-inline-item"><code><?= e($entry['value']) ?></code></li>
                         <?php endforeach; ?>
                     </ul>
-                    <?php if ($isAdmin && $a['revoked_at'] === null): ?>
+                    <?php if (can('authorisations.manage') && $a['revoked_at'] === null): ?>
                     <details class="small">
                         <summary class="text-danger"><?= e(__('Revoke this authorisation')) ?></summary>
                         <form method="post" action="<?= e(url('/authorisations/' . (int) $a['id'] . '/revoke')) ?>" class="mt-2" data-confirm="<?= e(__('Revoke this authorisation? This cannot be undone.')) ?>" novalidate>

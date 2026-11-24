@@ -7,12 +7,11 @@ declare(strict_types=1);
  *
  * Security assumptions:
  * - The default for a route is "signed in with 2FA, any role" (see Router).
- *   Public and pending routes are marked explicitly, and admin routes say so.
+ *   Public and pending routes are marked explicitly, and every action route names its permission.
  * - Every POST is CSRF-checked by the kernel. Nothing here needs to repeat it.
  * - /api/... is NOT routed here: App hands it to Sentinel\Api\ApiKernel (bearer tokens, no session).
  */
 
-use Sentinel\Auth\Role;
 use Sentinel\Controllers\AdminController;
 use Sentinel\Controllers\AgentController;
 use Sentinel\Controllers\AlertController;
@@ -37,8 +36,9 @@ use Sentinel\Core\Router;
 $router = new Router();
 $public = ['auth' => 'public'];
 $pending = ['auth' => 'pending'];
-$admin = ['role' => Role::ADMIN];
-$technician = ['role' => Role::TECHNICIAN];
+// Each action route names the permission it needs (Sentinel\Auth\Permissions, 1.40); the built-in roles hold the
+// same rights the old fixed roles had (tests/e2e/roles_test.php checks every route against the 1.39 table).
+$anyAdmin = ['perm' => array_values(array_filter(\Sentinel\Auth\Permissions::names(), static fn (string $p): bool => \Sentinel\Auth\Permissions::ALL[$p][0] === 'admin'))];
 $duringPasswordChange = ['allow_password_change' => true];
 
 // Sign-in flow
@@ -67,146 +67,153 @@ $router->add('POST', '/notifications/read', [AlertController::class, 'markRead']
 
 // Clients: everyone views; admins manage; technicians may pause (only admins resume)
 $router->add('GET', '/clients', [ClientController::class, 'index']);
-$router->add('GET', '/clients/new', [ClientController::class, 'create'], $admin);
-$router->add('POST', '/clients', [ClientController::class, 'store'], $admin);
+$router->add('GET', '/clients/new', [ClientController::class, 'create'], ['perm' => 'clients.manage']);
+$router->add('POST', '/clients', [ClientController::class, 'store'], ['perm' => 'clients.manage']);
 $router->add('GET', '/clients/{id}', [ClientController::class, 'show']);
 // A client's pages, one per section (the overview is /clients/{id}); see ClientController::SECTIONS.
 foreach (['findings', 'scans', 'vulnerabilities', 'certificates', 'website', 'agents', 'devices', 'authorisations', 'engagements', 'discovery', 'reports', 'compliance'] as $clientSection) {
     $router->add('GET', '/clients/{id}/' . $clientSection, [ClientController::class, 'show']);
 }
 $router->add('GET', '/clients/{id}/overview', [ClientController::class, 'overview'], ['passive' => true]);
-$router->add('GET', '/clients/{id}/edit', [ClientController::class, 'edit'], $admin);
-$router->add('POST', '/clients/{id}', [ClientController::class, 'update'], $admin);
-$router->add('POST', '/clients/{id}/archive', [ClientController::class, 'archive'], $admin);
-$router->add('POST', '/clients/{id}/pause', [ClientController::class, 'pause'], $technician);
-$router->add('POST', '/clients/{id}/resume', [ClientController::class, 'resume'], $admin);
-$router->add('POST', '/clients/{id}/sites', [ClientController::class, 'addSite'], $admin);
-$router->add('POST', '/sites/{id}', [ClientController::class, 'updateSite'], $admin);
+$router->add('GET', '/clients/{id}/edit', [ClientController::class, 'edit'], ['perm' => 'clients.manage']);
+$router->add('POST', '/clients/{id}', [ClientController::class, 'update'], ['perm' => 'clients.manage']);
+$router->add('POST', '/clients/{id}/archive', [ClientController::class, 'archive'], ['perm' => 'clients.manage']);
+$router->add('POST', '/clients/{id}/pause', [ClientController::class, 'pause'], ['perm' => 'scanning.pause']);
+$router->add('POST', '/clients/{id}/resume', [ClientController::class, 'resume'], ['perm' => 'scanning.resume']);
+$router->add('POST', '/clients/{id}/sites', [ClientController::class, 'addSite'], ['perm' => 'clients.manage']);
+$router->add('POST', '/sites/{id}', [ClientController::class, 'updateSite'], ['perm' => 'clients.manage']);
 
 // Authorised-to-scan register: admins only (everyone sees it on the client page)
 // Pen-test engagements: technicians and admins create, stop and cancel; a DIFFERENT admin approves (two-person rule).
-$router->add('GET', '/clients/{id}/engagements/new', [\Sentinel\Controllers\EngagementController::class, 'create'], $technician);
-$router->add('POST', '/clients/{id}/engagements', [\Sentinel\Controllers\EngagementController::class, 'store'], $technician);
+$router->add('GET', '/clients/{id}/engagements/new', [\Sentinel\Controllers\EngagementController::class, 'create'], ['perm' => 'engagements.run']);
+$router->add('POST', '/clients/{id}/engagements', [\Sentinel\Controllers\EngagementController::class, 'store'], ['perm' => 'engagements.run']);
 $router->add('GET', '/engagements', [\Sentinel\Controllers\EngagementController::class, 'index']);
 $router->add('GET', '/engagements/{id}', [\Sentinel\Controllers\EngagementController::class, 'show']);
-$router->add('GET', '/engagements/{id}/document', [\Sentinel\Controllers\EngagementController::class, 'document'], $technician);
-$router->add('POST', '/engagements/{id}/approve', [\Sentinel\Controllers\EngagementController::class, 'approve'], $admin);
-$router->add('POST', '/engagements/{id}/stop', [\Sentinel\Controllers\EngagementController::class, 'stop'], $technician);
-$router->add('POST', '/engagements/{id}/run-external', [\Sentinel\Controllers\EngagementController::class, 'runExternal'], $technician);
-$router->add('POST', '/engagements/{id}/run-internal', [\Sentinel\Controllers\EngagementController::class, 'runInternal'], $technician);
-$router->add('POST', '/engagements/{id}/report', [\Sentinel\Controllers\EngagementController::class, 'report'], $technician);
-$router->add('POST', '/engagements/{id}/cancel', [\Sentinel\Controllers\EngagementController::class, 'cancel'], $technician);
-$router->add('GET', '/clients/{id}/authorisations/new', [AuthorisationController::class, 'create'], $admin);
-$router->add('POST', '/clients/{id}/authorisations', [AuthorisationController::class, 'store'], $admin);
-$router->add('POST', '/authorisations/{id}/revoke', [AuthorisationController::class, 'revoke'], $admin);
+$router->add('GET', '/engagements/{id}/document', [\Sentinel\Controllers\EngagementController::class, 'document'], ['perm' => ['engagements.run', 'engagements.approve']]);
+$router->add('POST', '/engagements/{id}/approve', [\Sentinel\Controllers\EngagementController::class, 'approve'], ['perm' => 'engagements.approve']);
+$router->add('POST', '/engagements/{id}/stop', [\Sentinel\Controllers\EngagementController::class, 'stop'], ['perm' => 'engagements.run']);
+$router->add('POST', '/engagements/{id}/run-external', [\Sentinel\Controllers\EngagementController::class, 'runExternal'], ['perm' => 'engagements.run']);
+$router->add('POST', '/engagements/{id}/run-internal', [\Sentinel\Controllers\EngagementController::class, 'runInternal'], ['perm' => 'engagements.run']);
+$router->add('POST', '/engagements/{id}/report', [\Sentinel\Controllers\EngagementController::class, 'report'], ['perm' => 'engagements.run']);
+$router->add('POST', '/engagements/{id}/cancel', [\Sentinel\Controllers\EngagementController::class, 'cancel'], ['perm' => 'engagements.run']);
+$router->add('GET', '/clients/{id}/authorisations/new', [AuthorisationController::class, 'create'], ['perm' => 'authorisations.manage']);
+$router->add('POST', '/clients/{id}/authorisations', [AuthorisationController::class, 'store'], ['perm' => 'authorisations.manage']);
+$router->add('POST', '/authorisations/{id}/revoke', [AuthorisationController::class, 'revoke'], ['perm' => 'authorisations.manage']);
 
 // Discovery: technicians and admins run it and triage suggestions; approving into scope is admin-only (authorisation form)
-$router->add('POST', '/clients/{id}/discover', [DiscoveryController::class, 'run'], $technician);
-$router->add('POST', '/suggestions/{id}/dismiss', [DiscoveryController::class, 'dismiss'], $technician);
-$router->add('POST', '/suggestions/{id}/restore', [DiscoveryController::class, 'restore'], $technician);
+$router->add('POST', '/clients/{id}/discover', [DiscoveryController::class, 'run'], ['perm' => 'scans.run']);
+$router->add('POST', '/suggestions/{id}/dismiss', [DiscoveryController::class, 'dismiss'], ['perm' => 'scans.run']);
+$router->add('POST', '/suggestions/{id}/restore', [DiscoveryController::class, 'restore'], ['perm' => 'scans.run']);
 
 // Port scans: technicians and admins queue and cancel (the outside-window override is admin-only, checked in the controller)
-$router->add('POST', '/clients/{id}/scan', [ScanController::class, 'queue'], $technician);
+$router->add('POST', '/clients/{id}/scan', [ScanController::class, 'queue'], ['perm' => 'scans.run']);
 // On-premises agents: technicians pause a site; admins manage authorisations, enrolment, agents, resume and scan now.
-$router->add('GET', '/clients/{id}/sites/{site}/internal-authorisations/new', [AgentController::class, 'authorisationForm'], $admin);
-$router->add('POST', '/clients/{id}/sites/{site}/internal-authorisations', [AgentController::class, 'storeAuthorisation'], $admin);
-$router->add('POST', '/clients/{id}/internal-authorisations/{auth}/revoke', [AgentController::class, 'revokeAuthorisation'], $admin);
-$router->add('POST', '/clients/{id}/sites/{site}/enrol', [AgentController::class, 'enrol'], $admin);
-$router->add('POST', '/clients/{id}/agents/{agent}/revoke', [AgentController::class, 'revokeAgent'], $admin);
-$router->add('POST', '/clients/{id}/agents/{agent}/approve-key', [AgentController::class, 'approveKey'], $admin);
-$router->add('POST', '/clients/{id}/agents/{agent}/restart', [AgentController::class, 'restartAgent'], $admin);
-$router->add('POST', '/clients/{id}/agents/{agent}/update', [AgentController::class, 'updateAgent'], $admin);
-$router->add('POST', '/clients/{id}/agents-update', [AgentController::class, 'updateClientAgents'], $admin);
-$router->add('POST', '/clients/{id}/agents/{agent}/diagnostics', [AgentController::class, 'diagnosticsAgent'], $admin);
-$router->add('POST', '/clients/{id}/sites/{site}/agent-settings', [AgentController::class, 'siteSettings'], $admin);
-$router->add('POST', '/clients/{id}/sites/{site}/pause', [AgentController::class, 'pause'], $technician);
-$router->add('POST', '/clients/{id}/sites/{site}/resume', [AgentController::class, 'resume'], $admin);
-$router->add('POST', '/clients/{id}/sites/{site}/scan', [AgentController::class, 'scan'], $admin);
+$router->add('GET', '/clients/{id}/sites/{site}/internal-authorisations/new', [AgentController::class, 'authorisationForm'], ['perm' => 'authorisations.manage']);
+$router->add('POST', '/clients/{id}/sites/{site}/internal-authorisations', [AgentController::class, 'storeAuthorisation'], ['perm' => 'authorisations.manage']);
+$router->add('POST', '/clients/{id}/internal-authorisations/{auth}/revoke', [AgentController::class, 'revokeAuthorisation'], ['perm' => 'authorisations.manage']);
+$router->add('POST', '/clients/{id}/sites/{site}/enrol', [AgentController::class, 'enrol'], ['perm' => 'agents.manage']);
+$router->add('POST', '/clients/{id}/agents/{agent}/revoke', [AgentController::class, 'revokeAgent'], ['perm' => 'agents.manage']);
+$router->add('POST', '/clients/{id}/agents/{agent}/approve-key', [AgentController::class, 'approveKey'], ['perm' => 'agents.manage']);
+$router->add('POST', '/clients/{id}/agents/{agent}/restart', [AgentController::class, 'restartAgent'], ['perm' => 'agents.manage']);
+$router->add('POST', '/clients/{id}/agents/{agent}/update', [AgentController::class, 'updateAgent'], ['perm' => 'agents.manage']);
+$router->add('POST', '/clients/{id}/agents-update', [AgentController::class, 'updateClientAgents'], ['perm' => 'agents.manage']);
+$router->add('POST', '/clients/{id}/agents/{agent}/diagnostics', [AgentController::class, 'diagnosticsAgent'], ['perm' => 'agents.manage']);
+$router->add('POST', '/clients/{id}/sites/{site}/agent-settings', [AgentController::class, 'siteSettings'], ['perm' => 'agents.manage']);
+$router->add('POST', '/clients/{id}/sites/{site}/pause', [AgentController::class, 'pause'], ['perm' => 'scanning.pause']);
+$router->add('POST', '/clients/{id}/sites/{site}/resume', [AgentController::class, 'resume'], ['perm' => 'scanning.resume']);
+$router->add('POST', '/clients/{id}/sites/{site}/scan', [AgentController::class, 'scan'], ['perm' => 'agents.manage']);
 // Active Directory checks of a site (admins): settings and the password sealed in the browser for the agent.
-$router->add('POST', '/clients/{id}/sites/{site}/directory', [\Sentinel\Controllers\DirectoryController::class, 'save'], $admin);
-$router->add('POST', '/clients/{id}/sites/{site}/directory/trust', [\Sentinel\Controllers\DirectoryController::class, 'trust'], $admin);
-$router->add('POST', '/clients/{id}/sites/{site}/directory/remove', [\Sentinel\Controllers\DirectoryController::class, 'remove'], $admin);
+$router->add('POST', '/clients/{id}/sites/{site}/directory', [\Sentinel\Controllers\DirectoryController::class, 'save'], ['perm' => 'directory.manage']);
+$router->add('POST', '/clients/{id}/sites/{site}/directory/trust', [\Sentinel\Controllers\DirectoryController::class, 'trust'], ['perm' => 'directory.manage']);
+$router->add('POST', '/clients/{id}/sites/{site}/directory/remove', [\Sentinel\Controllers\DirectoryController::class, 'remove'], ['perm' => 'directory.manage']);
 // Internal devices (inventory sources): everyone views; technicians ask for a sync; admins link and unlink.
 $router->add('GET', '/clients/{id}/devices/{device}', [InventoryController::class, 'device']);
-$router->add('POST', '/clients/{id}/devices/{device}/merge', [InventoryController::class, 'merge'], $admin);
-$router->add('GET', '/clients/{id}/inventory/link', [InventoryController::class, 'linkForm'], $admin);
-$router->add('POST', '/clients/{id}/inventory/link', [InventoryController::class, 'link'], $admin);
-$router->add('POST', '/clients/{id}/inventory/unlink', [InventoryController::class, 'unlink'], $admin);
-$router->add('POST', '/clients/{id}/inventory/sync', [InventoryController::class, 'sync'], $technician);
-$router->add('POST', '/scans/{id}/cancel', [ScanController::class, 'cancel'], $technician);
+$router->add('POST', '/clients/{id}/devices/{device}/merge', [InventoryController::class, 'merge'], ['perm' => 'devices.merge']);
+$router->add('GET', '/clients/{id}/inventory/link', [InventoryController::class, 'linkForm'], ['perm' => 'integrations.link']);
+$router->add('POST', '/clients/{id}/inventory/link', [InventoryController::class, 'link'], ['perm' => 'integrations.link']);
+$router->add('POST', '/clients/{id}/inventory/unlink', [InventoryController::class, 'unlink'], ['perm' => 'integrations.link']);
+$router->add('POST', '/clients/{id}/inventory/sync', [InventoryController::class, 'sync'], ['perm' => 'scans.run']);
+$router->add('POST', '/scans/{id}/cancel', [ScanController::class, 'cancel'], ['perm' => 'scans.run']);
 
 // Findings: everyone views; technicians and admins triage
 $router->add('GET', '/findings', [FindingController::class, 'index']);
 $router->add('GET', '/findings/{id}', [FindingController::class, 'show']);
-$router->add('POST', '/findings/{id}/triage', [FindingController::class, 'triage'], $technician);
+$router->add('POST', '/findings/{id}/triage', [FindingController::class, 'triage'], ['perm' => 'findings.triage']);
 // Fix workflow: technicians and admins assign and verify; only admins set a finding's own due date.
-$router->add('POST', '/findings/{id}/assign', [FindingController::class, 'assign'], $technician);
-$router->add('POST', '/findings/{id}/verify', [FindingController::class, 'verify'], $technician);
-$router->add('POST', '/findings/{id}/due', [FindingController::class, 'due'], $admin);
-$router->add('POST', '/findings/bulk', [FindingController::class, 'bulk'], $technician);
+$router->add('POST', '/findings/{id}/assign', [FindingController::class, 'assign'], ['perm' => 'findings.assign']);
+$router->add('POST', '/findings/{id}/verify', [FindingController::class, 'verify'], ['perm' => 'findings.verify']);
+$router->add('POST', '/findings/{id}/due', [FindingController::class, 'due'], ['perm' => 'findings.due']);
+$router->add('POST', '/findings/bulk', [FindingController::class, 'bulk'], ['perm' => ['findings.triage', 'findings.assign', 'findings.verify', 'findings.due']]);
 
 // Reports: everyone views and downloads saved reports; technicians and admins create; admins delete and set schedules and branding
 $router->add('GET', '/reports', [ReportController::class, 'index']);
-$router->add('POST', '/clients/{id}/reports', [ReportController::class, 'store'], $technician);
-$router->add('POST', '/reports', [ReportController::class, 'storeFromList'], $technician);
-$router->add('POST', '/clients/{id}/report-schedule', [ReportController::class, 'schedule'], $admin);
+$router->add('POST', '/clients/{id}/reports', [ReportController::class, 'store'], ['perm' => 'reports.create']);
+$router->add('POST', '/reports', [ReportController::class, 'storeFromList'], ['perm' => 'reports.create']);
+$router->add('POST', '/clients/{id}/report-schedule', [ReportController::class, 'schedule'], ['perm' => 'reports.schedule']);
 $router->add('GET', '/reports/{id}', [ReportController::class, 'show']);
 $router->add('GET', '/reports/{id}/view', [ReportController::class, 'view']);
 $router->add('GET', '/reports/{id}/download', [ReportController::class, 'download']);
 $router->add('GET', '/reports/{id}/csv', [ReportController::class, 'csv']);
-$router->add('POST', '/reports/{id}/delete', [ReportController::class, 'delete'], $admin);
-$router->add('POST', '/admin/branding', [ReportController::class, 'branding'], $admin);
+$router->add('POST', '/reports/{id}/delete', [ReportController::class, 'delete'], ['perm' => 'reports.delete']);
+$router->add('POST', '/admin/branding', [ReportController::class, 'branding'], ['perm' => 'settings.manage']);
 
 // Global kill switch
-$router->add('POST', '/scanning/pause', [ScanningController::class, 'pause'], $technician);
-$router->add('POST', '/scanning/resume', [ScanningController::class, 'resume'], $admin);
+$router->add('POST', '/scanning/pause', [ScanningController::class, 'pause'], ['perm' => 'scanning.pause']);
+$router->add('POST', '/scanning/resume', [ScanningController::class, 'resume'], ['perm' => 'scanning.resume']);
 
 // Admin only
-$router->add('GET', '/users', [UserController::class, 'index'], $admin);
-$router->add('GET', '/users/new', [UserController::class, 'create'], $admin);
-$router->add('POST', '/users', [UserController::class, 'store'], $admin);
-$router->add('GET', '/users/{id}', [UserController::class, 'edit'], $admin);
-$router->add('POST', '/users/{id}', [UserController::class, 'update'], $admin);
-$router->add('POST', '/users/{id}/password', [UserController::class, 'resetPassword'], $admin);
-$router->add('POST', '/users/{id}/2fa-reset', [UserController::class, 'resetTwoFactor'], $admin);
-$router->add('GET', '/admin', [AdminController::class, 'index'], $admin);
-$router->add('GET', '/admin/audit', [AdminController::class, 'auditLog'], $admin);
-$router->add('GET', '/admin/integrations', [IntegrationsController::class, 'index'], $admin);
-$router->add('POST', '/admin/integrations/ninjaone', [IntegrationsController::class, 'saveNinjaOne'], $admin);
-$router->add('POST', '/admin/integrations/ninjaone/test', [IntegrationsController::class, 'testNinjaOne'], $admin);
-$router->add('POST', '/admin/integrations/itflow', [IntegrationsController::class, 'saveItflow'], $admin);
-$router->add('POST', '/admin/integrations/itflow/test', [IntegrationsController::class, 'testItflow'], $admin);
-$router->add('POST', '/admin/integrations/itflow/sync', [IntegrationsController::class, 'syncItflow'], $admin);
-$router->add('POST', '/admin/integrations/itflow/tickets', [IntegrationsController::class, 'ticketsItflow'], $admin);
-$router->add('POST', '/admin/integrations/mspalign', [IntegrationsController::class, 'saveAlign'], $admin);
-$router->add('POST', '/admin/integrations/mspalign/test', [IntegrationsController::class, 'testAlign'], $admin);
-$router->add('POST', '/admin/integrations/breach', [IntegrationsController::class, 'saveBreach'], $admin);
-$router->add('POST', '/admin/integrations/breach/check', [IntegrationsController::class, 'checkBreach'], $admin);
-$router->add('POST', '/clients/{id}/compliance/link', [ComplianceController::class, 'link'], $admin);
-$router->add('POST', '/clients/{id}/compliance/unlink', [ComplianceController::class, 'unlink'], $admin);
-$router->add('POST', '/clients/{id}/compliance/refresh', [ComplianceController::class, 'refresh'], $technician);
-$router->add('GET', '/admin/settings', [AdminController::class, 'settings'], $admin);
-$router->add('POST', '/admin/settings', [AdminController::class, 'saveSettings'], $admin);
-$router->add('POST', '/admin/settings/due-dates', [AdminController::class, 'saveDuePolicy'], $admin);
-$router->add('POST', '/admin/feeds/refresh', [AdminController::class, 'refreshFeeds'], $admin);
-$router->add('POST', '/admin/alerts', [AlertController::class, 'save'], $admin);
-$router->add('POST', '/admin/alerts/test', [AlertController::class, 'test'], $admin);
-$router->add('GET', '/admin/system', [SystemController::class, 'index'], $admin);
-$router->add('POST', '/admin/system/retention', [SystemController::class, 'retention'], $admin);
-$router->add('POST', '/admin/system/updates', [SystemController::class, 'updates'], $admin);
-$router->add('POST', '/admin/system/demo', [SystemController::class, 'demo'], $admin);
-$router->add('POST', '/admin/system/update', [SystemController::class, 'update'], $admin);
-$router->add('POST', '/admin/system/agents-update', [SystemController::class, 'updateAgents'], $admin);
-$router->add('POST', '/admin/system/agents-move', [SystemController::class, 'moveAgents'], $admin);
-$router->add('POST', '/admin/system/release-key', [SystemController::class, 'releaseKey'], $admin);
-$router->add('POST', '/admin/system/backups', [SystemController::class, 'backups'], $admin);
-$router->add('POST', '/admin/system/release-sign', [SystemController::class, 'releaseSign'], $admin);
-$router->add('GET', '/admin/api', [ApiAdminController::class, 'index'], $admin);
-$router->add('GET', '/admin/api/docs', [ApiAdminController::class, 'docs'], $admin);
-$router->add('POST', '/admin/api/tokens', [ApiAdminController::class, 'create'], $admin);
-$router->add('POST', '/admin/api/tokens/{id}/revoke', [ApiAdminController::class, 'revoke'], $admin);
-$router->add('POST', '/admin/api/events', [ApiAdminController::class, 'events'], $admin);
-$router->add('POST', '/admin/api/events/secret', [ApiAdminController::class, 'secret'], $admin);
-$router->add('POST', '/admin/api/events/test', [ApiAdminController::class, 'test'], $admin);
+$router->add('GET', '/users', [UserController::class, 'index'], ['perm' => 'users.manage']);
+$router->add('GET', '/users/new', [UserController::class, 'create'], ['perm' => 'users.manage']);
+$router->add('POST', '/users', [UserController::class, 'store'], ['perm' => 'users.manage']);
+$router->add('GET', '/users/{id}', [UserController::class, 'edit'], ['perm' => 'users.manage']);
+$router->add('POST', '/users/{id}', [UserController::class, 'update'], ['perm' => 'users.manage']);
+$router->add('POST', '/users/{id}/password', [UserController::class, 'resetPassword'], ['perm' => 'users.manage']);
+$router->add('POST', '/users/{id}/2fa-reset', [UserController::class, 'resetTwoFactor'], ['perm' => 'users.manage']);
+// Roles (1.40): built-in ones read-only, custom ones made from the permission list
+$router->add('GET', '/admin/roles', [\Sentinel\Controllers\RoleController::class, 'index'], ['perm' => 'users.manage']);
+$router->add('GET', '/admin/roles/new', [\Sentinel\Controllers\RoleController::class, 'create'], ['perm' => 'users.manage']);
+$router->add('POST', '/admin/roles', [\Sentinel\Controllers\RoleController::class, 'store'], ['perm' => 'users.manage']);
+$router->add('GET', '/admin/roles/{id}', [\Sentinel\Controllers\RoleController::class, 'edit'], ['perm' => 'users.manage']);
+$router->add('POST', '/admin/roles/{id}', [\Sentinel\Controllers\RoleController::class, 'update'], ['perm' => 'users.manage']);
+$router->add('POST', '/admin/roles/{id}/delete', [\Sentinel\Controllers\RoleController::class, 'delete'], ['perm' => 'users.manage']);
+$router->add('GET', '/admin', [AdminController::class, 'index'], $anyAdmin);
+$router->add('GET', '/admin/audit', [AdminController::class, 'auditLog'], ['perm' => 'audit.view']);
+$router->add('GET', '/admin/integrations', [IntegrationsController::class, 'index'], ['perm' => 'integrations.manage']);
+$router->add('POST', '/admin/integrations/ninjaone', [IntegrationsController::class, 'saveNinjaOne'], ['perm' => 'integrations.manage']);
+$router->add('POST', '/admin/integrations/ninjaone/test', [IntegrationsController::class, 'testNinjaOne'], ['perm' => 'integrations.manage']);
+$router->add('POST', '/admin/integrations/itflow', [IntegrationsController::class, 'saveItflow'], ['perm' => 'integrations.manage']);
+$router->add('POST', '/admin/integrations/itflow/test', [IntegrationsController::class, 'testItflow'], ['perm' => 'integrations.manage']);
+$router->add('POST', '/admin/integrations/itflow/sync', [IntegrationsController::class, 'syncItflow'], ['perm' => 'integrations.manage']);
+$router->add('POST', '/admin/integrations/itflow/tickets', [IntegrationsController::class, 'ticketsItflow'], ['perm' => 'integrations.manage']);
+$router->add('POST', '/admin/integrations/mspalign', [IntegrationsController::class, 'saveAlign'], ['perm' => 'integrations.manage']);
+$router->add('POST', '/admin/integrations/mspalign/test', [IntegrationsController::class, 'testAlign'], ['perm' => 'integrations.manage']);
+$router->add('POST', '/admin/integrations/breach', [IntegrationsController::class, 'saveBreach'], ['perm' => 'integrations.manage']);
+$router->add('POST', '/admin/integrations/breach/check', [IntegrationsController::class, 'checkBreach'], ['perm' => 'integrations.manage']);
+$router->add('POST', '/clients/{id}/compliance/link', [ComplianceController::class, 'link'], ['perm' => 'integrations.link']);
+$router->add('POST', '/clients/{id}/compliance/unlink', [ComplianceController::class, 'unlink'], ['perm' => 'integrations.link']);
+$router->add('POST', '/clients/{id}/compliance/refresh', [ComplianceController::class, 'refresh'], ['perm' => 'scans.run']);
+$router->add('GET', '/admin/settings', [AdminController::class, 'settings'], ['perm' => 'settings.manage']);
+$router->add('POST', '/admin/settings', [AdminController::class, 'saveSettings'], ['perm' => 'settings.manage']);
+$router->add('POST', '/admin/settings/due-dates', [AdminController::class, 'saveDuePolicy'], ['perm' => 'settings.manage']);
+$router->add('POST', '/admin/feeds/refresh', [AdminController::class, 'refreshFeeds'], ['perm' => 'settings.manage']);
+$router->add('POST', '/admin/alerts', [AlertController::class, 'save'], ['perm' => 'settings.manage']);
+$router->add('POST', '/admin/alerts/test', [AlertController::class, 'test'], ['perm' => 'settings.manage']);
+$router->add('GET', '/admin/system', [SystemController::class, 'index'], ['perm' => ['system.manage', 'release.manage']]);
+$router->add('POST', '/admin/system/retention', [SystemController::class, 'retention'], ['perm' => 'system.manage']);
+$router->add('POST', '/admin/system/updates', [SystemController::class, 'updates'], ['perm' => 'system.manage']);
+$router->add('POST', '/admin/system/demo', [SystemController::class, 'demo'], ['perm' => 'system.manage']);
+$router->add('POST', '/admin/system/update', [SystemController::class, 'update'], ['perm' => 'system.manage']);
+$router->add('POST', '/admin/system/agents-update', [SystemController::class, 'updateAgents'], ['perm' => 'system.manage']);
+$router->add('POST', '/admin/system/agents-move', [SystemController::class, 'moveAgents'], ['perm' => 'system.manage']);
+$router->add('POST', '/admin/system/release-key', [SystemController::class, 'releaseKey'], ['perm' => 'release.manage']);
+$router->add('POST', '/admin/system/backups', [SystemController::class, 'backups'], ['perm' => 'system.manage']);
+$router->add('POST', '/admin/system/release-sign', [SystemController::class, 'releaseSign'], ['perm' => 'release.manage']);
+$router->add('GET', '/admin/api', [ApiAdminController::class, 'index'], ['perm' => 'api.manage']);
+$router->add('GET', '/admin/api/docs', [ApiAdminController::class, 'docs'], ['perm' => 'api.manage']);
+$router->add('POST', '/admin/api/tokens', [ApiAdminController::class, 'create'], ['perm' => 'api.manage']);
+$router->add('POST', '/admin/api/tokens/{id}/revoke', [ApiAdminController::class, 'revoke'], ['perm' => 'api.manage']);
+$router->add('POST', '/admin/api/events', [ApiAdminController::class, 'events'], ['perm' => 'api.manage']);
+$router->add('POST', '/admin/api/events/secret', [ApiAdminController::class, 'secret'], ['perm' => 'api.manage']);
+$router->add('POST', '/admin/api/events/test', [ApiAdminController::class, 'test'], ['perm' => 'api.manage']);
 
 return $router;

@@ -105,10 +105,12 @@ final class Outbox
                 $this->db->prepare("UPDATE deliveries SET claimed_at = NULL, attempts = :a, last_error = :e, status = :s, next_attempt_at = UTC_TIMESTAMP() + INTERVAL :wait MINUTE WHERE id = :id")
                     ->execute(['a' => $attempts, 'e' => mb_substr($message, 0, 300), 's' => $final ? 'failed' : 'pending', 'wait' => $wait, 'id' => $d['id']]);
                 if ($final && (string) ($d['report_ids'] ?? '') !== '') {
-                    // A monthly report email gave up: tell admins in-app, so it isn't lost silently.
-                    $this->db->prepare("INSERT INTO notifications (user_id, kind, severity, title, body, link, created_at)
-                                        SELECT id, 'report_failed', 'warn', :t, :b, '/reports', UTC_TIMESTAMP() FROM users WHERE is_active = 1 AND role = 'admin'")
-                        ->execute(['t' => mb_substr('A monthly report email to ' . $d['recipient'] . ' could not be sent', 0, 300), 'b' => mb_substr($message, 0, 2000)]);
+                    // A monthly report email gave up: tell those who schedule reports in-app, so it isn't lost silently.
+                    $note = $this->db->prepare("INSERT INTO notifications (user_id, kind, severity, title, body, link, created_at)
+                                                VALUES (:u, 'report_failed', 'warn', :t, :b, '/reports', UTC_TIMESTAMP())");
+                    foreach ((new \Sentinel\Auth\RoleRepository($this->db))->usersWith('reports.schedule') as $u) {
+                        $note->execute(['u' => $u['id'], 't' => mb_substr('A monthly report email to ' . $d['recipient'] . ' could not be sent', 0, 300), 'b' => mb_substr($message, 0, 2000)]);
+                    }
                 }
                 $stats['failed']++;
             }

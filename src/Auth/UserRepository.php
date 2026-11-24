@@ -30,10 +30,25 @@ final class UserRepository
      */
     public function find(int $id): ?array
     {
-        $stmt = $this->db->prepare('SELECT * FROM users WHERE id = :id');
+        $stmt = $this->db->prepare('SELECT u.*, r.role_key, r.name AS role_name FROM users u LEFT JOIN roles r ON r.id = u.role_id WHERE u.id = :id');
         $stmt->execute(['id' => $id]);
         $row = $stmt->fetch();
         return $row === false ? null : $row;
+    }
+
+    /**
+     * What a user may do (1.40): their role's permissions. A user without a role (never after migration 0046) holds
+     * nothing.
+     *
+     * @param array<string,mixed> $user a find() row
+     * @return list<string>
+     */
+    public function permissions(array $user): array
+    {
+        if (($user['role_id'] ?? null) === null) {
+            return [];
+        }
+        return (new RoleRepository($this->db))->permissionsOf(['id' => (int) $user['role_id'], 'role_key' => $user['role_key'] ?? null]);
     }
 
     /**
@@ -52,9 +67,9 @@ final class UserRepository
     public function all(): array
     {
         $stmt = $this->db->query(
-            'SELECT id, username, display_name, email, role, is_active, must_change_password,
-                    totp_enabled_at, last_login_at, created_at
-             FROM users ORDER BY username'
+            'SELECT u.id, u.username, u.display_name, u.email, u.role, u.role_id, r.name AS role_name, r.role_key, u.is_active, u.must_change_password,
+                    u.totp_enabled_at, u.last_login_at, u.created_at
+             FROM users u LEFT JOIN roles r ON r.id = u.role_id ORDER BY u.username'
         );
         return $stmt->fetchAll();
     }
@@ -64,13 +79,13 @@ final class UserRepository
      *
      * @return int New user ID.
      */
-    public function create(string $username, string $displayName, string $email, string $role, string $passwordHash, bool $mustChange): int
+    public function create(string $username, string $displayName, string $email, int $roleId, string $passwordHash, bool $mustChange): int
     {
         $stmt = $this->db->prepare(
-            'INSERT INTO users (username, display_name, email, role, password_hash, must_change_password, is_active, session_version, created_at, updated_at)
-             VALUES (:u, :d, :e, :r, :p, :m, 1, 1, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
+            'INSERT INTO users (username, display_name, email, role, role_id, password_hash, must_change_password, is_active, session_version, created_at, updated_at)
+             VALUES (:u, :d, :e, :r, :rid, :p, :m, 1, 1, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
         );
-        $stmt->execute(['u' => $username, 'd' => $displayName, 'e' => $email, 'r' => $role, 'p' => $passwordHash, 'm' => $mustChange ? 1 : 0]);
+        $stmt->execute(['u' => $username, 'd' => $displayName, 'e' => $email, 'r' => $this->legacyRole($roleId), 'rid' => $roleId, 'p' => $passwordHash, 'm' => $mustChange ? 1 : 0]);
         return (int) $this->db->lastInsertId();
     }
 
@@ -81,24 +96,27 @@ final class UserRepository
      *                            so the user's sessions end and the change takes effect at once.
      *                            A name or email fix alone doesn't sign anyone out.
      */
-    public function updateAccount(int $id, string $displayName, string $email, string $role, bool $active, bool $accessChanged): void
+    public function updateAccount(int $id, string $displayName, string $email, int $roleId, bool $active, bool $accessChanged): void
     {
         $stmt = $this->db->prepare(
-            'UPDATE users SET display_name = :d, email = :e, role = :r, is_active = :a,
+            'UPDATE users SET display_name = :d, email = :e, role = :r, role_id = :rid, is_active = :a,
                     session_version = session_version + :bump, updated_at = UTC_TIMESTAMP()
              WHERE id = :id'
         );
-        $stmt->execute(['d' => $displayName, 'e' => $email, 'r' => $role, 'a' => $active ? 1 : 0, 'bump' => $accessChanged ? 1 : 0, 'id' => $id]);
+        $stmt->execute(['d' => $displayName, 'e' => $email, 'r' => $this->legacyRole($roleId), 'rid' => $roleId, 'a' => $active ? 1 : 0,
+                        'bump' => $accessChanged ? 1 : 0, 'id' => $id]);
     }
 
     /**
-     * Count active admins while locking their rows (call inside a transaction).
-     * Two admins demoting each other at the same moment are serialised, so
-     * the "last admin" rule can't be raced.
+     * The old users.role value for a role (kept in step since 1.40): the built-in key, or 'viewer' (the least) for a
+     * custom role, so anything that still read the old column could only ever under-grant.
      */
-    public function countActiveAdminsForUpdate(): int
+    private function legacyRole(int $roleId): string
     {
-        return count($this->db->query("SELECT id FROM users WHERE role = 'admin' AND is_active = 1 FOR UPDATE")->fetchAll());
+        $stmt = $this->db->prepare('SELECT role_key FROM roles WHERE id = :id');
+        $stmt->execute(['id' => $roleId]);
+        $key = $stmt->fetchColumn();
+        return is_string($key) && in_array($key, Permissions::BUILTIN, true) ? $key : 'viewer';
     }
 
     /** Set a new password hash and sign out other sessions. */

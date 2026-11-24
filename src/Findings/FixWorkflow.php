@@ -70,22 +70,20 @@ final class FixWorkflow
     }
 
     /**
-     * Users who may own findings: active technicians and admins.
+     * Users who may own findings: active users whose role may triage findings (1.40; the built-in Technician and
+     * Admin, as before).
      *
      * @return list<array{id:int, username:string, display_name:string}>
      */
     public function assignableUsers(): array
     {
-        return array_map(static fn (array $r): array => ['id' => (int) $r['id'], 'username' => (string) $r['username'], 'display_name' => (string) ($r['display_name'] ?? '')],
-            $this->db->query("SELECT id, username, display_name FROM users WHERE is_active = 1 AND role IN ('technician','admin') ORDER BY COALESCE(NULLIF(display_name, ''), username)")->fetchAll());
+        return (new \Sentinel\Auth\RoleRepository($this->db))->usersWith('findings.triage');
     }
 
-    /** True if the user exists, is active and is a technician or admin. */
+    /** True if the user exists, is active and may own findings. */
     public function isAssignable(int $userId): bool
     {
-        $stmt = $this->db->prepare("SELECT COUNT(*) FROM users WHERE id = :id AND is_active = 1 AND role IN ('technician','admin')");
-        $stmt->execute(['id' => $userId]);
-        return (int) $stmt->fetchColumn() === 1;
+        return in_array($userId, array_column($this->assignableUsers(), 'id'), true);
     }
 
     /**

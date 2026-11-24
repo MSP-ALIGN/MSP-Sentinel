@@ -29,7 +29,7 @@ $other = count($device['software']) - count($matched);
                     <dt class="col-5"><?= e(__('Last contact')) ?></dt><dd class="col-7"><?= e(($device['last_contact'] ?? '?') . ' UTC') ?></dd>
                 </dl>
                 <?php if (($device['source'] ?? '') === 'agent' && $device['os_name'] !== ''): ?><div class="text-body-secondary mt-1"><?= e(__('Operating system and type worked out from the network (Windows over SMB, or service banners).')) ?></div><?php endif; ?>
-                <?php $canMerge = ($currentUser['role'] ?? '') === 'admin'; ?>
+                <?php $canMerge = can('devices.merge'); ?>
                 <?php foreach ($merged ?? [] as $m): ?>
                 <div class="alert alert-info mt-2 mb-0 py-2"><i class="bi bi-intersect me-1" aria-hidden="true"></i><?= e(__('Also found by the on-premises agent as {name} ({ip}): shown as one device ({how}).', [
                     'name' => (string) ($m['name'] ?: $m['dns_name'] ?: '?'), 'ip' => str_replace(',', ', ', (string) $m['ip_addresses']),

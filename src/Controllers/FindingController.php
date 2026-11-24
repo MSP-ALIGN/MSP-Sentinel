@@ -223,7 +223,7 @@ final class FindingController extends Controller
         if ($result !== null) {
             Session::flash('warning', $result);
         } else {
-            Session::flash('success', \Sentinel\Auth\Role::atLeast((string) ($this->user()['role'] ?? ''), \Sentinel\Auth\Role::ADMIN)
+            Session::flash('success', App::auth()->can('scans.outside_window')
                 ? __('Recheck queued. It runs within a minute (after any scan already running), and the result appears in the history.')
                 : __('Recheck queued. It runs in the client\'s scan window (now, if the window is open), and the result appears in the history.'));
         }
@@ -269,8 +269,8 @@ final class FindingController extends Controller
             $names = array_values(array_filter(explode(',', (string) $stmt->fetchColumn())));
             $payload = ['finding_id' => $id, 'ips' => [$target['ip']], 'hostnames' => [], 'ports' => [$target['port']], 'names' => [$target['ip'] => array_slice($names, 0, 20)]];
         }
-        // Outside the client's scan window only for admins (as for manual scans); a technician's recheck waits for the window.
-        $outside = \Sentinel\Auth\Role::atLeast((string) ($this->user()['role'] ?? ''), \Sentinel\Auth\Role::ADMIN);
+        // Outside the client's scan window only with that permission (as for manual scans); otherwise it waits for the window.
+        $outside = App::auth()->can('scans.outside_window');
         $jobId = App::scans()->queue($clientId, 'manual', (int) $this->user()['id'], $outside, __('Verify fix for finding #{id}', ['id' => $id]), $payload, 'verify');
         $db->prepare('UPDATE findings SET verify_requested_at = UTC_TIMESTAMP(), verify_job_id = :j WHERE id = :id')->execute(['j' => $jobId, 'id' => $id]);
         $db->prepare("INSERT INTO finding_events (finding_id, event, user_id, note, created_at) VALUES (:f, 'verify_requested', :u, :n, UTC_TIMESTAMP())")
@@ -339,8 +339,10 @@ final class FindingController extends Controller
             Session::flash('danger', __('Choose findings and an action (at most {n} findings at once).', ['n' => self::BULK_MAX]));
             return Response::redirect($back);
         }
-        if ($action === 'due' && (string) ($this->user()['role'] ?? '') !== \Sentinel\Auth\Role::ADMIN) {
-            throw new HttpException(403, __('Only admins can set due dates.'));
+        // Each action needs its own permission (the route lets in anyone holding one of them, 1.40).
+        $need = ['assign' => 'findings.assign', 'due' => 'findings.due', 'triage' => 'findings.triage', 'verify' => 'findings.verify'][$action];
+        if (!App::auth()->can($need)) {
+            throw new HttpException(403, __('Your role does not allow this action.'));
         }
         $me = (int) $this->user()['id'];
         $note = $request->input('note');
@@ -352,7 +354,7 @@ final class FindingController extends Controller
             $raw = $request->input('assignee');
             $assignee = $raw === 'me' ? $me : ($raw === '' ? null : (ctype_digit($raw) && strlen($raw) < 10 ? (int) $raw : -1));
             if (($assignee !== null && ($assignee < 1 || !App::fixWorkflow()->isAssignable($assignee))) || mb_strlen($note) > 500) {
-                Session::flash('danger', __('Choose an active technician or admin (and a note of up to 500 characters).'));
+                Session::flash('danger', __('Choose an active user who can work on findings (and a note of up to 500 characters).'));
                 return Response::redirect($back);
             }
         } elseif ($action === 'due') {

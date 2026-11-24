@@ -68,3 +68,24 @@ function asset(string $path): string
 {
     return App::basePath() . '/assets/' . ltrim($path, '/') . '?v=' . rawurlencode(App::version());
 }
+
+/**
+ * True when the signed-in user holds a permission (1.40), for showing or hiding actions in views. The routes check
+ * the same permission again: hiding a button is a convenience, never the protection.
+ */
+function can(string $permission): bool
+{
+    return \Sentinel\Core\App::auth()->can($permission);
+}
+
+/**
+ * The name of a user's or role's role for display (1.40): built-in role names are translated, custom ones shown as
+ * typed. Accepts a row with role_name/role_key (a user) or name/role_key (a role). The result still needs e().
+ *
+ * @param array<string,mixed> $row
+ */
+function role_label(array $row): string
+{
+    $name = (string) ($row['role_name'] ?? $row['name'] ?? '');
+    return ($row['role_key'] ?? null) !== null ? __($name) : $name;
+}

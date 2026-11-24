@@ -23,7 +23,6 @@ if (PHP_SAPI !== 'cli') {
 require dirname(__DIR__) . '/src/bootstrap.php';
 
 use Sentinel\Auth\Passwords;
-use Sentinel\Auth\Role;
 use Sentinel\Core\App;
 
 $opts = getopt('', ['username:', 'name:', 'email::']);
@@ -73,8 +72,8 @@ try {
         exit(1);
     }
     // must_change_password = false: the admin chose this password themselves.
-    $id = App::users()->create($username, $name, $email, Role::ADMIN, Passwords::hash($password), false);
-    App::audit()->log('user.created', null, 'cli', 'user', $id, ['username' => $username, 'role' => Role::ADMIN, 'via' => 'cli']);
+    $id = App::users()->create($username, $name, $email, (int) App::roles()->idForKey('admin'), Passwords::hash($password), false);
+    App::audit()->log('user.created', null, 'cli', 'user', $id, ['username' => $username, 'role' => 'Admin', 'via' => 'cli']);
     fwrite(STDOUT, "Admin '{$username}' created. Sign in to set up two-factor authentication.\n");
 } catch (\Throwable $ex) {
     fwrite(STDERR, 'Failed: ' . $ex->getMessage() . "\n");

@@ -4,12 +4,12 @@
  * triage form (technicians and admins).
  * Expects: $finding, $events, $errors, $values, $assignable, $verifiable, $guidance (meaning, fix), $currentUser.
  */
-use Sentinel\Auth\Role;
 use Sentinel\Core\Csrf;
 
 require __DIR__ . '/../partials/finding_badges.php';
-$canTriage = Role::atLeast((string) $currentUser['role'], Role::TECHNICIAN);
-$isAdmin = Role::atLeast((string) $currentUser['role'], Role::ADMIN);
+// Each action by its own permission (1.40); the routes check them again.
+$canTriage = can('findings.triage');
+$isAdmin = can('findings.due');
 $editable = $finding['status'] !== 'resolved' && (int) $finding['client_archived'] !== 1;
 $verifyResult = is_string($finding['verify_summary'] ?? null) ? (json_decode($finding['verify_summary'], true)['verify_result'] ?? null) : null;
 $values = ($values ?? []) + ['status' => '', 'note' => ''];
@@ -115,7 +115,8 @@ $eventLabels = [
                         <?php elseif (in_array($finding['verify_status'], ['queued', 'running'], true)): ?><span class="badge text-bg-info"><i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i><?= e($finding['verify_status'] === 'queued' ? __('Waiting') : __('Running')) ?></span>
                         <?php else: ?><?= e(match ($verifyResult) { 'fixed' => __('Fixed'), 'still_present' => __('Still present'), default => __('Could not finish') }) ?> <span class="text-body-secondary"><?= e(($finding['verify_finished_at'] ?? '') . ' UTC') ?></span><?php endif; ?></dd>
                 </dl>
-                <?php if ($canTriage && $editable): ?>
+                <?php if ($editable && (can('findings.assign') || can('findings.verify'))): ?>
+                <?php if (can('findings.assign')): ?>
                 <form method="post" action="<?= e(url('/findings/' . (int) $finding['id'] . '/assign')) ?>" class="mb-2">
                     <?= Csrf::field() ?>
                     <label class="form-label mb-1" for="assignee"><?= e(__('Assign to')) ?></label>
@@ -133,7 +134,8 @@ $eventLabels = [
                     <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-person-check me-1" aria-hidden="true"></i><?= e(__('Assign to me')) ?></button>
                 </form>
                 <?php endif; ?>
-                <?php if ($verifiable): ?>
+                <?php endif; ?>
+                <?php if ($verifiable && can('findings.verify')): ?>
                 <form method="post" data-confirm="<?= e(__('Recheck this finding now? Sentinel scans just this target again.')) ?>" action="<?= e(url('/findings/' . (int) $finding['id'] . '/verify')) ?>" class="d-inline">
                     <?= Csrf::field() ?>
                     <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i><?= e(__('Verify fix')) ?></button>
@@ -142,7 +144,7 @@ $eventLabels = [
                 <?php endif; ?>
                 <?php if ($isAdmin && $finding['status'] === 'open'): ?>
                 <details class="mt-2"<?= !empty($errors['due']) ? ' open' : '' ?>>
-                    <summary><?= e(__('Change the due date (admins)')) ?></summary>
+                    <summary><?= e(__('Change the due date')) ?></summary>
                     <form method="post" action="<?= e(url('/findings/' . (int) $finding['id'] . '/due')) ?>" class="mt-2">
                         <?= Csrf::field() ?>
                         <label class="form-label mb-1" for="due_date"><?= e(__('Due date (UTC)')) ?></label>

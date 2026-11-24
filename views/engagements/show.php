@@ -6,14 +6,12 @@
  * (latest per host), $findings (EngagementFindings::analyse), $externalJobs, $agentJobs, $reports, $retestOf.
  * Every value is escaped; results came from the tested hosts and are untrusted. Actions are shown only to roles allowed to use them (the routes enforce it too).
  */
-use Sentinel\Auth\Role;
 use Sentinel\Core\Csrf;
 use Sentinel\Engagements\EngagementRepository as ER;
 
 $e = $engagement;
-$role = (string) $currentUser['role'];
-$isAdmin = Role::atLeast($role, Role::ADMIN);
-$isTech = Role::atLeast($role, Role::TECHNICIAN);
+$isAdmin = can('engagements.approve'); // may approve (never their own)
+$isTech = can('engagements.run');
 $mine = (int) $e['created_by'] === (int) $currentUser['id'];
 $tz = new DateTimeZone((string) $client['timezone']);
 $local = static fn (?string $utc): string => $utc === null ? '–' : (new DateTimeImmutable($utc, new DateTimeZone('UTC')))->setTimezone($tz)->format('Y-m-d H:i');
@@ -50,7 +48,7 @@ foreach ($e['targets'] as $t) {
             <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Authorisation and approval')) ?></h2></div>
             <div class="card-body">
                 <p class="mb-2"><?= e(__('Signed by {n} ({r}) on {d}.', ['n' => $e['signer_name'], 'r' => $e['signer_role'], 'd' => $e['signed_on']])) ?>
-                    <?php if ($isTech): ?><a href="<?= e(url('/engagements/' . (int) $e['id'] . '/document')) ?>"><?= e(__('Download the signed document')) ?></a><?php endif; ?></p>
+                    <?php if ($isTech || $isAdmin): ?><a href="<?= e(url('/engagements/' . (int) $e['id'] . '/document')) ?>"><?= e(__('Download the signed document')) ?></a><?php endif; ?></p>
                 <p class="small text-body-secondary font-monospace text-break mb-2">SHA-256 <?= e($e['document_sha256']) ?></p>
                 <p class="mb-1"><?= e(__('Created by {u} at {t}.', ['u' => $e['created_by_name'] ?? '?', 't' => $local((string) $e['created_at'])])) ?></p>
                 <p class="mb-1"><?= e($e['approved_at'] !== null ? __('Approved by {u} at {t}.', ['u' => $e['approved_by_name'] ?? '?', 't' => $local((string) $e['approved_at'])]) : __('Not approved yet.')) ?></p>

@@ -239,25 +239,26 @@ final class EngagementController extends Controller
         $this->audit($request, 'engagement.created', 'engagement', $id, ['client_id' => $clientId, 'tests' => $v['tests'], 'intensity' => $v['intensity'],
             'default_passwords_confirmed' => in_array('default_creds', $v['tests'], true),
             'external' => count($external), 'internal' => count(array_filter($targets, static fn (array $t): bool => $t['kind'] === 'internal')), 'document_sha256' => $sha]);
-        // Tell the other admins: the engagement can't run until one of them approves it (1.34).
-        $admins = (int) App::db()->query("SELECT COUNT(*) FROM users WHERE is_active = 1 AND role = 'admin'")->fetchColumn();
+        // Tell the approvers: the engagement can't run until one of them approves it (1.34). Approvers other than the creator.
+        $me = (int) $this->user()['id'];
+        $approvers = count(array_filter(App::roles()->usersWith('engagements.approve'), static fn (array $u): bool => $u['id'] !== $me));
         App::alerts()->notifyUsers('engagement', 'warn', __('Engagement awaiting approval: {name}', ['name' => $v['name']]),
             __('{user} created it for {client}. A different admin must approve it before anything runs.', ['user' => (string) ($this->user()['display_name'] ?? ''), 'client' => (string) $client['name']]),
-            '/engagements/' . $id, 'admin');
-        Session::flash('success', $admins >= 2 || !\Sentinel\Auth\Role::atLeast((string) $this->user()['role'], \Sentinel\Auth\Role::ADMIN)
-            ? __('Engagement created. Another admin must approve it before anything runs; the admins were notified.')
-            : __('Engagement created. It needs a second admin to approve it, and you are the only one: add another admin under Users first.'));
+            '/engagements/' . $id, 'engagements.approve');
+        Session::flash('success', $approvers >= 1
+            ? __('Engagement created. Someone else who may approve engagements must approve it before anything runs; they were notified.')
+            : __('Engagement created. Nobody else may approve engagements yet: give a second person a role that can approve them (Users) first.'));
         return Response::redirect('/engagements/' . $id);
     }
 
     /** GET /engagements: every engagement across clients, with those awaiting the viewer's approval first (1.34). */
     public function index(Request $request): Response
     {
-        $isAdmin = \Sentinel\Auth\Role::atLeast((string) $this->user()['role'], \Sentinel\Auth\Role::ADMIN);
+        $canApprove = App::auth()->can('engagements.approve');
         return $this->page('engagements/index', __('Pen-test engagements'), [
             'engagements' => App::engagements()->all(),
-            'awaiting' => $isAdmin ? App::engagements()->awaitingApprovalBy((int) $this->user()['id']) : [],
-            'adminCount' => (int) App::db()->query("SELECT COUNT(*) FROM users WHERE is_active = 1 AND role = 'admin'")->fetchColumn(),
+            'awaiting' => $canApprove ? App::engagements()->awaitingApprovalBy((int) $this->user()['id']) : [],
+            'approverCount' => count(App::roles()->usersWith('engagements.approve')),
         ]);
     }
 

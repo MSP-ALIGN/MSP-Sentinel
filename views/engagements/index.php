@@ -15,7 +15,7 @@ $stateBadge = [
     EngagementRepository::STATE_STOPPED => ['text-bg-dark', __('Stopped')],
     EngagementRepository::STATE_CANCELLED => ['text-bg-light border', __('Cancelled')],
 ];
-$isAdmin = ($currentUser['role'] ?? '') === 'admin';
+$isAdmin = can('engagements.approve');
 ?>
 <?php if ($awaiting !== []): ?>
 <div class="card border-warning mb-3">
@@ -28,8 +28,8 @@ $isAdmin = ($currentUser['role'] ?? '') === 'admin';
     </ul>
 </div>
 <?php endif; ?>
-<?php if ($isAdmin && $adminCount < 2): ?>
-<div class="alert alert-info"><?= e(__('Engagements need a second admin to approve them, and there is only one admin.')) ?> <a href="<?= e(url('/users/new')) ?>"><?= e(__('Add another admin')) ?></a></div>
+<?php if ($isAdmin && $approverCount < 2): ?>
+<div class="alert alert-info"><?= e(__('Engagements need a second person to approve them, and you are the only one who may.')) ?> <?php if (can('users.manage')): ?><a href="<?= e(url('/users')) ?>"><?= e(__('Give another user a role that can approve engagements')) ?></a><?php endif; ?></div>
 <?php endif; ?>
 <div class="card">
     <div class="card-header d-flex flex-wrap align-items-center gap-2">

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Sentinel\Core;
 
-use Sentinel\Auth\Role;
+use Sentinel\Auth\Permissions;
 
 /**
  * Maps a method and path to a controller action and its access rules.
@@ -14,7 +14,8 @@ use Sentinel\Auth\Role;
  * - 'auth' => 'pending' : password checked, second factor still needed
  * - 'auth' => 'user'    : fully signed-in user (the default)
  * - 'passive' => true    : background request (auto-refresh); does not reset the idle sign-out timer
- * - 'role' => minimum role for 'user' routes (default: viewer)
+ * - 'perm' => the permission a 'user' route needs, or a list of which any one will do (default: none, any
+ *   signed-in user). Names come from Sentinel\Auth\Permissions (1.40; replaces the old minimum role).
  *
  * Security assumptions:
  * - The default is the most restrictive useful option: signed in plus 2FA.
@@ -33,16 +34,21 @@ final class Router
      * @param string                    $method  HTTP method (GET or POST).
      * @param string                    $pattern Path like "/users/{id}". Every {name} parameter matches digits only.
      * @param array{class-string,string} $handler [ControllerClass, method].
-     * @param array<string,mixed>       $opts    Access rules: auth, role, allow_password_change.
+     * @param array<string,mixed>       $opts    Access rules: auth, perm, allow_password_change, passive.
      */
     public function add(string $method, string $pattern, array $handler, array $opts = []): void
     {
-        $opts += ['auth' => 'user', 'role' => Role::VIEWER, 'allow_password_change' => false, 'passive' => false];
+        $opts += ['auth' => 'user', 'perm' => [], 'allow_password_change' => false, 'passive' => false];
         if (!in_array($opts['auth'], ['public', 'pending', 'user'], true)) {
             throw new \InvalidArgumentException('Unknown auth level for route ' . $pattern);
         }
-        if (!Role::isValid((string) $opts['role'])) {
-            throw new \InvalidArgumentException('Unknown role for route ' . $pattern);
+        if (isset($opts['role'])) {
+            throw new \InvalidArgumentException('Routes take a permission (perm), not a role: ' . $pattern);
+        }
+        foreach ((array) $opts['perm'] as $p) {
+            if (!is_string($p) || !Permissions::isValid($p)) {
+                throw new \InvalidArgumentException('Unknown permission for route ' . $pattern);
+            }
         }
         // Every {name} parameter (e.g. {id}, {device}) matches a positive whole number only.
         $regex = '#^' . preg_replace('/\\\\\{([a-z]{1,20})\\\\\}/', '(?P<$1>[1-9][0-9]{0,18})', preg_quote($pattern, '#')) . '$#';

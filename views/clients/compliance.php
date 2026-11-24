@@ -2,7 +2,7 @@
 /**
  * A client's Compliance page: its frameworks from MSP Align, with Sentinel's evidence per control.
  * Expects: $client, $alignOn (bool), $compliance (AlignCompliance::forClient() or null when not linked),
- * $alignClients (list, error: choices for linking), $isAdmin, $isTech, $archived. Every value is escaped.
+ * $alignClients (list, error: choices for linking), $archived. Every value is escaped.
  * Read-only towards MSP Align: control statuses are decided there.
  */
 use Sentinel\Core\Csrf;
@@ -18,10 +18,10 @@ $statusBadge = ['met' => ['success', __('Met')], 'partial' => ['warning', __('Pa
         <?php if ($linked): ?>
         <span class="small text-body-secondary"><?= e(__('From MSP Align: {name}', ['name' => (string) $client['align_client_name']])) ?></span>
         <div class="ms-auto d-flex gap-2">
-            <?php if ($isTech): ?>
+            <?php if (can('scans.run')): ?>
             <form method="post" action="<?= e(url('/clients/' . $clientId . '/compliance/refresh')) ?>"><?= Csrf::field() ?><button type="submit" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i><?= e(__('Read again')) ?></button></form>
             <?php endif; ?>
-            <?php if ($isAdmin): ?>
+            <?php if (can('integrations.link')): ?>
             <form method="post" action="<?= e(url('/clients/' . $clientId . '/compliance/unlink')) ?>" data-confirm="<?= e(__('Unlink this client from MSP Align?')) ?>"><?= Csrf::field() ?><button type="submit" class="btn btn-outline-danger btn-sm"><?= e(__('Unlink')) ?></button></form>
             <?php endif; ?>
         </div>
@@ -29,14 +29,14 @@ $statusBadge = ['met' => ['success', __('Met')], 'partial' => ['warning', __('Pa
     </div>
     <div class="card-body">
     <?php if (!$alignOn && !$linked): ?>
-        <p class="mb-0 text-body-secondary"><?= e(($currentUser['role'] ?? '') === 'admin'
+        <p class="mb-0 text-body-secondary"><?= e(can('integrations.link')
             ? __('Connect MSP Align under Administration, Integrations to see this client\'s compliance frameworks here, with Sentinel\'s findings matched to their controls.')
             : __('Compliance frameworks appear here once an admin connects MSP Align.')) ?></p>
     <?php elseif (!$linked): ?>
         <p class="small"><?= e(__('Link this client to its MSP Align client to see its compliance frameworks here.')) ?></p>
         <?php if ($alignClients['error'] !== ''): ?>
         <div class="alert alert-danger py-2 small"><?= e($alignClients['error']) ?></div>
-        <?php elseif (!$isAdmin): ?>
+        <?php elseif (!can('integrations.link')): ?>
         <p class="small text-body-secondary mb-0"><?= e(__('An admin can link it.')) ?></p>
         <?php elseif ($archived || (int) ($client['is_demo'] ?? 0) === 1): ?>
         <p class="small text-body-secondary mb-0"><?= e(__('Archived and demo clients can\'t be linked.')) ?></p>

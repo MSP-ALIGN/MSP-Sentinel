@@ -1,7 +1,7 @@
 <?php
 /**
  * A client's pen-test engagements (ClientController, section 'engagements').
- * Expects: $client, $engagements (EngagementRepository::forClient), $isTech, $archived. Every value is escaped.
+ * Expects: $client, $engagements (EngagementRepository::forClient), $archived. Every value is escaped.
  */
 use Sentinel\Engagements\EngagementRepository;
 
@@ -20,11 +20,11 @@ $stateBadge = [
 <div class="card mt-3" id="engagements">
     <div class="card-header d-flex align-items-center flex-wrap gap-2">
         <h2 class="card-title h5 mb-0"><?= e(__('Pen-test engagements')) ?></h2>
-        <?php if ($isTech && !$archived && (int) ($client['is_demo'] ?? 0) !== 1): ?>
+        <?php if (can('engagements.run') && !$archived && (int) ($client['is_demo'] ?? 0) !== 1): ?>
         <a class="btn btn-primary btn-sm ms-auto" href="<?= e(url('/clients/' . (int) $client['id'] . '/engagements/new')) ?>"><i class="bi bi-crosshair me-1" aria-hidden="true"></i><?= e(__('New engagement')) ?></a>
-        <?php elseif ($isTech && (int) ($client['is_demo'] ?? 0) === 1): ?>
+        <?php elseif (can('engagements.run') && (int) ($client['is_demo'] ?? 0) === 1): ?>
         <span class="small text-body-secondary ms-auto"><?= e(__('Demo clients are never tested, so engagements can\'t be created for them.')) ?></span>
-        <?php elseif ($isTech && $archived): ?>
+        <?php elseif (can('engagements.run') && $archived): ?>
         <span class="small text-body-secondary ms-auto"><?= e(__('Archived clients can\'t get new engagements.')) ?></span>
         <?php endif; ?>
     </div>

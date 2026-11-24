@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.39.1](https://img.shields.io/badge/version-1.39.1-ff5a1f?style=flat-square)
+![Version 1.40.0](https://img.shields.io/badge/version-1.40.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,23 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.40.0 (2026-11-24): roles and permissions
+
+- **Permissions.** Every action now needs a permission: 29 of them in 7 groups (clients and scope, scanning,
+  findings, reports, engagements, agents and devices, administration). Seeing clients and their findings needs none.
+- **Built-in roles unchanged.** Viewer, Technician and Admin keep exactly the rights they had (a test checks every
+  page and action against 1.39). Existing users keep their role (migration 0046).
+- **Your own roles.** **Administration → Roles** creates roles from the permission list (or copies a built-in one),
+  for example a "Lead technician" who may also set due dates and approve engagements, without full Admin. The
+  **Who can do what** table shows every permission and which role holds it.
+- **Never more than you hold.** You can only give permissions and roles you hold yourself, and can't change, reset
+  the password or two-factor of, or disable a more powerful user. Nobody changes their own role, built-in roles never
+  change, and at least one active user always holds every permission. Role changes are confirmed with your password,
+  audited with what was added and removed, and sign the role's users out so they apply at once.
+- **Alerts, owners and approvals follow permissions:** system, backup and feed alerts go to those who manage the
+  system or settings; findings can be given to anyone who may triage; any second person who may approve engagements
+  can approve; API tokens keep working while their creator may manage the API.
+
 ### 1.39.1 (2026-11-24): pen-test findings fixes from review
 
 - **Retests only resolve what they really tested.** A host whose retest was stopped (kill switch), timed out or failed
@@ -151,23 +168,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
   - a scan where the NTLM answer is missing no longer replaces the known Windows build with a vaguer guess;
   - the combined device page lists each port once and shows the merged agent device's SNMP issues;
   - the device list counts open findings with an index instead of scanning them per device.
-
-### 1.38.0 (2026-11-24): device OS from the network, one device per machine
-
-- **Operating system and type for agent devices.** The agent reads a Windows machine's version and build over SMB
-  without logging in (the NTLM handshake, as nmap's ntlm-info does) and Sentinel recognises other devices from their
-  service banners and web pages (Linux distributions, NAS boxes, printers, firewalls, hypervisors). Devices now show
-  their OS and are typed workstation, server or other. Windows 11 laptops in the demo data are workstations again.
-- **One device per machine.** A machine that both the agent and NinjaOne report is one row in the Devices list
-  (matched by address and name, or address alone when the agent saw no name). Its page combines NinjaOne's OS,
-  antivirus and patches with the agent's services, certificates and findings. Admins can split a wrong match or merge
-  by hand; nothing is deleted (migration 0044).
-- **Fixes to 1.37 from review:**
-  - the bulk action panel on Findings starts with no action and no decision chosen, and its note is limited to 500
-    characters; the selection count is translated and stays right after going back;
-  - **Backups are made another way** on the System page stops backup warnings and alerts;
-  - a backup run stopped by a missing or short encryption passphrase is recorded as failed;
-  - two backup runs at once both stay in the history.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

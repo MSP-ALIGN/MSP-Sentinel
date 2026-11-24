@@ -200,9 +200,9 @@ return [
         $uid = $ctx->createUser('apiadmin' . bin2hex(random_bytes(2)), 'admin', 'Apiadmin-Pass-01!');
         [, $t2] = App::apiTokens()->create('Creator test', true, [], false, false, [], 30, $uid);
         Assert::same(200, $ctx->api('GET', '/api/v1/me', $t2)->status);
-        $ctx->db->exec("UPDATE users SET role = 'technician' WHERE id = {$uid}");
+        $ctx->db->exec("UPDATE users SET role = 'technician', role_id = (SELECT id FROM roles WHERE role_key = 'technician') WHERE id = {$uid}");
         Assert::same(401, $ctx->api('GET', '/api/v1/me', $t2)->status, 'creator demoted');
-        $ctx->db->exec("UPDATE users SET role = 'admin', is_active = 0 WHERE id = {$uid}");
+        $ctx->db->exec("UPDATE users SET role = 'admin', role_id = (SELECT id FROM roles WHERE role_key = 'admin'), is_active = 0 WHERE id = {$uid}");
         Assert::same(401, $ctx->api('GET', '/api/v1/me', $t2)->status, 'creator deactivated');
 
         [, $far] = $token($ctx, [$a], false, false, ['198.51.100.0/24']);

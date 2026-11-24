@@ -35,7 +35,7 @@ final class AdminController extends Controller
         return $this->page('admin/index', __('Administration'), [
             'users' => [
                 'active' => (int) $db->query('SELECT COUNT(*) FROM users WHERE is_active = 1')->fetchColumn(),
-                'admins' => (int) $db->query("SELECT COUNT(*) FROM users WHERE is_active = 1 AND role = 'admin'")->fetchColumn(),
+                'admins' => App::roles()->completeHoldersAfter(), // users who hold every permission (1.40)
             ],
             'email' => App::settings()->get('email_enabled') === '1',
             'webhook' => App::settings()->get('webhook_enabled') === '1',

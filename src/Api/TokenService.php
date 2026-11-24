@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Sentinel\Api;
 
 use PDO;
-use Sentinel\Auth\Role;
 use Sentinel\Core\Crypto;
 use Sentinel\Core\RateLimiter;
 use Sentinel\Scope\IpRange;
@@ -83,8 +82,8 @@ final class TokenService
             return $this->fail($ip, 401, 'Missing or malformed bearer token.');
         }
         $stmt = $this->db->prepare(
-            "SELECT t.*, u.username AS creator_username, u.role AS creator_role, u.is_active AS creator_active
-             FROM api_tokens t JOIN users u ON u.id = t.created_by WHERE t.token_prefix = :p"
+            "SELECT t.*, u.username AS creator_username, u.role_id AS creator_role_id, r.role_key AS creator_role_key, u.is_active AS creator_active
+             FROM api_tokens t JOIN users u ON u.id = t.created_by LEFT JOIN roles r ON r.id = u.role_id WHERE t.token_prefix = :p"
         );
         $stmt->execute(['p' => $m[2]]);
         $t = $stmt->fetch();
@@ -96,8 +95,11 @@ final class TokenService
         if ($t['revoked_at'] !== null || strtotime($t['expires_at'] . ' UTC') <= time()) {
             return $this->fail($ip, 401, 'This token has expired or was revoked.');
         }
-        if ((int) $t['creator_active'] !== 1 || !Role::atLeast((string) $t['creator_role'], Role::ADMIN)) {
-            return $this->fail($ip, 401, 'The admin who created this token is no longer active.');
+        // The creator must still be active and still allowed to manage the API (1.40: a permission, was the admin role).
+        $creatorPerms = $t['creator_role_id'] === null ? []
+            : (new \Sentinel\Auth\RoleRepository($this->db))->permissionsOf(['id' => (int) $t['creator_role_id'], 'role_key' => $t['creator_role_key']]);
+        if ((int) $t['creator_active'] !== 1 || !in_array('api.manage', $creatorPerms, true)) {
+            return $this->fail($ip, 401, 'The person who created this token is no longer active or may no longer manage the API.');
         }
         if (!self::ipAllowed((string) $t['ip_allowlist'], $ip)) {
             // Same answer as a wrong token, so a leaked token used elsewhere doesn't reveal that it is live.
