@@ -2,6 +2,33 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.46.1 (2026-11-24): Sign in with Microsoft setup fixes from review
+
+- **No lock-out from the wrong tenant.** Once a tenant is saved, the setup script's details must come from that same
+  tenant (409 otherwise), so a run signed in to the wrong one changes nothing. Switching needs **Switch to another
+  Microsoft tenant** ticked for the code. Switching tenants, here or by hand, now also turns password sign-in back on
+  for everyone whose Microsoft link it clears.
+- **All or nothing.** Using the code and saving the details is one transaction. The code only works while the Admin
+  who made it is still an active Admin with every client. Wrong details sent with the right code no longer count
+  toward the address's rate limit.
+- **The script.** The command shown works on Windows PowerShell 5.1 (TLS 1.2 first). The script shows the tenant and
+  asks before changing it, keeps the app's other web settings, waits for a new app to be ready, accepts a Sentinel
+  address with a sub-folder, and sends the expiry date in a format every regional setting gets right.
+- Expiry reminders also come while sign-in is switched off.
+
+### 1.46.0 (2026-11-24): Sign in with Microsoft sets itself up
+
+- **No more app registration by hand.** Under **Administration → Integrations → Sign in with Microsoft**, enter your
+  password and click **Create setup code**. Run the PowerShell command Sentinel shows on any Windows PC and sign in at
+  Microsoft as an Entra admin. The script (`entra-sso-setup.ps1`) creates the app registration: single tenant,
+  Sentinel's redirect address, sign-in permissions only (granted for the organisation), the auth_time claim and a
+  12-month client secret. It sends the details to Sentinel with the one-time code, so the secret is never shown or
+  copied. Then turn the switch on.
+- **Renewals and reminders.** The card shows when the secret expires. Admins are reminded 30 and 7 days before and
+  when it has expired. Running the script again with a new code adds a new secret and removes its older ones.
+- **Safe by default.** The code lasts 30 minutes, works once, and only an Admin who sees every client can create one.
+  The script never turns sign-in on, and a new tenant still clears every user's Microsoft link.
+
 ### 1.45.3 (2026-11-24): Windows agent installer and nmap
 
 - **nmap's setup opens for you.** The free nmap installer has no silent mode (nmap.org keeps that for the paid OEM

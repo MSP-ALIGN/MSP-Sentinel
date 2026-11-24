@@ -136,6 +136,28 @@ final class AlertService
         $this->queueEmail($this->teamAddresses(), '[Sentinel] ' . $title, $title . "\n\n" . $message . "\n\n" . $this->absolute('/admin/system#backups'));
     }
 
+    /**
+     * The Sign in with Microsoft client secret made by the setup script runs out soon (1.46): tell the users who manage
+     * integrations, in-app and by email, once at 30 days, again at 7 days and once when it has expired.
+     */
+    public function ssoSecretExpiring(Settings $settings): void
+    {
+        $days = \Sentinel\Auth\SsoSetup::secretDaysLeft();
+        if ($days === null || $days > 30 || $settings->getSecret('sso_entra_secret') === '') {
+            return;
+        }
+        $stage = $settings->get('sso_entra_secret_expires') . '|' . ($days < 0 ? 'expired' : ($days <= 7 ? '7' : '30'));
+        if ($settings->get('sso_secret_warned') === $stage) {
+            return;
+        }
+        $settings->set('sso_secret_warned', $stage);
+        $date = substr($settings->get('sso_entra_secret_expires'), 0, 10);
+        $title = $days < 0 ? __('Sign in with Microsoft stopped working: its client secret expired') : __('Sign in with Microsoft: the client secret expires on {date}', ['date' => $date]);
+        $body = __('Renew it under Administration → Integrations → Sign in with Microsoft: create a setup code and run the setup script again. It adds a new secret and removes the old one. Password sign-in keeps working meanwhile.');
+        $this->notifyUsers('sso_secret', 'warn', $title, $body, '/admin/integrations#sso', 'integrations.manage');
+        $this->queueEmail($this->teamAddresses(), '[Sentinel] ' . $title, $title . "\n\n" . $body . "\n\n" . $this->absolute('/admin/integrations#sso'));
+    }
+
     /** A threat feed refresh failed: tell admins in-app (at most once a day per feed). */
     public function feedFailed(string $feed, string $message): void
     {

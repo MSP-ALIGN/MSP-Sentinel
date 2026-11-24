@@ -71,7 +71,34 @@ Lost both your phone and your recovery codes? Ask an admin to reset your two-fac
 Your team can sign in with their Microsoft 365 work account (Microsoft Entra ID). ITFlow itself can't act as a
 sign-in provider, so Sentinel signs in against the same Microsoft tenant your team already uses.
 
-**Set it up** (an Admin who sees every client, with their own password):
+**Set it up automatically** (1.46; an Admin who sees every client, with their own password):
+
+1. Set Sentinel's public address in the config file (`app.public_url`, for example `https://sentinel.msp.example`).
+2. Under **Administration → Integrations → Sign in with Microsoft**, enter your password and click **Create setup
+   code**. Sentinel shows a one-time code (valid 30 minutes, shown once) and a PowerShell command.
+3. On any Windows PC, run the command in PowerShell (no admin rights on the PC needed). It installs the Microsoft
+   Graph PowerShell authentication module for you if it is missing, and opens a Microsoft sign-in: use an Entra admin
+   who can register apps and grant consent (Application Administrator, Cloud Application Administrator or Global
+   Administrator). It shows which tenant you signed in to and asks before changing anything. Then enter the setup
+   code.
+4. The script creates the app registration **MSP Sentinel (your address)** in your tenant: single tenant,
+   Sentinel's redirect address, sign-in permissions only (openid, profile, email, granted for the organisation), the
+   optional claim **auth_time**, and a client secret valid for 12 months. It sends the IDs and the secret straight to
+   Sentinel with the code; the secret is never shown.
+5. Back in Sentinel, tick **Show "Sign in with Microsoft"** and save. Recommended: in Entra Conditional Access,
+   require MFA for this app.
+
+**Another tenant.** Once a tenant is saved, the script's details must come from that same tenant, so a run signed
+in to the wrong one (common for an MSP with several) changes nothing. To really switch tenants, tick **Switch to
+another Microsoft tenant** when creating the code: every user's Microsoft link is cleared, and password sign-in is
+turned back on for anyone who had it off, so nobody is locked out.
+
+**Renewing the secret.** The card shows when the secret expires, and Sentinel reminds admins 30 days and 7 days
+before (in-app and by email) and when it has expired, also while sign-in is switched off. Create a new setup code and run the same command: it finds the
+app it made before, adds a new secret, sends it to Sentinel, and then removes its older secrets. Password sign-in
+keeps working throughout.
+
+**Or set it up by hand:**
 
 1. Set Sentinel's public address in the config file (`app.public_url`, for example `https://sentinel.msp.example`).
 2. In the Microsoft Entra admin center, go to **App registrations → New registration**. Name it (e.g. MSP Sentinel),
@@ -80,7 +107,7 @@ sign-in provider, so Sentinel signs in against the same Microsoft tenant your te
 3. Under **Certificates & secrets**, create a client secret and copy its **Value**. From **Overview**, copy the
    **Directory (tenant) ID** and **Application (client) ID**.
 4. In Sentinel, go to **Administration → Integrations → Sign in with Microsoft**, enter the three values and tick
-   **Show "Sign in with Microsoft"**.
+   **Show "Sign in with Microsoft"**. (A secret typed in by hand has no expiry reminder.)
 5. Recommended: in Entra Conditional Access, require MFA for this app, and under the app registration's **Token
    configuration** add the optional claim **auth_time** (ID token). Sentinel skips its own code only when it can
    see that MFA happened in the last hour; without auth_time it always asks for its code (the server log says so).

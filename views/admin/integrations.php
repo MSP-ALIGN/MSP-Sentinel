@@ -262,8 +262,40 @@ $n = $ninja;
     </div>
     <div class="card-body">
         <p class="small"><?= e(__('Your team signs in with their Microsoft 365 work account. Each user links their own Microsoft account once, under My profile, while signed in with their password and Sentinel\'s code; only linked accounts can sign in, and guests from other directories never can. Roles and clients stay managed here. Sentinel\'s own code is skipped only when Microsoft confirms MFA within the last hour. Password sign-in keeps working as a fallback unless you turn it off for a user.')) ?></p>
+        <?php // Automatic setup (1.46): a one-time code, then entra-sso-setup.ps1 creates the app and sends its details here. ?>
+        <?php if ($so['secret_days'] !== null): ?>
+        <div class="alert <?= $so['secret_days'] <= 30 ? 'alert-warning' : 'alert-light' ?> small py-2" role="status">
+            <?= e($so['secret_days'] < 0 ? __('The client secret expired on {date}. Sign-in with Microsoft fails until it is renewed: create a setup code below and run the script again.', ['date' => substr($so['secret_expires'], 0, 10)])
+                : ($so['secret_days'] <= 30 ? __('The client secret expires on {date} ({n} days). Renew it: create a setup code below and run the script again.', ['date' => substr($so['secret_expires'], 0, 10), 'n' => $so['secret_days']])
+                : __('The client secret expires on {date}. Sentinel reminds admins 30 days before.', ['date' => substr($so['secret_expires'], 0, 10)]))) ?>
+        </div>
+        <?php endif; ?>
+        <?php if ($so['setup'] !== null): ?>
+        <div class="alert alert-info" role="status">
+            <p class="mb-2"><strong><?= e(__('Setup code (shown once, valid for 30 minutes):')) ?></strong> <code class="fs-6 user-select-all" data-testid="sso-setup-code"><?= e($so['setup']['code']) ?></code></p>
+            <p class="small mb-1"><?= e(__('On any Windows PC, in PowerShell, run this. Sign in at Microsoft as an Entra admin (Application Administrator or Global Administrator) when asked, then enter the setup code:')) ?></p>
+            <pre class="small mb-2 user-select-all text-wrap"><code>[Net.ServicePointManager]::SecurityProtocol = 'Tls12'; &amp; ([scriptblock]::Create((Invoke-RestMethod https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/entra-sso-setup.ps1))) -Server <?= e($so['public_url']) ?></code></pre>
+            <p class="small mb-0"><?= e(__('It installs the Microsoft Graph PowerShell module if needed, creates (or updates) the "MSP Sentinel" app registration in your tenant, grants it sign-in permissions only, adds a 12-month client secret and sends the details here. The secret is never shown. Then turn on the switch below.')) ?></p>
+        </div>
+        <?php endif; ?>
+        <form method="post" action="<?= e(url('/admin/integrations/sso/setup-code')) ?>" autocomplete="off" class="mb-3" novalidate>
+            <?= Csrf::field() ?>
+            <p class="small mb-2"><strong><?= e(__('Set up automatically')) ?></strong>: <?= e(__('Sentinel gives you a one-time code and a PowerShell command. The command creates the Entra app and sends its details back, so there is nothing to copy. Run it again to renew the secret.')) ?>
+                <?php if ($so['setup'] === null && $so['setup_pending']): ?><?= e(__('A setup code is waiting to be used; a new one replaces it.')) ?><?php endif; ?></p>
+            <div class="d-flex flex-wrap align-items-end gap-2">
+                <div><label class="form-label small mb-1" for="sso-setup-pw"><?= e(__('Your own password (to confirm)')) ?></label>
+                    <input class="form-control form-control-sm sn-w-20" type="password" id="sso-setup-pw" name="my_password" required autocomplete="current-password"></div>
+                <button class="btn btn-outline-primary btn-sm" type="submit"<?= $so['public_url'] === '' ? ' disabled' : '' ?>><i class="bi bi-magic me-1" aria-hidden="true"></i><?= e(__('Create setup code')) ?></button>
+            </div>
+            <?php if ($so['tenant'] !== ''): ?>
+            <div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="sso-setup-tenant" name="new_tenant" value="1">
+                <label class="form-check-label small" for="sso-setup-tenant"><?= e(__('Switch to another Microsoft tenant (every user\'s Microsoft link is cleared, and password sign-in is turned back on for them)')) ?></label></div>
+            <div class="form-text"><?= e(__('Without this, the script must sign in to the tenant Sentinel uses now ({tenant}), so a run in the wrong tenant changes nothing.', ['tenant' => $so['tenant']])) ?></div>
+            <?php endif; ?>
+            <?php if ($so['public_url'] === ''): ?><div class="form-text"><?= e(__('Set app.public_url in the config file first.')) ?></div><?php endif; ?>
+        </form>
         <details class="small mb-3">
-            <summary><?= e(__('How to set it up')) ?></summary>
+            <summary><?= e(__('Or set it up by hand')) ?></summary>
             <ol class="mt-2 mb-0">
                 <li><?= e(__('In the Microsoft Entra admin center: App registrations → New registration. Name it (e.g. MSP Sentinel), "Accounts in this organizational directory only".')) ?></li>
                 <li><?= e(__('Redirect URI: platform Web, address:')) ?> <code><?= e($so['redirect'] !== '' ? $so['redirect'] : __('(set app.public_url in the config file first)')) ?></code></li>

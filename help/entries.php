@@ -194,6 +194,7 @@ return [
                 'Connect other systems under Administration → Integrations. Sentinel only reads from them, except ITFlow tickets. Changing an integration\'s address clears its saved key: enter the key again for the new address.',
                 'ITFlow: every 15 minutes Sentinel adds new ITFlow clients, applies renames, and archives or restores clients archived or unarchived in ITFlow (a client you archived in Sentinel stays archived; changes show in the audit log as itflow-sync). With ticketing on, Sentinel opens, updates and closes ITFlow tickets for findings: see "ITFlow tickets in detail". On ITFlow builds with service boards, new tickets are moved to the board chosen under Integrations (by default the one named Alerts), unassigned so the board\'s own rules pick them up; on stock ITFlow they stay where ITFlow puts them.',
                 'Only some ITFlow clients: tick "Only sync ITFlow clients with this tag" under Integrations and tag those clients in ITFlow (default tag Sentinel, any case). Untagged clients are not added, and ones already here are archived (restored when the tag comes back). Tag the clients first: the first sync archives every linked client without the tag. If the tags can\'t be read, no client tag has that name, or no client has it, the sync stops and changes nothing; only client tags count. To leave one client out entirely, tick "Don\'t sync with ITFlow" on its Edit page: no renames, archives, restores, MSP Align linking by ITFlow ID or ITFlow tickets for it, and an ITFlow client of the same name is not added. Tickets already open in ITFlow are no longer followed; when the switch is turned off again, only findings from then on get tickets.',
+                'Sign in with Microsoft, set up automatically: under Integrations, enter your password and click Create setup code, then run the PowerShell command shown on any Windows PC and sign in at Microsoft as an Entra admin. The script creates the app registration (sign-in permissions only), adds a 12-month client secret and sends everything to Sentinel with the one-time code; then turn the switch on. Sentinel reminds admins 30 and 7 days before the secret expires: run the script again with a new code to renew it. A run signed in to another tenant than the saved one changes nothing, unless you ticked "Switch to another Microsoft tenant" for the code (that clears every user\'s Microsoft link and turns password sign-in back on for them).',
                 'MSP Align: connect it, then link each client on its Compliance page (see "Compliance").',
                 'NinjaOne: create an API app with the Monitoring scope and the Client credentials grant, connect it, then link each client to its NinjaOne organisation on the client\'s Devices page. Sentinel reads devices, operating systems, antivirus, BitLocker, missing Windows updates and installed software every 6 hours, and changes nothing in NinjaOne. Network devices, phones and devices waiting for approval are left out.',
                 'Breach monitoring (XposedOrNot): verify each client domain in your XposedOrNot account (verified domains are domains you have proved you own there, by a DNS record or email), then paste the API key and tick Check weekly. The free key is meant for low-volume use; paid xonAPI+ keys work the same way. Check now runs at most once an hour. See "Breach monitoring details".',
@@ -361,6 +362,20 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.46.1',
+            'date' => '2026-11-24',
+            'items' => [
+                'Sign in with Microsoft setup fixes: a run signed in to another tenant is refused unless the setup code allows switching; switching tenants turns password sign-in back on for everyone whose Microsoft link it clears; saving is all-or-nothing; the command shown works on Windows PowerShell 5.1; the script asks before changing a tenant, keeps the app\'s other web settings, and waits for a new app to be ready.',
+            ],
+        ],
+        [
+            'version' => '1.46.0',
+            'date' => '2026-11-24',
+            'items' => [
+                'Sign in with Microsoft sets itself up: Create setup code on the Integrations page, run the PowerShell command it shows, and the script creates the Entra app (sign-in permissions only, auth_time claim, 12-month secret) and sends its details to Sentinel. Nothing to copy; run it again to renew. Admins are reminded before the secret expires.',
+            ],
+        ],
         [
             'version' => '1.45.3',
             'date' => '2026-11-24',
