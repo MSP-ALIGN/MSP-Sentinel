@@ -2,6 +2,16 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.44.1 (2026-11-24): ITFlow boards fixes from review
+
+- **The Integrations page never waits on ITFlow.** The board list is read by **Test connection**, the client sync and
+  ticket runs, and kept; before, every page view asked ITFlow and could hang while it was down.
+- **A tech's work is never undone.** A ticket found again after an unclear answer is moved only while still new
+  (15 minutes), and then without unassigning it.
+- A chosen board that ITFlow no longer lists, or an ITFlow that lists no boards any more, is reported in the ticket
+  run; "Alerts" is matched ignoring spaces, and the first such board is used; ITFlow's reason for refusing to list
+  boards is shown.
+
 ### 1.44.0 (2026-11-24): ITFlow tickets on your Alerts board
 
 - **Service boards.** On ITFlow builds with board support (the MountaineerIT build's `mit_boards` API), Sentinel moves

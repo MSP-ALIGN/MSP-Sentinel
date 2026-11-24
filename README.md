@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.45.1](https://img.shields.io/badge/version-1.45.1-ff5a1f?style=flat-square)
+![Version 1.45.2](https://img.shields.io/badge/version-1.45.2-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,14 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.45.2 (2026-11-24): Windows agent installer fix
+
+- **The Windows installer runs again.** `install-agent.ps1` stopped with a parse error ("Unexpected token 'PHP'")
+  before it did anything, because one line of the php.ini it writes left a string unclosed. Nothing was installed or
+  changed by the failed run; run the same command again.
+- The test suite now checks the quoting and brackets of every PowerShell script, so a script that doesn't parse
+  can't ship again.
+
 ### 1.45.1 (2026-11-24): ITFlow tag filter fixes from review
 
 - **No mass archive.** The sync also stops, changing nothing, when no client the key can see has the tag, or when
@@ -138,16 +146,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
   that name, the sync stops and changes nothing. Needs an ITFlow with the tags API.
 - **Leave a client out.** **Don't sync with ITFlow** on a client's Edit page: the sync never renames, archives or
   restores it, and Sentinel opens no ITFlow tickets for it.
-
-### 1.44.1 (2026-11-24): ITFlow boards fixes from review
-
-- **The Integrations page never waits on ITFlow.** The board list is read by **Test connection**, the client sync and
-  ticket runs, and kept; before, every page view asked ITFlow and could hang while it was down.
-- **A tech's work is never undone.** A ticket found again after an unclear answer is moved only while still new
-  (15 minutes), and then without unassigning it.
-- A chosen board that ITFlow no longer lists, or an ITFlow that lists no boards any more, is reported in the ticket
-  run; "Alerts" is matched ignoring spaces, and the first such board is used; ITFlow's reason for refusing to list
-  boards is shown.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 
