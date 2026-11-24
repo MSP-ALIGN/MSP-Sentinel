@@ -53,8 +53,17 @@ final class AdminController extends Controller
     public function auditLog(Request $request): Response
     {
         $page = max(1, min(100000, (int) $request->query('page')));
-        $total = (int) App::db()->query('SELECT COUNT(*) FROM audit_log')->fetchColumn();
-        $stmt = App::db()->prepare('SELECT * FROM audit_log ORDER BY id DESC LIMIT :lim OFFSET :off');
+        // Text filter (1.34): action, user name or details contain it (bound, LIKE wildcards escaped).
+        $q = \Sentinel\Search\SearchService::normalise($request->query('q'));
+        $where = $q === '' ? '1 = 1' : "(action LIKE :q1 ESCAPE '!' OR username LIKE :q2 ESCAPE '!' OR details LIKE :q3 ESCAPE '!' OR target_type LIKE :q4 ESCAPE '!')";
+        $params = $q === '' ? [] : array_fill_keys(['q1', 'q2', 'q3', 'q4'], \Sentinel\Search\SearchService::like($q));
+        $count = App::db()->prepare("SELECT COUNT(*) FROM audit_log WHERE {$where}");
+        $count->execute($params);
+        $total = (int) $count->fetchColumn();
+        $stmt = App::db()->prepare("SELECT * FROM audit_log WHERE {$where} ORDER BY id DESC LIMIT :lim OFFSET :off");
+        foreach ($params as $k => $v) {
+            $stmt->bindValue($k, $v);
+        }
         $stmt->bindValue('lim', self::AUDIT_PAGE_SIZE, \PDO::PARAM_INT);
         $stmt->bindValue('off', ($page - 1) * self::AUDIT_PAGE_SIZE, \PDO::PARAM_INT);
         $stmt->execute();
@@ -62,6 +71,8 @@ final class AdminController extends Controller
             'entries' => $stmt->fetchAll(),
             'page' => $page,
             'pages' => max(1, (int) ceil($total / self::AUDIT_PAGE_SIZE)),
+            'q' => $q,
+            'total' => $total,
         ]);
     }
 

@@ -21,13 +21,13 @@ return [
         Assert::contains('img/logo.svg', $login->body);
         $u = $ctx->login('themeuser', 'Themeuser-Pass-1!');
         $page = $u->get('/');
-        Assert::contains('<html lang="en" data-bs-theme="dark">', $page->body, 'dark by default');
+        Assert::contains('<html lang="en" data-bs-theme="dark" ', $page->body, 'dark by default');
         Assert::contains('css/theme.css', $page->body);
         Assert::notContains('fonts.googleapis', $page->body, 'no outside font host');
         Assert::contains("font-src 'self'", (string) $page->header('content-security-policy'), 'CSP unchanged');
 
         $u->submit('/profile', '/profile/theme', ['ui_theme' => 'light']);
-        Assert::contains('<html lang="en" data-bs-theme="light">', $u->get('/')->body, 'light chosen');
+        Assert::contains('<html lang="en" data-bs-theme="light" ', $u->get('/')->body, 'light chosen');
         Assert::same('{"ui_theme":"light"}', (string) $ctx->db->query("SELECT details FROM audit_log WHERE action = 'user.ui_theme' ORDER BY id DESC LIMIT 1")->fetchColumn(), 'audited');
         $u->submit('/profile', '/profile/theme', ['ui_theme' => '"><script>alert(1)</script>']);
         Assert::same('light', $ctx->db->query("SELECT ui_theme FROM users WHERE username = 'themeuser'")->fetchColumn(), 'only dark or light accepted');

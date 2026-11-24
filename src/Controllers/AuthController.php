@@ -76,7 +76,7 @@ final class AuthController extends Controller
         $code = $request->input('code');
         $method = null;
         if (preg_match('/^\d{3}\s?\d{3}$/', $code)) {
-            $secret = App::crypto()->decrypt((string) $user['totp_secret_enc']);
+            $secret = App::crypto()->decryptFor('totp:' . (int) $user['id'], (string) $user['totp_secret_enc']);
             $step = Totp::verify($secret, $code, $user['totp_last_step'] === null ? null : (int) $user['totp_last_step']);
             if ($step !== null && App::users()->claimTotpStep($id, $step)) {
                 $method = 'totp';
@@ -136,7 +136,7 @@ final class AuthController extends Controller
         $db = App::db();
         $db->beginTransaction();
         try {
-            if (!App::users()->enableTotp($id, App::crypto()->encrypt($secret), $step)) {
+            if (!App::users()->enableTotp($id, App::crypto()->encryptFor('totp:' . $id, $secret), $step)) {
                 // A parallel request finished enrolment first. Use the normal 2FA prompt instead.
                 $db->rollBack();
                 return Response::redirect('/login/2fa');

@@ -50,7 +50,7 @@ return [
     'admins create tokens: shown once, stored only as a keyed hash' => function (TestContext $ctx) use ($setup): void {
         [$a] = $setup($ctx);
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
-        Assert::redirect('/admin/api', $admin->submit('/admin/api', '/admin/api/tokens', ['name' => 'MSP Align', 'clients' => [(string) $a], 'expires_days' => '90', 'ip_allowlist' => '']));
+        Assert::redirect('/admin/api', $admin->submit('/admin/api', '/admin/api/tokens', ['my_password' => 'Admin-Pass-0001!', 'name' => 'MSP Align', 'clients' => [(string) $a], 'expires_days' => '90', 'ip_allowlist' => '']));
         $page = $admin->get('/admin/api')->body;
         Assert::true((bool) preg_match('/id="new-token">(snt_[A-Za-z0-9]{12}_[A-Za-z0-9_-]{43})</', $page, $m), 'token shown');
         $plain = $m[1];
@@ -62,11 +62,11 @@ return [
         Assert::notContains(substr($plain, 18), (string) $ctx->db->query("SELECT details FROM audit_log WHERE action = 'api.token_created' ORDER BY id DESC LIMIT 1")->fetchColumn());
         Assert::same(200, $ctx->api('GET', '/api/v1/me', $plain)->status);
 
-        $admin->submit('/admin/api', '/admin/api/tokens', ['name' => '', 'all_clients' => '1', 'expires_days' => '90']);
+        $admin->submit('/admin/api', '/admin/api/tokens', ['my_password' => 'Admin-Pass-0001!', 'name' => '', 'all_clients' => '1', 'expires_days' => '90']);
         Assert::contains('Give the token a name', $admin->get('/admin/api')->body);
-        $admin->submit('/admin/api', '/admin/api/tokens', ['name' => 'Forever', 'all_clients' => '1', 'expires_days' => '5000']);
+        $admin->submit('/admin/api', '/admin/api/tokens', ['my_password' => 'Admin-Pass-0001!', 'name' => 'Forever', 'all_clients' => '1', 'expires_days' => '5000']);
         Assert::contains('Choose when the token expires', $admin->get('/admin/api')->body);
-        $admin->submit('/admin/api', '/admin/api/tokens', ['name' => 'Bad IP', 'all_clients' => '1', 'expires_days' => '30', 'ip_allowlist' => '203.0.113.7/24']);
+        $admin->submit('/admin/api', '/admin/api/tokens', ['my_password' => 'Admin-Pass-0001!', 'name' => 'Bad IP', 'all_clients' => '1', 'expires_days' => '30', 'ip_allowlist' => '203.0.113.7/24']);
         Assert::contains('is not an IP address or network', $admin->get('/admin/api')->body);
 
         if ((int) $ctx->db->query("SELECT COUNT(*) FROM users WHERE username = 'apitech'")->fetchColumn() === 0) {
@@ -222,6 +222,7 @@ return [
         }
         Assert::same(200, $ctx->api('GET', '/api/v1/me', $near)->status, 'others\' failures never block a valid token');
         Assert::same(429, $ctx->api('GET', '/api/v1/me', 'snt_AAAAAAAAAAAA_' . str_repeat('y', 43))->status, 'but more bad attempts from that address are refused');
+        Assert::same(1, (int) $ctx->db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'api.locked_out'")->fetchColumn(), 'the lockout is audited once');
         $ctx->db->exec("DELETE FROM auth_throttle");
     },
     'updated_since only reports real changes; archived clients keep real totals; events retry for longer' => function (TestContext $ctx) use ($setup, $token): void {
@@ -274,7 +275,7 @@ return [
         Assert::true((bool) preg_match('/id="new-secret">(whsec_[A-Za-z0-9_-]{43})</', $page, $m), 'secret shown once');
         $secret = $m[1];
         Assert::notContains($secret, $admin->get('/admin/api')->body);
-        Assert::true(str_starts_with((string) $ctx->db->query("SELECT value FROM settings WHERE name = 'event_webhook_secret'")->fetchColumn(), 'v1:'), 'stored encrypted');
+        Assert::true(str_starts_with((string) $ctx->db->query("SELECT value FROM settings WHERE name = 'event_webhook_secret'")->fetchColumn(), 'v2:'), 'stored encrypted');
 
         @unlink($ctx->eventLog);
         $admin->submit('/admin/api', '/admin/api/events/test', []);

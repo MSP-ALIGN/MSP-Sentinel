@@ -57,10 +57,10 @@ $n = $ninja;
         <div class="d-flex flex-wrap align-items-center gap-2">
             <form method="post" action="<?= e(url('/admin/integrations/itflow/test')) ?>"><?= Csrf::field() ?>
                 <button type="submit" class="btn btn-outline-secondary btn-sm"><i class="bi bi-plug me-1" aria-hidden="true"></i><?= e(__('Test connection')) ?></button></form>
-            <form method="post" action="<?= e(url('/admin/integrations/itflow/sync')) ?>"><?= Csrf::field() ?>
+            <form method="post" data-confirm="<?= e(__('Sync clients with ITFlow now? New ITFlow clients are added here (not scanned until authorised), renames are applied, and clients archived in ITFlow are archived here.')) ?>" action="<?= e(url('/admin/integrations/itflow/sync')) ?>"><?= Csrf::field() ?>
                 <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i><?= e(__('Sync now')) ?></button></form>
             <?php if ($it['tickets']): ?>
-            <form method="post" action="<?= e(url('/admin/integrations/itflow/tickets')) ?>"><?= Csrf::field() ?>
+            <form method="post" data-confirm="<?= e(__('Open ITFlow tickets now? Tickets are created in ITFlow for open Fail and known-exploited findings that have none yet.')) ?>" action="<?= e(url('/admin/integrations/itflow/tickets')) ?>"><?= Csrf::field() ?>
                 <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-ticket-perforated me-1" aria-hidden="true"></i><?= e(__('Open tickets now')) ?></button></form>
             <form method="post" action="<?= e(url('/admin/integrations/itflow/tickets')) ?>" data-confirm="<?= e(__('Open tickets for every current open Fail finding of linked clients (up to 20 now, the rest every 5 minutes)? Weekly Warnings tickets are not affected.')) ?>"><?= Csrf::field() ?><input type="hidden" name="existing" value="1">
                 <button type="submit" class="btn btn-outline-secondary btn-sm"><?= e(__('Also open tickets for existing Fail findings')) ?></button></form>
@@ -216,7 +216,7 @@ $n = $ninja;
             <button type="submit" class="btn btn-primary btn-sm mt-3"><?= e(__('Save')) ?></button>
         </form>
         <hr>
-        <form method="post" action="<?= e(url('/admin/integrations/breach/check')) ?>" class="d-flex flex-wrap align-items-center gap-2">
+        <form method="post" data-confirm="<?= e(__('Check for breached accounts now? Sentinel asks XposedOrNot once (it allows only a few checks a day).')) ?>" action="<?= e(url('/admin/integrations/breach/check')) ?>" class="d-flex flex-wrap align-items-center gap-2">
             <?= Csrf::field() ?>
             <button type="submit" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i><?= e(__('Check now')) ?></button>
             <?php if ($br['last_result'] !== ''): ?>

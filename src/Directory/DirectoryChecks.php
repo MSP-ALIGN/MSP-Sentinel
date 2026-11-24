@@ -16,7 +16,12 @@ namespace Sentinel\Directory;
  * The weaknesses are worked out here, so only results go back: for each check a count and up to MAX_NAMES account
  * names. No password hashes or secrets are read (the attributes asked for are listed in the searches below).
  *
- * Untrusted: every directory value (names are cleaned and shortened; numbers parsed defensively).
+ * Untrusted: every directory value (names are cleaned and shortened; numbers parsed defensively); the job's
+ * dc_ip and cert_trusted are signed by Sentinel, but a compromised Sentinel could sign other ones (1.34 audit).
+ * So the agent also remembers, per domain, the address of the domain controller it first signed in to (pinFile in its
+ * own state folder). A later job naming another address for that domain gets no password: someone at the agent
+ * deletes the pin file (dc-pins.json) when a domain controller really moves. Certificate renewals on the same
+ * address keep working through "Trust this certificate" in Sentinel.
  */
 final class DirectoryChecks
 {
@@ -33,8 +38,34 @@ final class DirectoryChecks
     private const DC_GROUPS = [516, 521];
 
     /** @param callable(string,int):array{0:string,1:int} $endpoint maps (ip, port) to where to connect (Connector) */
-    public function __construct(private $endpoint, private readonly float $timeout = 120.0)
+    public function __construct(private $endpoint, private readonly float $timeout = 120.0, private readonly ?string $pinFile = null)
     {
+    }
+
+    /** The pinned domain controller address for a domain, or '' (none yet, or no pin file). */
+    private function pinned(string $domain): string
+    {
+        if ($this->pinFile === null || !is_file($this->pinFile)) {
+            return '';
+        }
+        $pins = json_decode((string) @file_get_contents($this->pinFile), true);
+        return is_array($pins) && is_string($pins[$domain] ?? null) ? $pins[$domain] : '';
+    }
+
+    /** Remember the address after the first successful sign-in for a domain (written atomically, owner-only). */
+    private function pin(string $domain, string $ip): void
+    {
+        if ($this->pinFile === null || $this->pinned($domain) !== '') {
+            return;
+        }
+        $pins = is_file($this->pinFile) ? json_decode((string) @file_get_contents($this->pinFile), true) : [];
+        $pins = is_array($pins) ? $pins : [];
+        $pins[$domain] = $ip;
+        $tmp = $this->pinFile . '.tmp';
+        if (@file_put_contents($tmp, json_encode($pins, JSON_PRETTY_PRINT) . "\n", LOCK_EX) !== false) {
+            @chmod($tmp, 0600);
+            @rename($tmp, $this->pinFile);
+        }
     }
 
     /**
@@ -50,6 +81,13 @@ final class DirectoryChecks
         $out = ['cert' => [], 'signing_required' => null, 'bind' => 'failed', 'error' => '', 'checks' => null];
         [$ip389, $port389] = ($this->endpoint)($job['dc_ip'], 389);
         $out['signing_required'] = LdapClient::signingRequired($ip389, $port389);
+        $pinned = $this->pinned($job['domain']);
+        if ($pinned !== '' && $pinned !== $job['dc_ip']) {
+            $out['bind'] = 'failed'; // reported as an error; no certificate is read from the new address
+            $out['error'] = 'This agent signed in to ' . $job['domain'] . ' at ' . $pinned . ' before, not ' . $job['dc_ip']
+                . ': the password was not sent. If the domain controller really moved, delete dc-pins.json in the agent\'s state folder on the agent itself.';
+            return $out;
+        }
         [$ip, $port] = ($this->endpoint)($job['dc_ip'], 636);
         try {
             $c = LdapClient::connectTls($ip, $port, $this->timeout);
@@ -78,6 +116,7 @@ final class DirectoryChecks
                 return $out;
             }
             $out['bind'] = 'ok';
+            $this->pin($job['domain'], $job['dc_ip']);
             $out['checks'] = $this->read($c, self::baseDn($job['domain']), $now);
         } catch (LdapException | BerException $ex) {
             $out['error'] = $ex->getMessage();

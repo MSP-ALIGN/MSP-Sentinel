@@ -65,6 +65,19 @@ final class PageController extends Controller
         ];
     }
 
+    /**
+     * GET /search?q=: the top bar's search across clients, findings, hosts, devices, engagements and help (1.34).
+     * Every signed-in user; the query is untrusted and only ever a bound, escaped LIKE value (SearchService).
+     */
+    public function search(Request $request): Response
+    {
+        $q = \Sentinel\Search\SearchService::normalise($request->query('q'));
+        $entries = require SENTINEL_ROOT . '/help/entries.php';
+        $topics = is_array($entries) && is_array($entries['topics'] ?? null) ? $entries['topics'] : [];
+        $results = (new \Sentinel\Search\SearchService(App::db()))->search($q, $topics);
+        return $this->page('search/index', $q === '' ? __('Search') : __('Search: {q}', ['q' => $q]), ['q' => $q, 'raw' => mb_substr($request->query('q'), 0, 100), 'results' => $results]);
+    }
+
     /** GET /help */
     public function help(Request $request): Response
     {

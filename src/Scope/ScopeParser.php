@@ -54,7 +54,7 @@ final class ScopeParser
      */
     private const PUBLIC_SUFFIXES = [
         'github.io', 'gitlab.io', 'azurewebsites.net', 'cloudapp.net', 'cloudapp.azure.com', 'azureedge.net', 'trafficmanager.net',
-        'blob.core.windows.net', 'onmicrosoft.com', 'sharepoint.com', 'herokuapp.com', 'appspot.com', 'blogspot.com',
+        'core.windows.net', 'blob.core.windows.net', 'onmicrosoft.com', 'sharepoint.com', 'herokuapp.com', 'appspot.com', 'blogspot.com',
         'amazonaws.com', 'cloudfront.net', 'elasticbeanstalk.com', 'netlify.app', 'vercel.app', 'pages.dev', 'workers.dev',
         'web.app', 'firebaseapp.com', 'wordpress.com', 'myshopify.com', 'wixsite.com', 'squarespace.com', 'duckdns.org',
         'no-ip.com', 'ddns.net', 'dyndns.org', 'synology.me', 'myqnapcloud.com',
@@ -181,6 +181,11 @@ final class ScopeParser
         if (self::isPublicSuffix($host)) {
             return __('This is a shared public suffix (like co.uk or github.io), not a single organisation\'s domain. List the client\'s own names under it instead.');
         }
+        // A wildcard under a shared platform (*.s3.amazonaws.com, *.region.cloudapp.azure.com) would take in other
+        // customers' names; only exact names (the client's own app.azurewebsites.net) are accepted there (1.34 audit).
+        if ($wildcard && self::underPublicSuffix($host)) {
+            return __('A wildcard under a shared platform domain would include other organisations\' names. List the client\'s own names under it one by one instead.');
+        }
         if (!$this->allowDocumentation) {
             $lastTwo = implode('.', array_slice($labels, -2));
             if (in_array($tld, self::DOCUMENTATION_DOMAINS, true) || in_array($lastTwo, self::DOCUMENTATION_DOMAINS, true)) {
@@ -201,6 +206,17 @@ final class ScopeParser
         }
         $labels = explode('.', $host);
         return count($labels) === 2 && strlen($labels[1]) === 2 && in_array($labels[0], self::CC_SECOND_LEVELS, true);
+    }
+
+    /** True if $host is below one of the shared platform suffixes (not counting country second levels). */
+    public static function underPublicSuffix(string $host): bool
+    {
+        foreach (self::PUBLIC_SUFFIXES as $suffix) {
+            if (str_ends_with($host, '.' . $suffix)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** @return list<IpRange> */

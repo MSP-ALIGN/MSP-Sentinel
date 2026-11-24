@@ -45,7 +45,7 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                 <?php if ((int) $site['scanning_paused'] === 0 && $isTech): ?>
                     <form method="post" action="<?= e(url('/clients/' . $cid . '/sites/' . $sid . '/pause')) ?>" data-confirm="<?= e(__('Stop agent scans at this site now?')) ?>"><?= Csrf::field() ?><button class="btn btn-sm btn-outline-danger" type="submit"><i class="bi bi-stop-circle me-1" aria-hidden="true"></i><?= e(__('Pause')) ?></button></form>
                 <?php elseif ((int) $site['scanning_paused'] === 1 && $isAdmin): ?>
-                    <form method="post" action="<?= e(url('/clients/' . $cid . '/sites/' . $sid . '/resume')) ?>"><?= Csrf::field() ?><button class="btn btn-sm btn-outline-primary" type="submit"><?= e(__('Resume')) ?></button></form>
+                    <form method="post" data-confirm="<?= e(__('Resume scanning for this site? Its agent starts taking scans again.')) ?>" action="<?= e(url('/clients/' . $cid . '/sites/' . $sid . '/resume')) ?>"><?= Csrf::field() ?><button class="btn btn-sm btn-outline-primary" type="submit"><?= e(__('Resume')) ?></button></form>
                 <?php endif; ?>
                 </span>
             </div>
@@ -59,7 +59,7 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                     <i class="bi bi-patch-check text-success" aria-hidden="true"></i><span class="visually-hidden"><?= e(__('signed')) ?></span>
                     <?php if ($isAdmin): ?>
                     <details class="d-inline-block ms-2"><summary class="text-danger"><?= e(__('Revoke')) ?></summary>
-                        <form method="post" action="<?= e(url('/clients/' . $cid . '/internal-authorisations/' . (int) $s['active']['id'] . '/revoke')) ?>" class="d-flex gap-2 mt-1"><?= Csrf::field() ?>
+                        <form method="post" data-confirm="<?= e(__('Revoke this internal authorisation? The site\'s agent stops scanning straight away and nothing internal is scanned until a new one is recorded.')) ?>" action="<?= e(url('/clients/' . $cid . '/internal-authorisations/' . (int) $s['active']['id'] . '/revoke')) ?>" class="d-flex gap-2 mt-1"><?= Csrf::field() ?>
                             <input class="form-control form-control-sm" name="reason" maxlength="500" placeholder="<?= e(__('Reason (required)')) ?>" required aria-label="<?= e(__('Reason')) ?>">
                             <button class="btn btn-sm btn-danger" type="submit"><?= e(__('Revoke')) ?></button></form></details>
                     <?php endif; ?>
@@ -140,7 +140,7 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
             </form>
             <div class="d-flex flex-wrap gap-2 mb-2">
                 <form method="post" action="<?= e(url('/clients/' . $cid . '/sites/' . $sid . '/enrol')) ?>"><?= Csrf::field() ?><button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-key me-1" aria-hidden="true"></i><?= e(__('Create an enrolment code')) ?></button></form>
-                <form method="post" action="<?= e(url('/clients/' . $cid . '/sites/' . $sid . '/scan')) ?>" class="d-flex gap-2"><?= Csrf::field() ?>
+                <form method="post" data-confirm="<?= e(__('Start an internal scan of this site now? Its agent scans the authorised ranges at the site\'s pace.')) ?>" action="<?= e(url('/clients/' . $cid . '/sites/' . $sid . '/scan')) ?>" class="d-flex gap-2"><?= Csrf::field() ?>
                     <input class="form-control form-control-sm" name="reason" maxlength="300" placeholder="<?= e(__('Reason for a scan now')) ?>" aria-label="<?= e(__('Reason for a scan now')) ?>">
                     <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-radar me-1" aria-hidden="true"></i><?= e(__('Scan now')) ?></button></form>
             </div>

@@ -102,6 +102,20 @@ abstract class Controller
         return null;
     }
 
+    /**
+     * The signed-in admin confirms a powerful action with their own password (field "my_password"): another user's
+     * password or 2FA, role or access, API tokens (1.34). Throttled and audited like every re-check, so an unlocked
+     * screen or a stolen session alone can't do it.
+     *
+     * @return string|null Error message, or null when confirmed.
+     */
+    protected function confirmWithOwnPassword(Request $request): ?string
+    {
+        $me = App::db()->query('SELECT id, password_hash FROM users WHERE id = ' . (int) $this->user()['id'])->fetch() ?: [];
+        $why = $this->checkCurrentPassword($request, $me, $request->raw('my_password'));
+        return $why === null ? null : __('Enter your own password to confirm.') . ' ' . $why;
+    }
+
     /** Failed password re-checks allowed per window, and the window (seconds). */
     protected const REAUTH_MAX_FAILS = 5;
     protected const REAUTH_WINDOW = 900;

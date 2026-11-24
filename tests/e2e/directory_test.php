@@ -255,6 +255,18 @@ return [
         $runDirAgent($ctx);
         $scan($ctx, $cid, $site);
         Assert::same('', App::directory()->find($site)['last_error']);
+        // The agent remembers where it signed in: a job naming another domain controller address (a compromised
+        // Sentinel could sign one) gets no password until someone at the agent deletes dc-pins.json.
+        Assert::contains('10.90.0.5', (string) @file_get_contents($dirAgent($ctx) . '/dc-pins.json'), 'pinned after the first sign-in');
+        // (Simulated as the agent having first signed in at another address; the test network only maps .5.)
+        $pins = $dirAgent($ctx) . '/dc-pins.json';
+        $pinned = (string) file_get_contents($pins);
+        file_put_contents($pins, json_encode(['corp.example' => '10.90.0.9']));
+        $before = count($binds($ctx));
+        $scan($ctx, $cid, $site);
+        Assert::same([], array_values(array_filter(array_slice($binds($ctx), $before), static fn (array $b): bool => $b['mode'] === 'ldaps')), 'no sign-in at another address');
+        Assert::contains('at 10.90.0.9 before, not 10.90.0.5', App::directory()->find($site)['last_error']);
+        file_put_contents($pins, $pinned);
         // A changed certificate: the agent doesn't sign in, and says why.
         $ctx->db->exec("UPDATE site_directory SET cert_trusted = '" . str_repeat('ab', 32) . "' WHERE site_id = {$site}");
         $before = count($binds($ctx));

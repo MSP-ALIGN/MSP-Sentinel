@@ -46,7 +46,7 @@ try {
 }
 ?>
 <!doctype html>
-<html lang="en" data-bs-theme="<?= ($currentUser['ui_theme'] ?? 'dark') === 'light' ? 'light' : 'dark' ?>">
+<html lang="en" data-bs-theme="<?= ($currentUser['ui_theme'] ?? 'dark') === 'light' ? 'light' : 'dark' ?>" data-confirm-title="<?= e(__('Are you sure?')) ?>" data-confirm-yes="<?= e(__('Yes, continue')) ?>" data-confirm-no="<?= e(__('Cancel')) ?>">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -68,6 +68,16 @@ try {
             </ul>
             <?php $build = App::build(); if ($build !== null && $build['development']): ?>
             <span class="badge text-bg-warning ms-2" title="<?= e(__('Installed from the {b} branch at commit {c}: newest changes, not a release. Use it for testing, not for production.', ['b' => $build['branch'], 'c' => $build['commit']])) ?>"><i class="bi bi-cone-striped" aria-hidden="true"></i> <?= e(__('Development build')) ?> · <?= e($build['branch']) ?></span>
+            <?php endif; ?>
+            <?php if ($currentUser !== null): ?>
+            <form class="d-none d-md-flex ms-3 flex-grow-1 sn-search" role="search" method="get" action="<?= e(url('/search')) ?>" style="max-width: 32rem">
+                <label class="visually-hidden" for="sn-search-q"><?= e(__('Search')) ?></label>
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text"><i class="bi bi-search" aria-hidden="true"></i></span>
+                    <input class="form-control" type="search" id="sn-search-q" name="q" maxlength="100" placeholder="<?= e(__('Search clients, findings, CVEs, hosts, devices…')) ?>" value="<?= e((string) ($searchQuery ?? '')) ?>" autocomplete="off">
+                </div>
+            </form>
+            <a class="nav-link d-md-none ms-2" href="<?= e(url('/search')) ?>" aria-label="<?= e(__('Search')) ?>"><i class="bi bi-search" aria-hidden="true"></i></a>
             <?php endif; ?>
             <ul class="navbar-nav ms-auto">
                 <?php if ($currentUser !== null): ?>

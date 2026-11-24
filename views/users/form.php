@@ -56,6 +56,12 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
         </div>
         <?php if ($isSelf): ?>
         <p class="form-text"><?= e(__('You cannot change your own role or disable your own account.')) ?></p>
+        <?php else: ?>
+        <div class="mb-3">
+            <label for="my_password" class="form-label"><?= e(__('Your own password (only needed when changing the role or access)')) ?></label>
+            <input type="password" class="form-control<?= $invalid('my_password') ?>" id="my_password" name="my_password" autocomplete="current-password">
+            <?php $field = 'my_password'; require __DIR__ . '/../partials/field_error.php'; ?>
+        </div>
         <?php endif; ?>
         <?php else: ?>
         <div class="mb-3">
@@ -78,12 +84,14 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
 <div class="col-lg-5">
     <div class="card mb-3">
         <div class="card-header"><h2 class="card-title h6 mb-0"><?= e(__('Reset password')) ?></h2></div>
-        <form method="post" action="<?= e(url('/users/' . (int) $target['id'] . '/password')) ?>" novalidate>
+        <form method="post" data-confirm="<?= e(__('Set a temporary password for this user? Their current password stops working and they must change it at the next sign-in.')) ?>" action="<?= e(url('/users/' . (int) $target['id'] . '/password')) ?>" novalidate>
         <div class="card-body">
             <?= Csrf::field() ?>
             <label for="reset_password" class="form-label"><?= e(__('New temporary password')) ?></label>
             <input type="password" class="form-control" id="reset_password" name="password" required autocomplete="new-password" minlength="<?= e(Passwords::MIN_LENGTH) ?>">
             <div class="form-text"><?= e(__('Signs the user out everywhere. They must change it at next sign-in.')) ?></div>
+            <label for="reset_password_mine" class="form-label small mt-2"><?= e(__('Your own password (to confirm)')) ?></label>
+            <input type="password" class="form-control form-control-sm" id="reset_password_mine" name="my_password" required autocomplete="current-password">
         </div>
         <div class="card-footer"><button type="submit" class="btn btn-warning btn-sm"><?= e(__('Set temporary password')) ?></button></div>
         </form>
@@ -98,6 +106,8 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
                 <label for="reset_2fa_password" class="form-label small"><?= e(__('New temporary password (required)')) ?></label>
                 <input type="password" class="form-control form-control-sm mb-2" id="reset_2fa_password" name="password" required autocomplete="new-password" minlength="<?= e(Passwords::MIN_LENGTH) ?>">
                 <div class="form-text mb-2"><?= e(__('The password is replaced too, so nobody who knows the old one can set up 2FA in the user\'s place. Give it to the user directly.')) ?></div>
+                <label for="reset_2fa_mine" class="form-label small "><?= e(__('Your own password (to confirm)')) ?></label>
+            <input type="password" class="form-control form-control-sm" id="reset_2fa_mine" name="my_password" required autocomplete="current-password"><div class="mb-2"></div>
                 <button type="submit" class="btn btn-outline-danger btn-sm"><?= e(__('Reset two-factor authentication')) ?></button>
             </form>
             <?php endif; ?>

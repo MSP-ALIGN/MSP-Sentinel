@@ -64,6 +64,40 @@ return [
         Assert::same(0, $code, $out);
         Assert::contains('file(s) verified', $out);
     },
+    'a tampered database dump cannot run client commands (shell, source)' => function (TestContext $ctx): void {
+        $root = dirname(__DIR__, 2);
+        $b = new \Sentinel\System\Backup(\Sentinel\Core\App::config(), $root, \Sentinel\Core\App::version());
+        $refuse = new ReflectionMethod($b, 'refuseClientCommands');
+        $marker = sys_get_temp_dir() . '/sentinel-shell-' . bin2hex(random_bytes(4));
+        foreach (["SELECT 1;\n\\! touch {$marker}\n", "SELECT 1;\nsystem touch {$marker}\n", "  \\. /etc/passwd\n"] as $sql) {
+            $f = tempnam(sys_get_temp_dir(), 'dump');
+            file_put_contents($f, $sql);
+            $refused = false;
+            try {
+                $refuse->invoke($b, $f);
+            } catch (\RuntimeException $e) {
+                $refused = str_contains($e->getMessage(), 'client commands');
+            }
+            unlink($f);
+            Assert::true($refused, 'refused: ' . trim($sql));
+        }
+        // An ordinary dump (comments, SET, INSERT with backslashes in strings) is fine.
+        $f = tempnam(sys_get_temp_dir(), 'dump');
+        file_put_contents($f, "/*M!999999\\- enable the sandbox mode */\n/*!40101 SET NAMES utf8mb4 */;\nINSERT INTO t VALUES ('a\\\\b','\\! not a command');\n");
+        $refuse->invoke($b, $f);
+        // Even past the check, the client runs with --binary-mode (client commands off).
+        $import = new ReflectionMethod($b, 'import');
+        file_put_contents($f, "SELECT 1; \\! touch {$marker}\n");
+        try {
+            $import->invoke($b, $f);
+        } catch (\RuntimeException) {
+            // a syntax error is fine; running the shell is not
+        }
+        unlink($f);
+        Assert::true(!file_exists($marker), 'no shell command ran');
+        $local = (new ReflectionClassConstant($b, 'LOCAL_ONLY_CONFIG'))->getValue();
+        Assert::true(in_array(['scanner', 'nmap_path'], $local, true) && in_array(['web_update', 'state_dir'], $local, true), 'programs and folders stay local');
+    },
     'a backup can never run code or write through links' => function (TestContext $ctx) use ($dir): void {
         $d = $dir() . '-evil';
         array_map('unlink', glob($d . '/*') ?: []);

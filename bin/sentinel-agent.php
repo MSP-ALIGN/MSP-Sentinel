@@ -173,7 +173,7 @@ switch ($command) {
         $runner = new Runner($http, new JobVerifier((string) $c['server_public_key'], (int) $c['agent_id'], (int) $c['site_id'], (int) $c['client_id']), new State((string) ($c['state_file'] ?? dirname($configFile) . '/state.json')),
             new NmapRunner((string) ($c['nmap_path'] ?? $platform->nmapPath())), new TlsChecker($connector), new HttpProbe($connector), $say,
             $platform, new ProtocolProbes($connector), $key, $credentials,
-            new DirectoryChecks(static fn (string $ip, int $port): array => $connector->endpoint($ip, $port)),
+            new DirectoryChecks(static fn (string $ip, int $port): array => $connector->endpoint($ip, $port), 120.0, $stateDir . '/dc-pins.json'),
             // Test mode: listen on 127.0.0.1 and high ports, without joining the multicast group (no ports given: don't listen).
             // Windows: no listener (the system owns UDP 137 and 5355).
             !$platform->namesListener() ? null : ($testMode ? (is_array($c['testing']['names'] ?? null)

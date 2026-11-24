@@ -40,6 +40,30 @@ return [
         $bytes = random_bytes(20);
         Assert::same($bytes, Totp::base32Decode(Totp::base32Encode($bytes)));
     },
+    'Crypto v2 values are bound to their place (setting or user)' => function (TestContext $ctx): void {
+        $crypto = new Crypto(random_bytes(32));
+        $enc = $crypto->encryptFor('setting:smtp_password', 'pw');
+        Assert::true(str_starts_with($enc, 'v2:'), 'v2 format');
+        Assert::same('pw', $crypto->decryptFor('setting:smtp_password', $enc));
+        foreach (['setting:itflow_api_key', 'totp:1', ''] as $other) {
+            $threw = false;
+            try {
+                $crypto->decryptFor($other, $enc);
+            } catch (RuntimeException) {
+                $threw = true;
+            }
+            Assert::true($threw, 'moved to ' . $other . ': refused');
+        }
+        $legacy = $crypto->encrypt('old');
+        $threw = false;
+        try {
+            $crypto->decryptFor('setting:smtp_password', $legacy);
+        } catch (RuntimeException) {
+            $threw = true;
+        }
+        Assert::true($threw, 'an unbound v1 value is refused unless allowed');
+        Assert::same('old', $crypto->decryptFor('setting:smtp_password', $legacy, true), 'the migration may read v1');
+    },
     'Crypto round trip and tamper detection' => function (TestContext $ctx): void {
         $crypto = new Crypto(random_bytes(32));
         $enc = $crypto->encrypt('secret-value');

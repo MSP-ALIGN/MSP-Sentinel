@@ -14,7 +14,7 @@ use Sentinel\Findings\FindingRepository;
 require __DIR__ . '/../partials/finding_badges.php';
 $q = static fn (array $over): array => array_filter(array_merge(['client' => $filters['client'] ?: null, 'status' => $filters['status'] === '' ? 'all' : $filters['status'],
     'severity' => $filters['severity'] ?: null, 'type' => $filters['type'] ?: null, 'assignee' => $filters['assignee'] ?: null, 'due' => $filters['due'] ?: null, 'source' => $filters['source'] ?: null,
-    'view' => $grouped ? null : 'flat', 'group' => $filters['group'] ?: null], $over), static fn ($v) => $v !== null && $v !== '');
+    'view' => $grouped ? null : 'flat', 'group' => $filters['group'] ?: null, 'q' => $filters['q'] ?: null], $over), static fn ($v) => $v !== null && $v !== '');
 $canAct = in_array((string) ($currentUser['role'] ?? ''), [Role::ADMIN, Role::TECHNICIAN], true);
 $isAdmin = (string) ($currentUser['role'] ?? '') === Role::ADMIN;
 $returnTo = '/findings' . (($qs = http_build_query($q([]))) !== '' ? '?' . $qs : '');
@@ -53,6 +53,10 @@ $flatRow = static function (array $f) use ($findingSeverityBadge, $findingStatus
 <div class="card">
     <div class="card-header">
         <form method="get" action="<?= e(url('/findings')) ?>" class="row g-2 align-items-end">
+            <div class="col-12 col-md-6">
+                <label class="form-label small mb-0" for="f-q"><?= e(__('Contains')) ?></label>
+                <input class="form-control form-control-sm" type="search" id="f-q" name="q" maxlength="100" value="<?= e($filters['q']) ?>" placeholder="<?= e(__('Title, target or CVE')) ?>">
+            </div>
             <div class="col-6 col-md-3">
                 <label class="form-label small mb-0" for="f-client"><?= e(__('Client')) ?></label>
                 <select class="form-select form-select-sm" id="f-client" name="client">
@@ -174,7 +178,7 @@ $flatRow = static function (array $f) use ($findingSeverityBadge, $findingStatus
                                 <div class="col-sm-5"><label class="form-label small mb-0" for="ban-<?= e($g['group_key']) ?>"><?= e(__('Note (optional)')) ?></label><input class="form-control form-control-sm" id="ban-<?= e($g['group_key']) ?>" name="note" maxlength="500"></div>
                                 <div class="col-sm-3"><button class="btn btn-sm btn-outline-primary w-100" type="submit"><?= e(__('Assign all')) ?></button></div>
                             </form>
-                            <form method="post" action="<?= e(url('/findings/bulk')) ?>" class="row g-1 align-items-end mb-2"><?= $bulkHidden('triage') ?>
+                            <form method="post" data-confirm="<?= e(__('Apply this decision to all {n} targets in this group?', ['n' => count($members)])) ?>" action="<?= e(url('/findings/bulk')) ?>" class="row g-1 align-items-end mb-2"><?= $bulkHidden('triage') ?>
                                 <div class="col-sm-4"><label class="form-label small mb-0" for="bt-<?= e($g['group_key']) ?>"><?= e(__('Decision')) ?></label>
                                     <select class="form-select form-select-sm" id="bt-<?= e($g['group_key']) ?>" name="status">
                                         <option value="accepted"><?= e(__('Accept risk')) ?></option><option value="false_positive"><?= e(__('False positive')) ?></option><option value="open"><?= e(__('Reopen')) ?></option>
@@ -183,14 +187,14 @@ $flatRow = static function (array $f) use ($findingSeverityBadge, $findingStatus
                                 <div class="col-sm-3"><button class="btn btn-sm btn-outline-primary w-100" type="submit"><?= e(__('Apply to all')) ?></button></div>
                             </form>
                             <?php if ($isAdmin): ?>
-                            <form method="post" action="<?= e(url('/findings/bulk')) ?>" class="row g-1 align-items-end mb-2"><?= $bulkHidden('due') ?>
+                            <form method="post" data-confirm="<?= e(__('Set this due date for all {n} targets in this group?', ['n' => count($members)])) ?>" action="<?= e(url('/findings/bulk')) ?>" class="row g-1 align-items-end mb-2"><?= $bulkHidden('due') ?>
                                 <div class="col-sm-4"><label class="form-label small mb-0" for="bd-<?= e($g['group_key']) ?>"><?= e(__('Due date')) ?></label><input class="form-control form-control-sm" type="date" id="bd-<?= e($g['group_key']) ?>" name="due_date">
                                     <div class="form-check small"><input class="form-check-input" type="checkbox" id="bdr-<?= e($g['group_key']) ?>" name="reset" value="1"><label class="form-check-label" for="bdr-<?= e($g['group_key']) ?>"><?= e(__('Follow the policy again')) ?></label></div></div>
                                 <div class="col-sm-5"><label class="form-label small mb-0" for="bdn-<?= e($g['group_key']) ?>"><?= e(__('Reason (required)')) ?></label><input class="form-control form-control-sm" id="bdn-<?= e($g['group_key']) ?>" name="note" maxlength="500" required></div>
                                 <div class="col-sm-3"><button class="btn btn-sm btn-outline-primary w-100" type="submit"><?= e(__('Set due date')) ?></button></div>
                             </form>
                             <?php endif; ?>
-                            <form method="post" action="<?= e(url('/findings/bulk')) ?>"><?= $bulkHidden('verify') ?>
+                            <form method="post" data-confirm="<?= e(__('Recheck all {n} targets in this group now? Each one is scanned again on its own.', ['n' => count($members)])) ?>" action="<?= e(url('/findings/bulk')) ?>"><?= $bulkHidden('verify') ?>
                                 <button class="btn btn-sm btn-outline-secondary" type="submit"><i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i><?= e(__('Verify fix on all')) ?></button>
                                 <span class="small text-body-secondary ms-1"><?= e(__('Each target is rechecked on its own (at most 10 waiting per client).')) ?></span>
                             </form>

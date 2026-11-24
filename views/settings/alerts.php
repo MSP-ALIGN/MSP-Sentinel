@@ -70,8 +70,8 @@ $statusBadge = ['sent' => 'text-bg-success', 'pending' => 'text-bg-secondary', '
     </form>
     <div class="card-body border-top">
         <div class="d-flex flex-wrap gap-2 mb-3">
-            <form method="post" action="<?= e(url('/admin/alerts/test')) ?>"><?= Csrf::field() ?><input type="hidden" name="channel" value="email"><button type="submit" class="btn btn-outline-secondary btn-sm"><?= e(__('Send test email to me')) ?></button></form>
-            <form method="post" action="<?= e(url('/admin/alerts/test')) ?>"><?= Csrf::field() ?><input type="hidden" name="channel" value="webhook"><button type="submit" class="btn btn-outline-secondary btn-sm"><?= e(__('Send test webhook message')) ?></button></form>
+            <form method="post" data-confirm="<?= e(__('Send a test email to your address now?')) ?>" action="<?= e(url('/admin/alerts/test')) ?>"><?= Csrf::field() ?><input type="hidden" name="channel" value="email"><button type="submit" class="btn btn-outline-secondary btn-sm"><?= e(__('Send test email to me')) ?></button></form>
+            <form method="post" data-confirm="<?= e(__('Send a test message to the alert webhook (Teams, Slack) now?')) ?>" action="<?= e(url('/admin/alerts/test')) ?>"><?= Csrf::field() ?><input type="hidden" name="channel" value="webhook"><button type="submit" class="btn btn-outline-secondary btn-sm"><?= e(__('Send test webhook message')) ?></button></form>
         </div>
         <?php if ($a['recent'] !== []): ?>
         <h3 class="h6"><?= e(__('Recent deliveries')) ?></h3>

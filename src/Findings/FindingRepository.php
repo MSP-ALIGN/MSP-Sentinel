@@ -171,6 +171,13 @@ final class FindingRepository
         } elseif (($f['due'] ?? '') === 'soon') {
             $where[] = "f.status = 'open' AND f.due_at >= UTC_TIMESTAMP() AND f.due_at < UTC_TIMESTAMP() + INTERVAL " . FixWorkflow::DUE_SOON_DAYS . ' DAY';
         }
+        // Text (1.34): title, target or CVE contains it (bound, LIKE wildcards escaped).
+        $q = \Sentinel\Search\SearchService::normalise((string) ($f['q'] ?? ''));
+        if ($q !== '') {
+            $where[] = "(f.title LIKE :q1 ESCAPE '!' OR f.target LIKE :q2 ESCAPE '!' OR f.cve_id LIKE :q3 ESCAPE '!')";
+            $like = \Sentinel\Search\SearchService::like($q);
+            $params += ['q1' => $like, 'q2' => $like, 'q3' => $like];
+        }
         // One group (a "show all" link from the grouped list): 40 hex characters, compared as a bound value.
         if (preg_match('/^[0-9a-f]{40}$/', (string) ($f['group'] ?? '')) === 1) {
             $where[] = self::GROUP_KEY_SQL . ' = :group';

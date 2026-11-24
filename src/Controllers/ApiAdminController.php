@@ -60,6 +60,9 @@ final class ApiAdminController extends Controller
         $clientIds = array_values(array_unique(array_map('intval', array_filter($request->postList('clients'), 'ctype_digit'))));
         $days = (int) $request->input('expires_days');
         $errors = [];
+        if (($why = $this->confirmWithOwnPassword($request)) !== null) {
+            $errors[] = $why; // a token can act as this admin for up to a year
+        }
         if ($name === '' || mb_strlen($name) > 100 || !mb_check_encoding($name, 'UTF-8') || preg_match('/[\x00-\x1F\x7F]/u', $name)) {
             $errors[] = __('Give the token a name (up to 100 characters), for example "MSP Align".');
         }

@@ -54,6 +54,7 @@ final class FindingController extends Controller
             'due' => in_array($request->query('due'), ['overdue', 'soon'], true) ? $request->query('due') : '',
             'source' => in_array($request->query('source'), FindingRepository::SOURCES, true) ? $request->query('source') : '',
             'group' => preg_match('/^[0-9a-f]{40}$/', $request->query('group')) === 1 ? $request->query('group') : '',
+            'q' => \Sentinel\Search\SearchService::normalise($request->query('q')),
         ];
         // Grouped by issue unless asked for one row per target (or showing one whole group).
         $grouped = $request->query('view') !== 'flat' && $filters['group'] === '';
@@ -211,7 +212,9 @@ final class FindingController extends Controller
         if ($result !== null) {
             Session::flash('warning', $result);
         } else {
-            Session::flash('success', __('Recheck queued. It runs within a minute (after any scan already running), and the result appears in the history.'));
+            Session::flash('success', \Sentinel\Auth\Role::atLeast((string) ($this->user()['role'] ?? ''), \Sentinel\Auth\Role::ADMIN)
+                ? __('Recheck queued. It runs within a minute (after any scan already running), and the result appears in the history.')
+                : __('Recheck queued. It runs in the client\'s scan window (now, if the window is open), and the result appears in the history.'));
         }
         return Response::redirect('/findings/' . $id);
     }
@@ -255,7 +258,9 @@ final class FindingController extends Controller
             $names = array_values(array_filter(explode(',', (string) $stmt->fetchColumn())));
             $payload = ['finding_id' => $id, 'ips' => [$target['ip']], 'hostnames' => [], 'ports' => [$target['port']], 'names' => [$target['ip'] => array_slice($names, 0, 20)]];
         }
-        $jobId = App::scans()->queue($clientId, 'manual', (int) $this->user()['id'], true, __('Verify fix for finding #{id}', ['id' => $id]), $payload, 'verify');
+        // Outside the client's scan window only for admins (as for manual scans); a technician's recheck waits for the window.
+        $outside = \Sentinel\Auth\Role::atLeast((string) ($this->user()['role'] ?? ''), \Sentinel\Auth\Role::ADMIN);
+        $jobId = App::scans()->queue($clientId, 'manual', (int) $this->user()['id'], $outside, __('Verify fix for finding #{id}', ['id' => $id]), $payload, 'verify');
         $db->prepare('UPDATE findings SET verify_requested_at = UTC_TIMESTAMP(), verify_job_id = :j WHERE id = :id')->execute(['j' => $jobId, 'id' => $id]);
         $db->prepare("INSERT INTO finding_events (finding_id, event, user_id, note, created_at) VALUES (:f, 'verify_requested', :u, :n, UTC_TIMESTAMP())")
             ->execute(['f' => $id, 'u' => (int) $this->user()['id'], 'n' => $target['kind'] === 'email' ? $target['domain'] : $target['ip'] . ' port ' . $target['port']]);

@@ -399,23 +399,29 @@ if [ "$auto_updates" -eq 1 ]; then
   run systemctl enable --now unattended-upgrades
 fi
 
+# An existing passphrase file from before 1.34 (0640 root:sentinel) was readable by the PHP-FPM pool: owner-only now.
+if [ -f /etc/msp-sentinel/backup.env ] && [ "$dry" -ne 1 ]; then
+  chown sentinel:sentinel /etc/msp-sentinel/backup.env && chmod 0600 /etc/msp-sentinel/backup.env
+fi
+
 if [ -n "$backup_pass" ]; then
   say "Encrypted backups"
   if [ -f /etc/msp-sentinel/backup.env ]; then
     echo "  Note: replacing the existing backup passphrase. Older backups still need the OLD passphrase: keep it."
   fi
   if [ "$dry" -eq 1 ]; then
-    echo "  [dry-run] write /etc/msp-sentinel/backup.env (mode 0640, root:sentinel) with the passphrase"
+    echo "  [dry-run] write /etc/msp-sentinel/backup.env (mode 0600, sentinel:sentinel) with the passphrase"
   else
     # POSIX single quotes (each ' becomes '\''), because the cron job sources this file with sh (dash), which
-    # does not understand bash's $'...' quoting. Readable by root and the backup job only. Never printed.
+    # does not understand bash's $'...' quoting. Readable by root and the backup job (user sentinel) only: not by the
+    # PHP-FPM pool, which shares the sentinel group (1.34 audit). Never printed.
     q="'$(printf '%s' "$backup_pass" | sed "s/'/'\\\\''/g")'"
     { echo '# Written by the MSP Sentinel installer: nightly backups are encrypted with this passphrase. Keep a copy in your vault.'
       echo 'export SENTINEL_BACKUP_ENCRYPT=1'
       printf 'export SENTINEL_BACKUP_PASSPHRASE=%s\n' "$q"; } > /etc/msp-sentinel/backup.env.tmp
     unset q
-    chown root:sentinel /etc/msp-sentinel/backup.env.tmp
-    chmod 0640 /etc/msp-sentinel/backup.env.tmp
+    chown sentinel:sentinel /etc/msp-sentinel/backup.env.tmp
+    chmod 0600 /etc/msp-sentinel/backup.env.tmp
     # Self-test: the file must give back exactly this passphrase under sh (through the environment, not argv).
     SENTINEL_PP_EXPECT="$backup_pass" sh -c '. /etc/msp-sentinel/backup.env.tmp; [ "$SENTINEL_BACKUP_PASSPHRASE" = "$SENTINEL_PP_EXPECT" ]' \
       || { rm -f /etc/msp-sentinel/backup.env.tmp; die "Could not store the backup passphrase safely; backups were left unencrypted."; }

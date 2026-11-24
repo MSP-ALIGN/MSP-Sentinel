@@ -128,7 +128,7 @@ $eventLabels = [
                 </form>
                 <?php endif; ?>
                 <?php if ($verifiable): ?>
-                <form method="post" action="<?= e(url('/findings/' . (int) $finding['id'] . '/verify')) ?>" class="d-inline">
+                <form method="post" data-confirm="<?= e(__('Recheck this finding now? Sentinel scans just this target again.')) ?>" action="<?= e(url('/findings/' . (int) $finding['id'] . '/verify')) ?>" class="d-inline">
                     <?= Csrf::field() ?>
                     <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i><?= e(__('Verify fix')) ?></button>
                 </form>

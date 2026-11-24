@@ -221,6 +221,13 @@ final class IntegrationsController extends Controller
             return $back;
         }
         $changed = [];
+        // A saved key never follows a new address (see saveItflow).
+        $alignDropped = $s->get('mspalign_url') !== $url && $s->getSecret('mspalign_api_key') !== '' && trim($request->raw('api_key')) === '';
+        if ($alignDropped) {
+            $s->setSecret('mspalign_api_key', '');
+            $changed['mspalign_api_key'] = 'cleared (address changed)';
+            Session::flash('warning', __('The MSP Align address changed, so the saved API key was removed. Enter the key again for the new address.'));
+        }
         foreach (['mspalign_url' => $url, 'mspalign_enabled' => $enabled ? '1' : '0'] as $key => $value) {
             if ($s->get($key) !== $value) {
                 $s->set($key, $value);
@@ -293,6 +300,13 @@ final class IntegrationsController extends Controller
             return $back;
         }
         $changed = [];
+        // A saved key never follows a new address: a changed address needs the key entered again (so a typo, a hijacked
+        // session or a rogue admin can't send the stored key to another server).
+        $keyDropped = $s->get('itflow_url') !== $url && $s->getSecret('itflow_api_key') !== '' && trim($request->raw('api_key')) === '';
+        if ($keyDropped) {
+            $s->setSecret('itflow_api_key', '');
+            $changed['itflow_api_key'] = 'cleared (address changed)';
+        }
         $tickets = $request->input('tickets') === '1';
         if ($tickets && $s->get('itflow_tickets_enabled') !== '1') {
             $s->set('itflow_tickets_since', gmdate('Y-m-d H:i:s')); // only findings from now on (no flood when turning it on)
@@ -319,6 +333,9 @@ final class IntegrationsController extends Controller
         if ($changed !== []) {
             $s->set('itflow_test_result', '');
             $this->audit($request, 'settings.itflow_updated', null, null, ['changed' => $changed]);
+        }
+        if ($keyDropped) {
+            Session::flash('warning', __('The ITFlow address changed, so the saved API key was removed. Enter the key again for the new address.'));
         }
         Session::flash('success', $enabled ? __('ITFlow settings saved. Clients sync within 15 minutes, or use Sync now.') : __('ITFlow settings saved.'));
         return $back;

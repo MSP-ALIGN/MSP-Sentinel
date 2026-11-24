@@ -9,7 +9,8 @@ $labels = Role::labels();
         <a href="<?= e(url('/users/new')) ?>" class="btn btn-primary btn-sm ms-auto"><i class="bi bi-person-plus me-1" aria-hidden="true"></i><?= e(__('Add user')) ?></a>
     </div>
     <div class="card-body p-0 table-responsive">
-        <table class="table table-hover align-middle mb-0">
+        <div class="p-2"><div class="d-flex align-items-center gap-2 mb-2"><label class="visually-hidden" for="users-filter"><?= e(__('Filter this list')) ?></label><input class="form-control form-control-sm" style="max-width: 20rem" type="search" id="users-filter" maxlength="100" data-filter-list="#users-table" data-filter-count="#users-filter-count" placeholder="<?= e(__('Filter users…')) ?>"><span class="small text-body-secondary" id="users-filter-count" aria-live="polite"></span></div></div>
+        <table class="table table-hover align-middle mb-0" id="users-table">
             <thead>
             <tr>
                 <th scope="col"><?= e(__('Username')) ?></th>

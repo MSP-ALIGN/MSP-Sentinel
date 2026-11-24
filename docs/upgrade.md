@@ -34,6 +34,11 @@ How it works, and why it is safe:
   user, could at worst start an unplanned update no more than four times an hour; they could not run anything
   else as root.
 
+**What gets installed.** A server that follows a branch installs whatever that branch holds when the update runs:
+branch code is not signed. The **Update now** card shows the installed commit and the newest commit seen at the last
+check; if in doubt, look that commit up on GitHub before you click. For client work, a server installed from a signed
+release download (below) is the more conservative choice.
+
 Servers installed before 1.12.0 get it with their next `sudo msp-sentinel-update`. Servers installed from a release
 download (below) don't have it: update those on the server.
 

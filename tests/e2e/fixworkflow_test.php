@@ -177,7 +177,7 @@ return [
         file_put_contents($ctx->nmapLog, '');
         Assert::redirect('/findings/' . $id, $tech->submit('/findings/' . $id, '/findings/' . $id . '/verify', []));
         $job = $ctx->db->query("SELECT id, job_type, outside_window, payload FROM scan_jobs WHERE client_id = {$cid} ORDER BY id DESC LIMIT 1")->fetch();
-        Assert::same(['verify', 1], [$job['job_type'], (int) $job['outside_window']]);
+        Assert::same(['verify', 0], [$job['job_type'], (int) $job['outside_window']], 'a technician\'s recheck waits for the scan window');
         Assert::same(null, App::scans()->openJob($cid), 'a verify job never blocks scans');
         // Second request within 10 minutes is refused.
         $tech->submit('/findings/' . $id, '/findings/' . $id . '/verify', []);
@@ -201,6 +201,14 @@ return [
         Assert::same('resolved', (string) $ctx->db->query("SELECT status FROM findings WHERE id = {$id}")->fetchColumn(), 'fixed');
         Assert::contains('no longer reachable from the internet', (string) $ctx->db->query("SELECT note FROM finding_events WHERE finding_id = {$id} AND event = 'verified' ORDER BY id DESC LIMIT 1")->fetchColumn());
         Assert::contains('Fixed', $tech->get('/findings/' . $id)->body);
+
+        // An admin's recheck may run outside the scan window (as an admin's "scan now" can).
+        $id2 = $fid($ctx, $cid, 'site:203.0.113.190:443:missing_hsts');
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $admin->submit('/findings/' . $id2, '/findings/' . $id2 . '/verify', []);
+        Assert::same(1, (int) $ctx->db->query("SELECT outside_window FROM scan_jobs WHERE client_id = {$cid} AND job_type = 'verify' ORDER BY id DESC LIMIT 1")->fetchColumn(), 'admin recheck outside the window');
+        $ctx->db->exec("DELETE FROM scan_jobs WHERE client_id = {$cid} AND job_type = 'verify' AND status = 'queued'");
+        $ctx->db->exec("UPDATE findings SET verify_requested_at = NULL WHERE id = {$id2}");
     },
     'verify fix is honest: closed ports, aborted rechecks, already resolved, CSRF' => function (TestContext $ctx) use ($setup, $fid, $userId): void {
         $cid = $setup($ctx);

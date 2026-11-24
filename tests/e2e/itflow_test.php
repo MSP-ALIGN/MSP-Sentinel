@@ -522,4 +522,14 @@ return [
         // (The leading finding lost its row too, so it opens the new ticket and the released target joins it.)
         Assert::true($rc !== false && $rc['state'] === 'open' && (int) $rc['itflow_ticket_id'] > 0 && (int) $rc['itflow_ticket_id'] !== $t3, 'released and ticketed again');
     },
+    'ITFlow: a saved key never follows a new address' => function (TestContext $ctx) use ($base, $key): void {
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $admin->submit('/admin/integrations', '/admin/integrations/itflow', ['url' => $base($ctx), 'api_key' => $key, 'enabled' => '0']);
+        Assert::true(App::settings()->getSecret('itflow_api_key') !== '', 'saved');
+        $admin->submit('/admin/integrations', '/admin/integrations/itflow', ['url' => 'https://itflow-elsewhere.example', 'api_key' => '', 'enabled' => '0']);
+        Assert::same('', App::settings()->getSecret('itflow_api_key'), 'a changed address drops the saved key');
+        Assert::contains('saved API key was removed', $admin->get('/admin/integrations')->body);
+        $admin->submit('/admin/integrations', '/admin/integrations/itflow', ['url' => $base($ctx), 'api_key' => $key, 'enabled' => '0']);
+        Assert::true(App::settings()->getSecret('itflow_api_key') !== '', 'entered again with the new address: kept');
+    },
 ];

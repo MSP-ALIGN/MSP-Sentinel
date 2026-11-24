@@ -142,7 +142,7 @@ final class Settings
         if (!in_array($name, self::SECRETS, true) || $this->crypto === null) {
             throw new \InvalidArgumentException('Not a secret setting: ' . $name);
         }
-        $this->set($name, $value === '' ? '' : $this->crypto->encrypt($value));
+        $this->set($name, $value === '' ? '' : $this->crypto->encryptFor('setting:' . $name, $value));
     }
 
     /** Read a secret setting (decrypted, straight from the database), or '' if unset or unreadable (e.g. the app key changed). */
@@ -156,7 +156,7 @@ final class Settings
             return '';
         }
         try {
-            return $this->crypto->decrypt($stored);
+            return $this->crypto->decryptFor('setting:' . $name, $stored); // bound to this setting's name (1.34)
         } catch (\RuntimeException) {
             return '';
         }

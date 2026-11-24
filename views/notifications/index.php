@@ -3,6 +3,13 @@
 $sev = ['fail' => ['text-bg-danger', 'bi-x-octagon', __('Fail')], 'warn' => ['text-bg-warning', 'bi-exclamation-triangle', __('Warning')], 'info' => ['text-bg-secondary', 'bi-info-circle', __('Info')]];
 ?>
 <div class="card">
+    <?php $unreadIds = array_map(static fn (array $n): int => (int) $n['id'], array_filter($notifications, static fn (array $n): bool => $n['read_at'] === null)); ?>
+    <?php if ($unreadIds !== []): ?>
+    <div class="card-header d-flex align-items-center"><span class="small text-body-secondary"><?= e(__('{n} new', ['n' => count($unreadIds)])) ?></span>
+        <form method="post" action="<?= e(url('/notifications/read')) ?>" class="ms-auto"><?= \Sentinel\Core\Csrf::field() ?>
+            <input type="hidden" name="up_to" value="<?= e(max($unreadIds)) ?>">
+            <button class="btn btn-sm btn-outline-secondary" type="submit"><i class="bi bi-check2-all me-1" aria-hidden="true"></i><?= e(__('Mark all as read')) ?></button></form></div>
+    <?php endif; ?>
     <?php if ($notifications === []): ?>
     <div class="card-body"><p class="text-body-secondary mb-0"><?= e(__('No notifications yet.')) ?></p></div>
     <?php else: ?>

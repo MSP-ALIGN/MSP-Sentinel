@@ -72,7 +72,7 @@ return [
     'admin cannot change own role or disable self' => function (TestContext $ctx): void {
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $id = (int) $ctx->db->query("SELECT id FROM users WHERE username = 'admin'")->fetchColumn();
-        $res = $admin->submit('/users/' . $id, '/users/' . $id, ['display_name' => 'Alex Admin', 'email' => 'admin@msp.example', 'role' => 'viewer']);
+        $res = $admin->submit('/users/' . $id, '/users/' . $id, ['display_name' => 'Alex Admin', 'email' => 'admin@msp.example', 'role' => 'viewer', 'my_password' => 'Admin-Pass-0001!']);
         Assert::redirect('/users', $res);
         $row = $ctx->db->query("SELECT role, is_active FROM users WHERE id = {$id}")->fetch();
         Assert::same('admin', $row['role'], 'role unchanged');
@@ -83,13 +83,16 @@ return [
         $id = $ctx->createUser('rita', 'technician', 'Rita-Pass-0001!!');
         $rita = $ctx->login('rita', 'Rita-Pass-0001!!');
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
-        $admin->submit('/users/' . $id, '/users/' . $id, ['display_name' => 'Rita Example', 'email' => '', 'role' => 'viewer', 'is_active' => '1']);
+        $noPw = $admin->submit('/users/' . $id, '/users/' . $id, ['display_name' => 'Rita Example', 'email' => '', 'role' => 'viewer', 'is_active' => '1']);
+        Assert::status(422, $noPw);
+        Assert::contains('Enter your own password to confirm', $noPw->body, 'a role change needs the admin\'s own password');
+        $admin->submit('/users/' . $id, '/users/' . $id, ['display_name' => 'Rita Example', 'email' => '', 'role' => 'viewer', 'is_active' => '1', 'my_password' => 'Admin-Pass-0001!']);
         Assert::same('viewer', $ctx->db->query("SELECT role FROM users WHERE id = {$id}")->fetchColumn());
         Assert::redirect('/login', $rita->get('/'), 'role change ends existing sessions');
 
         $ctx->allowFreshCode('rita');
         $rita = $ctx->login('rita', 'Rita-Pass-0001!!');
-        $reset = $admin->submit('/users/' . $id, '/users/' . $id . '/password', ['password' => 'Rita-Temp-Pass-02!']);
+        $reset = $admin->submit('/users/' . $id, '/users/' . $id . '/password', ['password' => 'Rita-Temp-Pass-02!', 'my_password' => 'Admin-Pass-0001!']);
         Assert::redirect('/users/' . $id, $reset);
         Assert::redirect('/login', $rita->get('/'), 'password reset ends existing sessions');
         $ctx->allowFreshCode('rita');
@@ -103,7 +106,7 @@ return [
         // Without a new temporary password the reset is refused.
         $admin->submit('/users/' . $id, '/users/' . $id . '/2fa-reset', []);
         Assert::true($ctx->db->query("SELECT totp_enabled_at FROM users WHERE id = {$id}")->fetchColumn() !== null, 'reset refused without a password');
-        Assert::redirect('/users/' . $id, $admin->submit('/users/' . $id, '/users/' . $id . '/2fa-reset', ['password' => 'Lou-Temp-Pass-02!']));
+        Assert::redirect('/users/' . $id, $admin->submit('/users/' . $id, '/users/' . $id . '/2fa-reset', ['password' => 'Lou-Temp-Pass-02!', 'my_password' => 'Admin-Pass-0001!']));
         $old = $ctx->client()->submit('/login', '/login', ['username' => 'lou', 'password' => 'Lou-Pass-00001!!']);
         Assert::status(422, $old, 'old password no longer works, so nobody else can enrol in the user\'s place');
         $res = $ctx->client()->submit('/login', '/login', ['username' => 'lou', 'password' => 'Lou-Temp-Pass-02!']);

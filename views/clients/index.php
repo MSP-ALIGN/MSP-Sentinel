@@ -16,7 +16,8 @@ $isAdmin = Role::atLeast((string) $currentUser['role'], Role::ADMIN);
         </div>
     </div>
     <div class="card-body p-0 table-responsive">
-        <table class="table table-hover align-middle mb-0">
+        <div class="p-2"><div class="d-flex align-items-center gap-2 mb-2"><label class="visually-hidden" for="clients-filter"><?= e(__('Filter this list')) ?></label><input class="form-control form-control-sm" style="max-width: 20rem" type="search" id="clients-filter" maxlength="100" data-filter-list="#clients-table" data-filter-count="#clients-filter-count" placeholder="<?= e(__('Filter clients by name…')) ?>"><span class="small text-body-secondary" id="clients-filter-count" aria-live="polite"></span></div></div>
+        <table class="table table-hover align-middle mb-0" id="clients-table">
             <thead>
             <tr>
                 <th scope="col"><?= e(__('Client')) ?></th>

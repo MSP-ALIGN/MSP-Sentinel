@@ -85,7 +85,7 @@ final class AlignClient
         return array_values(array_filter(array_map(static fn ($a): ?array => is_array($a) && is_int($a['framework_id'] ?? null) ? [
             'framework_id' => $a['framework_id'], 'framework' => self::str($a['framework'] ?? ''), 'slug' => self::str($a['slug'] ?? ''),
             'score' => is_array($a['score'] ?? null) && is_int($a['score']['percent'] ?? null) ? $a['score']['percent'] : 0,
-            'url' => self::str($a['url'] ?? ''),
+            'url' => self::webUrl(self::str($a['url'] ?? '')),
         ] : null, $this->all('/api/v1/clients/' . $clientId . '/compliance'))));
     }
 
@@ -173,6 +173,16 @@ final class AlignClient
             });
         }
         return $data;
+    }
+
+    /**
+     * A link from MSP Align as shown in Sentinel: only a plain http(s) address is kept ('' otherwise), so an answer
+     * can never put a javascript: or data: link on the compliance page (1.34 audit).
+     */
+    private static function webUrl(string $url): string
+    {
+        $p = parse_url($url);
+        return is_array($p) && in_array(strtolower((string) ($p['scheme'] ?? '')), ['http', 'https'], true) && ($p['host'] ?? '') !== '' ? $url : '';
     }
 
     /** A scalar as a trimmed string ('' for anything else). */

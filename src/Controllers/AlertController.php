@@ -93,6 +93,12 @@ final class AlertController extends Controller
         }
 
         $changed = [];
+        // A saved SMTP password never follows a new mail server: a changed host needs the password entered again.
+        if (isset($v['smtp_host']) && $settings->get('smtp_host') !== $v['smtp_host'] && $settings->getSecret('smtp_password') !== '' && $request->raw('smtp_password') === '') {
+            $settings->setSecret('smtp_password', '');
+            $changed['smtp_password'] = 'cleared (server changed)';
+            Session::flash('warning', __('The mail server changed, so the saved SMTP password was removed. Enter it again for the new server.'));
+        }
         foreach ($v as $name => $value) {
             if ($settings->get($name) !== $value) {
                 $settings->set($name, $value);
@@ -161,20 +167,26 @@ final class AlertController extends Controller
         return Response::redirect('/admin/settings#alerts');
     }
 
-    /** GET /notifications: the signed-in user's notifications (opening the page marks them read). */
+    /**
+     * GET /notifications: the signed-in user's notifications. Read-only (1.34): a GET never changes anything, so a link
+     * from another site can't mark alerts read unseen; "Mark all as read" (POST, CSRF-checked) does.
+     */
     public function notifications(Request $request): Response
     {
         $uid = (int) $this->user()['id'];
         $stmt = App::db()->prepare('SELECT * FROM notifications WHERE user_id = :u ORDER BY id DESC LIMIT 100');
         $stmt->execute(['u' => $uid]);
-        $rows = $stmt->fetchAll();
-        if ($rows !== []) {
-            // Only what is shown is marked read (not older rows beyond the list, nor ones that arrive meanwhile).
-            $shown = array_map(static fn (array $r): int => (int) $r['id'], $rows);
-            App::db()->prepare('UPDATE notifications SET read_at = UTC_TIMESTAMP() WHERE user_id = :u AND read_at IS NULL AND id BETWEEN :lo AND :hi')
-                ->execute(['u' => $uid, 'lo' => min($shown), 'hi' => max($shown)]);
-        }
-        return $this->page('notifications/index', __('Notifications'), ['notifications' => $rows]);
+        return $this->page('notifications/index', __('Notifications'), ['notifications' => $stmt->fetchAll()]);
+    }
+
+    /** POST /notifications/read: mark the signed-in user's notifications up to the newest one shown as read. */
+    public function markRead(Request $request): Response
+    {
+        $uid = (int) $this->user()['id'];
+        $upTo = ctype_digit($request->input('up_to')) ? (int) $request->input('up_to') : 0; // not ones that arrived since
+        App::db()->prepare('UPDATE notifications SET read_at = UTC_TIMESTAMP() WHERE user_id = :u AND read_at IS NULL AND id <= :hi')
+            ->execute(['u' => $uid, 'hi' => $upTo]);
+        return Response::redirect('/notifications');
     }
 
     /** POST /profile/alerts: the signed-in user's email preference. */

@@ -56,7 +56,7 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
             <?php else: ?>
             <?php if ($wu['pending'] && $wu['unclaimed']): ?>
             <div class="alert alert-warning py-2 mb-2"><?= e(__('The update request was not picked up: the update helper on the server is stopped. On the server, run: sudo systemctl reset-failed msp-sentinel-web-update.path && sudo systemctl restart msp-sentinel-web-update.path (or run sudo msp-sentinel-update).')) ?>
-                <form method="post" action="<?= e(url('/admin/system/update')) ?>" class="mt-2"><?= Csrf::field() ?><input type="hidden" name="action" value="cancel"><button type="submit" class="btn btn-outline-secondary btn-sm"><?= e(__('Remove the waiting request')) ?></button></form></div>
+                <form method="post" data-confirm="<?= e(__('Remove the waiting update request? The update will not run.')) ?>" action="<?= e(url('/admin/system/update')) ?>" class="mt-2"><?= Csrf::field() ?><input type="hidden" name="action" value="cancel"><button type="submit" class="btn btn-outline-secondary btn-sm"><?= e(__('Remove the waiting request')) ?></button></form></div>
             <?php elseif ($wu['pending']): ?>
             <p class="mb-2"><span class="badge text-bg-info"><?= e(__('Waiting')) ?></span> <?= e(__('The update was requested and starts within a few seconds.')) ?></p>
             <?php elseif ($st['state'] === 'running' && !$st['stale']): ?>
@@ -75,6 +75,11 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
             <p class="text-body-secondary mb-2"><?= e($build !== null
                 ? __('Fetches the newest {b} branch, backs up first, applies database changes and checks health. Same as sudo msp-sentinel-update on the server.', ['b' => $build['branch']])
                 : __('Backs up first, applies database changes and checks health.')) ?></p>
+            <?php if ($build !== null): ?>
+            <p class="small text-body-secondary mb-2"><?= e(__('Installed commit: {c}. Newest commit on {b} at the last check: {h}. Branch code is not signed: it is whatever the repository holds when the update runs, so check the commit on GitHub first if in doubt (docs/upgrade.md).', [
+                'c' => substr((string) ($build['sha'] ?? ''), 0, 12) ?: '?', 'b' => $build['branch'],
+                'h' => $branchStatus !== null && $branchStatus['head'] !== '' ? $branchStatus['head'] : __('not known yet')])) ?></p>
+            <?php endif; ?>
             <form method="post" action="<?= e(url('/admin/system/update')) ?>" data-confirm="<?= e(__('Update Sentinel now? It backs up first and may be unavailable for a minute.')) ?>">
                 <?= Csrf::field() ?>
                 <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-cloud-arrow-down me-1" aria-hidden="true"></i><?= e(__('Update now')) ?></button>
@@ -120,7 +125,7 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
         <h3 class="h6 mt-2"><?= e(__('Release key')) ?></h3>
         <p class="text-body-secondary"><?= e(__('Agents install only releases signed with this key. It is made in your browser: the private key goes into a password-protected file on YOUR computer and never to Sentinel; Sentinel keeps only the public half and gives it to agents. It does not expire. Keep the file and its password safe: without them you can\'t sign releases.')) ?></p>
         <?php if ($rk['key'] === ''): ?>
-        <form method="post" action="<?= e(url('/admin/system/release-key')) ?>" class="row g-2 mb-3" data-release-key="create" <?= $keyAttrs ?>><?= \Sentinel\Core\Csrf::field() ?>
+        <form method="post" action="<?= e(url('/admin/system/release-key')) ?>" class="row g-2 mb-3" data-confirm="<?= e(__('Create the release key? Your browser downloads the key file: keep it and its password safe, Sentinel can\'t give it back.')) ?>" data-release-key="create" <?= $keyAttrs ?>><?= \Sentinel\Core\Csrf::field() ?>
             <input type="hidden" name="mode" value="create"><input type="hidden" name="public_key" value="">
             <?= $newPw . $sentinelPw . $note ?>
             <div class="col-12"><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-key me-1" aria-hidden="true"></i><?= e(__('Create release key (downloads the key file)')) ?></button></div>
@@ -128,7 +133,7 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
         <?php else: ?>
         <p><?= e(__('Key {fp}', ['fp' => $fp])) ?><?= $rk['created'] !== '' ? ' · ' . e(__('created {t} UTC', ['t' => $rk['created']])) : '' ?></p>
         <?php if ($rk['manifest'] !== null): $mf = json_decode($rk['manifest'], true); ?>
-        <form method="post" action="<?= e(url('/admin/system/release-sign')) ?>" class="row g-2 mb-3" data-release-key="sign" data-public-key="<?= e($rk['key']) ?>" <?= $keyAttrs ?>><?= \Sentinel\Core\Csrf::field() ?>
+        <form method="post" data-confirm="<?= e(__('Sign this version with the release key? Agents will accept it as an update.')) ?>" action="<?= e(url('/admin/system/release-sign')) ?>" class="row g-2 mb-3" data-release-key="sign" data-public-key="<?= e($rk['key']) ?>" <?= $keyAttrs ?>><?= \Sentinel\Core\Csrf::field() ?>
             <input type="hidden" name="manifest" value="<?= e($rk['manifest']) ?>"><input type="hidden" name="signature" value="">
             <div class="col-12"><?= e(__('Sign version {v} ({n} files) so agents can be updated to it.', ['v' => $mf['version'] ?? '?', 'n' => count($mf['files'] ?? [])])) ?>
                 <div class="form-text"><?= e(__('Before signing, compare this fingerprint of the files with the one published in the release notes for this version: a difference means files on this server were changed, so do not sign.')) ?></div>
@@ -145,7 +150,7 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
         <p class="text-success"><i class="bi bi-patch-check me-1" aria-hidden="true"></i><?= e(__('This version is signed.')) ?></p>
         <?php endif; ?>
         <details class="mb-2"><summary><?= e(__('Rotate the key (you have the current key file)')) ?></summary>
-            <form method="post" action="<?= e(url('/admin/system/release-key')) ?>" class="row g-2 mt-1" data-release-key="rotate" data-public-key="<?= e($rk['key']) ?>" <?= $keyAttrs ?>><?= \Sentinel\Core\Csrf::field() ?>
+            <form method="post" action="<?= e(url('/admin/system/release-key')) ?>" class="row g-2 mt-1" data-confirm="<?= e(__('Rotate the release key? Agents move to the new key; keep the new key file and its password safe.')) ?>" data-release-key="rotate" data-public-key="<?= e($rk['key']) ?>" <?= $keyAttrs ?>><?= \Sentinel\Core\Csrf::field() ?>
                 <input type="hidden" name="mode" value="rotate"><input type="hidden" name="public_key" value=""><input type="hidden" name="statement" value=""><input type="hidden" name="statement_signature" value="">
                 <div class="col-md-5"><label class="form-label"><?= e(__('Current key file')) ?></label><input class="form-control form-control-sm" type="file" accept=".json,application/json" data-key-field="file"></div>
                 <div class="col-md-4"><label class="form-label"><?= e(__('Its password')) ?></label><input class="form-control form-control-sm" type="password" data-key-field="password" autocomplete="off"></div>
@@ -191,7 +196,7 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
                     <?php else: ?><span class="text-body-secondary"><?= e(__('waiting for its next check-in')) ?></span><?php endif; ?></li>
             <?php endforeach; ?>
             </ul>
-            <form method="post" action="<?= e(url('/admin/system/agents-move')) ?>" class="d-flex flex-wrap gap-2 align-items-end mb-3"><?= \Sentinel\Core\Csrf::field() ?>
+            <form method="post" data-confirm="<?= e(__('Mark the move as complete? Agents that haven\'t moved yet will no longer be told the new address.')) ?>" action="<?= e(url('/admin/system/agents-move')) ?>" class="d-flex flex-wrap gap-2 align-items-end mb-3"><?= \Sentinel\Core\Csrf::field() ?>
                 <div><label class="form-label mb-0" for="move-confirm"><?= e(__('Your password')) ?></label>
                     <input class="form-control form-control-sm" id="move-confirm" name="password" type="password" autocomplete="current-password" required></div>
                 <?php if (!$agentMove['complete']): ?><button class="btn btn-sm btn-outline-primary" type="submit" name="complete" value="1"><?= e(__('Move complete (stop asking agents)')) ?></button><?php endif; ?>
@@ -230,7 +235,7 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
 </div>
 <div class="card mb-3" id="retention">
     <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Data retention')) ?></h2></div>
-    <form method="post" action="<?= e(url('/admin/system/retention')) ?>" novalidate>
+    <form method="post" data-confirm="<?= e(__('Save the retention periods? The next clean-up permanently deletes data older than these periods.')) ?>" action="<?= e(url('/admin/system/retention')) ?>" novalidate>
         <?= Csrf::field() ?>
         <div class="card-body small">
             <p class="text-body-secondary"><?= e(__('Months to keep (0 = keep forever). The worker removes older data once a day. The audit log is always kept.')) ?></p>

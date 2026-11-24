@@ -145,10 +145,10 @@ final class WebhookSender
                         'type' => 'AdaptiveCard',
                         'version' => '1.4',
                         'body' => array_merge(
-                            [['type' => 'TextBlock', 'size' => 'Medium', 'weight' => 'Bolder', 'wrap' => true, 'text' => $alert['title'],
+                            [['type' => 'TextBlock', 'size' => 'Medium', 'weight' => 'Bolder', 'wrap' => true, 'text' => self::teamsEscape($alert['title']),
                               'color' => $alert['severity'] === 'fail' ? 'Attention' : ($alert['severity'] === 'warn' ? 'Warning' : 'Default')],
-                             ['type' => 'TextBlock', 'wrap' => true, 'text' => $alert['text']]],
-                            array_map(static fn (string $l): array => ['type' => 'TextBlock', 'wrap' => true, 'spacing' => 'None', 'text' => '- ' . $l], $lines)
+                             ['type' => 'TextBlock', 'wrap' => true, 'text' => self::teamsEscape($alert['text'])]],
+                            array_map(static fn (string $l): array => ['type' => 'TextBlock', 'wrap' => true, 'spacing' => 'None', 'text' => '- ' . self::teamsEscape($l)], $lines)
                         ),
                         'actions' => $alert['link'] !== '' ? [['type' => 'Action.OpenUrl', 'title' => 'Open in Sentinel', 'url' => $alert['link']]] : [],
                     ],
@@ -176,6 +176,16 @@ final class WebhookSender
     }
 
     /** Escape Slack mrkdwn control characters in untrusted text. */
+    /**
+     * Text for a Teams adaptive card TextBlock, which renders a subset of Markdown: the Markdown characters are
+     * backslash-escaped so a device name or title (untrusted, from scans or integrations) shows literally and can't
+     * add links or formatting (1.34 audit).
+     */
+    private static function teamsEscape(string $text): string
+    {
+        return (string) preg_replace('/([\\\\`*_{}\[\]()#+\-.!>|~])/', '\\\\$1', $text);
+    }
+
     private static function slackEscape(string $text): string
     {
         return str_replace(['&', '<', '>'], ['&amp;', '&lt;', '&gt;'], $text);

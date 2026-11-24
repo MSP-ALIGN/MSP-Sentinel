@@ -53,7 +53,7 @@ use Sentinel\Core\Csrf;
         </div>
         <div class="card">
             <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Two-factor authentication')) ?></h2></div>
-            <form method="post" action="<?= e(url('/profile/recovery-codes')) ?>" novalidate>
+            <form method="post" data-confirm="<?= e(__('Create new recovery codes? Your current recovery codes stop working.')) ?>" action="<?= e(url('/profile/recovery-codes')) ?>" novalidate>
             <div class="card-body">
                 <p><span class="badge text-bg-success"><i class="bi bi-shield-lock me-1" aria-hidden="true"></i><?= e(__('On')) ?></span>
                     <?= e(__('{n} unused recovery codes left.', ['n' => $recoveryLeft])) ?></p>

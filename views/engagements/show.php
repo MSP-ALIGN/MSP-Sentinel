@@ -57,7 +57,7 @@ foreach ($e['targets'] as $t) {
                 <?php if ($e['stopped_at'] !== null): ?><p class="mb-1"><?= e(__('Stopped by {u} at {t}: {r}', ['u' => $e['stopped_by_name'] ?? '?', 't' => $local((string) $e['stopped_at']), 'r' => $e['stop_reason']])) ?></p><?php endif; ?>
 
                 <?php if ($state === ER::STATE_AWAITING && $isAdmin && !$mine): ?>
-                <form method="post" action="<?= e(url('/engagements/' . (int) $e['id'] . '/approve')) ?>" class="mt-3"><?= Csrf::field() ?>
+                <form method="post" data-confirm="<?= e(__('Approve this engagement? Its tests can run as soon as its window opens.')) ?>" action="<?= e(url('/engagements/' . (int) $e['id'] . '/approve')) ?>" class="mt-3"><?= Csrf::field() ?>
                     <label for="password" class="form-label"><?= e(__('Your Sentinel password')) ?></label>
                     <input type="password" class="form-control form-control-sm mb-2" id="password" name="password" autocomplete="current-password" required>
                     <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-check2-circle me-1" aria-hidden="true"></i><?= e(__('Approve: I checked the signed document matches this scope')) ?></button>

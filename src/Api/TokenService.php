@@ -33,7 +33,8 @@ final class TokenService
     private const FAIL_LIMIT = 20;
 
     /** Needs the database, the app key (for HMACs) and the rate limiter. */
-    public function __construct(private readonly PDO $db, private readonly Crypto $crypto, private readonly RateLimiter $limiter)
+    public function __construct(private readonly PDO $db, private readonly Crypto $crypto, private readonly RateLimiter $limiter,
+        private readonly ?\Sentinel\Core\Audit $audit = null)
     {
     }
 
@@ -176,6 +177,11 @@ final class TokenService
             return ['error' => [429, 'Too many failed attempts. Try again later.']];
         }
         $this->limiter->hit($bucket);
+        // The failure that reaches the limit is audited once (1.34 audit): admins see token guessing or a broken
+        // script in the audit log. The token value itself is never logged.
+        if ($this->audit !== null && $this->limiter->tooMany($bucket, self::FAIL_LIMIT, 600)) {
+            $this->audit->log('api.locked_out', null, null, null, null, ['reason' => $message, 'minutes' => 10], $ip);
+        }
         return ['error' => [$status, $message]];
     }
 

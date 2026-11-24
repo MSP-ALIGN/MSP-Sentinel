@@ -3,7 +3,7 @@
  *
  * - Renders the TOTP enrolment QR code locally from a data attribute, so the
  *   secret never leaves the browser for a third-party QR service.
- * - Asks for confirmation before submitting forms marked with data-confirm.
+ * - Asks for confirmation before submitting forms marked with data-confirm (an in-page dialog, see askConfirm).
  * - Copy buttons (data-copy="element id"): copy that element's text (install commands, enrolment codes).
  * - Refreshes dashboard panels (elements with data-refresh-url) every 60 seconds
  *   while the tab is visible. Only same-origin fragments marked with the
@@ -144,11 +144,94 @@
         });
     });
 
+    // Instant list filters (1.34): <input data-filter-list="#container" [data-filter-count="#el"]> hides the
+    // container's items (elements with data-filter-item, else its table body rows) whose text doesn't contain what was
+    // typed. Text comparison only; nothing is sent anywhere. A ?q= in the address pre-fills it (search results link here).
+    document.querySelectorAll('input[data-filter-list]').forEach(function (input) {
+        var container = document.querySelector(input.getAttribute('data-filter-list'));
+        if (!container) { return; }
+        var countEl = input.getAttribute('data-filter-count') ? document.querySelector(input.getAttribute('data-filter-count')) : null;
+        var items = container.querySelectorAll('[data-filter-item]');
+        if (items.length === 0) { items = container.querySelectorAll('tbody > tr'); }
+        var fromUrl = new URLSearchParams(window.location.search).get('q');
+        if (fromUrl && input.value === '' && input.hasAttribute('data-filter-from-url')) { input.value = fromUrl.slice(0, 100); }
+        function apply() {
+            var q = input.value.trim().toLowerCase();
+            var shown = 0;
+            items.forEach(function (it) {
+                var match = q === '' || it.textContent.toLowerCase().indexOf(q) !== -1;
+                it.hidden = !match;
+                if (match) { shown++; }
+            });
+            if (countEl) { countEl.textContent = q === '' ? '' : shown + ' / ' + items.length; }
+        }
+        input.addEventListener('input', apply);
+        apply();
+    });
+
+    // "Are you sure?" for forms marked data-confirm: an in-page dialog (Bootstrap modal) saying exactly what will
+    // happen, with Cancel focused first; the browser's own confirm() where Bootstrap isn't loaded. The message is
+    // set as text (never HTML). Runs in the capture phase and stops the event until confirmed, so a form's own submit
+    // handler (release key, sealed passwords) only runs after "Yes".
+    var confirmModal = null;
+    function askConfirm(message, onYes) {
+        if (!window.bootstrap || !window.bootstrap.Modal) {
+            if (window.confirm(message)) { onYes(); }
+            return;
+        }
+        if (confirmModal === null) {
+            var el = document.createElement('div');
+            el.className = 'modal fade';
+            el.id = 'sn-confirm';
+            el.tabIndex = -1;
+            el.setAttribute('aria-labelledby', 'sn-confirm-title');
+            el.setAttribute('aria-hidden', 'true');
+            el.innerHTML = '<div class="modal-dialog modal-dialog-centered"><div class="modal-content">'
+                + '<div class="modal-header"><h2 class="modal-title h5" id="sn-confirm-title"></h2>'
+                + '<button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>'
+                + '<div class="modal-body"><p class="mb-0" id="sn-confirm-text"></p></div>'
+                + '<div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" id="sn-confirm-no"></button>'
+                + '<button type="button" class="btn btn-primary" id="sn-confirm-yes"></button></div></div></div>';
+            document.body.appendChild(el);
+            var lang = document.documentElement;
+            el.querySelector('#sn-confirm-title').textContent = lang.getAttribute('data-confirm-title') || 'Are you sure?';
+            el.querySelector('#sn-confirm-no').textContent = lang.getAttribute('data-confirm-no') || 'Cancel';
+            el.querySelector('#sn-confirm-yes').textContent = lang.getAttribute('data-confirm-yes') || 'Yes, continue';
+            el.querySelector('.btn-close').setAttribute('aria-label', lang.getAttribute('data-confirm-no') || 'Cancel');
+            el.addEventListener('shown.bs.modal', function () { el.querySelector('#sn-confirm-no').focus(); });
+            confirmModal = { el: el, modal: new window.bootstrap.Modal(el), onYes: null };
+            el.querySelector('#sn-confirm-yes').addEventListener('click', function () {
+                var go = confirmModal.onYes;
+                confirmModal.onYes = null;
+                confirmModal.modal.hide();
+                if (go) { go(); }
+            });
+        }
+        confirmModal.el.querySelector('#sn-confirm-text').textContent = message;
+        confirmModal.onYes = onYes;
+        confirmModal.modal.show();
+    }
+
     document.addEventListener('submit', function (event) {
         var form = event.target;
         var message = form && form.getAttribute ? form.getAttribute('data-confirm') : null;
-        if (message && !window.confirm(message)) {
-            event.preventDefault();
+        if (!message) {
+            return;
         }
+        if (form.getAttribute('data-confirmed') === '1') {
+            form.removeAttribute('data-confirmed'); // asked once per submit
+            return;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        var submitter = event.submitter || null;
+        askConfirm(message, function () {
+            form.setAttribute('data-confirmed', '1');
+            if (typeof form.requestSubmit === 'function') {
+                form.requestSubmit(submitter && submitter.form === form ? submitter : undefined);
+            } else {
+                form.submit();
+            }
+        });
     }, true);
 })();

@@ -261,7 +261,7 @@ final class EngagementController extends Controller
             'clientNav' => ClientController::nav($client, 'engagements', App::findings()->counts((int) $client['id']))]);
     }
 
-    /** POST /engagements/{id}/approve (admins, with their password; never the creator) */
+    /** POST /engagements/{id}/approve (admins, with their password; never the creator, nor an account the creator made or reset recently) */
     public function approve(Request $request, array $params): Response
     {
         $e = $this->engagementOr404($params);
@@ -269,6 +269,16 @@ final class EngagementController extends Controller
         $me = (int) $this->user()['id'];
         if ((int) $e['created_by'] === $me) {
             Session::flash('danger', __('You created this engagement: a different admin must approve it.'));
+            return $back;
+        }
+        // The second person must really be someone else: not an account the creator made, or whose password or 2FA the
+        // creator reset, in the last 30 days (otherwise one admin could approve their own engagement through it).
+        $link = App::db()->prepare("SELECT COUNT(*) FROM audit_log WHERE user_id = :creator AND target_type = 'user' AND target_id = :me
+            AND action IN ('user.created', 'user.password_reset', 'user.2fa_reset') AND created_at >= UTC_TIMESTAMP() - INTERVAL 30 DAY");
+        $link->execute(['creator' => (int) $e['created_by'], 'me' => $me]);
+        if ((int) $link->fetchColumn() > 0) {
+            $this->audit($request, 'engagement.approval_refused', 'engagement', (int) $e['id'], ['reason' => 'account created or reset by the creator']);
+            Session::flash('danger', __('The engagement\'s creator created your account or reset its password or two-factor authentication in the last 30 days: another admin must approve it.'));
             return $back;
         }
         $user = App::db()->query('SELECT id, password_hash FROM users WHERE id = ' . $me)->fetch() ?: [];

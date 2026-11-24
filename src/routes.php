@@ -55,6 +55,7 @@ $router->add('GET', '/recovery-codes', [AuthController::class, 'showRecoveryCode
 $router->add('GET', '/', [PageController::class, 'dashboard']);
 $router->add('GET', '/dashboard/live', [PageController::class, 'live'], ['passive' => true]);
 $router->add('GET', '/help', [PageController::class, 'help'], $duringPasswordChange);
+$router->add('GET', '/search', [PageController::class, 'search']);
 $router->add('GET', '/profile', [ProfileController::class, 'index']);
 $router->add('GET', '/profile/password', [ProfileController::class, 'showPassword'], $duringPasswordChange);
 $router->add('POST', '/profile/password', [ProfileController::class, 'changePassword'], $duringPasswordChange);
@@ -62,6 +63,7 @@ $router->add('POST', '/profile/recovery-codes', [ProfileController::class, 'rege
 $router->add('POST', '/profile/alerts', [AlertController::class, 'preference']);
 $router->add('POST', '/profile/theme', [AlertController::class, 'theme']);
 $router->add('GET', '/notifications', [AlertController::class, 'notifications']);
+$router->add('POST', '/notifications/read', [AlertController::class, 'markRead']);
 
 // Clients: everyone views; admins manage; technicians may pause (only admins resume)
 $router->add('GET', '/clients', [ClientController::class, 'index']);

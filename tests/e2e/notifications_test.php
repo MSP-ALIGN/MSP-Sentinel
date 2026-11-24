@@ -35,7 +35,7 @@ return [
 
         Assert::redirect('/admin/settings#alerts', $configure($ctx));
         $stored = $ctx->db->query("SELECT name, value FROM settings WHERE name IN ('smtp_password', 'webhook_url')")->fetchAll(PDO::FETCH_KEY_PAIR);
-        Assert::true(str_starts_with($stored['smtp_password'], 'v1:') && str_starts_with($stored['webhook_url'], 'v1:'), 'secrets stored encrypted');
+        Assert::true(str_starts_with($stored['smtp_password'], 'v2:') && str_starts_with($stored['webhook_url'], 'v2:'), 'secrets stored encrypted');
         $page = $admin->get('/admin/settings')->body;
         Assert::notContains('Relay-Secret-123', $page, 'password never shown');
         Assert::notContains('/webhook', $page, 'webhook URL never shown');
@@ -124,7 +124,10 @@ return [
         Assert::true((bool) preg_match('/notification-count">\d+</', $page), 'unread count shown in the header');
         $list = $admin->get('/notifications')->body;
         Assert::contains('Fail: Remote Desktop open to the internet', $list);
-        Assert::notContains('notification-count', $admin->get('/')->body, 'opening the list marks them read');
+        Assert::true((bool) preg_match('/notification-count">\d+</', $admin->get('/')->body), 'opening the list changes nothing (a GET never writes)');
+        $upTo = (int) $ctx->db->query("SELECT MAX(id) FROM notifications")->fetchColumn();
+        $admin->post('/notifications/read', ['_csrf' => $admin->get('/notifications')->csrf(), 'up_to' => (string) $upTo]);
+        Assert::notContains('notification-count', $admin->get('/')->body, '"Mark all as read" marks them read');
     },
     'accepted findings stay quiet; failed deliveries are retried then given up' => function (TestContext $ctx) use ($configure): void {
         $configure($ctx);
@@ -154,6 +157,19 @@ return [
         Assert::same(['failed', 3], [$row['status'], (int) $row['attempts']]);
         Assert::contains('Could not connect', $row['last_error']);
         Assert::notContains('Relay-Secret-123', $row['last_error']);
+
+        // A long scan holds the worker lock: queued alerts are still tried meanwhile (under the outbox's own lock).
+        App::alerts()->queueEmail(['admin@msp.example'], 'During a long scan', 'body');
+        $lid = (int) $ctx->db->query("SELECT MAX(id) FROM deliveries WHERE subject = 'During a long scan'")->fetchColumn();
+        $lock = $ctx->db->quote('msp_sentinel_worker_' . substr(hash('sha256', (string) $ctx->db->query('SELECT DATABASE()')->fetchColumn()), 0, 16));
+        Assert::same(1, (int) $ctx->db->query("SELECT GET_LOCK({$lock}, 0)")->fetchColumn(), 'test holds the worker lock');
+        try {
+            [, $out] = $ctx->cli('bin/worker.php', ['--no-schedule']);
+        } finally {
+            $ctx->db->query("SELECT RELEASE_LOCK({$lock})");
+        }
+        Assert::contains('Another worker is running', $out);
+        Assert::same(1, (int) $ctx->db->query("SELECT attempts FROM deliveries WHERE id = {$lid}")->fetchColumn(), 'tried while the scan ran');
     },
     'review fixes: no double sending, flapping and escalation, channel off, notifications read' => function (TestContext $ctx) use ($configure): void {
         $configure($ctx);
@@ -208,7 +224,7 @@ return [
             $db->exec("INSERT INTO notifications (user_id, kind, severity, title, created_at) VALUES ({$uid}, 'digest', 'info', 'Filler {$i}', UTC_TIMESTAMP())");
         }
         $ctx->login('admin', 'Admin-Pass-0001!')->get('/notifications');
-        Assert::true((int) $db->query("SELECT COUNT(*) FROM notifications WHERE user_id = {$uid} AND read_at IS NULL")->fetchColumn() > 0, 'older rows beyond the list stay unread');
+        Assert::same(105, (int) $db->query("SELECT COUNT(*) FROM notifications WHERE user_id = {$uid} AND read_at IS NULL")->fetchColumn(), 'viewing marks nothing read');
         $db->exec("UPDATE notifications SET read_at = UTC_TIMESTAMP() WHERE user_id = {$uid}");
     },
     'STARTTLS: works with a trusted certificate, refuses a name mismatch' => function (TestContext $ctx) use ($configure): void {

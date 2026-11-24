@@ -325,7 +325,7 @@ final class App
     /** API tokens. */
     public static function apiTokens(): TokenService
     {
-        return new TokenService(self::db(), self::crypto(), self::limiter());
+        return new TokenService(self::db(), self::crypto(), self::limiter(), self::audit());
     }
 
     /** Stored reports. */

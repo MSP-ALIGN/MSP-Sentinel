@@ -10,7 +10,7 @@ A backup contains the app key, the database password and all client data. Files 
 ## Daily backups (installer)
 
 The installer adds a daily cron job that keeps the newest 14 backups in `/var/backups/msp-sentinel/`. To encrypt
-them, create `/etc/msp-sentinel/backup.env` (mode 0640, `root:sentinel`):
+them, create `/etc/msp-sentinel/backup.env` (mode 0600, owner `sentinel:sentinel`, so the web server can't read it):
 
 ```sh
 export SENTINEL_BACKUP_ENCRYPT=1

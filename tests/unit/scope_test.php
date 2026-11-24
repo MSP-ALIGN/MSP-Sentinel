@@ -40,7 +40,7 @@ return [
                   // IPv6 allowlist: only global unicast (2000::/3)
                   '::127.0.0.1', '::a00:1', '::10.0.0.0/120', '::ffff:0:a00:1', 'fec0::1', '4000::1', '5f00::1', '64:ff9b::a00:1',
                   // shared public suffixes and RFC 9476 .alt
-                  '*.co.uk', 'co.uk', '*.github.io', '*.azurewebsites.net', '*.com.au', 'host.alt'] as $bad) {
+                  '*.co.uk', 'co.uk', '*.github.io', '*.azurewebsites.net', '*.com.au', 'host.alt', '*.s3.amazonaws.com', '*.bucket.core.windows.net', '*.eastus.cloudapp.azure.com'] as $bad) {
             Assert::true(is_string($p->parse($bad)), "must refuse {$bad}");
         }
     },

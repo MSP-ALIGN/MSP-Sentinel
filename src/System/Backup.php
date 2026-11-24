@@ -34,6 +34,12 @@ use Sentinel\Core\Config;
  */
 final class Backup
 {
+    /** Config entries kept from this server on a --with-config restore (programs, folders, trust, update sources). */
+    private const LOCAL_ONLY_CONFIG = [
+        ['scanner', 'nmap_path'], ['web_update', 'state_dir'], ['tls', 'ca_file'], ['updates', 'url'], ['updates', 'compare_url'],
+        ['app', 'trusted_proxies'],
+    ];
+
     private const MAGIC = "MSPSBK1\n";
     private const CHUNK = 65536;
 
@@ -197,14 +203,28 @@ final class Backup
                         }
                         @unlink($dest);
                     }
+                    // The folder must still be where it should be (no link swapped in after safeDir) right before
+                    // the file is created and again after (1.34 audit): storage/ is writable by the web server's
+                    // group while the restore runs as root. A mismatch stops the restore before anything is written
+                    // or, after creating, before content or permissions go anywhere.
+                    $expectedDir = (realpath($this->root) ?: $this->root) . substr(dirname($dest), strlen($this->root));
+                    if (realpath(dirname($dest)) !== $expectedDir) {
+                        throw new \RuntimeException('Refusing to restore ' . $rel . ': its folder changed during the restore.');
+                    }
                     $in = fopen($files . '/' . $rel, 'rb');
                     $out = @fopen($dest, 'xb'); // fails if anything (including a link) appeared meanwhile
+                    if ($out !== false && realpath(dirname($dest)) !== $expectedDir) {
+                        fclose($out);
+                        throw new \RuntimeException('Refusing to restore ' . $rel . ': its folder changed during the restore (an empty file may have been left; check storage/).');
+                    }
                     if ($in === false || $out === false || stream_copy_to_stream($in, $out) === false) {
                         throw new \RuntimeException('Could not write ' . $rel . '.');
                     }
                     fclose($in);
                     fclose($out);
-                    @chmod($dest, 0660); // group "sentinel": both the web server and the worker can use it
+                    if (!is_link($dest)) {
+                        @chmod($dest, 0660); // group "sentinel": both the web server and the worker can use it
+                    }
                 }
             }
             if ($withConfig) {
@@ -219,6 +239,17 @@ final class Backup
                 if (is_array($current) && isset($current['db'])) {
                     $restored['db'] = $current['db'];
                 }
+                // Settings that name programs, folders or trust on THIS server are never taken from a backup file
+                // (1.34 audit): a tampered backup could otherwise point the scanner at another program, or the update
+                // helper (root) at another folder. This server's values are kept; missing ones fall back to defaults.
+                foreach (self::LOCAL_ONLY_CONFIG as [$section, $key]) {
+                    if (is_array($current) && is_array($current[$section] ?? null) && array_key_exists($key, $current[$section])) {
+                        $restored[$section][$key] = $current[$section][$key];
+                    } elseif (is_array($restored[$section] ?? null)) {
+                        unset($restored[$section][$key]);
+                    }
+                }
+                unset($restored['testing']);
                 if (is_file($configPath) && !@copy($configPath, $configPath . '.before-restore-' . gmdate('Ymd-His'))) {
                     throw new \RuntimeException('Could not keep a copy of the current config (run the restore as root for --with-config).');
                 }
@@ -266,8 +297,11 @@ final class Backup
             if (is_link($path)) {
                 throw new \RuntimeException('Refusing to restore through a symbolic link: ' . substr($path, strlen($this->root) + 1));
             }
-            if (!is_dir($path) && !@mkdir($path, 02770) && !is_dir($path)) {
-                throw new \RuntimeException('Could not create ' . substr($path, strlen($this->root) + 1) . '.');
+            if (!is_dir($path)) {
+                if (!@mkdir($path, 02770) && !is_dir($path)) {
+                    throw new \RuntimeException('Could not create ' . substr($path, strlen($this->root) + 1) . '.');
+                }
+                @chmod($path, 02770); // mkdir's mode is reduced by the umask; the web server's group needs write access
             }
         }
     }
@@ -374,10 +408,52 @@ final class Backup
         $bin = $this->findBinary(['mariadb', 'mysql']);
         $opts = $this->optionsFile();
         try {
-            $this->run([$bin, '--defaults-extra-file=' . $opts, '--default-character-set=utf8mb4', (string) $this->config->get('db.name')], $file, 'Database restore failed');
+            // --binary-mode turns off the client's own commands (\! shell, \. source, system, ...) when reading a
+            // file, so a tampered dump can only run SQL against Sentinel's own database (1.34 audit); --sandbox (newer
+            // MariaDB clients) also refuses file access. The dump is checked for client commands first as well.
+            $this->refuseClientCommands($file);
+            $cmd = [$bin, '--defaults-extra-file=' . $opts, '--default-character-set=utf8mb4', '--binary-mode'];
+            if ($this->clientSupports($bin, '--sandbox')) {
+                $cmd[] = '--sandbox';
+            }
+            $cmd[] = (string) $this->config->get('db.name');
+            $this->run($cmd, $file, 'Database restore failed');
         } finally {
             @unlink($opts);
         }
+    }
+
+    /**
+     * Refuse a dump with a line that starts with a mysql client command (a dump written by mariadb-dump never has
+     * one: every line is SQL or a comment). Defence in depth next to --binary-mode.
+     */
+    private function refuseClientCommands(string $file): void
+    {
+        $fh = fopen($file, 'rb');
+        if ($fh === false) {
+            throw new \RuntimeException('Could not read the database dump.');
+        }
+        try {
+            while (($line = fgets($fh, 1048576)) !== false) {
+                if (preg_match('/^\s*(\\\\[^\s]|(system|source|connect|pager|tee|use)\b)/i', $line) === 1) {
+                    throw new \RuntimeException('The database dump contains client commands, which a Sentinel backup never has. It was not restored.');
+                }
+            }
+        } finally {
+            fclose($fh);
+        }
+    }
+
+    /** Whether the database client knows an option (from its --help text). */
+    private function clientSupports(string $bin, string $option): bool
+    {
+        $proc = proc_open([$bin, '--help'], [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes);
+        if (!is_resource($proc)) {
+            return false;
+        }
+        $help = (string) stream_get_contents($pipes[1]);
+        proc_close($proc);
+        return preg_match('/^\s*' . preg_quote($option, '/') . '\s/m', $help) === 1;
     }
 
     /**

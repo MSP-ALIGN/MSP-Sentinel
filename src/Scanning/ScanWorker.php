@@ -102,7 +102,9 @@ final class ScanWorker
         $this->housekeeping?->tick();
         $lock = $this->db->quote('msp_sentinel_worker_' . substr(hash('sha256', (string) $this->db->query('SELECT DATABASE()')->fetchColumn()), 0, 16));
         if ((int) $this->db->query("SELECT GET_LOCK({$lock}, 0)")->fetchColumn() !== 1) {
-            return 'Another worker is running.';
+            // A long scan holds the worker lock for hours: alerts (and test messages) still go out meanwhile, under
+            // the outbox's own lock (1.34 audit). Deliveries are claimed row by row, so two senders never send one twice.
+            return 'Another worker is running.' . $this->flushOutboxAlone();
         }
         try {
             // We hold the only worker lock, so any job still "running" belongs to a worker that died.
@@ -171,6 +173,27 @@ final class ScanWorker
                 }
             }
             return $result;
+        } finally {
+            $this->db->query("SELECT RELEASE_LOCK({$lock})");
+        }
+    }
+
+    /** Send queued alerts while another worker holds the worker lock; '' or a short note for the tick result. */
+    private function flushOutboxAlone(): string
+    {
+        if ($this->outbox === null) {
+            return '';
+        }
+        $lock = $this->db->quote('msp_sentinel_outbox_' . substr(hash('sha256', (string) $this->db->query('SELECT DATABASE()')->fetchColumn()), 0, 16));
+        if ((int) $this->db->query("SELECT GET_LOCK({$lock}, 0)")->fetchColumn() !== 1) {
+            return '';
+        }
+        try {
+            $sent = $this->outbox->flush();
+            return $sent['sent'] + $sent['failed'] > 0 ? " Alerts: {$sent['sent']} sent, {$sent['failed']} failed." : '';
+        } catch (\Throwable $ex) {
+            error_log('[msp-sentinel] sending alerts failed: ' . $ex->getMessage());
+            return '';
         } finally {
             $this->db->query("SELECT RELEASE_LOCK({$lock})");
         }

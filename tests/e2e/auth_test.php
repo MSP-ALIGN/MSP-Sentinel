@@ -75,7 +75,7 @@ return [
     },
     'secrets are stored encrypted or hashed, never in plain text' => function (TestContext $ctx): void {
         $row = $ctx->db->query("SELECT totp_secret_enc FROM users WHERE username = 'admin'")->fetch();
-        Assert::true(str_starts_with((string) $row['totp_secret_enc'], 'v1:'), 'TOTP secret is encrypted');
+        Assert::true(str_starts_with((string) $row['totp_secret_enc'], 'v2:'), 'TOTP secret is encrypted');
         Assert::notContains($ctx->secrets['admin'], (string) $row['totp_secret_enc']);
         $hashes = $ctx->db->query("SELECT code_hash FROM user_recovery_codes")->fetchAll(PDO::FETCH_COLUMN);
         foreach (explode(',', $ctx->secrets['admin-recovery']) as $code) {

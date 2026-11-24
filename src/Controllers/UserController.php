@@ -103,6 +103,10 @@ final class UserController extends Controller
             'is_active' => $isSelf ? 1 : ($request->input('is_active') === '1' ? 1 : 0),
         ];
         $errors = $this->validateAccount($values);
+        // Changing someone's role or access is confirmed with the admin's own password.
+        if (($values['role'] !== (string) $target['role'] || $values['is_active'] !== (int) $target['is_active']) && ($why = $this->confirmWithOwnPassword($request)) !== null) {
+            $errors['my_password'] = $why;
+        }
         $losesAdmin = $target['role'] === Role::ADMIN && (int) $target['is_active'] === 1
             && ($values['role'] !== Role::ADMIN || $values['is_active'] !== 1);
         $accessChanged = $values['role'] !== (string) $target['role'] || $values['is_active'] !== (int) $target['is_active'];
@@ -154,6 +158,10 @@ final class UserController extends Controller
             Session::flash('warning', __('Change your own password from your profile.'));
             return Response::redirect('/users/' . $id);
         }
+        if (($why = $this->confirmWithOwnPassword($request)) !== null) {
+            Session::flash('danger', $why);
+            return Response::redirect('/users/' . $id);
+        }
         $password = $request->raw('password');
         if (($policy = Passwords::policyError($password, (string) $target['username'])) !== null) {
             Session::flash('danger', $policy);
@@ -172,6 +180,10 @@ final class UserController extends Controller
         $id = (int) $target['id'];
         if ($id === (int) $this->user()['id']) {
             Session::flash('warning', __('You cannot reset your own two-factor authentication. Ask another admin.'));
+            return Response::redirect('/users/' . $id);
+        }
+        if (($why = $this->confirmWithOwnPassword($request)) !== null) {
+            Session::flash('danger', $why);
             return Response::redirect('/users/' . $id);
         }
         $password = $request->raw('password');

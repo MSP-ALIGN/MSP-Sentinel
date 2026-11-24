@@ -300,4 +300,22 @@ return [
             @unlink(dirname($ctx->nmapLog) . '/nmap-closed.json');
         }
     },
+    'engagements: an account the creator made (or reset) cannot be the second approver' => function (TestContext $ctx) use ($engSetup, $fields, $lastId): void {
+        [$cid, $site, $pdf] = $engSetup($ctx);
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $admin->upload('/clients/' . $cid . '/engagements/new', '/clients/' . $cid . '/engagements', $fields($site, ['name' => 'Self approval attempt',
+            'external' => '203.0.113.2', 'internal_' . $site => '', 'exclusions' => '']), 'document', $pdf, 'application/pdf');
+        $id = $lastId($ctx, $cid);
+        // The creator makes a second admin account (audited as theirs) and tries to approve through it.
+        $admin->submit('/users/new', '/users', ['username' => 'shadow.admin', 'display_name' => 'Shadow', 'email' => '', 'role' => 'admin', 'password' => 'Shadow-Temp-Pass-01!']);
+        $ctx->db->exec("UPDATE users SET must_change_password = 0 WHERE username = 'shadow.admin'");
+        $shadow = $ctx->login('shadow.admin', 'Shadow-Temp-Pass-01!');
+        $shadow->post('/engagements/' . $id . '/approve', ['_csrf' => $shadow->get('/engagements/' . $id)->csrf(), 'password' => 'Shadow-Temp-Pass-01!']);
+        Assert::same(null, $ctx->db->query("SELECT approved_at FROM engagements WHERE id = {$id}")->fetchColumn(), 'not approved by an account its creator made');
+        Assert::contains('another admin must approve it', $shadow->get('/engagements/' . $id)->body);
+        // A long-standing second admin can.
+        $admin2 = $ctx->login('engadmin2', 'Engadmin2-Pass-0001!');
+        $admin2->post('/engagements/' . $id . '/approve', ['_csrf' => $admin2->get('/engagements/' . $id)->csrf(), 'password' => 'Engadmin2-Pass-0001!']);
+        Assert::true($ctx->db->query("SELECT approved_at FROM engagements WHERE id = {$id}")->fetchColumn() !== null, 'approved by a real second admin');
+    },
 ];

@@ -75,7 +75,7 @@ $now = time();
         </div>
     </form>
     <div class="card-body pt-0 d-flex flex-wrap gap-2">
-        <form method="post" action="<?= e(url('/admin/api/events/test')) ?>"><?= Csrf::field() ?><button type="submit" class="btn btn-outline-secondary btn-sm"><?= e(__('Send test event')) ?></button></form>
+        <form method="post" data-confirm="<?= e(__('Send a test event to the configured webhook address now?')) ?>" action="<?= e(url('/admin/api/events/test')) ?>"><?= Csrf::field() ?><button type="submit" class="btn btn-outline-secondary btn-sm"><?= e(__('Send test event')) ?></button></form>
         <form method="post" action="<?= e(url('/admin/api/events/secret')) ?>" data-confirm="<?= e(__('Create a new signing secret? The receiving system must be updated, or it will reject events.')) ?>"><?= Csrf::field() ?><button type="submit" class="btn btn-outline-warning btn-sm"><?= e(__('New signing secret')) ?></button></form>
     </div>
     <?php if ($events['recent'] !== []): ?>
@@ -120,6 +120,8 @@ $now = time();
                 <select class="form-select form-select-sm" id="expires_days" name="expires_days">
                     <?php foreach ([30, 90, 180, 365] as $d): ?><option value="<?= $d ?>" <?= $d === 90 ? 'selected' : '' ?>><?= e(__('{n} days', ['n' => $d])) ?></option><?php endforeach; ?>
                 </select></div>
+            <label for="token_mine" class="form-label small mt-2"><?= e(__('Your own password (to confirm)')) ?></label>
+            <input type="password" class="form-control form-control-sm" id="token_mine" name="my_password" required autocomplete="current-password">
             <p class="small text-body-secondary mt-2 mb-0"><?= e(__('A token acts as you. It stops working if you are deactivated or are no longer an admin. Documentation: /api/v1/openapi.json and Help.')) ?></p>
         </div>
         <div class="card-footer"><button type="submit" class="btn btn-primary btn-sm"><?= e(__('Create token')) ?></button></div>

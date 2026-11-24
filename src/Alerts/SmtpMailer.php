@@ -199,7 +199,11 @@ final class SmtpMailer
         }
         $got = (int) substr($reply, 0, 3);
         if (!in_array($got, (array) $code, true)) {
-            throw new \RuntimeException('the mail server answered ' . ($got ?: 'nothing') . ' ' . mb_substr(trim(substr(strtok($reply, "\n"), 4)), 0, 120));
+            // The reply text only when it is an SMTP reply: something that isn't a mail server never has its answer shown
+            // (the test button must not work as a probe of other services).
+            $isSmtp = $got >= 200 && $got <= 599 && preg_match('/^\d{3}[ -]/', $reply) === 1;
+            throw new \RuntimeException($isSmtp ? 'the mail server answered ' . $got . ' ' . mb_substr(trim(substr(strtok($reply, "\n"), 4)), 0, 120)
+                : 'the server did not answer like a mail server');
         }
         return $reply;
     }
