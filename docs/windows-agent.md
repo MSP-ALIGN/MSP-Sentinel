@@ -113,6 +113,11 @@ folder and the files resolve to themselves (no junction, link or pipe).
   address, because it never reads the agent's own folder. Keep the old address working, or upgrade by hand after a
   move.
 - **The update task runs the new release's self-check as SYSTEM.** On Linux the helper runs it as the agent's user.
+- **The update task's own code runs from a frozen copy** (1.35): `C:\Program Files\MSP Sentinel Agent\updater`,
+  outside `app\`, which remote updates never change, so the task code never comes from a new release.
+  `install-agent.ps1` refreshes it on install and `-Upgrade`; an agent updated from an older version makes it once
+  from its installed release (if Windows doesn't let the old launcher be replaced while it runs, run
+  `install-agent.ps1 -Upgrade` once to finish the change).
   The code is signed and verified first.
 
 ## What to check on a real Windows machine

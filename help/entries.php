@@ -170,7 +170,7 @@ return [
                 'To add one (admins): 1. On the client\'s Agents page, record the site\'s internal authorisation: who approved it, the dates and the private networks (each at most a /16). 2. Prepare a mini-PC or VM on that network: Debian 13, Debian 12 or Ubuntu 24.04, or Windows Server 2022/2025 or Windows 11 (preview); 2 CPU cores, 2 GB memory, 20 GB disk; a VM needs a bridged adapter, not NAT; outbound HTTPS to Sentinel. 3. Click Create an enrolment code (it appears once the authorisation is recorded; shown once, valid once for 24 hours). 4. Run the install command shown on the page and follow its checks.',
                 'Sentinel signs the authorisation and every job; the agent checks both and refuses any target outside the signed networks. Pause on the site stops agent scans within a minute; revoking an agent stops its token at once.',
                 'On the Agents page you can also set scan gentleness per site (very gentle, gentle or faster; never beyond nmap\'s normal -T3), how often agents check in, ask for Diagnostics (versions, disk, memory, clock difference, key fingerprint) and Restart.',
-                'Updates: Update to x.y.z for one agent, or Update all agents (per client, or under Administration → System). An agent installs only releases signed with the release key it pinned at install, and a root helper checks again. Agents older than 1.22.0 must be upgraded once by hand. The release key (Administration → System) is created once in your browser: the private key downloads as a password-protected file, Sentinel keeps only the public half, and it does not expire. Click Sign this version after each Sentinel update. Rotate it with the old key file; Replace it only if the file is lost (agents then need it by hand).',
+                'Updates: Update to x.y.z for one agent, or Update all agents (per client, or under Administration → System). An agent installs only releases signed with the release key it pinned at install, and a root helper checks again. Agents older than 1.22.0 must be upgraded once by hand. The release key (Administration → System) is created once in your browser: the private key downloads as a password-protected file, Sentinel keeps only the public half, and it does not expire. Click Sign this version after each Sentinel update, and paste the expected manifest SHA-256 from the release notes (or from php bin/release-sign.php hash --ref vX.Y.Z on your own computer): your browser signs only if it matches. The root (Windows: SYSTEM) update helper runs from a frozen copy that remote updates never change, so a new release never runs with those rights; a release that changes the helper asks for a one-off manual upgrade. Rotate it with the old key file; Replace it only if the file is lost (agents then need it by hand).',
                 'New Sentinel address: Administration → System → Move agents (with your password). Each agent switches only after the new address signs a challenge with this Sentinel\'s key; nothing secret is sent before. Right after a move it goes back if the new address keeps failing, and while moved it asks its original address every 6 hours, so keep that address working.',
             ],
         ],
@@ -352,6 +352,14 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.35.0',
+            'date' => '2026-11-24',
+            'items' => [
+                'Agent updates can no longer run new code as root or SYSTEM: the update helper runs from a frozen copy that remote updates never change, and updates no longer rewrite the services. Each agent makes the copy at its next update; nothing to do (on Windows, install-agent.ps1 -Upgrade once if the change can\'t finish on its own).',
+                'Sign this version asks for the expected manifest SHA-256 (from the release notes, or php bin/release-sign.php hash --ref vX.Y.Z on your own computer) and signs only if it matches; the hash is kept in the audit log.',
+            ],
+        ],
         [
             'version' => '1.34.0',
             'date' => '2026-11-24',

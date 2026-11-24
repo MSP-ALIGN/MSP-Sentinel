@@ -161,11 +161,18 @@ final class SystemController extends Controller
     /** POST /admin/system/release-sign (admins): keep the signature the admin's browser made for this installation's files. */
     public function releaseSign(Request $request): Response
     {
+        // The admin confirmed the manifest by its hash (from the release notes, or computed on their own computer); the
+        // browser checked it before signing and it is checked again here, and kept in the audit log (1.35).
+        $expected = strtolower(trim($request->input('expected_hash')));
+        if (preg_match('/^[0-9a-f]{64}$/', $expected) !== 1 || !hash_equals($expected, hash('sha256', $request->raw('manifest')))) {
+            Session::flash('danger', __('The expected manifest hash is missing or does not match what would be signed. Nothing was signed.'));
+            return Response::redirect('/admin/system#agents');
+        }
         $error = App::agentRelease()->acceptSignature($request->raw('manifest'), trim($request->input('signature')));
         if ($error !== '') {
             Session::flash('danger', $error);
         } else {
-            $this->audit($request, 'release_key.signed', null, null, ['version' => App::agentRelease()->version()]);
+            $this->audit($request, 'release_key.signed', null, null, ['version' => App::agentRelease()->version(), 'manifest_sha256' => $expected]);
             Session::flash('success', __('Version {v} signed. Agents can be updated to it.', ['v' => App::agentRelease()->version() ?? '?']));
         }
         return Response::redirect('/admin/system#agents');

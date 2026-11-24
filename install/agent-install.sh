@@ -116,6 +116,15 @@ release_key_and_helper() {
   fi
   # The helper's results: root-owned, readable by the agent, not changeable by it.
   run install -d -o root -g sentinel-agent -m 0750 /var/lib/sentinel-agent-update
+  # The helper itself runs from a root-owned copy outside the code folder (1.35): remote updates never change it, so
+  # code from a new release never runs as root. Refreshed here, from the release being installed by hand.
+  frozen=/usr/local/lib/sentinel-agent-update
+  run rm -rf "$frozen.new"
+  for f in bin/agent-update-runner.php src/System/ReleaseManifest.php src/Agent/Signer.php src/System/ReleaseKeyOffer.php; do
+    run install -D -o root -g root -m 0644 "$SRC/$f" "$frozen.new/$f"
+  done
+  run rm -rf "$frozen"
+  run mv -T "$frozen.new" "$frozen"
   render sentinel-agent-update.service | write_file /etc/systemd/system/sentinel-agent-update.service 0644
   render sentinel-agent-update.path | write_file /etc/systemd/system/sentinel-agent-update.path 0644
   run systemctl daemon-reload
@@ -130,7 +139,7 @@ if [ "$mode" = uninstall ]; then
   run systemctl disable --now sentinel-agent sentinel-agent-update.path || true
   run rm -f /etc/systemd/system/sentinel-agent.service /etc/systemd/system/sentinel-agent-update.service /etc/systemd/system/sentinel-agent-update.path
   run systemctl daemon-reload
-  run rm -rf "$APP_DIR" "$APP_DIR.old" "$APP_DIR.new" "$APP_DIR.failed" "$CONF_DIR" "$STATE_DIR" /var/lib/sentinel-agent-update
+  run rm -rf "$APP_DIR" "$APP_DIR.old" "$APP_DIR.new" "$APP_DIR.failed" "$CONF_DIR" "$STATE_DIR" /var/lib/sentinel-agent-update /usr/local/lib/sentinel-agent-update
   run userdel sentinel-agent || true
   echo "  Removed. Also revoke the agent on the client page in Sentinel, so its token stops working."
   exit 0

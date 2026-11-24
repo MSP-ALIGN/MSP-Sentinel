@@ -12,18 +12,22 @@ StartLimitBurst=5
 Type=oneshot
 # The result folder must exist before the sandbox is set up ("+": outside it). Root-owned, readable by the agent.
 ExecStartPre=+/usr/bin/install -d -o root -g sentinel-agent -m 0750 /var/lib/sentinel-agent-update
-# The helper's own code is in the code folder: repair an update stopped half-way (power cut between the two renames): the code folder missing and the previous
+# Repair an update stopped half-way (power cut between the two renames): the code folder missing and the previous
 # version kept beside it. Runs as root ("+") before anything else, outside the code folder (which may be missing).
 # Fixed root-owned paths only; a symlink is never followed.
 ExecStartPre=+/bin/sh -c 'if [ ! -e __ROOT__ ] && [ ! -L __ROOT__ ] && [ -d __ROOT__.old ] && [ ! -L __ROOT__.old ]; then mv -T __ROOT__.old __ROOT__; fi'
-ExecStart=__PHP__ __ROOT__/bin/agent-update-runner.php
+# The helper runs from a root-owned copy OUTSIDE the code folder (1.35), which remote updates never change, so code from
+# a new release never runs as root. Agents updated from an older version make the copy once, from the installed
+# (already verified) release; install/agent-install.sh refreshes it on a manual upgrade.
+ExecStartPre=+/bin/sh -c 'if [ ! -f /usr/local/lib/sentinel-agent-update/bin/agent-update-runner.php ] && [ ! -L /usr/local/lib/sentinel-agent-update ]; then __PHP__ __ROOT__/bin/agent-update-runner.php --freeze; fi'
+ExecStart=__PHP__ /usr/local/lib/sentinel-agent-update/bin/agent-update-runner.php
 TimeoutStartSec=900
-# Hardening: it may only write the agent's code folder, its own result folder, the systemd units it owns, the pinned
+# Hardening: it may only write the agent's code folder, its own result folder (never the systemd units, 1.35), the pinned
 # release key (/etc/sentinel-agent/release-key.pub, only as the helper's pin step allows), plus the
 # agent's state folder, where ONLY the collector (running as the agent's user) removes the request. Root's own code
 # never touches that folder (bin/agent-update-runner.php).
 ProtectSystem=strict
-ReadWritePaths=/opt /etc/systemd/system /etc/sentinel-agent /var/lib/sentinel-agent-update /var/lib/sentinel-agent
+ReadWritePaths=/opt /etc/sentinel-agent /var/lib/sentinel-agent-update /var/lib/sentinel-agent
 ProtectHome=yes
 PrivateTmp=yes
 PrivateDevices=yes

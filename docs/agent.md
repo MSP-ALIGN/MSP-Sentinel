@@ -171,15 +171,20 @@ vouch for code. What that protects, and what it doesn't, is under "What the rele
    release public key it pinned (`/etc/sentinel-agent/release-key.pub`, else the key pinned at enrolment in the
    root-owned `agent.json`; an update never changes it): the signature, that it is the version asked for and newer than its own, and every file's SHA-256.
 2. It stages the files in its state folder and asks the root update helper (`sentinel-agent-update.path` starts
-   `bin/agent-update-runner.php`) to install them. The agent itself can't change its code.
+   `agent-update-runner.php`) to install them. The agent itself can't change its code.
+   **The helper runs from a frozen copy** in `/usr/local/lib/sentinel-agent-update` (root-owned, outside the code
+   folder; 1.35). Remote updates never change it, so code from a new release never runs as root: a release only ever
+   runs as the agent's unprivileged user. The installer writes the copy (install and `--upgrade`); an agent updated
+   from an older version makes it once, from its installed (already checked) release.
 3. **Root never touches the agent's folder** (its user could plant symlinks there). The helper has the staged release
    read by a collector running as the agent's user, and checks everything again in memory: the signature with the
    pinned key, the version (x.y.z, newer than the installed one; an unreadable installed version is refused) and every
    file's hash. Only then does it write the files into a new root-owned folder.
 4. **Pre-flight:** the new release's own self-check runs as the agent's user (PHP version and extensions). A release
    that needs something the appliance doesn't have isn't installed.
-5. It puts the new folder in place (the previous one stays as `/opt/sentinel-agent.old`), writes the systemd units
-   from the new release and restarts the agent. **If the agent doesn't stay running, the previous version is put back
+5. It puts the new folder in place (the previous one stays as `/opt/sentinel-agent.old`) and restarts the agent. It
+   does **not** rewrite the systemd units (1.35): changes to the units or to the helper itself arrive only with a
+   manual upgrade (`agent-install.sh --upgrade`), and release notes say when one is needed. **If the agent doesn't stay running, the previous version is put back
    and restarted** (rollback): it must be running 20 and 50 seconds later without having restarted. An update stopped
    half-way (power cut between the two renames) is repaired by systemd before the agent or the helper starts (a
    root step in both units puts `/opt/sentinel-agent.old` back), so the agent comes back on its own (1.28).
@@ -202,11 +207,14 @@ holds the private key.
    Ed25519 key pair and downloads the private key as a file locked with that password (PBKDF2-SHA256, 600,000 rounds,
    AES-256-GCM). Only the public half goes to Sentinel. Keep the file and its password safe (a password manager or
    offline storage); you need both to sign releases. **The key does not expire.**
-2. **Sign this version** (after each Sentinel update): Sentinel lists its own files with their SHA-256; you pick the
-   key file and type its password; your browser checks the file is the release key Sentinel uses, signs, and sends
-   only the signature. Agents can then be updated to that version.
-   The page shows the manifest's SHA-256 and every file that will be signed: compare the hash with the one published
-   in the release notes for that version (`bin/release-sign.php sign` prints it; both use the same file list). Only
+2. **Sign this version** (after each Sentinel update): Sentinel lists its own files with their SHA-256 (the
+   manifest). **Paste the expected manifest SHA-256** (1.35): from the release notes of that version (each release
+   publishes it as `AGENT-MANIFEST-SHA256`), or computed on your own computer from the repository:
+   `php bin/release-sign.php hash --ref v1.35.0` (no key needed; `--dir FOLDER` works on an unpacked release). Then
+   pick the key file and type its password. Your browser hashes the exact manifest it is about to sign and **refuses
+   to sign unless it matches what you pasted**; Sentinel checks it again and keeps the hash in the audit log. A
+   mismatch means files on the server were changed: don't sign. Agents can then be updated to that version.
+   The page also shows the manifest's SHA-256 and every file that will be signed. Only
    the release's own folders and file types are listed: files of other types or outside those folders (a backup, a
    dump) never are. A stray file of a release type inside a release folder (say `src/extra.php`) would be, which is
    one more reason to compare the hash and look over the list.
@@ -241,7 +249,8 @@ with no key yet would take it.
   installing Sentinel, and check the fingerprint the agent installer prints against the System page.
 - **Signing and rotating happen in a page Sentinel serves.** If the Sentinel server itself were taken over, its
   page could be changed to copy your key file and password while you use them, or show you changed files to sign.
-  Only sign and rotate on a Sentinel you just updated yourself, compare the manifest hash with the release notes,
+  Only sign and rotate on a Sentinel you just updated yourself, take the expected manifest hash from the release
+  notes or your own computer (never from the page),
   and if you think the server was compromised, don't use the key there: rebuild the server, then replace the key
   and give agents the new one by hand. The command line remains for maintainers who sign from their git repository instead:
 `php bin/release-sign.php keygen --out ~/sentinel-release.key`, then `sign --key …` for each release

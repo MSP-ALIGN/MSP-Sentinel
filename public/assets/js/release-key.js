@@ -170,13 +170,25 @@
                         });
                     }).catch(fail);
                 } else if (mode === 'sign') {
-                    readFile(form.querySelector('[data-key-field=file]')).then(function (text) {
+                    // Sign only what the admin confirmed (1.35): the SHA-256 of the exact manifest text about to be
+                    // signed must equal the hash they pasted from the release notes or computed on their own computer
+                    // (php bin/release-sign.php hash --ref vX.Y.Z).
+                    var manifest = form.querySelector('input[name=manifest]').value;
+                    var expected = field('expected-hash').trim().toLowerCase();
+                    crypto.subtle.digest('SHA-256', new TextEncoder().encode(manifest)).then(function (d) {
+                        var actual = Array.prototype.map.call(new Uint8Array(d), function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+                        if (!/^[0-9a-f]{64}$/.test(expected) || expected !== actual) {
+                            throw new Error(form.getAttribute('data-hash-text') || 'the files on this server do not match the release hash you entered: do not sign');
+                        }
+                        set('expected_hash', expected);
+                        return readFile(form.querySelector('[data-key-field=file]'));
+                    }).then(function (text) {
                         return unlock(text, field('password'));
                     }).then(function (k) {
                         if (k.publicKey !== form.getAttribute('data-public-key')) {
                             throw new Error(form.getAttribute('data-wrong-key-text') || 'this is not the release key Sentinel uses');
                         }
-                        return sign(k.privateKey, form.querySelector('input[name=manifest]').value);
+                        return sign(k.privateKey, manifest);
                     }).then(function (sig) {
                         set('signature', sig);
                         done();

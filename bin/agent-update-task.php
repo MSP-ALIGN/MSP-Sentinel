@@ -68,6 +68,17 @@ $keyFile = $opt('key') ?? $win->releaseKeyFile();
 // swapped while this runs).
 $app = rtrim($opt('app') ?? (defined('SENTINEL_UPDATE_APP') ? (string) SENTINEL_UPDATE_APP : dirname(__DIR__)), '\\/');
 $php = $opt('php') ?? PHP_BINARY;
+// Moving to the frozen update code (1.35): an agent installed before 1.35 has a launcher that runs this task straight
+// from app\. When this code runs from app\ (so it IS the installed, already verified release, not a staged one),
+// it puts this release's launcher in place once; from then on the task runs from updater\ (see
+// install/windows/agent-update-launcher.php) and this block never runs again. Never in the test suite.
+if (!$test && defined('SENTINEL_UPDATE_APP') && str_starts_with(strtolower((string) realpath(__FILE__)), strtolower((string) realpath($app)) . '\\')) {
+    $launcher = dirname($app) . '\\agent-update-launcher.php';
+    $newLauncher = $app . '\\install\\windows\\agent-update-launcher.php';
+    if (is_file($newLauncher) && !str_contains((string) @file_get_contents($launcher), "'\\\\updater'")) {
+        @copy($newLauncher, $launcher . '.new') && @rename($launcher . '.new', $launcher);
+    }
+}
 $phpIni = dirname($php) . DIRECTORY_SEPARATOR . 'php.ini';
 $service = !($test && in_array('--no-service', $argv, true));
 $system32 = (getenv('SystemRoot') ?: 'C:\\Windows') . '\\System32';

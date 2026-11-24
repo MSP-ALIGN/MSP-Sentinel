@@ -39,9 +39,14 @@ page.
    client's agents at once under **Administration → System**.
 2. Each agent updates at its next check-in between scans and only installs code signed with your release key. Create
    the release key once under **Administration → System → Release key**, and **Sign this version** after each
-   Sentinel update: see [the agent reference](../agent.md#updates-from-sentinel-122).
+   Sentinel update. Signing asks for the **expected manifest SHA-256**: copy it from the release notes
+   (`AGENT-MANIFEST-SHA256`) or compute it on your own computer with `php bin/release-sign.php hash --ref vX.Y.Z`.
+   Your browser signs only if it matches. See [the agent reference](../agent.md#updates-from-sentinel-122).
 3. The Agents page shows "Updated to x.y.z", or why it was refused. If the new version doesn't stay running, the
    agent goes back to the previous one by itself.
+4. The root update helper runs from a frozen copy that remote updates never change, so a new release never runs as
+   root (or SYSTEM on Windows). When a release changes the helper or the services, its notes ask for a one-off manual
+   upgrade (`agent-install.sh --upgrade`, or `install-agent.ps1 -Upgrade` on Windows).
 
 ## Turn on Active Directory checks
 

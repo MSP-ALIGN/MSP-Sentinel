@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.34.0](https://img.shields.io/badge/version-1.34.0-ff5a1f?style=flat-square)
+![Version 1.35.0](https://img.shields.io/badge/version-1.35.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -118,6 +118,23 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.35.0 (2026-11-24): agent updates can't run new code as root; signing checks the release hash
+
+- **The agent update helper is frozen.** Linux agents run the root update helper from a root-owned copy in
+  `/usr/local/lib/sentinel-agent-update`, and Windows agents run the SYSTEM update task from `updater\`, both outside
+  the code folder that updates replace. A remote update no longer rewrites the systemd units either. So code from a new
+  release only ever runs as the agent's unprivileged account, even if a release were signed through a compromised
+  Sentinel.
+  - Nothing to do: an agent makes its frozen copy at its next update, from the version it already runs. The installers
+    refresh it on install and on a manual upgrade. On Windows, if the old launcher can't be swapped while it runs,
+    `install-agent.ps1 -Upgrade` once finishes the change.
+  - From now on, changes to the helper or the services arrive only with a manual upgrade; release notes will say so.
+- **Signing a version checks its hash.** On **Administration → System → Sign this version**, paste the expected
+  manifest SHA-256 from the release notes, or compute it on your own computer with
+  `php bin/release-sign.php hash --ref vX.Y.Z` (no key needed). Your browser signs only if the files it is about to
+  sign match; Sentinel checks again and records the hash in the audit log. Each release build now publishes
+  `AGENT-MANIFEST-SHA256` next to `SHA256SUMS`.
+
 ### 1.34.0 (2026-11-24): security audit, search, confirmations, easier workflows and docs
 
 - **Search.** A search box in the top bar finds clients, findings (title, target or CVE), external hosts, internal
@@ -174,28 +191,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
   - stricter domain checks;
   - a broader API key format;
   - a smaller answer size limit.
-
-### 1.33.0 (2026-11-24): breach monitoring
-
-- **Breached accounts.** Once a week, Sentinel asks XposedOrNot which addresses of your verified domains appear in
-  known data breaches (**Administration → Integrations → Breach monitoring**).
-  - Each address goes to the client whose authorisation lists its domain.
-  - Verified domains in no client's register are listed and otherwise ignored.
-- **One finding per address:**
-  - Fail when a breach happened in the last 12 months;
-  - Warning when all its breaches are older;
-  - it lists each breach, its date and what was exposed, with advice: change the password and any reuse of it, turn
-    on MFA, check recent sign-ins.
-
-  Passwords are never stored or shown.
-- **Safe by default:**
-  - The API key is stored encrypted and never shown.
-  - A failed check (provider unreachable, key refused, its daily limit) changes nothing.
-  - An address no longer listed resolves.
-  - **Check now** runs at most once an hour.
-- **The client's Website & email page** lists the breached addresses.
-- **Provider choice:** XposedOrNot is free (paid xonAPI+ keys for commercial volume work the same way). Have I Been
-  Pwned has wider coverage but needs a paid key; it can be added later.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

@@ -2,6 +2,28 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.33.0 (2026-11-24): breach monitoring
+
+- **Breached accounts.** Once a week, Sentinel asks XposedOrNot which addresses of your verified domains appear in
+  known data breaches (**Administration → Integrations → Breach monitoring**).
+  - Each address goes to the client whose authorisation lists its domain.
+  - Verified domains in no client's register are listed and otherwise ignored.
+- **One finding per address:**
+  - Fail when a breach happened in the last 12 months;
+  - Warning when all its breaches are older;
+  - it lists each breach, its date and what was exposed, with advice: change the password and any reuse of it, turn
+    on MFA, check recent sign-ins.
+
+  Passwords are never stored or shown.
+- **Safe by default:**
+  - The API key is stored encrypted and never shown.
+  - A failed check (provider unreachable, key refused, its daily limit) changes nothing.
+  - An address no longer listed resolves.
+  - **Check now** runs at most once an hour.
+- **The client's Website & email page** lists the breached addresses.
+- **Provider choice:** XposedOrNot is free (paid xonAPI+ keys for commercial volume work the same way). Have I Been
+  Pwned has wider coverage but needs a paid key; it can be added later.
+
 ### 1.32.1 (2026-11-24): shared ITFlow tickets, fixes from review
 
 - **No target is left without a ticket.** A fixed target that stays with a replaced ticket is released, and gets a

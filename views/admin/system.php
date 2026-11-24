@@ -133,14 +133,15 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
         <?php else: ?>
         <p><?= e(__('Key {fp}', ['fp' => $fp])) ?><?= $rk['created'] !== '' ? ' · ' . e(__('created {t} UTC', ['t' => $rk['created']])) : '' ?></p>
         <?php if ($rk['manifest'] !== null): $mf = json_decode($rk['manifest'], true); ?>
-        <form method="post" data-confirm="<?= e(__('Sign this version with the release key? Agents will accept it as an update.')) ?>" action="<?= e(url('/admin/system/release-sign')) ?>" class="row g-2 mb-3" data-release-key="sign" data-public-key="<?= e($rk['key']) ?>" <?= $keyAttrs ?>><?= \Sentinel\Core\Csrf::field() ?>
-            <input type="hidden" name="manifest" value="<?= e($rk['manifest']) ?>"><input type="hidden" name="signature" value="">
+        <form method="post" data-confirm="<?= e(__('Sign version {v} (manifest SHA-256 {h}) with the release key? Every agent will accept it as an update.', ['v' => $mf['version'] ?? '?', 'h' => hash('sha256', $rk['manifest'])])) ?>" data-hash-text="<?= e(__('the files on this server do not match the hash you entered: do not sign, and check the server')) ?>" action="<?= e(url('/admin/system/release-sign')) ?>" class="row g-2 mb-3" data-release-key="sign" data-public-key="<?= e($rk['key']) ?>" <?= $keyAttrs ?>><?= \Sentinel\Core\Csrf::field() ?>
+            <input type="hidden" name="manifest" value="<?= e($rk['manifest']) ?>"><input type="hidden" name="signature" value=""><input type="hidden" name="expected_hash" value="">
             <div class="col-12"><?= e(__('Sign version {v} ({n} files) so agents can be updated to it.', ['v' => $mf['version'] ?? '?', 'n' => count($mf['files'] ?? [])])) ?>
-                <div class="form-text"><?= e(__('Before signing, compare this fingerprint of the files with the one published in the release notes for this version: a difference means files on this server were changed, so do not sign.')) ?></div>
+                <div class="form-text"><?= e(__('Sentinel signs a list of every agent file and its fingerprint. Paste the expected hash of that list below: from the release notes of version {v} (AGENT-MANIFEST-SHA256), or computed on your own computer with: php bin/release-sign.php hash --ref v{v}. The browser signs only if it matches exactly; a difference means files on this server were changed, so do not sign.', ['v' => $mf['version'] ?? '?'])) ?></div>
                 <div class="font-monospace small text-break" data-manifest-hash><?= e(__('Manifest SHA-256: {h}', ['h' => hash('sha256', $rk['manifest'])])) ?></div>
                 <details class="small"><summary><?= e(__('Files that will be signed')) ?></summary>
                     <pre class="small mb-0 update-log"><?php foreach (($mf['files'] ?? []) as $path => $hash): ?><?= e($hash . '  ' . $path) ?>
 <?php endforeach; ?></pre></details></div>
+            <div class="col-12"><label class="form-label" for="expected-hash"><?= e(__('Expected manifest SHA-256 (64 hex characters)')) ?></label><input class="form-control form-control-sm font-monospace" id="expected-hash" data-key-field="expected-hash" maxlength="64" autocomplete="off" spellcheck="false" required></div>
             <div class="col-md-5"><label class="form-label"><?= e(__('Key file')) ?></label><input class="form-control form-control-sm" type="file" accept=".json,application/json" data-key-field="file"></div>
             <div class="col-md-4"><label class="form-label"><?= e(__('Key file password')) ?></label><input class="form-control form-control-sm" type="password" data-key-field="password" autocomplete="off"></div>
             <?= $note ?>

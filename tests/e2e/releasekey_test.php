@@ -106,10 +106,18 @@ return [
                 Assert::same($fromGit, $tracked, 'same release files as a release archive');
                 Assert::true(!in_array('bin/build-release.sh', ReleaseManifest::listTree($ctx->root), true), 'export-ignore files are left out');
             }
-            $admin->submit('/admin/system', '/admin/system/release-sign', ['manifest' => $manifest, 'signature' => base64_encode(str_repeat('x', 64))]);
+            $mh = hash('sha256', $manifest);
+            $admin->submit('/admin/system', '/admin/system/release-sign', ['manifest' => $manifest, 'signature' => base64_encode(str_repeat('x', 64)), 'expected_hash' => $mh]);
             Assert::same(null, App::agentRelease()->version(), 'a bad signature is not kept');
             $sig = $js($ctx, ['op' => 'sign', 'file' => $k['file'], 'password' => 'Key-File-Password-1', 'text' => $manifest]);
-            $admin->submit('/admin/system', '/admin/system/release-sign', ['manifest' => $manifest, 'signature' => $sig['signature']]);
+            // The admin must confirm the manifest by its hash (1.35): missing or another hash signs nothing.
+            Assert::contains('Expected manifest SHA-256', $admin->get('/admin/system')->body, 'the page asks for the expected hash');
+            foreach (['', str_repeat('a', 64)] as $wrong) {
+                $res = $admin->submit('/admin/system', '/admin/system/release-sign', ['manifest' => $manifest, 'signature' => $sig['signature'], 'expected_hash' => $wrong]);
+                Assert::same(null, App::agentRelease()->version(), 'not signed with expected hash "' . $wrong . '"');
+            }
+            $admin->submit('/admin/system', '/admin/system/release-sign', ['manifest' => $manifest, 'signature' => $sig['signature'], 'expected_hash' => strtoupper($mh)]);
+            Assert::same($mh, json_decode((string) $ctx->db->query("SELECT details FROM audit_log WHERE action = 'release_key.signed' ORDER BY id DESC LIMIT 1")->fetchColumn(), true)['manifest_sha256'] ?? null, 'the signed hash is audited');
             Assert::same('9.9.9', App::agentRelease()->version(), 'signed in the browser');
             Assert::contains('This version is signed', $admin->get('/admin/system')->body);
             $threw = false;

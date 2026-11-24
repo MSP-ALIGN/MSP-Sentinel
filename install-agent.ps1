@@ -213,6 +213,14 @@ function Install-Code {
     if ($LASTEXITCODE -ge 8) { Fail "Copying the agent code failed (robocopy $LASTEXITCODE)." }
     # The update task's launcher lives outside app\ so the task can swap app\ (see agent-update-launcher.php).
     Copy-Item -LiteralPath (Join-Path $App 'install\windows\agent-update-launcher.php') -Destination $Launcher -Force
+    # The update task's code runs from updater\, a copy remote updates never change (1.35): code from a new release
+    # never runs as SYSTEM. Refreshed here from the release installed by hand.
+    $Updater = Join-Path $Root 'updater'
+    if (Test-Path -LiteralPath $Updater) { Remove-Item -LiteralPath $Updater -Recurse -Force }
+    & robocopy.exe (Join-Path $App 'src') (Join-Path $Updater 'src') /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
+    if ($LASTEXITCODE -ge 8) { Fail "Copying the update code failed (robocopy $LASTEXITCODE)." }
+    New-Item -ItemType Directory -Force -Path (Join-Path $Updater 'bin') | Out-Null
+    Copy-Item -LiteralPath (Join-Path $App 'bin\agent-update-task.php') -Destination (Join-Path $Updater 'bin\agent-update-task.php') -Force
     return (Get-Content -LiteralPath (Join-Path $App 'VERSION') -Raw).Trim()
 }
 

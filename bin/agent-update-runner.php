@@ -19,14 +19,20 @@ declare(strict_types=1);
  *    the manifest's files are written into a new root-owned folder.
  * 3. Pre-flight (as the agent's user): the new release's own `sentinel-agent.php selfcheck` must pass (PHP version and
  *    extensions) before anything is swapped.
- * 4. Swap /opt/sentinel-agent for the new folder (the previous one is kept as /opt/sentinel-agent.old), write the
- *    systemd units from the new release, restart the agent, and check it stays running; if not, the previous version
- *    is put back and restarted (rollback).
+ * 4. Swap /opt/sentinel-agent for the new folder (the previous one is kept as /opt/sentinel-agent.old), restart the
+ *    agent, and check it stays running; if not, the previous version is put back and restarted (rollback).
+ *
+ * Frozen helper (1.35): root runs THIS script from /usr/local/lib/sentinel-agent-update (FROZEN_DIR), a root-owned copy
+ * outside the code folder that remote updates never change, and an update never rewrites systemd units. So code from a
+ * new release never runs as root: a release (even one signed through a compromised Sentinel) only ever runs as the
+ * agent's unprivileged user. The copy is made by install/agent-install.sh (install and manual upgrade), or once by
+ * `--freeze` from the installed, already verified release when it is missing (agents updated from an older version).
+ * New helper code or unit changes arrive only with a manual upgrade.
  * The result goes to /var/lib/sentinel-agent-update/result.json: a root-owned folder the agent can read but not
  * change. Cleaning up the staged files is the agent's job.
  *
- * TEST SUITE ONLY: with SENTINEL_TEST_MODE=1, --app, --state, --key, --result and --no-systemd point it at test
- * folders, and the collector and pre-flight run as the current user (no runuser). Without it those options are
+ * TEST SUITE ONLY: with SENTINEL_TEST_MODE=1, --app, --state, --key, --result, --frozen and --no-systemd point it at
+ * test folders, and the collector and pre-flight run as the current user (no runuser). Without it those options are
  * refused and it must run as root.
  */
 
@@ -36,6 +42,10 @@ require dirname(__DIR__) . '/src/System/ReleaseKeyOffer.php';
 
 use Sentinel\System\ReleaseManifest;
 
+/** Where root runs the helper from: a root-owned copy outside the code folder (see the notes above). */
+const FROZEN_DIR = '/usr/local/lib/sentinel-agent-update';
+/** The helper's own files: all it needs (it loads nothing else). */
+const FROZEN_FILES = ['bin/agent-update-runner.php', 'src/System/ReleaseManifest.php', 'src/Agent/Signer.php', 'src/System/ReleaseKeyOffer.php'];
 const MAX_COLLECTED = 100663296; // 96 MB: the whole staged release as JSON (files are base64)
 const COLLECT_SECONDS = 180;
 
@@ -45,7 +55,7 @@ $opt = static function (string $name) use ($argv): ?string {
     return $i !== false ? (string) ($argv[$i + 1] ?? '') : null;
 };
 $test = getenv('SENTINEL_TEST_MODE') === '1';
-foreach (['app', 'state', 'key', 'result', 'config'] as $o) {
+foreach (['app', 'state', 'key', 'result', 'config', 'frozen'] as $o) {
     if (!$test && $opt($o) !== null) {
         fwrite(STDERR, "Test options are only allowed in the test suite.\n");
         exit(2);
@@ -56,6 +66,53 @@ if (!$test && in_array('--no-systemd', $argv, true)) {
     exit(2);
 }
 $state = $test && $opt('state') ? rtrim((string) $opt('state'), '/') : '/var/lib/sentinel-agent';
+
+// ---------------------------------------------------------------- freeze (root, once)
+// Copies this helper's files from the folder it runs from (the installed release, checked when it was installed) into
+// FROZEN_DIR, root-owned, when that copy is missing. Written to a temporary folder first and renamed, so a half-written
+// copy is never used. Never overwrites an existing copy (only the installer refreshes it, on a manual upgrade).
+if (in_array('--freeze', $argv, true)) {
+    if (!$test && (!function_exists('posix_geteuid') || posix_geteuid() !== 0)) {
+        fwrite(STDERR, "--freeze must run as root.\n");
+        exit(2);
+    }
+    $frozen = $test && $opt('frozen') ? rtrim((string) $opt('frozen'), '/') : FROZEN_DIR;
+    if (is_file($frozen . '/bin/agent-update-runner.php')) {
+        exit(0); // already frozen
+    }
+    if (is_link($frozen) || (file_exists($frozen) && !is_dir($frozen))) {
+        fwrite(STDERR, "Refusing to freeze: {$frozen} is not a plain folder.\n");
+        exit(1);
+    }
+    $from = dirname(__DIR__);
+    $tmp = $frozen . '.tmp-' . bin2hex(random_bytes(4));
+    $old = umask(0022);
+    foreach (FROZEN_FILES as $rel) {
+        $src = $from . '/' . $rel;
+        if (!is_file($src) || is_link($src)) {
+            fwrite(STDERR, "Missing helper file: {$rel}\n");
+            exit(1);
+        }
+        @mkdir(dirname($tmp . '/' . $rel), 0755, true);
+        if (!copy($src, $tmp . '/' . $rel)) {
+            fwrite(STDERR, "Could not copy {$rel}\n");
+            exit(1);
+        }
+        chmod($tmp . '/' . $rel, 0644);
+    }
+    umask($old);
+    if (is_dir($frozen)) {
+        // An empty or incomplete earlier attempt (no runner in it): replaced.
+        exec('rm -rf -- ' . escapeshellarg($frozen));
+    }
+    if (!rename($tmp, $frozen)) {
+        exec('rm -rf -- ' . escapeshellarg($tmp));
+        fwrite(STDERR, "Could not put the frozen helper in place.\n");
+        exit(1);
+    }
+    fwrite(STDOUT, "Update helper frozen in {$frozen}.\n");
+    exit(0);
+}
 
 // ---------------------------------------------------------------- collector (runs as the agent's user)
 if (in_array('--collect', $argv, true)) {
@@ -321,16 +378,8 @@ if (!rename($new, $app)) {
     $result($wanted, false, 'Could not put the new version in place; the previous one was kept.');
 }
 if ($systemd) {
-    $units = static function (string $root) use ($php): void {
-        foreach (['sentinel-agent.service', 'sentinel-agent-update.service', 'sentinel-agent-update.path'] as $unit) {
-            $tpl = @file_get_contents($root . '/install/templates/' . $unit);
-            if ($tpl !== false) {
-                file_put_contents('/etc/systemd/system/' . $unit, str_replace(['__ROOT__', '__PHP__', '__CONF__'], ['/opt/sentinel-agent', $php, '/etc/sentinel-agent'], $tpl));
-            }
-        }
-    };
-    $units($app);
-    $run(['/usr/bin/systemctl', 'daemon-reload'], 60);
+    // The systemd units are NOT rewritten from the new release (1.35): unit changes arrive only with a manual upgrade,
+    // so a release can't change what runs as root.
     $run(['/usr/bin/systemctl', 'restart', 'sentinel-agent.service'], 60);
     // Healthy = active at 20 s and again at 50 s, without having been restarted in between (a restart resets NRestarts).
     $healthy = true;
@@ -348,8 +397,6 @@ if ($systemd) {
         if (!$back && !is_dir($app) && is_dir($app . '.failed')) {
             rename($app . '.failed', $app); // never leave no agent at all
         }
-        $units($app);
-        $run(['/usr/bin/systemctl', 'daemon-reload'], 60);
         $run(['/usr/bin/systemctl', 'restart', 'sentinel-agent.service'], 60);
         $result($wanted, false, $back ? 'Version ' . $m['version'] . ' did not stay running; ' . $installed . ' was put back (rolled back).'
             : 'Version ' . $m['version'] . ' did not stay running and the rollback failed: check the appliance.');

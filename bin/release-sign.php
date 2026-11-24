@@ -15,6 +15,11 @@ declare(strict_types=1);
  *       Commit both with the release.
  *   php bin/release-sign.php verify
  *       Checks release/agent-manifest.* against install/release-key.pub and the files in this folder.
+ *   php bin/release-sign.php hash [--ref v1.35.0 | --dir /path/to/unpacked/release]
+ *       Prints the agent manifest SHA-256 of a release, with no key (1.35): from a git tag or commit of this repository
+ *       (default HEAD, read with `git archive`, so uncommitted files never count), or from an unpacked release folder.
+ *       Before signing on Sentinel's System page, compare it with the hash the page signs: the page refuses to sign
+ *       unless you paste a matching one. Run it on your own computer, not on the Sentinel server.
  *
  * Why: agents install new code only when it is signed with this key. Sentinel can tell an agent to update, but can't
  * vouch for code, so a compromised Sentinel server can't push code to client networks.
@@ -130,7 +135,41 @@ switch ($command) {
         echo 'Valid: agent release ' . $m['version'] . ', ' . count($m['files']) . " files, signed with install/release-key.pub, all files match.\n";
         exit(0);
 
+    case 'hash':
+        // The same manifest the System page builds from an installed tree (ReleaseManifest::listTree), from a tree we
+        // trust: a git ref unpacked to a temporary folder, or a release folder the admin unpacked themselves.
+        $dir = $expand($opt('dir'));
+        $tmp = '';
+        if ($dir === '') {
+            $ref = $opt('ref') !== '' ? $opt('ref') : 'HEAD';
+            if (preg_match('/^[A-Za-z0-9._\/~^-]{1,100}$/', $ref) !== 1 || str_starts_with($ref, '-')) {
+                $fail('--ref must be a tag, branch or commit, e.g. v1.35.0.');
+            }
+            $tmp = sys_get_temp_dir() . '/sentinel-hash-' . bin2hex(random_bytes(6));
+            mkdir($tmp, 0700);
+            exec('git -C ' . escapeshellarg($root) . ' archive --format=tar ' . escapeshellarg($ref) . ' | tar -xf - -C ' . escapeshellarg($tmp), $o, $code);
+            if ($code !== 0) {
+                exec('rm -rf -- ' . escapeshellarg($tmp));
+                $fail('git archive ' . $ref . ' failed: run this inside the repository, with that tag or commit fetched.');
+            }
+            $dir = $tmp;
+        }
+        if (!is_dir($dir) || !is_file($dir . '/VERSION')) {
+            $fail('Not a release folder (no VERSION file): ' . $dir);
+        }
+        try {
+            $version = trim((string) file_get_contents($dir . '/VERSION'));
+            $manifest = ReleaseManifest::build($dir, $version, ReleaseManifest::listTree($dir));
+        } finally {
+            if ($tmp !== '') {
+                exec('rm -rf -- ' . escapeshellarg($tmp));
+            }
+        }
+        echo 'Agent release ' . $version . ' (' . count($manifest['files']) . " files)\n";
+        echo 'Manifest SHA-256: ' . hash('sha256', ReleaseManifest::canonical($manifest)) . "\n";
+        exit(0);
+
     default:
-        echo "Release signing for agent updates (maintainer only):\n  keygen --out FILE   create the release key pair (once)\n  sign --key FILE     sign this release\n  verify              check the signed release\n";
+        echo "Release signing for agent updates (maintainer only):\n  keygen --out FILE   create the release key pair (once)\n  sign --key FILE     sign this release\n  verify              check the signed release\n  hash [--ref TAG | --dir FOLDER]   print a release's manifest SHA-256 (no key needed)\n";
         exit($command === 'help' ? 0 : 2);
 }

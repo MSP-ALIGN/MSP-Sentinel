@@ -212,4 +212,40 @@ return [
         $upRun($ctx);
         Assert::true(in_array($ctx->db->query("SELECT status FROM agent_jobs WHERE id = {$job}")->fetchColumn(), ['done', 'partial'], true), 'a scan runs while the update waits for its next attempt');
     },
+    'agent updates: the root helper runs from a frozen copy and never takes code or units from a new release' => function (TestContext $ctx): void {
+        $frozen = sys_get_temp_dir() . '/sentinel-frozen-' . bin2hex(random_bytes(4));
+        [$code, $out] = $ctx->cli('bin/agent-update-runner.php', ['--freeze', '--frozen', $frozen]);
+        Assert::same(0, $code, 'frozen: ' . $out);
+        foreach (['bin/agent-update-runner.php', 'src/System/ReleaseManifest.php', 'src/Agent/Signer.php', 'src/System/ReleaseKeyOffer.php'] as $f) {
+            Assert::same(hash_file('sha256', $ctx->root . '/' . $f), hash_file('sha256', $frozen . '/' . $f), 'copied: ' . $f);
+            Assert::same('644', substr(sprintf('%o', fileperms($frozen . '/' . $f)), -3), 'read-only for others: ' . $f);
+        }
+        // The frozen copy runs on its own (it loads only its own files).
+        [$code, $out] = $ctx->cli('bin/agent-update-runner.php', ['--freeze', '--frozen', $frozen . '-again']);
+        exec(escapeshellarg(PHP_BINARY) . ' -l ' . escapeshellarg($frozen . '/bin/agent-update-runner.php'), $lint, $lintCode);
+        Assert::same(0, $lintCode);
+        // An existing copy is never overwritten by --freeze (only a manual upgrade refreshes it).
+        file_put_contents($frozen . '/bin/agent-update-runner.php', "<?php // kept\n");
+        $ctx->cli('bin/agent-update-runner.php', ['--freeze', '--frozen', $frozen]);
+        Assert::same("<?php // kept\n", file_get_contents($frozen . '/bin/agent-update-runner.php'), 'never overwritten');
+        // A link in its place is refused.
+        $link = $frozen . '-link';
+        symlink(sys_get_temp_dir(), $link);
+        [$code] = $ctx->cli('bin/agent-update-runner.php', ['--freeze', '--frozen', $link]);
+        Assert::true($code !== 0, 'a symlink is refused');
+        // --frozen is a test option: refused outside the test suite.
+        [$code, $out] = $ctx->cli('bin/agent-update-runner.php', ['--freeze', '--frozen', $frozen], ['SENTINEL_TEST_MODE' => '0']);
+        Assert::contains('only allowed in the test suite', $out);
+        // The unit runs the frozen copy; neither the helper nor the unit lets an update write systemd units.
+        $unit = (string) file_get_contents($ctx->root . '/install/templates/sentinel-agent-update.service');
+        Assert::contains('ExecStart=__PHP__ /usr/local/lib/sentinel-agent-update/bin/agent-update-runner.php', $unit);
+        Assert::notContains('/etc/systemd/system', (string) preg_replace('/^#.*$/m', '', $unit), 'no write access to the units');
+        Assert::notContains('/etc/systemd/system', (string) file_get_contents($ctx->root . '/bin/agent-update-runner.php'), 'the helper never writes units');
+        // Windows (checked as text: it runs only on Windows): the launcher runs the task from updater\, never from app\.
+        $launcher = (string) file_get_contents($ctx->root . '/install/windows/agent-update-launcher.php');
+        Assert::contains('require $updater . \'\\\\bin\\\\agent-update-task.php\';', $launcher);
+        Assert::notContains('require $app . ', $launcher, 'never the task in app');
+        Assert::contains('Join-Path $Root \'updater\'', (string) file_get_contents($ctx->root . '/install-agent.ps1'), 'the installer refreshes updater');
+        exec('rm -rf ' . escapeshellarg($frozen) . ' ' . escapeshellarg($frozen . '-again') . ' ' . escapeshellarg($link));
+    },
 ];

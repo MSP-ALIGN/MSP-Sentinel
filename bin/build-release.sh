@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Build a release archive: dist/msp-sentinel-<version>.tar.gz and dist/SHA256SUMS.
+# Build a release archive: dist/msp-sentinel-<version>.tar.gz, dist/SHA256SUMS and dist/AGENT-MANIFEST-SHA256 (the
+# agent manifest hash admins compare before signing the version on Sentinel's System page; publish it with the
+# release notes).
 #
 # Usage: bin/build-release.sh [--out DIR] [--allow-dirty]
 #
@@ -41,5 +43,12 @@ mkdir -p "$out"
 name="msp-sentinel-$version"
 git -c tar.umask=0022 archive --worktree-attributes --format=tar --prefix="$name/" HEAD | gzip -n -9 > "$out/$name.tar.gz"
 ( cd "$out" && sha256sum "$name.tar.gz" > SHA256SUMS )
+# The agent manifest hash of exactly this archive (unpacked to a temporary folder): what Sentinel's System page signs.
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+tar -xzf "$out/$name.tar.gz" -C "$tmp"
+php "$root/bin/release-sign.php" hash --dir "$tmp/$name" | sed -n 's/^Manifest SHA-256: //p' > "$out/AGENT-MANIFEST-SHA256"
+[ -s "$out/AGENT-MANIFEST-SHA256" ] || { echo "Could not compute the agent manifest hash." >&2; exit 1; }
 echo "Built $out/$name.tar.gz"
 cat "$out/SHA256SUMS"
+echo "Agent manifest SHA-256 (publish with the release notes): $(cat "$out/AGENT-MANIFEST-SHA256")"
