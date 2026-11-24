@@ -2,6 +2,16 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.42.0 (2026-11-24): API tokens follow permissions and clients
+
+- **Clients:** a token only covers clients its creator sees ("All clients" only for someone who sees every client),
+  checked when it is made and on every call: if the creator later sees fewer clients, the token is cut down to theirs.
+- **Permissions:** triage and queueing scans need the creator's **Triage findings** and **Run scans and discovery**
+  (since 1.40.1), and breached addresses come back masked unless the creator may see them in full.
+- **The API page:** you see and revoke only tokens whose clients you all see, the scopes name the permission they
+  need, and outbound events (which carry every client's changes) can only be set up by someone who sees every client.
+  Existing tokens keep what they have, within their creator's rights.
+
 ### 1.41.0 (2026-11-24): limit users to their clients
 
 - **Per-user client lists.** Each user sees every client (the default, so nothing changes on upgrade) or only a

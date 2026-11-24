@@ -56,6 +56,7 @@ $now = time();
     <?php endif; ?>
 </div>
 
+<?php if (($currentUser['client_ids'] ?? null) === null): // events carry every client's changes (1.42) ?>
 <div class="card mb-3" id="events">
     <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Outbound events')) ?></h2></div>
     <form method="post" action="<?= e(url('/admin/api/events')) ?>" novalidate autocomplete="off">
@@ -93,6 +94,7 @@ $now = time();
     </div>
     <?php endif; ?>
 </div>
+<?php endif; ?>
 </div>
 
 <div class="col-xl-5">
@@ -104,15 +106,15 @@ $now = time();
             <div class="mb-2"><label class="form-label small mb-0" for="token-name"><?= e(__('Name')) ?></label>
                 <input class="form-control form-control-sm" id="token-name" name="name" maxlength="100" placeholder="MSP Align" required></div>
             <fieldset class="mb-2"><legend class="form-label small mb-0"><?= e(__('Clients this token can see')) ?></legend>
-                <div class="form-check"><input class="form-check-input" type="checkbox" id="all_clients" name="all_clients" value="1"><label class="form-check-label small" for="all_clients"><?= e(__('All clients (including ones added later)')) ?></label></div>
+                <div class="form-check"><input class="form-check-input" type="checkbox" id="all_clients" name="all_clients" value="1"<?= ($currentUser['client_ids'] ?? null) === null ? '' : ' disabled' ?>><label class="form-check-label small" for="all_clients"><?= e(__('All clients (including ones added later)')) ?></label></div>
                 <label class="visually-hidden" for="token-clients"><?= e(__('Chosen clients')) ?></label>
                 <select class="form-select form-select-sm mt-1" id="token-clients" name="clients[]" multiple size="5">
                     <?php foreach ($clients as $c): ?><option value="<?= e($c['id']) ?>"><?= e($c['name']) ?></option><?php endforeach; ?>
                 </select></fieldset>
             <fieldset class="mb-2"><legend class="form-label small mb-0"><?= e(__('Permissions')) ?></legend>
                 <div class="small text-body-secondary"><?= e(__('Every token can read. Changes are opt-in:')) ?></div>
-                <div class="form-check"><input class="form-check-input" type="checkbox" id="can_triage" name="can_triage" value="1"<?= can('findings.triage') ? '' : ' disabled' ?>><label class="form-check-label small" for="can_triage"><?= e(__('Triage findings (accept or mark false positive, with a note)')) ?></label></div>
-                <div class="form-check"><input class="form-check-input" type="checkbox" id="can_scan" name="can_scan" value="1"<?= can('scans.run') ? '' : ' disabled' ?>><label class="form-check-label small" for="can_scan"><?= e(__('Queue scans (they still run only in scope and in the scan window)')) ?></label></div>
+                <div class="form-check"><input class="form-check-input" type="checkbox" id="can_triage" name="can_triage" value="1"<?= can('findings.triage') ? '' : ' disabled' ?>><label class="form-check-label small" for="can_triage"><?= e(__('Triage findings (accept or mark false positive, with a note)')) ?> <span class="text-body-secondary"><?= e(__('needs your "Triage findings" permission')) ?></span></label></div>
+                <div class="form-check"><input class="form-check-input" type="checkbox" id="can_scan" name="can_scan" value="1"<?= can('scans.run') ? '' : ' disabled' ?>><label class="form-check-label small" for="can_scan"><?= e(__('Queue scans (they still run only in scope and in the scan window)')) ?> <span class="text-body-secondary"><?= e(__('needs your "Run scans and discovery" permission')) ?></span></label></div>
             </fieldset>
             <div class="mb-2"><label class="form-label small mb-0" for="ip_allowlist"><?= e(__('Only allow these IP addresses or networks (optional)')) ?></label>
                 <input class="form-control form-control-sm" id="ip_allowlist" name="ip_allowlist" maxlength="1000" placeholder="203.0.113.10, 198.51.100.0/24"></div>

@@ -58,8 +58,8 @@ final class ApiAdminController extends Controller
         $s = App::settings();
         $recent = App::db()->query("SELECT id, subject, status, attempts, last_error, created_at, sent_at FROM deliveries WHERE channel = 'event' ORDER BY id DESC LIMIT 10")->fetchAll();
         return $this->page('api/index', __('API'), [
-            'tokens' => App::apiTokens()->all(),
-            'clients' => App::clients()->all(),
+            'tokens' => App::apiTokens()->all(App::auth()->clientIds()),
+            'clients' => App::clients()->all(false, App::auth()->clientIds()),
             'newToken' => is_string($newToken) ? $newToken : null,
             'newSecret' => is_string($newSecret) ? $newSecret : null,
             'events' => ['enabled' => $s->get('event_webhook_enabled'), 'url_set' => $s->get('event_webhook_url') !== '', 'secret_set' => $s->get('event_webhook_secret') !== '', 'recent' => $recent],
@@ -83,9 +83,12 @@ final class ApiAdminController extends Controller
         if (!in_array($days, self::EXPIRY_CHOICES, true)) {
             $errors[] = __('Choose when the token expires.');
         }
-        $known = array_map(static fn (array $c): int => (int) $c['id'], App::clients()->all(true));
-        if (!$all && ($clientIds === [] || array_diff($clientIds, $known) !== [])) {
-            $errors[] = __('Choose "All clients" or at least one client.');
+        // Only clients you see yourself (1.42): "All clients" only if you see every client.
+        $known = array_map(static fn (array $c): int => (int) $c['id'], App::clients()->all(true, App::auth()->clientIds()));
+        if ($all && App::auth()->clientIds() !== null) {
+            $errors[] = __('You see only some clients, so a token can\'t have all clients.');
+        } elseif (!$all && ($clientIds === [] || array_diff($clientIds, $known) !== [])) {
+            $errors[] = __('Choose "All clients" or at least one client (only clients you see).');
         }
         $ips = [];
         foreach (array_filter(array_map('trim', preg_split('/[\s,]+/', $request->input('ip_allowlist')) ?: [])) as $entry) {
@@ -122,7 +125,7 @@ final class ApiAdminController extends Controller
     public function revoke(Request $request, array $params): Response
     {
         $id = (int) ($params['id'] ?? 0);
-        if (!App::apiTokens()->revoke($id, (int) $this->user()['id'])) {
+        if (!App::apiTokens()->revoke($id, (int) $this->user()['id'], App::auth()->clientIds())) {
             throw new HttpException(404);
         }
         $this->audit($request, 'api.token_revoked', 'api_token', $id);
@@ -133,6 +136,10 @@ final class ApiAdminController extends Controller
     /** POST /admin/api/events: event webhook on/off and URL. */
     public function events(Request $request): Response
     {
+        // Events carry every client's changes: only someone who sees every client sets them up (1.42).
+        if (App::auth()->clientIds() !== null) {
+            throw new HttpException(403, __('Event webhooks send every client\'s changes, so only someone who sees every client can set them up.'));
+        }
         $s = App::settings();
         $enabled = $request->input('event_webhook_enabled') === '1';
         $url = $request->input('event_webhook_url');
@@ -172,6 +179,10 @@ final class ApiAdminController extends Controller
     /** POST /admin/api/events/secret: a new signing secret (shown once). */
     public function secret(Request $request): Response
     {
+        // Events carry every client's changes: only someone who sees every client sets them up (1.42).
+        if (App::auth()->clientIds() !== null) {
+            throw new HttpException(403, __('Event webhooks send every client\'s changes, so only someone who sees every client can set them up.'));
+        }
         $secret = self::newSecret();
         App::settings()->setSecret('event_webhook_secret', $secret);
         Session::set('show_event_secret', $secret);
@@ -182,6 +193,10 @@ final class ApiAdminController extends Controller
     /** POST /admin/api/events/test: send a "ping" event now. */
     public function test(Request $request): Response
     {
+        // Events carry every client's changes: only someone who sees every client sets them up (1.42).
+        if (App::auth()->clientIds() !== null) {
+            throw new HttpException(403, __('Event webhooks send every client\'s changes, so only someone who sees every client can set them up.'));
+        }
         if (App::settings()->get('event_webhook_enabled') !== '1') {
             Session::flash('danger', __('Turn events on first.'));
             return Response::redirect('/admin/api#events');

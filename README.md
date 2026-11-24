@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.41.0](https://img.shields.io/badge/version-1.41.0-ff5a1f?style=flat-square)
+![Version 1.42.0](https://img.shields.io/badge/version-1.42.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,16 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.42.0 (2026-11-24): API tokens follow permissions and clients
+
+- **Clients:** a token only covers clients its creator sees ("All clients" only for someone who sees every client),
+  checked when it is made and on every call: if the creator later sees fewer clients, the token is cut down to theirs.
+- **Permissions:** triage and queueing scans need the creator's **Triage findings** and **Run scans and discovery**
+  (since 1.40.1), and breached addresses come back masked unless the creator may see them in full.
+- **The API page:** you see and revoke only tokens whose clients you all see, the scopes name the permission they
+  need, and outbound events (which carry every client's changes) can only be set up by someone who sees every client.
+  Existing tokens keep what they have, within their creator's rights.
+
 ### 1.41.0 (2026-11-24): limit users to their clients
 
 - **Per-user client lists.** Each user sees every client (the default, so nothing changes on upgrade) or only a
@@ -145,23 +155,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 - **Breached addresses** on a finding's page are masked unless you may see them in full.
 - Permissions that reach the whole system are marked **Near full control** on the Roles page. The demo data command
   picks an Admin by role.
-
-### 1.40.0 (2026-11-24): roles and permissions
-
-- **Permissions.** Every action now needs a permission: 29 of them in 7 groups (clients and scope, scanning,
-  findings, reports, engagements, agents and devices, administration). Seeing clients and their findings needs none.
-- **Built-in roles unchanged.** Viewer, Technician and Admin keep exactly the rights they had (a test checks every
-  page and action against 1.39). Existing users keep their role (migration 0046).
-- **Your own roles.** **Administration → Roles** creates roles from the permission list (or copies a built-in one),
-  for example a "Lead technician" who may also set due dates and approve engagements, without full Admin. The
-  **Who can do what** table shows every permission and which role holds it.
-- **Never more than you hold.** You can only give permissions and roles you hold yourself, and can't change, reset
-  the password or two-factor of, or disable a more powerful user. Nobody changes their own role, built-in roles never
-  change, and at least one active user always holds every permission. Role changes are confirmed with your password,
-  audited with what was added and removed, and sign the role's users out so they apply at once.
-- **Alerts, owners and approvals follow permissions:** system, backup and feed alerts go to those who manage the
-  system or settings; findings can be given to anyone who may triage; any second person who may approve engagements
-  can approve; API tokens keep working while their creator may manage the API.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

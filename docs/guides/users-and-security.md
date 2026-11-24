@@ -82,10 +82,20 @@ You can't change your own role or disable yourself, and the last active Admin ca
 
 ## Create an API token
 
-1. An admin goes to **Administration → API**.
+1. Someone with **Manage the API** goes to **Administration → API**.
 2. Name the token, choose its clients, expiry (30 to 365 days), optional IP limits and permissions (read always;
    triage and queue scans only if ticked), and enter **your own password**.
 3. Copy the token now: it is shown once. Details: [API](../api.md).
+
+A token never does more than the person who made it:
+
+- **Permissions:** it can only triage findings or queue scans if you hold **Triage findings** or **Run scans and
+  discovery**, and loses them when you do.
+- **Clients:** it can only cover clients you see ("All clients" only if you see every client). If you later see fewer
+  clients, the token is cut down to yours straight away.
+- **Breached addresses:** they come back masked unless you may see them in full.
+- **The token list:** you see and revoke only tokens whose clients you all see.
+- **Outbound events:** they carry every client's changes, so only someone who sees every client can set them up.
 
 ## "Are you sure?" confirmations
 

@@ -82,7 +82,7 @@ final class TokenService
             return $this->fail($ip, 401, 'Missing or malformed bearer token.');
         }
         $stmt = $this->db->prepare(
-            "SELECT t.*, u.username AS creator_username, u.role_id AS creator_role_id, r.role_key AS creator_role_key, u.is_active AS creator_active
+            "SELECT t.*, u.username AS creator_username, u.role_id AS creator_role_id, r.role_key AS creator_role_key, u.is_active AS creator_active, u.all_clients AS creator_all_clients
              FROM api_tokens t JOIN users u ON u.id = t.created_by LEFT JOIN roles r ON r.id = u.role_id WHERE t.token_prefix = :p"
         );
         $stmt->execute(['p' => $m[2]]);
@@ -122,6 +122,13 @@ final class TokenService
             $this->db->prepare('UPDATE api_tokens SET last_used_at = UTC_TIMESTAMP(), last_used_ip = :ip WHERE id = :id')->execute(['ip' => $ip, 'id' => $t['id']]);
         }
         $t['client_ids'] = (int) $t['all_clients'] === 1 ? null : $this->clientIds((int) $t['id']);
+        // Never more clients than its creator sees now (1.42): a token's clients are cut down to the creator's.
+        $creatorClients = (new \Sentinel\Auth\UserRepository($this->db))->clientIds(['id' => (int) $t['created_by'], 'all_clients' => $t['creator_all_clients']]);
+        if ($creatorClients !== null) {
+            $t['client_ids'] = array_values(array_intersect($t['client_ids'] ?? $creatorClients, $creatorClients));
+        }
+        // What the creator may see, for read-side masking (breached addresses in full need 'breach.addresses').
+        $t['creator_permissions'] = $creatorPerms;
         unset($t['token_hash']);
         return $t;
     }
@@ -158,22 +165,35 @@ final class TokenService
      *
      * @return list<array<string,mixed>>
      */
-    public function all(): array
+    public function all(?array $clientIds = null): array
     {
         $rows = $this->db->query(
             "SELECT t.id, t.name, t.token_prefix, t.all_clients, t.can_triage, t.can_scan, t.ip_allowlist, t.expires_at, t.created_at, t.last_used_at,
                     t.last_used_ip, t.revoked_at, u.display_name AS creator
              FROM api_tokens t JOIN users u ON u.id = t.created_by ORDER BY t.revoked_at IS NULL DESC, t.id DESC"
         )->fetchAll();
-        foreach ($rows as &$r) {
+        $out = [];
+        foreach ($rows as $r) {
+            // Only tokens whose clients the viewer all sees (1.42; null: every client): others aren't theirs to see.
+            if (!\Sentinel\Auth\ClientAccess::within((int) $r['all_clients'] === 1 ? null : $this->clientIds((int) $r['id']), $clientIds)) {
+                continue;
+            }
             $r['clients'] = (int) $r['all_clients'] === 1 ? [] : $this->db->query('SELECT c.name FROM api_token_clients tc JOIN clients c ON c.id = tc.client_id WHERE tc.token_id = ' . (int) $r['id'] . ' ORDER BY c.name')->fetchAll(PDO::FETCH_COLUMN);
+            $out[] = $r;
         }
-        return $rows;
+        return $out;
     }
 
     /** Revoke a token. Returns false if it was unknown or already revoked. */
-    public function revoke(int $id, int $userId): bool
+    public function revoke(int $id, int $userId, ?array $clientIds = null): bool
     {
+        // Only a token whose clients the revoker all sees (1.42).
+        $all = $this->db->prepare('SELECT all_clients FROM api_tokens WHERE id = :id');
+        $all->execute(['id' => $id]);
+        $flag = $all->fetchColumn();
+        if ($flag === false || !\Sentinel\Auth\ClientAccess::within((int) $flag === 1 ? null : $this->clientIds($id), $clientIds)) {
+            return false;
+        }
         $stmt = $this->db->prepare('UPDATE api_tokens SET revoked_at = UTC_TIMESTAMP(), revoked_by = :u WHERE id = :id AND revoked_at IS NULL');
         $stmt->execute(['u' => $userId, 'id' => $id]);
         return $stmt->rowCount() === 1;

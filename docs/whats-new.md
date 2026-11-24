@@ -2,6 +2,23 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.40.0 (2026-11-24): roles and permissions
+
+- **Permissions.** Every action now needs a permission: 29 of them in 7 groups (clients and scope, scanning,
+  findings, reports, engagements, agents and devices, administration). Seeing clients and their findings needs none.
+- **Built-in roles unchanged.** Viewer, Technician and Admin keep exactly the rights they had (a test checks every
+  page and action against 1.39). Existing users keep their role (migration 0046).
+- **Your own roles.** **Administration → Roles** creates roles from the permission list (or copies a built-in one),
+  for example a "Lead technician" who may also set due dates and approve engagements, without full Admin. The
+  **Who can do what** table shows every permission and which role holds it.
+- **Never more than you hold.** You can only give permissions and roles you hold yourself, and can't change, reset
+  the password or two-factor of, or disable a more powerful user. Nobody changes their own role, built-in roles never
+  change, and at least one active user always holds every permission. Role changes are confirmed with your password,
+  audited with what was added and removed, and sign the role's users out so they apply at once.
+- **Alerts, owners and approvals follow permissions:** system, backup and feed alerts go to those who manage the
+  system or settings; findings can be given to anyone who may triage; any second person who may approve engagements
+  can approve; API tokens keep working while their creator may manage the API.
+
 ### 1.39.1 (2026-11-24): pen-test findings fixes from review
 
 - **Retests only resolve what they really tested.** A host whose retest was stopped (kill switch), timed out or failed

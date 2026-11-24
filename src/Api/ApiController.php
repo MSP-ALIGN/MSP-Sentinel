@@ -204,7 +204,7 @@ final class ApiController
             $where[] = 'f.updated_at >= :since';
             $params['since'] = $since;
         }
-        return $this->paged(self::FINDING_SELECT, $where, $params, 'f.id', [self::class, 'findingOut']);
+        return $this->paged(self::FINDING_SELECT, $where, $params, 'f.id', fn (array $f): array => $this->findingFor($f));
     }
 
     /** GET /api/v1/findings/{id}: one finding with its history. */
@@ -213,7 +213,7 @@ final class ApiController
         $f = $this->findingRow((int) $p['id']);
         $events = array_map(static fn (array $e): array => ['event' => $e['event'], 'note' => $e['note'], 'by' => $e['username'] ?? null, 'at' => self::iso($e['created_at'])],
             App::findings()->events((int) $f['id']));
-        return ApiKernel::json(['data' => self::findingOut($f) + ['history' => $events]]);
+        return ApiKernel::json(['data' => $this->findingFor($f) + ['history' => $events]]);
     }
 
     /** POST /api/v1/findings/{id}/triage: {"status": "accepted|false_positive|open", "note": "..."} */
@@ -238,11 +238,11 @@ final class ApiController
         $full = '[API: ' . $this->token['name'] . '] ' . $note;
         $previous = App::findings()->triage((int) $f['id'], $status, $full, (int) $this->token['created_by']);
         if ($previous === null) {
-            return ApiKernel::json(['data' => self::findingOut($this->findingRow((int) $f['id'])), 'changed' => false]);
+            return ApiKernel::json(['data' => $this->findingFor($this->findingRow((int) $f['id'])), 'changed' => false]);
         }
         $this->audit('finding.triaged', 'finding', (int) $f['id'], ['client_id' => (int) $f['client_id'], 'from' => $previous, 'to' => $status, 'note' => mb_substr($note, 0, 300)]);
         App::events()->publish('finding.triaged', (App::events()->finding((int) $f['id']) ?? []) + ['previous_status' => $previous]);
-        return ApiKernel::json(['data' => self::findingOut($this->findingRow((int) $f['id'])), 'changed' => true]);
+        return ApiKernel::json(['data' => $this->findingFor($this->findingRow((int) $f['id'])), 'changed' => true]);
     }
 
     /** GET /api/v1/scans */
@@ -446,6 +446,25 @@ final class ApiController
     }
 
     /** @param array<string,mixed> $f */
+    /**
+     * A finding as this token may see it (1.42): a breached address is masked (in the key and detail) unless the
+     * token's creator may see breached addresses in full, as in the web interface.
+     *
+     * @param array<string,mixed> $f
+     * @return array<string,mixed>
+     */
+    private function findingFor(array $f): array
+    {
+        $out = self::findingOut($f);
+        if ($out['type'] === 'breach' && !in_array('breach.addresses', (array) ($this->token['creator_permissions'] ?? []), true)) {
+            $mask = static fn (string $s): string => (string) preg_replace_callback('/[^\s:;,]+@[^\s:;,]+/u',
+                static fn (array $m): string => \Sentinel\Breach\BreachMonitor::masked($m[0]), $s);
+            $out['key'] = $mask((string) $out['key']);
+            $out['detail'] = $mask((string) $out['detail']);
+        }
+        return $out;
+    }
+
     public static function findingOut(array $f): array
     {
         return ['id' => (int) $f['id'], 'client_id' => (int) $f['client_id'], 'asset_id' => $f['asset_id'] === null ? null : (int) $f['asset_id'], 'key' => $f['finding_key'],

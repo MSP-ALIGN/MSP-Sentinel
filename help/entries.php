@@ -202,7 +202,7 @@ return [
             'section' => 'admin',
             'title' => 'API and events',
             'paragraphs' => [
-                'Other tools, such as MSP Align, can read Sentinel\'s data through the API at /api/v1. Create tokens under Administration → API (with your password). A token is shown once: copy it into the other system straight away and send it as "Authorization: Bearer <token>". The API reference page under Administration → API lists every endpoint, and the OpenAPI description (/api/v1/openapi.json) can be downloaded there.',
+                'Other tools, such as MSP Align, can read Sentinel\'s data through the API at /api/v1. Create tokens under Administration → API (with your password). A token never does more than its creator: it can only triage or queue scans if you may, only covers clients you see, shows breached addresses masked unless you may see them, and is cut down when you lose rights. Outbound events carry every client\'s changes, so only someone who sees every client sets them up. A token is shown once: copy it into the other system straight away and send it as "Authorization: Bearer <token>". The API reference page under Administration → API lists every endpoint, and the OpenAPI description (/api/v1/openapi.json) can be downloaded there.',
                 'Each token covers all clients or the ones you choose, expires after 30 to 365 days, and can be limited to certain IP addresses. Every token can read; triage and queueing scans are separate permissions, off unless ticked. API scans follow the web rules (only in scope, never while paused, only in the scan window); API triage needs a note, marked with the token\'s name.',
                 'A token acts as the admin who created it and stops working when it is revoked or expires, or that admin is deactivated or no longer an admin. Each token can make 120 requests a minute. Its last use (time and address) shows on the API page; every change made through the API is in the audit log.',
                 'Outbound events: Sentinel can POST to an https address when findings open, reopen, become a Fail, resolve or are triaged, when a scan finishes and when a report is created. Check the X-Sentinel-Signature header (t=<unix time>,v1=<HMAC-SHA256 of "time.body" with the signing secret>) and reject old timestamps. The signing secret is shown once; you can create a new one at any time. Undelivered events are retried for about two days, so they may arrive late or out of order: use the event id to skip duplicates.',
@@ -359,6 +359,13 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.42.0',
+            'date' => '2026-11-24',
+            'items' => [
+                'API tokens follow your permissions and clients: a token only covers clients you see (and is cut down when you see fewer), shows breached addresses masked unless you may see them, and can only triage or queue scans if you may. You see and revoke only tokens within your clients; outbound events need someone who sees every client.',
+            ],
+        ],
         [
             'version' => '1.41.0',
             'date' => '2026-11-24',

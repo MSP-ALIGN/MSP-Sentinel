@@ -135,4 +135,38 @@ return [
         Assert::same($holders - 1, App::roles()->completeHoldersAfter($adminId, null, null, false));
         $ctx->db->exec("UPDATE clients SET is_archived = 1 WHERE id = {$new}");
     },
+
+    'client access (1.42): API tokens never reach more clients, or show more, than their creator' => function (TestContext $ctx) use ($setup): void {
+        [$mine, $hidden, $fMine, $fHidden] = $setup($ctx);
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $admin->submit('/admin/roles/new', '/admin/roles', ['name' => 'Client API keeper', 'my_password' => 'Admin-Pass-0001!', 'permissions[0]' => 'api.manage']);
+        $keeper = $ctx->createUser('clientapi', 'Client API keeper', 'Clientapi-Pass-0001!');
+        App::users()->setClients($keeper, [$mine]);
+        $k = $ctx->login('clientapi', 'Clientapi-Pass-0001!');
+        $count = static fn (): int => (int) $ctx->db->query('SELECT COUNT(*) FROM api_tokens')->fetchColumn();
+        $before = $count();
+        $form = ['my_password' => 'Clientapi-Pass-0001!', 'expires_days' => '30', 'ip_allowlist' => ''];
+        $k->submit('/admin/api', '/admin/api/tokens', ['name' => 'All of them', 'all_clients' => '1'] + $form);
+        $k->submit('/admin/api', '/admin/api/tokens', ['name' => 'The hidden one', 'clients[0]' => (string) $hidden] + $form);
+        Assert::same($before, $count(), 'all clients and a hidden client are refused');
+        $k->submit('/admin/api', '/admin/api/tokens', ['name' => 'Mine only', 'clients[0]' => (string) $mine] + $form);
+        Assert::same($before + 1, $count(), 'their own client is fine');
+        Assert::status(403, $k->post('/admin/api/events', ['_csrf' => $k->get('/admin/api')->csrf(), 'event_webhook_enabled' => '1', 'event_webhook_url' => 'https://hooks.example/x']), 'no event webhooks');
+        Assert::notContains('id="events"', $k->get('/admin/api')->body);
+        // A token for every client, made by someone who is now limited, reaches only the creator's clients.
+        [, $secret] = App::apiTokens()->create('Old all-clients token', true, [], false, false, [], 30, $keeper);
+        $ids = array_column(json_decode($ctx->api('GET', '/api/v1/clients', $secret)->body, true)['data'] ?? [], 'id');
+        Assert::same([$mine], array_map('intval', $ids), 'only the creator\'s clients');
+        Assert::status(404, $ctx->api('GET', '/api/v1/findings/' . $fHidden, $secret));
+        Assert::status(200, $ctx->api('GET', '/api/v1/findings/' . $fMine, $secret));
+        // Breached addresses: masked unless the creator may see them in full.
+        $ctx->db->prepare("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, detail, target, status, first_seen, last_seen, opened_at)
+                           VALUES (:c, 'breach:pat@visible.example', 'breach', 'warn', 'p***@visible.example appeared in 1 data breach(es)', 'pat@visible.example: Example breach (2026-01)', 'p***@visible.example', 'open', UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP())")
+            ->execute(['c' => $mine]);
+        $bid = (int) $ctx->db->lastInsertId();
+        $body = $ctx->api('GET', '/api/v1/findings/' . $bid, $secret)->body;
+        Assert::notContains('pat@visible.example', $body, 'masked for a creator without "See breached addresses"');
+        [, $adminSecret] = App::apiTokens()->create('Admin token', true, [], false, false, [], 30, (int) $ctx->db->query("SELECT id FROM users WHERE username = 'admin'")->fetchColumn());
+        Assert::contains('pat@visible.example', $ctx->api('GET', '/api/v1/findings/' . $bid, $adminSecret)->body, 'in full for an Admin\'s token');
+    },
 ];
