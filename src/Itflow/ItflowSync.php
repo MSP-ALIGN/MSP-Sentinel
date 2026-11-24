@@ -79,7 +79,12 @@ final class ItflowSync
                         throw new ItflowException('ITFlow has no client tag named "' . $tag . '", so nothing was changed. Create the tag in ITFlow or fix the name.', ItflowException::KIND_REFUSED);
                     }
                     $tagged = array_flip($ids);
-                    $tagNote = ' ' . sprintf('%d tagged "%s".', count(array_intersect_key($tagged, array_flip(array_column($clients, 'id')))), $tag);
+                    $taggedCount = count(array_intersect_key($tagged, array_flip(array_column($clients, 'id'))));
+                    if ($taggedCount === 0) {
+                        // Nobody tagged would archive every linked client in one run (1.45.1): stop instead.
+                        throw new ItflowException('No ITFlow client the key can see has the "' . $tag . '" tag, so nothing was changed. Tag the clients to sync in ITFlow first.', ItflowException::KIND_REFUSED);
+                    }
+                    $tagNote = ' ' . sprintf('%d tagged "%s".', $taggedCount, $tag);
                     foreach ($clients as &$c) {
                         if (!isset($tagged[$c['id']])) {
                             $c['archived'] = true;
@@ -133,13 +138,15 @@ final class ItflowSync
         $byItflow = $this->db->prepare('SELECT * FROM clients WHERE itflow_client_id = :i AND is_demo = 0 ORDER BY id LIMIT 1');
         // Same name (MariaDB's comparison: case and accents ignored), not archived, not yet linked to ITFlow.
         $byName = $this->db->prepare('SELECT * FROM clients WHERE name = :n AND itflow_client_id IS NULL AND is_demo = 0 AND is_archived = 0 AND itflow_sync_off = 0 LIMIT 1');
+        // A client set to "Don't sync with ITFlow" with that name (1.45.1): neither linked nor doubled by a new client.
+        $offName = $this->db->prepare('SELECT COUNT(*) FROM clients WHERE name = :n AND itflow_sync_off = 1 AND is_demo = 0');
         foreach ($clients as $c) {
             $name = self::clean($c['name']);
             if ($name === '') {
                 continue;
             }
             try {
-                $this->syncOne($c, $name, $s, $byItflow, $byName);
+                $this->syncOne($c, $name, $s, $byItflow, $byName, $offName);
             } catch (\PDOException $ex) {
                 // e.g. someone created a client with this name at the same moment: count it, carry on with the rest
                 error_log('[msp-sentinel] ITFlow sync, client ' . $c['id'] . ': ' . $ex->getMessage());
@@ -155,13 +162,17 @@ final class ItflowSync
      * @param array{id:int, name:string, archived:bool} $c
      * @param array<string,int> $s counters, updated in place
      */
-    private function syncOne(array $c, string $name, array &$s, \PDOStatement $byItflow, \PDOStatement $byName): void
+    private function syncOne(array $c, string $name, array &$s, \PDOStatement $byItflow, \PDOStatement $byName, \PDOStatement $offName): void
     {
         $byItflow->execute(['i' => $c['id']]);
         $mine = $byItflow->fetch();
         if ($mine === false) {
             if ($c['archived']) {
                 return; // not worth creating a client that is already archived in ITFlow
+            }
+            $offName->execute(['n' => $name]);
+            if ((int) $offName->fetchColumn() > 0) {
+                return; // that name is a client left out of the sync on purpose
             }
             $byName->execute(['n' => $name]);
             $same = $byName->fetch();
@@ -228,7 +239,7 @@ final class ItflowSync
         }
         $byPsa = array_diff_key($byPsa, $dupes); // an ITFlow ID on two MSP Align clients: link neither
         $n = 0;
-        $rows = $this->db->query('SELECT id, itflow_client_id FROM clients WHERE itflow_client_id IS NOT NULL AND align_client_id IS NULL AND is_demo = 0 AND is_archived = 0')->fetchAll();
+        $rows = $this->db->query('SELECT id, itflow_client_id FROM clients WHERE itflow_client_id IS NOT NULL AND align_client_id IS NULL AND is_demo = 0 AND is_archived = 0 AND itflow_sync_off = 0')->fetchAll();
         // An MSP Align client already linked to a Sentinel client is never linked to a second one (1.42.2).
         $used = array_flip(array_map('intval', $this->db->query('SELECT align_client_id FROM clients WHERE align_client_id IS NOT NULL')->fetchAll(\PDO::FETCH_COLUMN)));
         foreach ($rows as $r) {

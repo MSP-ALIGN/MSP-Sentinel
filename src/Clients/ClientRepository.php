@@ -90,7 +90,8 @@ final class ClientRepository
     }
 
     /**
-     * Update a client's details.
+     * Update a client's details. MariaDB applies SET from left to right, so itflow_resumed_at (1.45.1: when "Don't sync
+     * with ITFlow" is turned off) is worked out from the old itflow_sync_off before that column changes.
      *
      * @param array{name:string,itflow_client_id:?int,timezone:string,scan_window_start:string,scan_window_end:string,notes:string,ports_extra:string,ports_excluded:string,itflow_sync_off:int} $v Validated values.
      */
@@ -98,12 +99,13 @@ final class ClientRepository
     {
         $stmt = $this->db->prepare(
             'UPDATE clients SET name = :n, itflow_client_id = :it, timezone = :tz, scan_window_start = :ws, scan_window_end = :we,
-                    notes = :notes, ports_extra = :pe, ports_excluded = :px, itflow_sync_off = :so, updated_at = UTC_TIMESTAMP() WHERE id = :id'
+                    notes = :notes, ports_extra = :pe, ports_excluded = :px,
+                    itflow_resumed_at = IF(itflow_sync_off = 1 AND :so2 = 0, UTC_TIMESTAMP(), itflow_resumed_at), itflow_sync_off = :so, updated_at = UTC_TIMESTAMP() WHERE id = :id'
         );
         $stmt->execute([
             'n' => $v['name'], 'it' => $v['itflow_client_id'], 'tz' => $v['timezone'],
             'ws' => $v['scan_window_start'], 'we' => $v['scan_window_end'], 'notes' => $v['notes'],
-            'pe' => $v['ports_extra'], 'px' => $v['ports_excluded'], 'so' => $v['itflow_sync_off'] ? 1 : 0, 'id' => $id,
+            'pe' => $v['ports_extra'], 'px' => $v['ports_excluded'], 'so' => $v['itflow_sync_off'] ? 1 : 0, 'so2' => $v['itflow_sync_off'] ? 1 : 0, 'id' => $id,
         ]);
     }
 

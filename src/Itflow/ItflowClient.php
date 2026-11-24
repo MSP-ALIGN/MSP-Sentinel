@@ -137,9 +137,22 @@ final class ItflowClient
             if (!is_array($t) || !is_numeric($t['tag_id'] ?? null) || strcasecmp(trim((string) ($t['tag_name'] ?? '')), trim($tagName)) !== 0) {
                 continue;
             }
+            // Only client tags (1.45.1): ITFlow's tag_type 1. Never trust that the server applied kind=client, or a
+            // contact or location tag of the same name would hand over contact or location IDs as client IDs.
+            if (array_key_exists('tag_type', $t) && (string) $t['tag_type'] !== '1') {
+                continue;
+            }
             $found = true;
-            foreach ($this->tagsRead(['tag_id' => (int) $t['tag_id']]) as $one) {
-                $records = is_array($one) ? ($one['tag_record_ids'] ?? []) : [];
+            $rows = $this->tagsRead(['tag_id' => (int) $t['tag_id']], false);
+            if ($rows === []) {
+                throw new ItflowException('ITFlow found the tag "' . $tagName . '" but then could not read which clients have it, so nothing was changed.', ItflowException::KIND_REFUSED);
+            }
+            foreach ($rows as $one) {
+                if (!is_array($one) || !array_key_exists('tag_record_ids', $one)) {
+                    // A build without this field: "can't tell", never "nobody is tagged" (1.45.1).
+                    throw new ItflowException('ITFlow\'s tags API did not say which clients have the tag (no tag_record_ids), so nothing was changed.', ItflowException::KIND_REFUSED);
+                }
+                $records = $one['tag_record_ids'];
                 if (is_string($records)) {
                     $records = explode(',', $records); // tolerated: a comma-separated list
                 }
@@ -154,12 +167,13 @@ final class ItflowClient
     }
 
     /**
-     * One call to ITFlow's tags API. A 404 means this ITFlow has none: an error, never "no tags".
+     * One call to ITFlow's tags API. A 404 means this ITFlow has none: an error, never "no tags". "No resource" is an
+     * empty list only when $emptyOk (the name lookup); for the tag's own record it is an error to the caller.
      *
      * @param array<string,int|string> $query
      * @return list<mixed>
      */
-    private function tagsRead(array $query): array
+    private function tagsRead(array $query, bool $emptyOk = true): array
     {
         [$status, $body] = $this->request('/api/v1/tags/read.php', $query, null);
         $data = json_decode($body, true);
@@ -180,7 +194,7 @@ final class ItflowClient
         }
         $msg = is_string($data['message'] ?? null) ? $data['message'] : '';
         if (str_starts_with($msg, 'No resource')) {
-            return []; // nothing with that name
+            return []; // nothing with that name (the caller decides whether that is acceptable)
         }
         throw new ItflowException('ITFlow refused the tag lookup: ' . mb_substr((string) preg_replace('/[^\P{C}]/u', '', $msg), 0, 200), ItflowException::KIND_REFUSED);
     }

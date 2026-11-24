@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.45.0](https://img.shields.io/badge/version-1.45.0-ff5a1f?style=flat-square)
+![Version 1.45.1](https://img.shields.io/badge/version-1.45.1-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,17 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.45.1 (2026-11-24): ITFlow tag filter fixes from review
+
+- **No mass archive.** The sync also stops, changing nothing, when no client the key can see has the tag, or when
+  ITFlow finds the tag but doesn't say which clients have it. Only client tags count: a contact or location tag of
+  the same name is ignored.
+- **"Don't sync with ITFlow" goes further.** An ITFlow client with the same name is no longer added beside it, it is
+  not linked to MSP Align by ITFlow ID, and tickets waiting to be confirmed are left alone. When the switch is turned
+  off again, only findings from then on get ITFlow tickets (no backlog). The form says that open tickets are no longer
+  followed.
+- The tag name refuses invisible and invalid characters.
+
 ### 1.45.0 (2026-11-24): Choose which ITFlow clients sync
 
 - **Only tagged clients.** Under **Administration → Integrations → ITFlow**, tick **Only sync ITFlow clients with this
@@ -137,15 +148,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 - A chosen board that ITFlow no longer lists, or an ITFlow that lists no boards any more, is reported in the ticket
   run; "Alerts" is matched ignoring spaces, and the first such board is used; ITFlow's reason for refusing to list
   boards is shown.
-
-### 1.44.0 (2026-11-24): ITFlow tickets on your Alerts board
-
-- **Service boards.** On ITFlow builds with board support (the MountaineerIT build's `mit_boards` API), Sentinel moves
-  each new ticket to a chosen board right after opening it, by default the board named **Alerts**, unassigned so the
-  board's auto-assign and member notifications pick it up. Choose another board, or **Leave on ITFlow's default
-  board**, under **Administration → Integrations → ITFlow**.
-- **Never loses a ticket.** On stock ITFlow (no boards) nothing changes. If a move is refused, the ticket stays on
-  ITFlow's default board and the last ticket run says so. A ticket found again after an unclear answer is moved too.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

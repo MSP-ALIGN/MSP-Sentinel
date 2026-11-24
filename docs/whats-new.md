@@ -2,6 +2,15 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.44.0 (2026-11-24): ITFlow tickets on your Alerts board
+
+- **Service boards.** On ITFlow builds with board support (the MountaineerIT build's `mit_boards` API), Sentinel moves
+  each new ticket to a chosen board right after opening it, by default the board named **Alerts**, unassigned so the
+  board's auto-assign and member notifications pick it up. Choose another board, or **Leave on ITFlow's default
+  board**, under **Administration → Integrations → ITFlow**.
+- **Never loses a ticket.** On stock ITFlow (no boards) nothing changes. If a move is refused, the ticket stays on
+  ITFlow's default board and the last ticket run says so. A ticket found again after an unclear answer is moved too.
+
 ### 1.43.2 (2026-11-24): Sign in with Microsoft linking fixes from review
 
 - **Linking needs your password** (a stolen session alone can't plant a lasting Microsoft sign-in) and **no existing

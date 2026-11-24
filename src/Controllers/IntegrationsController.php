@@ -397,7 +397,7 @@ final class IntegrationsController extends Controller
         if ($tagName === '') {
             $tagName = 'Sentinel';
         }
-        if (mb_strlen($tagName) > 100 || preg_match('/[\x00-\x1F\x7F]/u', $tagName)) {
+        if (!mb_check_encoding($tagName, 'UTF-8') || mb_strlen($tagName) > 100 || preg_match('/\p{C}/u', $tagName) !== 0) {
             Session::flash('danger', __('The ITFlow tag name can be at most 100 characters, without line breaks.'));
             return $back;
         }

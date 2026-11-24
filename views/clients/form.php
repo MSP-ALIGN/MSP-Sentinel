@@ -29,7 +29,7 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
             <?php // 1.45: keeps this client out of the ITFlow sync (no rename, archive or restore) and out of ITFlow tickets. ?>
             <input class="form-check-input" type="checkbox" id="itflow_sync_off" name="itflow_sync_off" value="1"<?= ($values['itflow_sync_off'] ?? '0') === '1' ? ' checked' : '' ?>>
             <label class="form-check-label" for="itflow_sync_off"><?= e(__('Don\'t sync with ITFlow')) ?></label>
-            <div class="form-text"><?= e(__('The ITFlow sync leaves this client alone (no renames, archives or restores), and Sentinel makes no ITFlow tickets for it. Its ITFlow client ID is kept.')) ?></div>
+            <div class="form-text"><?= e(__('The ITFlow sync leaves this client alone (no renames, archives or restores), and Sentinel makes no ITFlow tickets for it. Tickets already open in ITFlow are no longer followed (close them there if they are not needed). When you turn this off again, only findings from then on get tickets. Its ITFlow client ID is kept.')) ?></div>
         </div>
         <div class="row g-3 mb-3">
             <div class="col-md-6">

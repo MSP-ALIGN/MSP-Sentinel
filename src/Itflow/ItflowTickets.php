@@ -256,7 +256,7 @@ final class ItflowTickets
      */
     private function settlePending(): void
     {
-        $rows = $this->db->query("SELECT t.*, c.itflow_client_id FROM itflow_tickets t JOIN clients c ON c.id = t.client_id
+        $rows = $this->db->query("SELECT t.*, c.itflow_client_id FROM itflow_tickets t JOIN clients c ON c.id = t.client_id AND c.itflow_sync_off = 0
                                   WHERE t.state = 'pending' AND t.marker <> '' ORDER BY t.attempts, t.id LIMIT 20")->fetchAll();
         foreach ($rows as $r) {
             $rowId = (int) $r['id'];
@@ -840,6 +840,7 @@ final class ItflowTickets
              WHERE f.status = 'open' AND (t.id IS NULL OR t.state = 'gone' OR (t.state = 'failed' AND t.retry_at <= UTC_TIMESTAMP()))
                AND (f.severity = 'fail' OR k.cve_id IS NOT NULL OR t.state = 'failed')
                AND (t.id IS NOT NULL OR COALESCE(f.opened_at, f.first_seen) >= :since OR k.date_added >= DATE(:since2))
+               AND (t.id IS NOT NULL OR c.itflow_resumed_at IS NULL OR COALESCE(f.opened_at, f.first_seen) >= c.itflow_resumed_at)
              ORDER BY (k.cve_id IS NOT NULL) DESC, f.id LIMIT " . $this->budget
         );
         $stmt->execute(['since' => $since, 'since2' => $since]);

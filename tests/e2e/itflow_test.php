@@ -671,6 +671,35 @@ return [
         Assert::contains('no client tag named "sentinel"', $r, $r);
         Assert::same([0, 0], [(int) $c(860)['is_archived'], (int) $c(861)['is_archived']], 'missing tag: nothing archived');
         Assert::same('0', App::settings()->fresh('itflow_last_ok'));
+        // 1.45.1: answers that can't tell who is tagged stop the sync too, instead of archiving everyone.
+        $setTags([]);
+        Assert::contains('No ITFlow client the key can see has the "sentinel" tag', App::itflowSync()->sync(), 'nobody tagged');
+        $setTags([860, 861, 864]);
+        foreach (['tag_id_none' => 'could not read which clients have it', 'no_record_ids' => 'no tag_record_ids'] as $mode => $why) {
+            file_put_contents($failFile, json_encode([$mode => true]));
+            $r = App::itflowSync()->sync();
+            Assert::contains($why, $r, $r);
+        }
+        Assert::same([0, 0], [(int) $c(860)['is_archived'], (int) $c(861)['is_archived']], 'unclear answers: nothing archived');
+        // A contact tag of the same name is never read as client IDs, even if ITFlow ignores kind=client.
+        file_put_contents($tagsFile, json_encode([['tag_id' => 7, 'tag_name' => 'Sentinel', 'tag_record_ids' => [860, 861, 864]],
+            ['tag_id' => 8, 'tag_name' => 'Sentinel', 'tag_record_ids' => [863], 'tag_type' => 3]]));
+        file_put_contents($failFile, json_encode(['ignore_kind' => true]));
+        $r = App::itflowSync()->sync();
+        Assert::contains('3 tagged', $r, $r);
+        Assert::same([], $c(863), 'a contact tag does not make a client tagged');
+        @unlink($failFile);
+        $setTags([860, 861, 864]);
+        // A new ITFlow client with the name of a left-out client is neither linked nor doubled.
+        $ctx->db->exec("UPDATE clients SET itflow_client_id = NULL WHERE id = {$left}");
+        $setItflow($ctx, [[860, 'Tagged Example One'], [861, 'Untagged Example Two'], [864, 'New Tagged Example'], [865, 'left out example three']]);
+        $setTags([860, 861, 864, 865]);
+        App::itflowSync()->sync();
+        Assert::same([], $c(865), 'not linked to, nor doubled beside, a left-out client');
+        Assert::same(1, (int) $ctx->db->query("SELECT COUNT(*) FROM clients WHERE name LIKE 'Left Out Example Three%'")->fetchColumn());
+        $ctx->db->exec("UPDATE clients SET itflow_client_id = 862 WHERE id = {$left}");
+        $setItflow($ctx, [[860, 'Tagged Example One'], [861, 'Untagged Example Two'], [862, 'Renamed In ITFlow Three'], [864, 'New Tagged Example']]);
+        $setTags([860, 861, 864]);
         // Tickets: none for the left-out client, as before for the others.
         $setTags([860, 861, 864]);
         $admin->submit('/admin/integrations', '/admin/integrations/itflow', $form + ['tag_filter' => '1', 'tag_name' => 'Sentinel', 'tickets' => '1']);
@@ -684,6 +713,20 @@ return [
         $clientsTicketed = array_map('intval', array_column($sent['tickets'], 'client_id'));
         Assert::true(in_array(860, $clientsTicketed, true), 'a synced client gets its ticket');
         Assert::true(!in_array(862, $clientsTicketed, true), 'the left-out client gets no ITFlow ticket');
+        // Turned off again: only findings from then on get tickets (no backlog).
+        $admin->submit('/clients/' . $left . '/edit', '/clients/' . $left, ['name' => 'Left Out Example Three', 'itflow_client_id' => '862', 'timezone' => 'UTC',
+            'scan_window_start' => '22:00', 'scan_window_end' => '06:00', 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);
+        Assert::true($c(862)['itflow_resumed_at'] !== null && (int) $c(862)['itflow_sync_off'] === 0, 'resumed time recorded');
+        $ctx->db->exec("UPDATE clients SET itflow_resumed_at = UTC_TIMESTAMP() - INTERVAL 1 SECOND WHERE id = {$left}");
+        $ctx->db->exec("UPDATE findings SET opened_at = UTC_TIMESTAMP() - INTERVAL 1 HOUR, first_seen = UTC_TIMESTAMP() - INTERVAL 1 HOUR WHERE finding_key = 'tagtest-0'"); // from while it was left out
+        $ctx->db->prepare("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, detail, target, evidence, status, first_seen, last_seen, opened_at, due_at)
+                           VALUES (:c, 'tagtest-new', 'port', 'fail', 'Open SMB', 'Open.', '192.0.2.50:445', 'x', 'open', UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP() + INTERVAL 14 DAY)")
+            ->execute(['c' => $left]);
+        App::itflowTickets()->run();
+        $sent = json_decode((string) @file_get_contents($store), true) ?: ['tickets' => []];
+        $mine = array_values(array_filter($sent['tickets'], static fn (array $t): bool => (int) $t['client_id'] === 862));
+        Assert::same(1, count($mine), 'one ticket: the new finding only, not the one from while it was left out');
+        Assert::contains('Open SMB', json_encode($mine));
         // Off again for later tests.
         $admin->submit('/admin/integrations', '/admin/integrations/itflow', ['url' => $base($ctx), 'api_key' => $key, 'enabled' => '0', 'tag_name' => 'Sentinel']);
         @unlink($tagsFile);
