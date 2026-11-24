@@ -37,7 +37,7 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
             </div>
             <div class="card-body">
                 <dl class="row mb-0 small">
-                    <dt class="col-5"><?= e(__('ITFlow ID')) ?></dt><dd class="col-7"><?= e($client['itflow_client_id'] ?? '—') ?></dd>
+                    <dt class="col-5"><?= e(__('ITFlow ID')) ?></dt><dd class="col-7"><?= e($client['itflow_client_id'] ?? '—') ?><?php if ((int) ($client['itflow_sync_off'] ?? 0) === 1): ?> <span class="badge text-bg-secondary"><?= e(__('Not synced')) ?></span><?php endif; ?></dd>
                     <dt class="col-5"><?= e(__('Timezone')) ?></dt><dd class="col-7"><?= e($client['timezone']) ?></dd>
                     <dt class="col-5"><?= e(__('Scan window')) ?></dt><dd class="col-7"><?= e(substr((string) $client['scan_window_start'], 0, 5) . '–' . substr((string) $client['scan_window_end'], 0, 5)) ?></dd>
                     <dt class="col-5"><?= e(__('Today there')) ?></dt><dd class="col-7"><?= e($today) ?></dd>

@@ -26,6 +26,19 @@ Keeps Sentinel's clients in step with ITFlow and puts security work on the ITFlo
    ticket stays on ITFlow's default board and the last ticket run says so. The ITFlow agent needs the Support role at
    edit level to move tickets. The board list is read by **Test connection**, the sync and ticket runs, so the page
    never waits on ITFlow; click **Test connection** after adding or renaming a board.
+5. **Only some clients** (ITFlow builds with the tags API, `api/v1/tags/read.php`): tick **Only sync ITFlow clients
+   with this tag** and enter the tag name (default **Sentinel**, any case). Tag the clients in ITFlow. Clients without
+   the tag are not added; ones already in Sentinel are archived, and restored when the tag is added back. Tag the
+   clients before turning this on: the first sync archives every linked client without the tag. The sync stops and
+   changes nothing when the tags can't be read, no client tag has that name, ITFlow doesn't say which clients have it,
+   or no client has it, so a typo or an odd answer never archives every client. Only client tags count, never a
+   contact or location tag of the same name. The ITFlow agent needs read access to tags.
+6. **Leave one client out**: on the client's **Edit** page, tick **Don't sync with ITFlow**. The sync then never
+   renames, archives or restores it, an ITFlow client with the same name is neither linked to it nor added beside it,
+   it is not linked to MSP Align by ITFlow ID, and Sentinel opens and updates no ITFlow tickets for it. Tickets already
+   open in ITFlow are no longer followed: close them in ITFlow if they are not needed. When you turn the switch off
+   again, only findings from then on get tickets. Its ITFlow client ID is kept, and its overview shows **Not synced**.
+   Anyone who can edit clients can set it; the change is in the audit log.
 
 What happens next:
 

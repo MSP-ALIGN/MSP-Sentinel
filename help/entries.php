@@ -193,6 +193,7 @@ return [
             'paragraphs' => [
                 'Connect other systems under Administration → Integrations. Sentinel only reads from them, except ITFlow tickets. Changing an integration\'s address clears its saved key: enter the key again for the new address.',
                 'ITFlow: every 15 minutes Sentinel adds new ITFlow clients, applies renames, and archives or restores clients archived or unarchived in ITFlow (a client you archived in Sentinel stays archived; changes show in the audit log as itflow-sync). With ticketing on, Sentinel opens, updates and closes ITFlow tickets for findings: see "ITFlow tickets in detail". On ITFlow builds with service boards, new tickets are moved to the board chosen under Integrations (by default the one named Alerts), unassigned so the board\'s own rules pick them up; on stock ITFlow they stay where ITFlow puts them.',
+                'Only some ITFlow clients: tick "Only sync ITFlow clients with this tag" under Integrations and tag those clients in ITFlow (default tag Sentinel, any case). Untagged clients are not added, and ones already here are archived (restored when the tag comes back). Tag the clients first: the first sync archives every linked client without the tag. If the tags can\'t be read, no client tag has that name, or no client has it, the sync stops and changes nothing; only client tags count. To leave one client out entirely, tick "Don\'t sync with ITFlow" on its Edit page: no renames, archives, restores, MSP Align linking by ITFlow ID or ITFlow tickets for it, and an ITFlow client of the same name is not added. Tickets already open in ITFlow are no longer followed; when the switch is turned off again, only findings from then on get tickets.',
                 'MSP Align: connect it, then link each client on its Compliance page (see "Compliance").',
                 'NinjaOne: create an API app with the Monitoring scope and the Client credentials grant, connect it, then link each client to its NinjaOne organisation on the client\'s Devices page. Sentinel reads devices, operating systems, antivirus, BitLocker, missing Windows updates and installed software every 6 hours, and changes nothing in NinjaOne. Network devices, phones and devices waiting for approval are left out.',
                 'Breach monitoring (XposedOrNot): verify each client domain in your XposedOrNot account (verified domains are domains you have proved you own there, by a DNS record or email), then paste the API key and tick Check weekly. The free key is meant for low-volume use; paid xonAPI+ keys work the same way. Check now runs at most once an hour. See "Breach monitoring details".',
@@ -360,6 +361,21 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.45.1',
+            'date' => '2026-11-24',
+            'items' => [
+                'ITFlow tag filter fixes: the sync also stops, changing nothing, when no client has the tag or ITFlow doesn\'t say which clients have it; only client tags count. A client set to "Don\'t sync with ITFlow" no longer gets a same-named copy, isn\'t linked to MSP Align by ITFlow ID, and gets no backlog of tickets when the switch is turned off again.',
+            ],
+        ],
+        [
+            'version' => '1.45.0',
+            'date' => '2026-11-24',
+            'items' => [
+                'ITFlow: sync only the clients with a chosen ITFlow tag (default Sentinel). Untagged clients are not added, and ones already here are archived until the tag comes back. If the tag can\'t be read the sync changes nothing.',
+                'A client can be left out of ITFlow: "Don\'t sync with ITFlow" on its Edit page stops renames, archives and ITFlow tickets for it.',
+            ],
+        ],
         [
             'version' => '1.44.1',
             'date' => '2026-11-24',

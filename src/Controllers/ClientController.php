@@ -60,7 +60,7 @@ final class ClientController extends Controller
         return $this->page('clients/form', __('Add client'), [
             'mode' => 'create',
             'values' => ['name' => '', 'itflow_client_id' => '', 'timezone' => 'UTC', 'scan_window_start' => '22:00', 'scan_window_end' => '06:00', 'notes' => '',
-                         'ports_extra' => '', 'ports_excluded' => ''],
+                         'ports_extra' => '', 'ports_excluded' => '', 'itflow_sync_off' => '0'],
             'errors' => [],
         ]);
     }
@@ -250,6 +250,7 @@ final class ClientController extends Controller
         $values['scan_window_start'] = substr((string) $client['scan_window_start'], 0, 5);
         $values['scan_window_end'] = substr((string) $client['scan_window_end'], 0, 5);
         $values['itflow_client_id'] = $client['itflow_client_id'] === null ? '' : (string) $client['itflow_client_id'];
+        $values['itflow_sync_off'] = (string) (int) $client['itflow_sync_off'];
         return $this->page('clients/form', __('Edit client'), ['mode' => 'edit', 'client' => $client, 'values' => $values, 'errors' => []]);
     }
 
@@ -264,7 +265,7 @@ final class ClientController extends Controller
         }
         App::clients()->update($id, $clean);
         $changes = [];
-        foreach (['name', 'itflow_client_id', 'timezone', 'scan_window_start', 'scan_window_end', 'ports_extra', 'ports_excluded'] as $field) {
+        foreach (['name', 'itflow_client_id', 'timezone', 'scan_window_start', 'scan_window_end', 'ports_extra', 'ports_excluded', 'itflow_sync_off'] as $field) {
             $old = $field === 'scan_window_start' || $field === 'scan_window_end' ? substr((string) $client[$field], 0, 5) : (string) $client[$field];
             $new = $field === 'scan_window_start' || $field === 'scan_window_end' ? substr((string) $clean[$field], 0, 5) : (string) $clean[$field];
             if ($old !== $new) {
@@ -360,6 +361,8 @@ final class ClientController extends Controller
             'notes' => $request->input('notes'),
             'ports_extra' => $request->input('ports_extra'),
             'ports_excluded' => $request->input('ports_excluded'),
+            // 1.45: a checkbox; anything but "1" means off (the sync and ITFlow tickets go on as before).
+            'itflow_sync_off' => $request->input('itflow_sync_off') === '1' ? '1' : '0',
         ];
         $errors = [];
         $portLists = [];
@@ -416,6 +419,7 @@ final class ClientController extends Controller
             'notes' => $values['notes'],
             'ports_extra' => $portLists['ports_extra'] ?? '',
             'ports_excluded' => $portLists['ports_excluded'] ?? '',
+            'itflow_sync_off' => (int) $values['itflow_sync_off'],
         ];
         return [$values, $clean, $errors];
     }

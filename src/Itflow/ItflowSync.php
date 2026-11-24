@@ -66,9 +66,36 @@ final class ItflowSync
         try {
             $this->settings->set('itflow_last_sync', gmdate('Y-m-d H:i:s'));
             try {
-                $s = $this->syncClients($this->itflow->clients());
+                $clients = $this->itflow->clients();
+                // Only clients with the chosen tag (1.45): the others are treated as archived in ITFlow, so they are
+                // never added, and linked ones are archived here (and restored when the tag comes back). A tag that
+                // can't be read stops the sync with nothing changed: never "everyone" or "no one" by mistake.
+                $tagNote = '';
+                if ($this->settings->get('itflow_tag_filter') === '1') {
+                    $tag = $this->settings->get('itflow_tag_name');
+                    $ids = $this->itflow->taggedClientIds($tag);
+                    if ($ids === null) {
+                        // A missing tag (a typo, or renamed in ITFlow) would archive every client: stop instead.
+                        throw new ItflowException('ITFlow has no client tag named "' . $tag . '", so nothing was changed. Create the tag in ITFlow or fix the name.', ItflowException::KIND_REFUSED);
+                    }
+                    $tagged = array_flip($ids);
+                    $taggedCount = count(array_intersect_key($tagged, array_flip(array_column($clients, 'id'))));
+                    if ($taggedCount === 0) {
+                        // Nobody tagged would archive every linked client in one run (1.45.1): stop instead.
+                        throw new ItflowException('No ITFlow client the key can see has the "' . $tag . '" tag, so nothing was changed. Tag the clients to sync in ITFlow first.', ItflowException::KIND_REFUSED);
+                    }
+                    $tagNote = ' ' . sprintf('%d tagged "%s".', $taggedCount, $tag);
+                    foreach ($clients as &$c) {
+                        if (!isset($tagged[$c['id']])) {
+                            $c['archived'] = true;
+                            $c['untagged'] = true;
+                        }
+                    }
+                    unset($c);
+                }
+                $s = $this->syncClients($clients);
                 $summary = sprintf('%d new, %d linked by name, %d renamed, %d archived, %d restored (%d ITFlow clients).',
-                    $s['created'], $s['linked'], $s['renamed'], $s['archived'], $s['restored'], $s['seen']);
+                    $s['created'], $s['linked'], $s['renamed'], $s['archived'], $s['restored'], $s['seen']) . $tagNote;
                 if ($s['conflicts'] > 0) {
                     $summary .= ' ' . $s['conflicts'] . ' name(s) left as they were because another client has that name.';
                 }
@@ -110,14 +137,16 @@ final class ItflowSync
         $s = ['seen' => count($clients), 'created' => 0, 'linked' => 0, 'renamed' => 0, 'archived' => 0, 'restored' => 0, 'conflicts' => 0];
         $byItflow = $this->db->prepare('SELECT * FROM clients WHERE itflow_client_id = :i AND is_demo = 0 ORDER BY id LIMIT 1');
         // Same name (MariaDB's comparison: case and accents ignored), not archived, not yet linked to ITFlow.
-        $byName = $this->db->prepare('SELECT * FROM clients WHERE name = :n AND itflow_client_id IS NULL AND is_demo = 0 AND is_archived = 0 LIMIT 1');
+        $byName = $this->db->prepare('SELECT * FROM clients WHERE name = :n AND itflow_client_id IS NULL AND is_demo = 0 AND is_archived = 0 AND itflow_sync_off = 0 LIMIT 1');
+        // A client set to "Don't sync with ITFlow" with that name (1.45.1): neither linked nor doubled by a new client.
+        $offName = $this->db->prepare('SELECT COUNT(*) FROM clients WHERE name = :n AND itflow_sync_off = 1 AND is_demo = 0');
         foreach ($clients as $c) {
             $name = self::clean($c['name']);
             if ($name === '') {
                 continue;
             }
             try {
-                $this->syncOne($c, $name, $s, $byItflow, $byName);
+                $this->syncOne($c, $name, $s, $byItflow, $byName, $offName);
             } catch (\PDOException $ex) {
                 // e.g. someone created a client with this name at the same moment: count it, carry on with the rest
                 error_log('[msp-sentinel] ITFlow sync, client ' . $c['id'] . ': ' . $ex->getMessage());
@@ -133,13 +162,17 @@ final class ItflowSync
      * @param array{id:int, name:string, archived:bool} $c
      * @param array<string,int> $s counters, updated in place
      */
-    private function syncOne(array $c, string $name, array &$s, \PDOStatement $byItflow, \PDOStatement $byName): void
+    private function syncOne(array $c, string $name, array &$s, \PDOStatement $byItflow, \PDOStatement $byName, \PDOStatement $offName): void
     {
         $byItflow->execute(['i' => $c['id']]);
         $mine = $byItflow->fetch();
         if ($mine === false) {
             if ($c['archived']) {
                 return; // not worth creating a client that is already archived in ITFlow
+            }
+            $offName->execute(['n' => $name]);
+            if ((int) $offName->fetchColumn() > 0) {
+                return; // that name is a client left out of the sync on purpose
             }
             $byName->execute(['n' => $name]);
             $same = $byName->fetch();
@@ -153,6 +186,9 @@ final class ItflowSync
                 $s['created']++;
                 return;
             }
+        }
+        if ((int) ($mine['itflow_sync_off'] ?? 0) === 1) {
+            return; // "Don't sync with ITFlow" on this client (1.45): left exactly as it is
         }
         $id = (int) $mine['id'];
         // Stored as "Name (ITFlow #id)" because the plain name was taken: try the plain name again (it may be free now),
@@ -171,11 +207,11 @@ final class ItflowSync
         }
         if ($c['archived'] && (int) $mine['is_archived'] === 0) {
             $this->db->prepare('UPDATE clients SET is_archived = 1, itflow_archived = 1, updated_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['id' => $id]);
-            $this->log('client.archived', $id, ['reason' => 'archived in ITFlow']);
+            $this->log('client.archived', $id, ['reason' => ($c['untagged'] ?? false) ? 'no "' . $this->settings->get('itflow_tag_name') . '" tag in ITFlow' : 'archived in ITFlow']);
             $s['archived']++;
         } elseif (!$c['archived'] && (int) $mine['is_archived'] === 1 && (int) ($mine['itflow_archived'] ?? 0) === 1) {
             $this->db->prepare('UPDATE clients SET is_archived = 0, itflow_archived = 0, updated_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['id' => $id]);
-            $this->log('client.restored', $id, ['reason' => 'unarchived in ITFlow']);
+            $this->log('client.restored', $id, ['reason' => 'unarchived or tagged in ITFlow']);
             $s['restored']++;
         }
     }
@@ -203,7 +239,7 @@ final class ItflowSync
         }
         $byPsa = array_diff_key($byPsa, $dupes); // an ITFlow ID on two MSP Align clients: link neither
         $n = 0;
-        $rows = $this->db->query('SELECT id, itflow_client_id FROM clients WHERE itflow_client_id IS NOT NULL AND align_client_id IS NULL AND is_demo = 0 AND is_archived = 0')->fetchAll();
+        $rows = $this->db->query('SELECT id, itflow_client_id FROM clients WHERE itflow_client_id IS NOT NULL AND align_client_id IS NULL AND is_demo = 0 AND is_archived = 0 AND itflow_sync_off = 0')->fetchAll();
         // An MSP Align client already linked to a Sentinel client is never linked to a second one (1.42.2).
         $used = array_flip(array_map('intval', $this->db->query('SELECT align_client_id FROM clients WHERE align_client_id IS NOT NULL')->fetchAll(\PDO::FETCH_COLUMN)));
         foreach ($rows as $r) {

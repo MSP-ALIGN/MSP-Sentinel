@@ -49,6 +49,38 @@ $find = static function (int $id) use (&$state): ?int {
     }
     return null;
 };
+// Tags (1.45: api/v1/tags/read.php, as in ITFlow builds with it). itflow-tags.json holds
+// [{"tag_id":7,"tag_name":"Sentinel","tag_record_ids":[1,2],"tag_type":1}] (tag_type 1 = client, the default);
+// itflow-fail.json: {"no_tags": true} answers 404 like an ITFlow without the tags API; {"tags_403": true} refuses the
+// key; {"ignore_kind": true} returns tags of every type for kind=client; {"tag_id_none": true} answers "No resource"
+// for tag_id; {"no_record_ids": true} leaves tag_record_ids out.
+if ($sub === '/api/v1/tags/read.php') {
+    if (($fail['no_tags'] ?? false) === true) {
+        http_response_code(404);
+        echo '<html>Not Found</html>';
+        exit;
+    }
+    if (($fail['tags_403'] ?? false) === true) {
+        http_response_code(403);
+        echo json_encode(['success' => 'False', 'message' => 'This API key cannot read tags.']);
+        exit;
+    }
+    $tags = json_decode((string) @file_get_contents(dirname((string) getenv('FEEDS_LOG')) . '/itflow-tags.json'), true) ?: [];
+    if (isset($_GET['tag_id'])) {
+        $rows = ($fail['tag_id_none'] ?? false) === true ? [] : array_values(array_filter($tags, static fn (array $t): bool => (int) $t['tag_id'] === (int) $_GET['tag_id']));
+        if (($fail['no_record_ids'] ?? false) === true) {
+            $rows = array_map(static fn (array $t): array => array_diff_key($t, ['tag_record_ids' => 1]), $rows);
+        }
+    } else {
+        $name = (string) ($_GET['tag_name'] ?? '');
+        $rows = array_values(array_filter($tags, static fn (array $t): bool => ($_GET['kind'] ?? '') === 'client'
+            && (($fail['ignore_kind'] ?? false) === true || (int) ($t['tag_type'] ?? 1) === 1) && ($name === '' || strcasecmp($t['tag_name'], $name) === 0)));
+        $rows = array_map(static fn (array $t): array => ['tag_id' => $t['tag_id'], 'tag_name' => $t['tag_name'], 'tag_type' => (int) ($t['tag_type'] ?? 1)], $rows);
+    }
+    echo json_encode($rows === [] ? ['success' => 'False', 'message' => 'No resource (for this client and company) with the specified parameter(s).']
+        : ['success' => 'True', 'count' => count($rows), 'data' => $rows]);
+    exit;
+}
 // Service boards of the MountaineerIT build (1.44: mit_boards/read.php and move.php). {"no_boards": true} in
 // itflow-fail.json answers 404 like stock ITFlow; {"move_refused": true} refuses moves (409). Moves are recorded in
 // itflow-tickets.json ("moves").
