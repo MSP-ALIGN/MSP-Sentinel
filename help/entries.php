@@ -363,6 +363,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.47.2',
+            'date' => '2026-11-24',
+            'items' => [
+                'Windows agent: scans failed with "Could not start nmap". The agent now starts nmap the Windows way (the right null device and the environment Windows networking needs) and reads its output without blocking, so the kill switch keeps working during a scan. Upgrade the agent (install-agent.ps1 -Upgrade, or a signed remote update).',
+            ],
+        ],
+        [
             'version' => '1.47.1',
             'date' => '2026-11-24',
             'items' => [
