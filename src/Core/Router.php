@@ -19,6 +19,8 @@ use Sentinel\Auth\Permissions;
  * - 'client' => the kind of record {id} names (Sentinel\Auth\ClientAccess::RECORDS, e.g. 'finding'): the kernel looks
  *   up its client and answers 404 to a user who doesn't see that client (1.41). Routes under /clients/{id} are
  *   checked by their client ID without it.
+ * - 'all_clients' => true: an org-wide page or action (the kill switch for every client, settings, integrations,
+ *   the system, the audit log): only for users who see every client (1.42.1).
  *
  * Security assumptions:
  * - The default is the most restrictive useful option: signed in plus 2FA.
@@ -41,7 +43,7 @@ final class Router
      */
     public function add(string $method, string $pattern, array $handler, array $opts = []): void
     {
-        $opts += ['auth' => 'user', 'perm' => [], 'allow_password_change' => false, 'passive' => false, 'client' => null];
+        $opts += ['auth' => 'user', 'perm' => [], 'allow_password_change' => false, 'passive' => false, 'client' => null, 'all_clients' => false];
         if ($opts['client'] !== null && !isset(\Sentinel\Auth\ClientAccess::RECORDS[$opts['client']])) {
             throw new \InvalidArgumentException('Unknown record kind for route ' . $pattern);
         }

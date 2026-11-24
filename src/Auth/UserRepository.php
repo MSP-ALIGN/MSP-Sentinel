@@ -66,6 +66,10 @@ final class UserRepository
         foreach (array_unique($clientIds ?? []) as $c) {
             $ins->execute(['u' => $userId, 'c' => (int) $c]);
         }
+        // Earlier notifications may be about clients they no longer see (1.42.1): a limited list starts afresh.
+        if ($clientIds !== null) {
+            $this->db->prepare('DELETE FROM notifications WHERE user_id = :u')->execute(['u' => $userId]);
+        }
     }
 
     /**

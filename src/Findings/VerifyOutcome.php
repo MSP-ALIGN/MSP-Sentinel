@@ -115,6 +115,13 @@ final class VerifyOutcome
         if ($requestedBy === null) {
             return;
         }
+        // Not to someone who no longer sees the finding's client (1.42.1).
+        $sees = $db->prepare('SELECT COUNT(*) FROM users u JOIN findings f ON f.id = :f
+                              WHERE u.id = :u AND (u.all_clients = 1 OR EXISTS (SELECT 1 FROM user_clients uc WHERE uc.user_id = u.id AND uc.client_id = f.client_id))');
+        $sees->execute(['f' => $findingId, 'u' => $requestedBy]);
+        if ((int) $sees->fetchColumn() === 0) {
+            return;
+        }
         $label = match ($result) {
             'fixed' => __('Fixed: {title}', ['title' => $title]),
             'still_present' => __('Still present: {title}', ['title' => $title]),

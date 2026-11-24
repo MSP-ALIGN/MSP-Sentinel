@@ -2,6 +2,21 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.40.1 (2026-11-24): roles and permissions fixes from review
+
+- **API tokens never do more than their creator.** Only someone who may triage findings or start scans can give a
+  token those rights, and a token loses them when its creator does (read access stays).
+- **One active Admin always stays.** The lock-out guard now counts only the built-in Admin, which also gets every
+  permission a later release adds; a custom role with every permission today would fall short then.
+- **Checked again when saving.** Who may change a user or a role, and which role may be given, is checked again
+  with the rows locked, so a role changed meanwhile by someone more powerful can't slip through or be saved over; a
+  role deleted meanwhile gives a form error.
+- **Pages show only what you may use:** the Administration overview shows only your areas, and the System page shows
+  a release signer only the release key.
+- **Breached addresses** on a finding's page are masked unless you may see them in full.
+- Permissions that reach the whole system are marked **Near full control** on the Roles page. The demo data command
+  picks an Admin by role.
+
 ### 1.40.0 (2026-11-24): roles and permissions
 
 - **Permissions.** Every action now needs a permission: 29 of them in 7 groups (clients and scope, scanning,

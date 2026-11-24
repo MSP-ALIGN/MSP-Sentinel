@@ -75,8 +75,8 @@ final class FindingController extends Controller
             'pages' => max(1, (int) ceil($result['total'] / ($grouped ? FindingRepository::GROUPS_PER_PAGE : FindingRepository::PAGE_SIZE))),
             'clients' => $repo->clientsWithFindings(App::auth()->clientIds()),
             'counts' => $repo->counts(null, App::auth()->clientIds()),
-            'fixCounts' => App::fixWorkflow()->counts((int) $this->user()['id']),
-            'assignable' => App::fixWorkflow()->assignableUsers(),
+            'fixCounts' => App::fixWorkflow()->counts((int) $this->user()['id'], App::auth()->clientIds()),
+            'assignable' => App::fixWorkflow()->assignableUsers(null, App::auth()->clientIds()),
         ]);
     }
 

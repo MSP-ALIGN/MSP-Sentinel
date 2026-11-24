@@ -169,4 +169,39 @@ return [
         [, $adminSecret] = App::apiTokens()->create('Admin token', true, [], false, false, [], 30, (int) $ctx->db->query("SELECT id FROM users WHERE username = 'admin'")->fetchColumn());
         Assert::contains('pat@visible.example', $ctx->api('GET', '/api/v1/findings/' . $bid, $adminSecret)->body, 'in full for an Admin\'s token');
     },
+
+    'client access (1.42.1): org-wide actions need every client; counts, owners and ITFlow links stay within clients' => function (TestContext $ctx) use ($setup): void {
+        [$mine, $hidden] = $setup($ctx);
+        $u = $ctx->login('limitedtech', 'Limitedtech-Pass-0001!');
+        $csrf = $u->get('/findings')->csrf();
+        Assert::status(403, $u->post('/scanning/pause', ['_csrf' => $csrf, 'reason' => 'Testing']), 'no kill switch for every client');
+        Assert::same('0', App::settings()->fresh('scanning_paused') ?: '0', 'scanning still on');
+        // A limited Admin can't open org-wide pages.
+        $ctx->createUser('limitedadmin', 'admin', 'Limitedadmin-Pass-0001!');
+        App::users()->setClients((int) $ctx->db->query("SELECT id FROM users WHERE username = 'limitedadmin'")->fetchColumn(), [$mine]);
+        $a = $ctx->login('limitedadmin', 'Limitedadmin-Pass-0001!');
+        foreach (['/admin/audit', '/admin/settings', '/admin/integrations', '/admin/system'] as $page) {
+            Assert::status(403, $a->get($page), $page);
+        }
+        Assert::status(200, $a->get('/users'), 'managing their own users still works');
+        Assert::notContains('href="/admin/audit"', $a->get('/admin')->body);
+        // Fix counts on the findings page only count their clients.
+        $counts = App::fixWorkflow()->counts(0, [$mine]);
+        $all = App::fixWorkflow()->counts(0, null);
+        Assert::true($counts['unassigned'] < $all['unassigned'], 'unassigned counted within their clients');
+        // The owner list on the findings page: only people who see one of their clients.
+        $ownersMine = array_column(App::fixWorkflow()->assignableUsers(null, [$mine]), 'username');
+        $hiddenOnly = $ctx->createUser('hiddentech', 'technician', 'Hiddentech-Pass-0001!');
+        App::users()->setClients($hiddenOnly, [$hidden]);
+        Assert::true(!in_array('hiddentech', array_column(App::fixWorkflow()->assignableUsers(null, [$mine]), 'username'), true), 'not listed for others');
+        Assert::true(in_array('limitedtech', $ownersMine, true), 'listed for their clients');
+        // One ITFlow client per Sentinel client.
+        $ctx->db->exec("UPDATE clients SET itflow_client_id = 7701 WHERE id = {$hidden}");
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $res = $admin->submit('/clients/' . $mine . '/edit', '/clients/' . $mine, ['name' => 'Visible Example', 'itflow_client_id' => '7701', 'timezone' => 'UTC',
+            'scan_window_start' => '00:00', 'scan_window_end' => '23:59', 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);
+        Assert::status(422, $res);
+        Assert::contains('already linked to this ITFlow client', $res->body);
+        $ctx->db->exec("UPDATE clients SET itflow_client_id = NULL WHERE id = {$hidden}");
+    },
 ];

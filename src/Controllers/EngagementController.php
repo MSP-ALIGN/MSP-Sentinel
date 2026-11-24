@@ -241,7 +241,7 @@ final class EngagementController extends Controller
             'external' => count($external), 'internal' => count(array_filter($targets, static fn (array $t): bool => $t['kind'] === 'internal')), 'document_sha256' => $sha]);
         // Tell the approvers: the engagement can't run until one of them approves it (1.34). Approvers other than the creator.
         $me = (int) $this->user()['id'];
-        $approvers = count(array_filter(App::roles()->usersWith('engagements.approve'), static fn (array $u): bool => $u['id'] !== $me));
+        $approvers = count(array_filter(App::roles()->usersWith('engagements.approve', $clientId), static fn (array $u): bool => $u['id'] !== $me)); // who see the client (1.42.1)
         App::alerts()->notifyUsers('engagement', 'warn', __('Engagement awaiting approval: {name}', ['name' => $v['name']]),
             __('{user} created it for {client}. A different admin must approve it before anything runs.', ['user' => (string) ($this->user()['display_name'] ?? ''), 'client' => (string) $client['name']]),
             '/engagements/' . $id, 'engagements.approve', $clientId);

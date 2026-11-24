@@ -6,8 +6,10 @@
  */
 use Sentinel\Core\Csrf;
 
-$canPause = can('scanning.pause');
-$canResume = can('scanning.resume');
+// The kill switch reaches every client (1.42.1): only for users who see every client.
+$everyClient = ($currentUser['client_ids'] ?? null) === null;
+$canPause = can('scanning.pause') && $everyClient;
+$canResume = can('scanning.resume') && $everyClient;
 ?>
 <?php if ($globallyPaused): ?>
 <div class="alert alert-danger d-flex align-items-center flex-wrap gap-2" role="status">

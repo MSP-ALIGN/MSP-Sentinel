@@ -149,6 +149,9 @@ final class ClientController extends Controller
                                          return ['list' => [], 'error' => $ex->getMessage()];
                                      }
                                  }
+                                 // MSP Align clients already linked to a Sentinel client are not offered (1.42.1).
+                                 $linked = array_map('intval', App::db()->query('SELECT align_client_id FROM clients WHERE align_client_id IS NOT NULL')->fetchAll(\PDO::FETCH_COLUMN));
+                                 $list = array_values(array_filter($list, static fn (array $a): bool => !in_array((int) $a['id'], $linked, true)));
                                  usort($list, static fn (array $a, array $b): int => [strcasecmp($a['name'], (string) $client['name']) !== 0, $a['name']] <=> [strcasecmp($b['name'], (string) $client['name']) !== 0, $b['name']]);
                                  return ['list' => $list, 'error' => ''];
                              }],
@@ -379,6 +382,12 @@ final class ClientController extends Controller
                 $errors['itflow_client_id'] = __('Enter the numeric ITFlow client ID, or leave it empty.');
             } else {
                 $itflow = (int) $values['itflow_client_id'];
+                // One ITFlow client per Sentinel client (1.42.1): else tickets would go to another client's ITFlow record.
+                $taken = App::db()->prepare('SELECT COUNT(*) FROM clients WHERE itflow_client_id = :i AND id <> :x');
+                $taken->execute(['i' => $itflow, 'x' => $exceptId ?? 0]);
+                if ((int) $taken->fetchColumn() > 0) {
+                    $errors['itflow_client_id'] = __('Another client is already linked to this ITFlow client.');
+                }
             }
         }
         if (!in_array($values['timezone'], \DateTimeZone::listIdentifiers(), true)) {

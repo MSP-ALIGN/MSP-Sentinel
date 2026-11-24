@@ -108,7 +108,16 @@ final class Outbox
                     // A monthly report email gave up: tell those who schedule reports in-app, so it isn't lost silently.
                     $note = $this->db->prepare("INSERT INTO notifications (user_id, kind, severity, title, body, link, created_at)
                                                 VALUES (:u, 'report_failed', 'warn', :t, :b, '/reports', UTC_TIMESTAMP())");
+                    // Only those who see the report's client (1.42.1).
+                    $rid = (int) explode(',', (string) $d['report_ids'])[0];
+                    $see = $this->db->prepare('SELECT u.id FROM users u JOIN reports r ON r.id = :r
+                                               WHERE u.all_clients = 1 OR EXISTS (SELECT 1 FROM user_clients uc WHERE uc.user_id = u.id AND uc.client_id = r.client_id)');
+                    $see->execute(['r' => $rid]);
+                    $seeing = array_flip(array_map('intval', $see->fetchAll(\PDO::FETCH_COLUMN)));
                     foreach ((new \Sentinel\Auth\RoleRepository($this->db))->usersWith('reports.schedule') as $u) {
+                        if (!isset($seeing[$u['id']])) {
+                            continue;
+                        }
                         $note->execute(['u' => $u['id'], 't' => mb_substr('A monthly report email to ' . $d['recipient'] . ' could not be sent', 0, 300), 'b' => mb_substr($message, 0, 2000)]);
                     }
                 }

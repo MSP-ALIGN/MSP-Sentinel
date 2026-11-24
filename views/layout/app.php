@@ -36,12 +36,14 @@ $adminItems = array_values(array_filter([
     ['/admin', 'bi-grid-1x2', __('Overview'), null],
     ['/users', 'bi-people', __('Users'), ['users.manage']],
     ['/admin/roles', 'bi-shield-lock', __('Roles'), ['users.manage']],
-    ['/admin/settings', 'bi-gear', __('Settings'), ['settings.manage']],
-    ['/admin/integrations', 'bi-puzzle', __('Integrations'), ['integrations.manage']],
+    ['/admin/settings', 'bi-gear', __('Settings'), ['settings.manage'], true],
+    ['/admin/integrations', 'bi-puzzle', __('Integrations'), ['integrations.manage'], true],
     ['/admin/api', 'bi-plug', __('API'), ['api.manage']],
-    ['/admin/system', 'bi-heart-pulse', __('System'), ['system.manage', 'release.manage']],
-    ['/admin/audit', 'bi-journal-text', __('Audit log'), ['audit.view']],
-], static fn (array $i): bool => $i[3] === null || array_intersect($i[3], $held) !== []));
+    ['/admin/system', 'bi-heart-pulse', __('System'), ['system.manage', 'release.manage'], true],
+    ['/admin/audit', 'bi-journal-text', __('Audit log'), ['audit.view'], true],
+], static fn (array $i): bool => ($i[3] === null || array_intersect($i[3], $held) !== [])
+    // Org-wide pages (1.42.1) only for users who see every client.
+    && (!($i[4] ?? false) || ($currentUser['client_ids'] ?? null) === null)));
 try {
     $sourceUrl = App::settings()->get('source_url');
 } catch (\Throwable) {

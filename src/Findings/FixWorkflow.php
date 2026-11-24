@@ -75,15 +75,19 @@ final class FixWorkflow
      *
      * @return list<array{id:int, username:string, display_name:string}>
      */
-    public function assignableUsers(?int $clientId = null): array
+    public function assignableUsers(?int $clientId = null, ?array $anyOf = null): array
     {
         $users = (new \Sentinel\Auth\RoleRepository($this->db))->usersWith('findings.triage');
-        if ($clientId === null) {
+        if ($clientId === null && $anyOf === null) {
             return $users;
         }
-        // Only those who see this client (1.41).
-        $stmt = $this->db->prepare('SELECT u.id FROM users u WHERE u.all_clients = 1 OR EXISTS (SELECT 1 FROM user_clients uc WHERE uc.user_id = u.id AND uc.client_id = :c)');
-        $stmt->execute(['c' => $clientId]);
+        // Only those who see this client (1.41), or (for a list page) at least one of these clients (1.42.1).
+        $ids = $clientId !== null ? [$clientId] : array_map('intval', $anyOf);
+        if ($ids === []) {
+            return [];
+        }
+        $stmt = $this->db->prepare('SELECT u.id FROM users u WHERE u.all_clients = 1 OR EXISTS (SELECT 1 FROM user_clients uc WHERE uc.user_id = u.id AND uc.client_id IN (' . implode(',', $ids) . '))');
+        $stmt->execute();
         $seeing = array_flip(array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN)));
         return array_values(array_filter($users, static fn (array $u): bool => isset($seeing[$u['id']])));
     }
@@ -189,13 +193,14 @@ final class FixWorkflow
      *
      * @return array{overdue:int, due_soon:int, mine:int, unassigned:int}
      */
-    public function counts(int $userId): array
+    public function counts(int $userId, ?array $clientIds = null): array
     {
         $stmt = $this->db->prepare(
             "SELECT SUM(f.due_at < UTC_TIMESTAMP()) AS overdue,
                     SUM(f.due_at >= UTC_TIMESTAMP() AND f.due_at < UTC_TIMESTAMP() + INTERVAL " . self::DUE_SOON_DAYS . " DAY) AS due_soon,
                     SUM(f.assigned_to = :u) AS mine, SUM(f.assigned_to IS NULL) AS unassigned
              FROM findings f JOIN clients c ON c.id = f.client_id AND c.is_archived = 0 WHERE f.status = 'open'"
+            . \Sentinel\Auth\ClientAccess::sql('f.client_id', $clientIds) // only the viewer's clients (1.42.1)
         );
         $stmt->execute(['u' => $userId]);
         $r = $stmt->fetch() ?: [];

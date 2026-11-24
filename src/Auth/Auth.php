@@ -274,15 +274,15 @@ final class Auth
     }
 
     /**
-     * The signed-in user's client list for filtering lists: null for every client (also for background work with
-     * nobody signed in, which isn't limited), else the IDs.
+     * The signed-in user's client list for filtering lists: null for every client, else the IDs. Nobody signed in
+     * sees no client (1.42.1: fails closed; background work doesn't use this).
      *
      * @return list<int>|null
      */
     public function clientIds(): ?array
     {
         $user = $this->user();
-        return $user === null ? null : ($user['client_ids'] ?? null);
+        return $user === null ? [] : ($user['client_ids'] ?? null);
     }
 
     public function refreshSessionVersion(): void

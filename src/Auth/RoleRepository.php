@@ -163,15 +163,22 @@ final class RoleRepository
      *
      * @return list<array{id:int, username:string, display_name:string}>
      */
-    public function usersWith(string $permission): array
+    public function usersWith(string $permission, ?int $clientId = null): array
     {
         $out = [];
+        // Given a client, only users who see it (1.42.1).
+        $seeing = null;
+        if ($clientId !== null) {
+            $stmt = $this->db->prepare('SELECT u.id FROM users u WHERE u.all_clients = 1 OR EXISTS (SELECT 1 FROM user_clients uc WHERE uc.user_id = u.id AND uc.client_id = :c)');
+            $stmt->execute(['c' => $clientId]);
+            $seeing = array_flip(array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN)));
+        }
         $roles = [];
         foreach ($this->db->query('SELECT * FROM roles')->fetchAll() as $r) {
             $roles[(int) $r['id']] = in_array($permission, $this->permissionsOf($r), true);
         }
         foreach ($this->db->query('SELECT id, username, display_name, role_id FROM users WHERE is_active = 1 ORDER BY COALESCE(NULLIF(display_name, \'\'), username)')->fetchAll() as $u) {
-            if ($roles[(int) $u['role_id']] ?? false) {
+            if (($roles[(int) $u['role_id']] ?? false) && ($seeing === null || isset($seeing[(int) $u['id']]))) {
                 $out[] = ['id' => (int) $u['id'], 'username' => (string) $u['username'], 'display_name' => (string) $u['display_name']];
             }
         }

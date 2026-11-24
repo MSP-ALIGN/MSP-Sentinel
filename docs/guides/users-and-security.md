@@ -47,8 +47,11 @@ dashboard, reports, engagements, notifications and alert emails leave them out. 
 given to someone who sees it. A client a limited user adds becomes one of theirs.
 
 - You can only give clients you see yourself, and only manage users whose clients you all see.
-- Administration pages (users, settings, integrations, the API, the system) work across all clients: give those
-  permissions to people who see every client.
+- Org-wide pages and actions work only for users who see every client: the kill switch for all scanning, settings,
+  integrations, the System page and the audit log. A limited user can still manage users, roles and API tokens
+  within their own clients.
+- One MSP Align client and one ITFlow client can each be linked to only one Sentinel client.
+- When someone's clients are narrowed to a list, their earlier notifications are cleared.
 - The last active Admin who sees every client can't be limited, demoted or disabled.
 
 ## Sign in and two-factor authentication

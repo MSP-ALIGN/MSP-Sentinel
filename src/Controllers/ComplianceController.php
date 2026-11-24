@@ -52,6 +52,14 @@ final class ComplianceController extends Controller
             Session::flash('danger', __('That MSP Align client is not visible to the API key.'));
             return $back;
         }
+        // One MSP Align client per Sentinel client (1.42.1, as for inventory links): otherwise someone could read
+        // another client's compliance data through their own client.
+        $taken = App::db()->prepare('SELECT COUNT(*) FROM clients WHERE align_client_id = :a AND id <> :id');
+        $taken->execute(['a' => $match['id'], 'id' => (int) $client['id']]);
+        if ((int) $taken->fetchColumn() > 0) {
+            Session::flash('danger', __('That MSP Align client is already linked to another client.'));
+            return $back;
+        }
         App::db()->prepare('UPDATE clients SET align_client_id = :a, align_client_name = :n, updated_at = UTC_TIMESTAMP() WHERE id = :id')
             ->execute(['a' => $match['id'], 'n' => mb_substr($match['name'], 0, 190), 'id' => (int) $client['id']]);
         App::db()->prepare('DELETE FROM align_cache WHERE client_id = :c')->execute(['c' => (int) $client['id']]);

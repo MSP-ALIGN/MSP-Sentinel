@@ -88,7 +88,7 @@ return [
         $db->exec("INSERT INTO clients (name, timezone, created_at, updated_at) VALUES ('Rank Fail Example', 'UTC', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
         $f = (int) $db->lastInsertId();
         $db->exec("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, target, status, first_seen, last_seen) VALUES ({$f}, 'f1', 'port', 'fail', 'F', 't', 'open', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
-        $order = array_column(\Sentinel\Core\App::dashboard()->clients(), 'id');
+        $order = array_column((new \Sentinel\Dashboard\DashboardData(\Sentinel\Core\App::db(), \Sentinel\Core\App::settings(), null))->clients(), 'id');
         Assert::true(array_search($f, $order, true) < array_search($w, $order, true), 'At risk ranks above Needs attention');
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $db->exec("UPDATE clients SET is_archived = 1 WHERE id IN ({$w}, {$f})");

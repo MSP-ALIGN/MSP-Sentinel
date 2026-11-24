@@ -705,6 +705,10 @@ final class App
                     ['path' => mb_substr($request->path, 0, 200), 'required' => implode(' or ', $need)], $request->ip());
                 throw new HttpException(403);
             }
+            // Org-wide pages and actions only for users who see every client (1.42.1): they reach or show every client.
+            if (($opts['all_clients'] ?? false) === true && ($user['client_ids'] ?? null) !== null) {
+                throw new HttpException(403, __('This works across all clients, so only someone who sees every client can use it.'));
+            }
             // Only the user's own clients (1.41): a client's pages, and records addressed by their own ID, answer 404
             // for any other client, as if they didn't exist. Checked here, once, before any controller runs.
             $clientId = null;

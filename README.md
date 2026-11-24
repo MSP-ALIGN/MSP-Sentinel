@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.42.0](https://img.shields.io/badge/version-1.42.0-ff5a1f?style=flat-square)
+![Version 1.42.1](https://img.shields.io/badge/version-1.42.1-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,17 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.42.1 (2026-11-24): client lists fixes from review
+
+- **Org-wide pages and actions need every client:** the kill switch for all scanning (pause and resume), settings,
+  integrations, the System page and the audit log, which reach or show every client. A limited user can still manage
+  users, roles and API tokens within their clients.
+- **One link per outside client:** an MSP Align client, and an ITFlow client, can each be linked to only one
+  Sentinel client (before, linking a hidden client's Align record to your own showed its compliance data).
+- **Within your clients:** the Unassigned, Overdue and Due-soon counts and the owner list on the Findings page;
+  engagement approvers counted for the message; failed report-email and recheck notifications.
+- Narrowing someone's clients clears their earlier notifications; an anonymous request's client list is empty.
+
 ### 1.42.0 (2026-11-24): API tokens follow permissions and clients
 
 - **Clients:** a token only covers clients its creator sees ("All clients" only for someone who sees every client),
@@ -140,21 +151,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 - **Never more than you see.** You can only give clients you see yourself, and only manage users whose clients you
   all see. Findings can only be given to someone who sees the client; a client a limited user adds becomes theirs.
   The last active Admin who sees every client can't be limited, demoted or disabled.
-
-### 1.40.1 (2026-11-24): roles and permissions fixes from review
-
-- **API tokens never do more than their creator.** Only someone who may triage findings or start scans can give a
-  token those rights, and a token loses them when its creator does (read access stays).
-- **One active Admin always stays.** The lock-out guard now counts only the built-in Admin, which also gets every
-  permission a later release adds; a custom role with every permission today would fall short then.
-- **Checked again when saving.** Who may change a user or a role, and which role may be given, is checked again
-  with the rows locked, so a role changed meanwhile by someone more powerful can't slip through or be saved over; a
-  role deleted meanwhile gives a form error.
-- **Pages show only what you may use:** the Administration overview shows only your areas, and the System page shows
-  a release signer only the release key.
-- **Breached addresses** on a finding's page are masked unless you may see them in full.
-- Permissions that reach the whole system are marked **Near full control** on the Roles page. The demo data command
-  picks an Admin by role.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 
