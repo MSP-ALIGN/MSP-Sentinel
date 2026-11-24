@@ -158,9 +158,9 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
                     <dl class="row small mb-2">
                         <dt class="col-sm-3"><?= e(__('Approved by')) ?></dt><dd class="col-sm-9"><?= e($a['approved_by_name']) ?>, <?= e($a['approved_by_role']) ?> (<?= e($a['approved_on']) ?>)</dd>
                         <?php if ($a['document_ref'] !== ''): ?><dt class="col-sm-3"><?= e(__('Reference')) ?></dt><dd class="col-sm-9"><?= e($a['document_ref']) ?></dd><?php endif; ?>
-                        <dt class="col-sm-3"><?= e(__('Recorded')) ?></dt><dd class="col-sm-9"><?= e(__('{date} UTC by {user}', ['date' => $a['created_at'], 'user' => $a['recorded_by_username'] ?? '?'])) ?></dd>
+                        <dt class="col-sm-3"><?= e(__('Recorded')) ?></dt><dd class="col-sm-9"><?= e(__('{date} by {user}', ['date' => when($a['created_at']), 'user' => $a['recorded_by_username'] ?? '?'])) ?></dd>
                         <?php if ($a['revoked_at'] !== null): ?>
-                        <dt class="col-sm-3"><?= e(__('Revoked')) ?></dt><dd class="col-sm-9"><?= e(__('{date} UTC by {user}: {reason}', ['date' => $a['revoked_at'], 'user' => $a['revoked_by_username'] ?? '?', 'reason' => $a['revoke_reason']])) ?></dd>
+                        <dt class="col-sm-3"><?= e(__('Revoked')) ?></dt><dd class="col-sm-9"><?= e(__('{date} by {user}: {reason}', ['date' => when($a['revoked_at']), 'user' => $a['revoked_by_username'] ?? '?', 'reason' => $a['revoke_reason']])) ?></dd>
                         <?php endif; ?>
                         <?php if (!empty($a['notes'])): ?><dt class="col-sm-3"><?= e(__('Notes')) ?></dt><dd class="col-sm-9 text-pre-line"><?= e($a['notes']) ?></dd><?php endif; ?>
                     </dl>

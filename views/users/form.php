@@ -143,7 +143,7 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
     <div class="card">
         <div class="card-header"><h2 class="card-title h6 mb-0"><?= e(__('Two-factor authentication')) ?></h2></div>
         <div class="card-body">
-            <p class="mb-2"><?= e($target['totp_enabled_at'] !== null ? __('Turned on since {date} (UTC).', ['date' => $target['totp_enabled_at']]) : __('Not set up yet. The user will be asked at next sign-in.')) ?></p>
+            <p class="mb-2"><?= e($target['totp_enabled_at'] !== null ? __('Turned on since {date}.', ['date' => when($target['totp_enabled_at'])]) : __('Not set up yet. The user will be asked at next sign-in.')) ?></p>
             <?php if ($target['totp_enabled_at'] !== null): ?>
             <form method="post" action="<?= e(url('/users/' . (int) $target['id'] . '/2fa-reset')) ?>" data-confirm="<?= e(__('Reset two-factor authentication for this user? They will be signed out and must set it up again.')) ?>" novalidate>
                 <?= Csrf::field() ?>

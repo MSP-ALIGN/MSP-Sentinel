@@ -32,7 +32,7 @@ $now = time();
     <?php else: ?>
     <div class="card-body p-0 table-responsive">
         <table class="table align-middle mb-0 small">
-            <thead><tr><th><?= e(__('Name')) ?></th><th><?= e(__('Can')) ?></th><th><?= e(__('Clients')) ?></th><th><?= e(__('Expires / last used (UTC)')) ?></th><th></th></tr></thead>
+            <thead><tr><th><?= e(__('Name')) ?></th><th><?= e(__('Can')) ?></th><th><?= e(__('Clients')) ?></th><th><?= e(__('Expires / last used')) ?></th><th></th></tr></thead>
             <tbody>
             <?php foreach ($tokens as $t):
                 $revoked = $t['revoked_at'] !== null;
@@ -43,7 +43,7 @@ $now = time();
                 <td><?= e(__('read')) ?><?= (int) $t['can_triage'] === 1 ? ', ' . e(__('triage')) : '' ?><?= (int) $t['can_scan'] === 1 ? ', ' . e(__('queue scans')) : '' ?>
                     <?php if ($t['ip_allowlist'] !== ''): ?><br><span class="text-body-secondary"><?= e(__('Only from: {ips}', ['ips' => str_replace(',', ', ', $t['ip_allowlist'])])) ?></span><?php endif; ?></td>
                 <td><?= (int) $t['all_clients'] === 1 ? e(__('All clients')) : e(implode(', ', $t['clients'])) ?></td>
-                <td><?= e(substr((string) $t['expires_at'], 0, 10)) ?><br><span class="text-body-secondary"><?= e($t['last_used_at'] !== null ? $t['last_used_at'] . ' · ' . $t['last_used_ip'] : __('never used')) ?></span></td>
+                <td><?= e(substr((string) $t['expires_at'], 0, 10)) ?><br><span class="text-body-secondary"><?= e($t['last_used_at'] !== null ? when($t['last_used_at']) . ' · ' . $t['last_used_ip'] : __('never used')) ?></span></td>
                 <td class="text-end"><?php if (!$revoked): ?>
                     <form method="post" action="<?= e(url('/admin/api/tokens/' . (int) $t['id'] . '/revoke')) ?>" data-confirm="<?= e(__('Revoke this token? Systems using it stop working immediately.')) ?>">
                         <?= Csrf::field() ?><button type="submit" class="btn btn-sm btn-outline-danger"><?= e(__('Revoke')) ?></button>
@@ -82,10 +82,10 @@ $now = time();
     <?php if ($events['recent'] !== []): ?>
     <div class="card-body p-0 table-responsive border-top">
         <table class="table table-sm mb-0 small">
-            <thead><tr><th><?= e(__('Event')) ?></th><th><?= e(__('Queued (UTC)')) ?></th><th><?= e(__('Status')) ?></th></tr></thead>
+            <thead><tr><th><?= e(__('Event')) ?></th><th><?= e(__('Queued')) ?></th><th><?= e(__('Status')) ?></th></tr></thead>
             <tbody>
             <?php foreach ($events['recent'] as $d): ?>
-            <tr><td><?= e($d['subject']) ?></td><td><?= e($d['created_at']) ?></td>
+            <tr><td><?= e($d['subject']) ?></td><td><?= e(when($d['created_at'])) ?></td>
                 <td><span class="badge text-bg-<?= $d['status'] === 'sent' ? 'success' : ($d['status'] === 'failed' ? 'danger' : 'secondary') ?>"><?= e($d['status']) ?></span>
                     <?php if ($d['last_error'] !== ''): ?><span class="text-body-secondary"><?= e($d['last_error']) ?></span><?php endif; ?></td></tr>
             <?php endforeach; ?>

@@ -36,8 +36,8 @@ $runBadges = [
         <?php [$rc, $ri, $rl] = $runBadges[$lastRun['status']] ?? $runBadges['failed']; $sum = $lastRun['summary']; ?>
         <div class="border rounded p-2 mb-3 small" data-testid="last-run">
             <span class="badge <?= e($rc) ?>"><i class="bi <?= e($ri) ?> me-1" aria-hidden="true"></i><?= e($rl) ?></span>
-            <?= e(__('Last run {date} UTC ({trigger}): {new} new, {seen} already suggested, {inscope} already in scope, {q} lookups in {s} s.', [
-                'date' => $lastRun['started_at'], 'trigger' => $lastRun['trigger_type'] === 'manual' ? __('manual') : __('weekly'),
+            <?= e(__('Last run {date} ({trigger}): {new} new, {seen} already suggested, {inscope} already in scope, {q} lookups in {s} s.', [
+                'date' => when($lastRun['started_at']), 'trigger' => $lastRun['trigger_type'] === 'manual' ? __('manual') : __('weekly'),
                 'new' => $sum['new'] ?? 0, 'seen' => $sum['seen_again'] ?? 0, 'inscope' => $sum['already_in_scope'] ?? 0,
                 'q' => $sum['queries'] ?? 0, 's' => $sum['seconds'] ?? 0,
             ])) ?>
@@ -66,7 +66,7 @@ $runBadges = [
             <table class="table table-sm align-middle mb-2">
                 <thead><tr>
                     <?php if (can('authorisations.manage')): ?><th scope="col"><span class="visually-hidden"><?= e(__('Select')) ?></span></th><?php endif; ?>
-                    <th scope="col"><?= e(__('Target')) ?></th><th scope="col"><?= e(__('Found by')) ?></th><th scope="col"><?= e(__('First seen (UTC)')) ?></th>
+                    <th scope="col"><?= e(__('Target')) ?></th><th scope="col"><?= e(__('Found by')) ?></th><th scope="col"><?= e(__('First seen')) ?></th>
                     <?php if (can('scans.run')): ?><th scope="col"><span class="visually-hidden"><?= e(__('Actions')) ?></span></th><?php endif; ?>
                 </tr></thead>
                 <tbody>
@@ -82,7 +82,7 @@ $runBadges = [
                         <?php endif; ?>
                     </td>
                     <td class="small"><?= e($sourceLabels[$s['source']] ?? $s['source']) ?>: <?= e($s['detail']) ?></td>
-                    <td class="small text-nowrap"><?= e($s['first_seen']) ?></td>
+                    <td class="small text-nowrap"><?= e(when($s['first_seen'])) ?></td>
                     <?php if (can('scans.run')): ?>
                     <td class="text-end"><button type="submit" form="dismiss-<?= e($s['id']) ?>" class="btn btn-link btn-sm text-body-secondary p-0"><?= e(__('Dismiss')) ?></button></td>
                     <?php endif; ?>

@@ -117,6 +117,9 @@ final class Settings
         // the sync, Test connection and ticket runs, so the Integrations page never waits on ITFlow.
         'itflow_boards_cache' => '',
         // Sign in with Microsoft (1.43): on/off, the Entra tenant and app (client) IDs; the client secret is a secret.
+        // The organisation's time zone (1.48): how times are shown (unless a user picks their own) and where new
+        // clients start. Times are stored and compared in UTC whatever this is.
+        'display_timezone' => 'UTC',
         // Pen-test engagements need a second person to approve them (1.47: '0' lets the creator approve their own).
         'engagement_two_person' => '1',
         'sso_entra_enabled' => '0',

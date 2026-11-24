@@ -2,6 +2,18 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.47.0 (2026-11-24): Choose one- or two-person approval for pen tests
+
+- **Your choice.** Under **Administration → Settings → Pen-test engagements**, an Admin who holds every permission and
+  sees every client can turn off two-person approval, with their own password. Everyone who may approve engagements
+  is told, and the change is audited. It stays on by default.
+- **With it off,** whoever creates an engagement may approve it themselves if their role may approve engagements,
+  still with their password and still before anything runs. The engagement page, the audit log and the pen-test
+  report say "single-person approval". A technician who can't approve still needs someone who can.
+- **Never weaker after the fact.** Each engagement keeps the rule in force when it was created. One made under the
+  two-person rule always needs a second person, and one made while it was off needs a second person again once the
+  rule is back on.
+
 ### 1.46.1 (2026-11-24): Sign in with Microsoft setup fixes from review
 
 - **No lock-out from the wrong tenant.** Once a tenant is saved, the setup script's details must come from that same

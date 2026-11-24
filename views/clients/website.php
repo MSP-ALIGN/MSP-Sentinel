@@ -28,7 +28,7 @@ $chip = static function (string $sev, string $text): string {
             <?php foreach ($websiteChecks as $w):
                 $codes = array_unique(array_merge((array) ($w['checks']['issues'] ?? []), (array) ($w['checks']['exposed'] ?? []))); ?>
             <tr>
-                <td><code><?= e(($w['scheme'] ?? 'http') . '://' . $w['ip'] . ':' . $w['port']) ?></code><?php if ($w['host_header'] !== ''): ?><br><span class="text-body-secondary"><?= e($w['host_header']) ?></span><?php endif; ?><br><span class="text-body-secondary"><?= e(__('Checked {time} UTC', ['time' => (string) $w['checks_at']])) ?></span></td>
+                <td><code><?= e(($w['scheme'] ?? 'http') . '://' . $w['ip'] . ':' . $w['port']) ?></code><?php if ($w['host_header'] !== ''): ?><br><span class="text-body-secondary"><?= e($w['host_header']) ?></span><?php endif; ?><br><span class="text-body-secondary"><?= e(__('Checked {time}', ['time' => when((string) $w['checks_at'])])) ?></span></td>
                 <td><?php if ($codes === []): ?><?= $chip('ok', __('No problems found')) ?><?php endif; ?>
                     <?php foreach ($codes as $code): $r = ExposureRules::websiteIssue((string) $code); ?><?= $chip($r['severity'], $r['text']) ?><?php endforeach; ?>
                     <?php $advice = (array) ($w['checks']['info'] ?? []); if ($advice !== []): ?>
@@ -76,7 +76,7 @@ $chip = static function (string $sev, string $text): string {
             <tbody>
             <?php foreach ($breaches as $b): ?>
             <tr>
-                <td><code><?= e($canSeeAddresses ? $b['email'] : \Sentinel\Breach\BreachMonitor::masked($b['email'])) ?></code><br><span class="text-body-secondary"><?= e(__('Known since {d} UTC', ['d' => $b['first_seen']])) ?></span></td>
+                <td><code><?= e($canSeeAddresses ? $b['email'] : \Sentinel\Breach\BreachMonitor::masked($b['email'])) ?></code><br><span class="text-body-secondary"><?= e(__('Known since {d}', ['d' => when($b['first_seen'])])) ?></span></td>
                 <td><?php foreach (array_slice($b['breaches'], 0, 10) as $x): $recent = \Sentinel\Breach\BreachMonitor::recent((string) ($x['date'] ?? '')); ?>
                     <?= $chip($recent ? 'fail' : 'warn', (string) ($x['name'] ?? '?') . ((string) ($x['date'] ?? '') !== '' ? ' (' . $x['date'] . ')' : '')) ?>
                     <?php if ((array) ($x['data'] ?? []) !== []): ?><span class="text-body-secondary"><?= e(implode(', ', array_slice((array) $x['data'], 0, 8))) ?></span><?php endif; ?><br>
@@ -97,7 +97,7 @@ $chip = static function (string $sev, string $text): string {
             <tbody>
             <?php foreach ($domainChecks as $d): $res = $d['result']; ?>
             <tr>
-                <td><code><?= e($d['name']) ?></code><br><span class="text-body-secondary"><?= e(__('Checked {time} UTC', ['time' => $d['checked_at']])) ?></span></td>
+                <td><code><?= e($d['name']) ?></code><br><span class="text-body-secondary"><?= e(__('Checked {time}', ['time' => when($d['checked_at'])])) ?></span></td>
                 <td><?= e($d['kind'] === 'zone' ? __('Zone transfer') : __('Subdomain takeover')) ?></td>
                 <td><?php if ($d['kind'] === 'zone'): ?>
                     <?php if ((array) ($res['nameservers'] ?? []) === []): ?><?= $chip('info', __('No nameserver of its own to ask (no NS records, or none at a public address)')) ?><?php endif; ?>

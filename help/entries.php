@@ -363,9 +363,17 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.48.0',
+            'date' => '2026-11-24',
+            'items' => [
+                'Your time zone: set it under Administration → Settings → General, and every time in Sentinel is shown in it, labelled (e.g. 13:33 PST). Users can pick their own under My profile. New clients, also from ITFlow, start in it, and a button moves clients still on UTC. Reports show their client\'s time zone. Times are still stored in UTC.',
+            ],
+        ],
+        [
             'version' => '1.47.2',
             'date' => '2026-11-24',
             'items' => [
+                'Time zones: Sentinel shows times in the organisation\'s time zone (Administration → Settings → General), or your own if you pick one under My profile; each time is labelled (e.g. PST). New clients, also from ITFlow, start in the organisation\'s zone, and a button on the Settings page moves clients still on UTC to it. Scan windows follow each client\'s own time zone; reports show their client\'s zone. Times are stored in UTC, so daylight saving never shifts a scan.',
                 'Windows agent: scans failed with "Could not start nmap". The agent now starts nmap the Windows way (the right null device and the environment Windows networking needs) and reads its output without blocking, so the kill switch keeps working during a scan. Upgrade the agent (install-agent.ps1 -Upgrade, or a signed remote update).',
             ],
         ],

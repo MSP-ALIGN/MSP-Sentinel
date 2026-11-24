@@ -40,7 +40,7 @@ $w = $ov['window'];
         <?php else: ?>
         <?= Svg::trend($ov['trend'], __('Open Fail and Warning findings for this client over the last 90 days')) ?>
         <p class="legend-line"><span class="lg-fail">━ <?= e(__('Fail')) ?></span> <span class="lg-warn">┅ <?= e(__('Warning')) ?></span>
-            <span class="hud-meta ms-2"><?= e(__('Last scan: {t}', ['t' => $c['last_scan'] !== null ? substr((string) $c['last_scan'], 0, 16) . ' UTC' : __('never')])) ?></span></p>
+            <span class="hud-meta ms-2"><?= e(__('Last scan: {t}', ['t' => $c['last_scan'] !== null ? when((string) $c['last_scan']) : __('never')])) ?></span></p>
         <?php endif; ?>
         
     </section>

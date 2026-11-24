@@ -66,7 +66,7 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
             </div>
             <div class="table-responsive">
             <table class="table table-sm small align-middle mb-2">
-                <thead><tr><th><?= e(__('Agent')) ?></th><th><?= e(__('Version')) ?></th><th><?= e(__('Last check-in (UTC)')) ?></th><th><?= e(__('Status')) ?></th><th></th></tr></thead>
+                <thead><tr><th><?= e(__('Agent')) ?></th><th><?= e(__('Version')) ?></th><th><?= e(__('Last check-in')) ?></th><th><?= e(__('Status')) ?></th><th></th></tr></thead>
                 <tbody>
                 <?php if ($s['agents'] === []): ?><tr><td colspan="5" class="text-body-secondary"><?= e(__('No agent enrolled yet.')) ?></td></tr><?php endif; ?>
                 <?php foreach ($s['agents'] as $a): $online = $a['last_seen_at'] !== null && strtotime($a['last_seen_at'] . ' UTC') > time() - 600; ?>
@@ -74,7 +74,7 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                     <td><?= e($a['name']) ?><div class="text-body-secondary"><?= e($a['last_ip']) ?></div>
                         <?php if ($a['status'] === 'active' && (string) $a['box_public_key'] !== ''): ?><div class="text-body-secondary small"><?= e(__('Key')) ?> <span class="font-monospace"><?= e(\Sentinel\AgentClient\AgentKey::fingerprint((string) $a['box_public_key'])) ?></span></div><?php endif; ?>
                         <?php if ($a['status'] === 'active' && (string) ($a['box_key_pending'] ?? '') !== ''): $pfp = \Sentinel\AgentClient\AgentKey::fingerprint((string) $a['box_key_pending']); ?>
-                        <div class="alert alert-warning small py-1 px-2 mt-1 mb-0"><?= e(__('The agent reported a NEW key {fp} ({t} UTC). Passwords are not sealed to it until an admin approves it. Approve only if the agent was reinstalled and its status command shows this fingerprint.', ['fp' => $pfp, 't' => $a['box_key_pending_at']])) ?>
+                        <div class="alert alert-warning small py-1 px-2 mt-1 mb-0"><?= e(__('The agent reported a NEW key {fp} ({t}). Passwords are not sealed to it until an admin approves it. Approve only if the agent was reinstalled and its status command shows this fingerprint.', ['fp' => $pfp, 't' => when($a['box_key_pending_at'])])) ?>
                             <?php if (can('agents.manage')): ?><form method="post" action="<?= e(url('/clients/' . $cid . '/agents/' . (int) $a['id'] . '/approve-key')) ?>" class="mt-1" data-confirm="<?= e(__('Approve this new agent key? Compare the fingerprint with the agent\'s status output first.')) ?>"><?= Csrf::field() ?>
                                 <input type="hidden" name="fingerprint" value="<?= e($pfp) ?>"><button class="btn btn-sm btn-outline-warning" type="submit"><?= e(__('Approve new key')) ?></button></form><?php endif; ?></div>
                         <?php endif; ?></td>
@@ -86,8 +86,8 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                         <div class="small text-warning font-sans-serif"><?= e(__('Upgrade this agent: before 1.21.0 it ignores the gentleness setting, Restart and Diagnostics.')) ?></div><?php endif; ?>
                         <?php if ($a['status'] === 'active' && (string) ($a['update_to'] ?? '') !== ''): ?><div class="small text-body-secondary"><?= e(__('update to {v} requested', ['v' => $a['update_to']])) ?></div><?php endif; ?>
                         <?php $ur = json_decode((string) ($a['update_result'] ?? ''), true); if ($a['status'] === 'active' && is_array($ur)): ?>
-                        <div class="small <?= ($ur['ok'] ?? false) ? 'text-success' : 'text-danger' ?>"><?= e(($ur['ok'] ?? false) ? __('Updated to {v} ({t} UTC)', ['v' => $ur['version'] ?? '?', 't' => $a['update_result_at']]) : __('Update to {v} refused: {why}', ['v' => $ur['version'] ?? '?', 'why' => $ur['message'] ?? ''])) ?></div><?php endif; ?></td>
-                    <td><?= e((string) ($a['last_seen_at'] ?? '-')) ?></td>
+                        <div class="small <?= ($ur['ok'] ?? false) ? 'text-success' : 'text-danger' ?>"><?= e(($ur['ok'] ?? false) ? __('Updated to {v} ({t})', ['v' => $ur['version'] ?? '?', 't' => when($a['update_result_at'])]) : __('Update to {v} refused: {why}', ['v' => $ur['version'] ?? '?', 'why' => $ur['message'] ?? ''])) ?></div><?php endif; ?></td>
+                    <td><?= e(when($a['last_seen_at'], null, '-')) ?></td>
                     <td><?php if ($a['status'] === 'revoked'): ?><span class="badge text-bg-secondary"><?= e(__('Revoked')) ?></span>
                         <?php elseif ($online): ?><span class="badge text-bg-success"><i class="bi bi-wifi me-1" aria-hidden="true"></i><?= e(__('Online')) ?></span>
                         <?php else: ?><span class="badge text-bg-warning"><i class="bi bi-wifi-off me-1" aria-hidden="true"></i><?= e(__('Offline')) ?></span><?php endif; ?></td>
@@ -106,7 +106,7 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                 </tr>
                 <?php $diag = json_decode((string) ($a['diagnostics'] ?? ''), true); if (is_array($diag) && $a['status'] === 'active'): ?>
                 <tr><td colspan="5" class="small">
-                    <details><summary><?= e(__('Diagnostics reported by the agent, {t} UTC', ['t' => $a['diagnostics_at']])) ?></summary>
+                    <details><summary><?= e(__('Diagnostics reported by the agent, {t}', ['t' => when($a['diagnostics_at'])])) ?></summary>
                     <?php $reportedFp = (string) ($diag['key_fingerprint'] ?? ''); $knownFp = (string) $a['box_public_key'] !== '' ? \Sentinel\AgentClient\AgentKey::fingerprint((string) $a['box_public_key']) : ''; ?>
                     <?php if ($reportedFp !== '' && $knownFp !== '' && $reportedFp !== $knownFp): ?><div class="alert alert-warning py-1 px-2 my-1"><?= e(__('The key this report names is not the pinned key ({fp}). Compare on the appliance itself (status command) before approving any key.', ['fp' => $knownFp])) ?></div><?php endif; ?>
                     <dl class="row mb-0 mt-1">
@@ -153,7 +153,7 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
             <?php if ($s['jobs'] !== []): ?>
             <ul class="list-unstyled small mb-0">
                 <?php foreach ($s['jobs'] as $j): $sum = json_decode((string) ($j['summary'] ?? ''), true) ?: []; ?>
-                <li>#<?= e($j['id']) ?> · <?= e($j['kind'] === 'full' ? __('full scan') : __('light sweep')) ?> · <?= e($jobLabel($j)) ?> · <?= e($j['created_at']) ?> UTC
+                <li>#<?= e($j['id']) ?> · <?= e($j['kind'] === 'full' ? __('full scan') : __('light sweep')) ?> · <?= e($jobLabel($j)) ?> · <?= e(when($j['created_at'])) ?>
                     <?php if (isset($sum['hosts'])): ?>· <?= e(__('{n} device(s), {m} new', ['n' => $sum['hosts'], 'm' => $sum['new_devices'] ?? 0])) ?><?php endif; ?>
                     <?php foreach ((array) ($sum['messages'] ?? []) as $msg): ?><div class="text-body-secondary ps-3"><?= e((string) $msg) ?></div><?php endforeach; ?></li>
                 <?php endforeach; ?>
@@ -172,8 +172,8 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                 <ul class="list-unstyled small mb-2">
                     <li><strong><?= e(__('Domain:')) ?></strong> <?= e($dir['domain']) ?> · <?= e(__('domain controller')) ?> <span class="font-monospace"><?= e($dir['dc_ip']) ?></span> · <?= e(__('account')) ?> <span class="font-monospace"><?= e($dir['username']) ?></span></li>
                     <li><strong><?= e(__('Password:')) ?></strong>
-                        <?php if ($dir['cred_state'] === 'held'): ?><span class="text-success"><i class="bi bi-shield-lock me-1" aria-hidden="true"></i><?= e(__('held by the agent (sealed), confirmed {t} UTC', ['t' => $dir['cred_confirmed_at']])) ?></span>
-                        <?php elseif ($dir['cred_state'] === 'waiting'): ?><span class="text-warning"><?= e(__('sealed and waiting for the agent to collect it (set {t} UTC)', ['t' => $dir['cred_set_at']])) ?></span>
+                        <?php if ($dir['cred_state'] === 'held'): ?><span class="text-success"><i class="bi bi-shield-lock me-1" aria-hidden="true"></i><?= e(__('held by the agent (sealed), confirmed {t}', ['t' => when($dir['cred_confirmed_at'])])) ?></span>
+                        <?php elseif ($dir['cred_state'] === 'waiting'): ?><span class="text-warning"><?= e(__('sealed and waiting for the agent to collect it (set {t})', ['t' => when($dir['cred_set_at'])])) ?></span>
                         <?php elseif ($dir['cred_state'] === 'failed'): ?><span class="text-danger"><?= e(__('not with the agent: {why}', ['why' => $dir['cred_error']])) ?></span>
                         <?php else: ?><span class="text-body-secondary"><?= e(__('not set')) ?></span><?php endif; ?>
                         <span class="text-body-secondary">· <?= e(__('Sentinel never has the password: only the agent can open it.')) ?></span></li>
@@ -189,8 +189,8 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                         <?php elseif ($dir['cert_trusted'] !== ''): ?><span class="text-success"><?= e(__('trusted')) ?></span> <span class="font-monospace text-body-secondary small"><?= e(substr($fp($dir['cert_trusted']), 0, 23)) ?>…</span>
                         <?php else: ?><span class="text-body-secondary"><?= e(__('not seen yet: the agent fetches it at its next full scan (it does not sign in before you trust it).')) ?></span><?php endif; ?></li>
                     <li><strong><?= e(__('Last directory read:')) ?></strong>
-                        <?= e($dir['checked_at'] !== null ? __('{t} UTC', ['t' => $dir['checked_at']]) : __('not yet')) ?>
-                        <?php if ($dir['last_error'] !== ''): ?><div class="text-danger ps-3"><?= e($dir['last_error']) ?> <?= e($dir['last_attempt_at'] !== null ? '(' . $dir['last_attempt_at'] . ' UTC)' : '') ?></div><?php endif; ?></li>
+                        <?= e($dir['checked_at'] !== null ? __('{t}', ['t' => when($dir['checked_at'])]) : __('not yet')) ?>
+                        <?php if ($dir['last_error'] !== ''): ?><div class="text-danger ps-3"><?= e($dir['last_error']) ?> <?= e($dir['last_attempt_at'] !== null ? '(' . when($dir['last_attempt_at']) . ')' : '') ?></div><?php endif; ?></li>
                 </ul>
                 <?php endif; ?>
                 <?php if (can('directory.manage')): ?>

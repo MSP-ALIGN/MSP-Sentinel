@@ -262,8 +262,8 @@ final class ItflowSync
         try {
             $this->db->prepare(
                 "INSERT INTO clients (name, itflow_client_id, timezone, scan_window_start, scan_window_end, notes, ports_extra, ports_excluded, created_by, created_at, updated_at)
-                 VALUES (:n, :i, 'UTC', '22:00:00', '06:00:00', :notes, '', '', NULL, UTC_TIMESTAMP(), UTC_TIMESTAMP())"
-            )->execute(['n' => $name, 'i' => $itflowId, 'notes' => 'Created from ITFlow (client #' . $itflowId . '). Not scanned until its authorisation is recorded.']);
+                 VALUES (:n, :i, :tz, '22:00:00', '06:00:00', :notes, '', '', NULL, UTC_TIMESTAMP(), UTC_TIMESTAMP())"
+            )->execute(['n' => $name, 'i' => $itflowId, 'tz' => self::orgZone($this->settings), 'notes' => 'Created from ITFlow (client #' . $itflowId . '). Not scanned until its authorisation is recorded.']);
             $id = (int) $this->db->lastInsertId();
             $this->db->prepare("INSERT INTO sites (client_id, name, is_default, created_at, updated_at) VALUES (:c, 'Main site', 1, UTC_TIMESTAMP(), UTC_TIMESTAMP())")->execute(['c' => $id]);
             $this->db->commit();
@@ -292,5 +292,12 @@ final class ItflowSync
     {
         $name = (string) preg_replace('/[\p{Cc}\p{Cf}]/u', '', mb_scrub($name, 'UTF-8'));
         return mb_substr(trim((string) preg_replace('/\s+/u', ' ', $name)), 0, 150);
+    }
+
+    /** The organisation's time zone for new clients (1.48), or UTC when it isn't a valid zone. */
+    private static function orgZone(Settings $settings): string
+    {
+        $zone = $settings->get('display_timezone');
+        return in_array($zone, \DateTimeZone::listIdentifiers(), true) ? $zone : 'UTC';
     }
 }

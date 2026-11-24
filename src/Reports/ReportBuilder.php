@@ -82,7 +82,8 @@ final class ReportBuilder
             'generated_at' => gmdate('Y-m-d H:i'),
             'generated_by' => $generatedBy,
             'period' => ['start' => $start, 'end' => $end],
-            'client' => ['id' => $cid, 'name' => (string) $client['name']],
+            // The client's time zone (1.48): the report shows its times there, labelled (older snapshots: UTC).
+            'client' => ['id' => $cid, 'name' => (string) $client['name'], 'timezone' => (string) $client['timezone']],
             'brand' => $this->brand(),
             'rating' => ['level' => $level, 'reason' => $reason],
             'counts' => [

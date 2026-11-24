@@ -23,7 +23,7 @@ $sev = ['fail' => ['text-bg-danger', 'bi-x-octagon', __('Fail')], 'warn' => ['te
                 <a href="<?= e(url((string) $n['link'])) ?>" class="fw-semibold"><?= e($n['title']) ?></a>
                 <?php else: ?><span class="fw-semibold"><?= e($n['title']) ?></span><?php endif; ?>
                 <?php if ($n['read_at'] === null): ?><span class="badge text-bg-primary"><?= e(__('New')) ?></span><?php endif; ?>
-                <span class="ms-auto small text-body-secondary"><?= e($n['created_at']) ?> UTC</span>
+                <span class="ms-auto small text-body-secondary"><?= e(when($n['created_at'])) ?></span>
             </div>
             <?php if ($n['body'] !== ''): ?><div class="small text-pre-line text-body-secondary mt-1"><?= e(mb_strimwidth((string) $n['body'], 0, 600, '…')) ?></div><?php endif; ?>
         </li>

@@ -70,6 +70,22 @@ use Sentinel\Core\Csrf;
             <div class="card-footer"><button type="submit" class="btn btn-outline-primary btn-sm"><?= e(__('Save appearance')) ?></button></div>
             </form>
         </div>
+        <div class="card mb-3" id="timezone">
+            <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Time zone')) ?></h2></div>
+            <form method="post" action="<?= e(url('/profile/timezone')) ?>">
+            <div class="card-body">
+                <?= Csrf::field() ?>
+                <?php $orgZone = \Sentinel\Core\App::settings()->get('display_timezone'); ?>
+                <label class="form-label" for="my-timezone"><?= e(__('Show times in')) ?></label>
+                <input class="form-control" id="my-timezone" name="timezone" list="my-timezone-list" value="<?= e($currentUser['timezone'] ?? '') ?>" autocomplete="off" spellcheck="false" placeholder="<?= e(__('The organisation\'s: {zone}', ['zone' => $orgZone])) ?>">
+                <datalist id="my-timezone-list">
+                    <?php foreach (\DateTimeZone::listIdentifiers() as $tz): ?><option value="<?= e($tz) ?>"></option><?php endforeach; ?>
+                </datalist>
+                <p class="form-text mb-0"><?= e(__('Leave empty to use the organisation\'s time zone ({zone}). Only changes how times are shown to you; scan windows follow each client\'s own time zone.', ['zone' => $orgZone])) ?></p>
+            </div>
+            <div class="card-footer"><button type="submit" class="btn btn-outline-primary btn-sm"><?= e(__('Save time zone')) ?></button></div>
+            </form>
+        </div>
         <div class="card">
             <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Two-factor authentication')) ?></h2></div>
             <form method="post" data-confirm="<?= e(__('Create new recovery codes? Your current recovery codes stop working.')) ?>" action="<?= e(url('/profile/recovery-codes')) ?>" novalidate>
