@@ -57,9 +57,10 @@ final class ClientController extends Controller
     /** GET /clients/new */
     public function create(Request $request): Response
     {
+        // New clients start in the organisation's time zone (1.48).
         return $this->page('clients/form', __('Add client'), [
             'mode' => 'create',
-            'values' => ['name' => '', 'itflow_client_id' => '', 'timezone' => 'UTC', 'scan_window_start' => '22:00', 'scan_window_end' => '06:00', 'notes' => '',
+            'values' => ['name' => '', 'itflow_client_id' => '', 'timezone' => App::settings()->get('display_timezone'), 'scan_window_start' => '22:00', 'scan_window_end' => '06:00', 'notes' => '',
                          'ports_extra' => '', 'ports_excluded' => '', 'itflow_sync_off' => '0'],
             'errors' => [],
         ]);

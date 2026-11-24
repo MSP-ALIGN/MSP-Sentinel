@@ -2,6 +2,29 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.48.1 (2026-11-24): Time zone fixes from review
+
+- **Everything in your time.** The activity feeds on the dashboard and client overview, the certificate "Checked"
+  times, and the dates in reports (first seen, fixed, decided) now use your time zone, or the client's in reports,
+  like the rest.
+- **The button says what it does.** After a Settings save that failed (for example a bad source address), the "move
+  clients still on UTC" button named the time zone just typed, but moved clients to the saved one. It now names the
+  saved one.
+- Time zone names that PHP knows by an older alias are accepted, and stored times in ISO format are shown converted.
+
+### 1.48.0 (2026-11-24): Times in your time zone
+
+- **Your time, everywhere.** Under **Administration → Settings → General**, choose your time zone (for example
+  America/Los_Angeles). Every time in Sentinel (scans, findings, notifications, the audit log, agents, integrations)
+  is then shown in it and labelled, for example `2026-11-24 13:33 PST`. Each user can pick their own under **My
+  profile → Time zone**.
+- **New clients start in it,** also those added from ITFlow. Clients still on UTC are listed on the Settings page,
+  with a button that moves them to your time zone (their scan window times stay the same numbers, now read as local
+  time). It's audited.
+- **Reports** show times in their client's time zone, labelled.
+- **Still UTC underneath.** Sentinel keeps storing and comparing times in UTC, so daylight-saving changes never
+  shift a scan, and the logs, agents and API agree. Leave the server's own clock on UTC.
+
 ### 1.47.2 (2026-11-24): Windows agent scans start
 
 - **"Could not start nmap" on Windows is fixed.** The agent asked Windows to read nmap's input from `/dev/null`,

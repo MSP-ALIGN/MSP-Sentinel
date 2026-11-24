@@ -26,7 +26,7 @@ $other = count($device['software']) - count($matched);
                     <dt class="col-5"><?= e(__('Addresses')) ?></dt><dd class="col-7 font-monospace"><?= e(str_replace(',', ', ', $device['ip_addresses']) ?: '-') ?></dd>
                     <dt class="col-5"><?= e(__('Antivirus / EDR')) ?></dt><dd class="col-7"><?= e(trim($device['av_product'] . ' ' . match ($device['av_state']) { 'on' => __('(on)'), 'off' => __('(off)'), 'missing' => __('none reported'), default => __('unknown') })) ?></dd>
                     <dt class="col-5"><?= e(__('Disk encryption')) ?></dt><dd class="col-7"><?= e(match ($device['encryption']) { 'on' => __('On'), 'off' => __('Off'), default => __('Unknown') }) ?></dd>
-                    <dt class="col-5"><?= e(__('Last contact')) ?></dt><dd class="col-7"><?= e(($device['last_contact'] ?? '?') . ' UTC') ?></dd>
+                    <dt class="col-5"><?= e(__('Last contact')) ?></dt><dd class="col-7"><?= e(when($device['last_contact'] ?? '?')) ?></dd>
                 </dl>
                 <?php if (($device['source'] ?? '') === 'agent' && $device['os_name'] !== ''): ?><div class="text-body-secondary mt-1"><?= e(__('Operating system and type worked out from the network (Windows over SMB, or service banners).')) ?></div><?php endif; ?>
                 <?php $canMerge = can('devices.merge'); ?>
@@ -44,7 +44,7 @@ $other = count($device['software']) - count($matched);
                     <button type="submit" class="btn btn-sm btn-outline-primary"><?= e(__('Merge')) ?></button>
                 </form>
                 <?php endif; ?>
-                <?php if ($device['removed_at'] !== null): ?><div class="alert alert-secondary mt-2 mb-0 py-2"><?= e(__('No longer reported by the source since {t} UTC.', ['t' => $device['removed_at']])) ?></div><?php endif; ?>
+                <?php if ($device['removed_at'] !== null): ?><div class="alert alert-secondary mt-2 mb-0 py-2"><?= e(__('No longer reported by the source since {t}.', ['t' => when($device['removed_at'])])) ?></div><?php endif; ?>
             </div>
         </div>
         <div class="card mb-3">
@@ -59,8 +59,8 @@ $other = count($device['software']) - count($matched);
             <div class="card-header"><h2 class="card-title h6 mb-0"><?= e(__('Missing updates')) ?></h2></div>
             <div class="card-body small p-0">
                 <?php if ($device['patches'] === []): ?><p class="text-body-secondary p-3 mb-0"><?= e(__('None reported.')) ?></p><?php else: ?>
-                <table class="table table-sm mb-0"><thead><tr><th><?= e(__('Update')) ?></th><th><?= e(__('Severity')) ?></th><th><?= e(__('Status')) ?></th><th><?= e(__('Since (UTC)')) ?></th></tr></thead><tbody>
-                <?php foreach ($device['patches'] as $p): ?><tr><td><?= e($p['kb'] !== '' ? $p['kb'] . ' · ' : '') ?><?= e($p['name']) ?></td><td><?= e($p['severity'] ?: '-') ?></td><td><?= e($p['status'] === 'failed' ? __('Failed') : __('Pending')) ?></td><td class="text-nowrap"><?= e(substr((string) ($p['detected_at'] ?? ''), 0, 10) ?: '?') ?></td></tr><?php endforeach; ?>
+                <table class="table table-sm mb-0"><thead><tr><th><?= e(__('Update')) ?></th><th><?= e(__('Severity')) ?></th><th><?= e(__('Status')) ?></th><th><?= e(__('Since')) ?></th></tr></thead><tbody>
+                <?php foreach ($device['patches'] as $p): ?><tr><td><?= e($p['kb'] !== '' ? $p['kb'] . ' · ' : '') ?><?= e($p['name']) ?></td><td><?= e($p['severity'] ?: '-') ?></td><td><?= e($p['status'] === 'failed' ? __('Failed') : __('Pending')) ?></td><td class="text-nowrap"><?= e(($p['detected_at'] ?? '') !== '' ? substr(when((string) $p['detected_at']), 0, 10) : '?') ?></td></tr><?php endforeach; ?>
                 </tbody></table><?php endif; ?>
             </div>
         </div>

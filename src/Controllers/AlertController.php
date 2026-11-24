@@ -204,6 +204,21 @@ final class AlertController extends Controller
         return Response::redirect('/profile');
     }
 
+    /** POST /profile/timezone (1.48): the time zone times are shown in for you ('' = the organisation's). */
+    public function timezone(Request $request): Response
+    {
+        $zone = $request->input('timezone');
+        if ($zone !== '' && !valid_timezone($zone)) {
+            Session::flash('danger', __('Choose a time zone from the list, or leave it empty.'));
+            return Response::redirect('/profile#timezone');
+        }
+        $uid = (int) $this->user()['id'];
+        App::db()->prepare('UPDATE users SET timezone = :t WHERE id = :id')->execute(['t' => $zone, 'id' => $uid]);
+        $this->audit($request, 'user.timezone', 'user', $uid, ['timezone' => $zone]);
+        Session::flash('success', __('Time zone saved.'));
+        return Response::redirect('/profile#timezone');
+    }
+
     /**
      * POST /profile/theme: the signed-in user's interface theme (dark or light).
      *

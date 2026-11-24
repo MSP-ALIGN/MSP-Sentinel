@@ -21,7 +21,7 @@ use Sentinel\Findings\FixWorkflow;
             </div></div>
         </div>
         <?php endforeach; ?>
-        <p class="small text-body-secondary mb-0"><?= e(__('Reminders go out once a day after {h}:00 UTC: each person gets their overdue findings and those due within {d} days, and the team addresses get a summary of overdue findings per client.', ['h' => sprintf('%02d', FixWorkflow::REMINDER_HOUR_UTC), 'd' => FixWorkflow::DUE_SOON_DAYS])) ?></p>
+        <p class="small text-body-secondary mb-0"><?= e(__('Reminders go out once a day after {h} ({utc}:00 UTC): each person gets their overdue findings and those due within {d} days, and the team addresses get a summary of overdue findings per client.', ['h' => (new DateTimeImmutable(gmdate('Y-m-d') . sprintf(' %02d:00', FixWorkflow::REMINDER_HOUR_UTC), new DateTimeZone('UTC')))->setTimezone(display_zone())->format('H:i T'), 'utc' => sprintf('%02d', FixWorkflow::REMINDER_HOUR_UTC), 'd' => FixWorkflow::DUE_SOON_DAYS])) ?></p>
     </div>
     <div class="card-footer"><button type="submit" class="btn btn-primary btn-sm"><?= e(__('Save due dates')) ?></button></div>
     </form>

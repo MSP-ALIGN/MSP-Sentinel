@@ -48,21 +48,21 @@ $eventLabels = [
                     <?php $tRef = $tk['reference'] !== '' ? $tk['reference'] : ((int) $tk['itflow_ticket_id'] > 0 ? '#' . (int) $tk['itflow_ticket_id'] : '—'); ?>
                     <?php if ($tk['link'] !== ''): ?><a href="<?= e($tk['link']) ?>" rel="noopener noreferrer" target="_blank"><?= e($tRef) ?></a><?php else: ?><?= e($tRef) ?><?php endif; ?>
                     <span class="badge text-bg-light border"><?= e($stateText[$tk['state']] ?? $tk['state']) ?></span>
-                    <span class="text-body-secondary">(<?= e(__('opened {t} UTC', ['t' => $tk['created_at']])) ?>)</span>
+                    <span class="text-body-secondary">(<?= e(__('opened {t}', ['t' => when($tk['created_at'])])) ?>)</span>
                     <?php if ($tk['state'] === 'failed' && $tk['last_error'] !== ''): ?><br><span class="text-danger"><?= e($tk['last_error']) ?></span><?php endif; ?></p>
                 <?php endforeach; ?>
                 <?php if ($finding['cve_id'] !== null): ?>
                 <p class="small"><a href="https://nvd.nist.gov/vuln/detail/<?= e(rawurlencode((string) $finding['cve_id'])) ?>" target="_blank" rel="noopener noreferrer"><?= e(__('{cve} on NVD', ['cve' => $finding['cve_id']])) ?></a></p>
                 <?php endif; ?>
                 <dl class="row small mb-0">
-                    <dt class="col-sm-4"><?= e(__('First seen')) ?></dt><dd class="col-sm-8"><?= e($finding['first_seen']) ?> UTC</dd>
-                    <dt class="col-sm-4"><?= e(__('Last seen')) ?></dt><dd class="col-sm-8"><?= e($finding['last_seen']) ?> UTC</dd>
-                    <?php if ($finding['asset_last_scanned'] !== null): ?><dt class="col-sm-4"><?= e(__('Host last scanned')) ?></dt><dd class="col-sm-8"><?= e($finding['asset_last_scanned']) ?> UTC</dd><?php endif; ?>
-                    <?php if ($finding['resolved_at'] !== null): ?><dt class="col-sm-4"><?= e(__('Resolved')) ?></dt><dd class="col-sm-8"><?= e($finding['resolved_at']) ?> UTC</dd><?php endif; ?>
+                    <dt class="col-sm-4"><?= e(__('First seen')) ?></dt><dd class="col-sm-8"><?= e(when($finding['first_seen'])) ?></dd>
+                    <dt class="col-sm-4"><?= e(__('Last seen')) ?></dt><dd class="col-sm-8"><?= e(when($finding['last_seen'])) ?></dd>
+                    <?php if ($finding['asset_last_scanned'] !== null): ?><dt class="col-sm-4"><?= e(__('Host last scanned')) ?></dt><dd class="col-sm-8"><?= e(when($finding['asset_last_scanned'])) ?></dd><?php endif; ?>
+                    <?php if ($finding['resolved_at'] !== null): ?><dt class="col-sm-4"><?= e(__('Resolved')) ?></dt><dd class="col-sm-8"><?= e(when($finding['resolved_at'])) ?></dd><?php endif; ?>
                     <?php if ((int) $finding['reopened_count'] > 0): ?><dt class="col-sm-4"><?= e(__('Reopened')) ?></dt><dd class="col-sm-8"><?= e(__('{n} time(s)', ['n' => $finding['reopened_count']])) ?></dd><?php endif; ?>
                     <?php if ($finding['triage_note'] !== null): ?>
                     <dt class="col-sm-4"><?= e(__('Last triage note')) ?></dt>
-                    <dd class="col-sm-8 text-pre-line"><?= e($finding['triage_note']) ?><div class="text-body-secondary"><?= e(__('{user}, {date} UTC', ['user' => $finding['triaged_by_username'] ?? '?', 'date' => $finding['triaged_at']])) ?></div></dd>
+                    <dd class="col-sm-8 text-pre-line"><?= e($finding['triage_note']) ?><div class="text-body-secondary"><?= e(__('{user}, {date}', ['user' => $finding['triaged_by_username'] ?? '?', 'date' => when($finding['triaged_at'])])) ?></div></dd>
                     <?php endif; ?>
                 </dl>
             </div>
@@ -106,14 +106,14 @@ $eventLabels = [
                     <dt class="col-5"><?= e(__('Owner')) ?></dt>
                     <dd class="col-7"><?php if ($finding['assigned_to'] === null): ?><span class="text-body-secondary"><?= e(__('Unassigned')) ?></span>
                         <?php else: ?><i class="bi bi-person me-1" aria-hidden="true"></i><?= e($finding['assignee_username'] ?? '?') ?><?php if ((int) ($finding['assignee_active'] ?? 1) !== 1): ?> <span class="badge text-bg-secondary"><?= e(__('inactive')) ?></span><?php endif; ?>
-                        <div class="text-body-secondary"><?= e(__('by {user}, {date} UTC', ['user' => $finding['assigned_by_username'] ?? '?', 'date' => $finding['assigned_at'] ?? '?'])) ?></div><?php endif; ?></dd>
+                        <div class="text-body-secondary"><?= e(__('by {user}, {date}', ['user' => $finding['assigned_by_username'] ?? '?', 'date' => when($finding['assigned_at'] ?? '?')])) ?></div><?php endif; ?></dd>
                     <dt class="col-5"><?= e(__('Due')) ?></dt>
                     <dd class="col-7"><?php if ($finding['status'] !== 'open' || $finding['due_at'] === null): ?><span class="text-body-secondary"><?= e(__('Not due (only open findings are due)')) ?></span>
                         <?php else: ?><?= e(substr((string) $finding['due_at'], 0, 10)) ?> <span class="text-body-secondary"><?= e((int) $finding['due_custom'] === 1 ? __('(set by an admin)') : __('(policy)')) ?></span><?php endif; ?></dd>
                     <dt class="col-5"><?= e(__('Last recheck')) ?></dt>
                     <dd class="col-7"><?php if ($finding['verify_job_id'] === null): ?><span class="text-body-secondary"><?= e(__('Never')) ?></span>
                         <?php elseif (in_array($finding['verify_status'], ['queued', 'running'], true)): ?><span class="badge text-bg-info"><i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i><?= e($finding['verify_status'] === 'queued' ? __('Waiting') : __('Running')) ?></span>
-                        <?php else: ?><?= e(match ($verifyResult) { 'fixed' => __('Fixed'), 'still_present' => __('Still present'), default => __('Could not finish') }) ?> <span class="text-body-secondary"><?= e(($finding['verify_finished_at'] ?? '') . ' UTC') ?></span><?php endif; ?></dd>
+                        <?php else: ?><?= e(match ($verifyResult) { 'fixed' => __('Fixed'), 'still_present' => __('Still present'), default => __('Could not finish') }) ?> <span class="text-body-secondary"><?= e(when($finding['verify_finished_at'] ?? '')) ?></span><?php endif; ?></dd>
                 </dl>
                 <?php if ($editable && (can('findings.assign') || can('findings.verify'))): ?>
                 <?php if (can('findings.assign')): ?>
@@ -165,7 +165,7 @@ $eventLabels = [
                 <?php foreach ($events as $ev): ?>
                 <li class="list-group-item">
                     <strong><?= e($eventLabels[$ev['event']] ?? $ev['event']) ?></strong>
-                    <span class="text-body-secondary"><?= e($ev['created_at']) ?> UTC<?= $ev['username'] !== null ? ' · ' . e($ev['username']) : ' · ' . e(__('automatic')) ?></span>
+                    <span class="text-body-secondary"><?= e(when($ev['created_at'])) ?><?= $ev['username'] !== null ? ' · ' . e($ev['username']) : ' · ' . e(__('automatic')) ?></span>
                     <?php if ($ev['note'] !== null && $ev['note'] !== ''): ?><div class="text-pre-line"><?= e($ev['note']) ?></div><?php endif; ?>
                 </li>
                 <?php endforeach; ?>

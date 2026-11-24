@@ -76,11 +76,11 @@ $statusBadge = ['sent' => 'text-bg-success', 'pending' => 'text-bg-secondary', '
         <?php if ($a['recent'] !== []): ?>
         <h3 class="h6"><?= e(__('Recent deliveries')) ?></h3>
         <table class="table table-sm small mb-0">
-            <thead><tr><th scope="col"><?= e(__('When (UTC)')) ?></th><th scope="col"><?= e(__('Channel')) ?></th><th scope="col"><?= e(__('Subject')) ?></th><th scope="col"><?= e(__('Status')) ?></th></tr></thead>
+            <thead><tr><th scope="col"><?= e(__('When')) ?></th><th scope="col"><?= e(__('Channel')) ?></th><th scope="col"><?= e(__('Subject')) ?></th><th scope="col"><?= e(__('Status')) ?></th></tr></thead>
             <tbody>
             <?php foreach ($a['recent'] as $d): ?>
             <tr>
-                <td class="text-nowrap"><?= e($d['created_at']) ?></td><td><?= e($d['channel']) ?></td><td><?= e($d['subject']) ?></td>
+                <td class="text-nowrap"><?= e(when($d['created_at'])) ?></td><td><?= e($d['channel']) ?></td><td><?= e($d['subject']) ?></td>
                 <td><span class="badge <?= e($statusBadge[$d['status']] ?? 'text-bg-secondary') ?>"><?= e($d['status']) ?></span><?php if ($d['last_error'] !== ''): ?><div class="text-danger"><?= e($d['last_error']) ?></div><?php endif; ?></td>
             </tr>
             <?php endforeach; ?>

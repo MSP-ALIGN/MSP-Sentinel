@@ -80,9 +80,20 @@ final class AdminController extends Controller
     public function settings(Request $request): Response
     {
         $settings = App::settings();
+        return $this->settingsPage(['product_name' => $settings->get('product_name'), 'source_url' => $settings->get('source_url'),
+            'display_timezone' => $settings->get('display_timezone')], [], 200);
+    }
+
+    /** The Settings page with these General values and errors (also the 422 re-render of saveSettings). */
+    private function settingsPage(array $values, array $errors, int $status): Response
+    {
         return $this->page('settings/index', __('Settings'), [
-            'values' => ['product_name' => $settings->get('product_name'), 'source_url' => $settings->get('source_url')],
-            'errors' => [],
+            'values' => $values,
+            'errors' => $errors,
+            // Clients still on UTC while the organisation's zone is another (1.48: the one-time "move" button).
+            'utcClients' => App::settings()->get('display_timezone') === 'UTC' ? [] : App::db()->query("SELECT id, name FROM clients WHERE timezone = 'UTC' AND is_archived = 0 AND is_demo = 0 ORDER BY name")->fetchAll(),
+            'mayEditClients' => App::auth()->can('clients.manage'),
+            'orgZone' => App::settings()->get('display_timezone'), // the stored zone: what the move button really uses (1.48.1)
             'feeds' => App::vulns()->feedStatuses(),
             'nvdKeySet' => trim((string) App::config()->get('nvd.api_key', '')) !== '',
             'nvdKeyUsable' => \Sentinel\Vulns\FeedUpdater::usableKey(App::config()) !== null,
@@ -92,7 +103,7 @@ final class AdminController extends Controller
             'twoPerson' => EngagementController::twoPerson(),
             'mayChangeTwoPerson' => \Sentinel\Auth\Permissions::isComplete((array) ($this->user()['permissions'] ?? [])) && ($this->user()['client_ids'] ?? null) === null,
             'feedsRefresh' => (new \Sentinel\Vulns\FeedSchedule(App::settings()))->status(),
-        ]);
+        ], $status);
     }
 
     /** POST /admin/settings/engagements: whether pen-test engagements need a second person to approve (1.47). */
@@ -129,6 +140,36 @@ final class AdminController extends Controller
                 : __('{who} turned two-person approval off. From now on, whoever creates an engagement may approve it themselves if they may approve engagements. Engagements created before still need a second person.', ['who' => $who]),
             '/engagements');
         Session::flash('success', $twoPerson ? __('Two-person approval is on.') : __('Two-person approval is off for new engagements.'));
+        return $back;
+    }
+
+    /**
+     * POST /admin/settings/clients-timezone (1.48): move the clients still on UTC to the organisation's time zone,
+     * once. Their scan window times stay the same numbers, now read as local time. Needs Manage settings (the route)
+     * and Edit clients; audited with the list of clients.
+     */
+    public function moveClientsTimezone(Request $request): Response
+    {
+        $back = Response::redirect('/admin/settings');
+        if (!App::auth()->can('clients.manage')) {
+            throw new \Sentinel\Core\HttpException(403, __('Changing clients needs the permission to edit clients.'));
+        }
+        $zone = App::settings()->get('display_timezone');
+        if ($zone === 'UTC' || !valid_timezone($zone)) {
+            Session::flash('warning', __('Choose the organisation\'s time zone first.'));
+            return $back;
+        }
+        $rows = App::db()->query("SELECT id, name FROM clients WHERE timezone = 'UTC' AND is_archived = 0 AND is_demo = 0 ORDER BY name")->fetchAll();
+        if ($rows === []) {
+            Session::flash('info', __('No client is on UTC.'));
+            return $back;
+        }
+        $upd = App::db()->prepare("UPDATE clients SET timezone = :z, updated_at = UTC_TIMESTAMP() WHERE id = :id AND timezone = 'UTC'");
+        foreach ($rows as $r) {
+            $upd->execute(['z' => $zone, 'id' => (int) $r['id']]);
+        }
+        $this->audit($request, 'clients.timezone_moved', null, null, ['timezone' => $zone, 'clients' => array_map(static fn (array $r): string => (string) $r['name'], $rows)]);
+        Session::flash('success', __('{n} client(s) moved to {zone}. Their scan windows now count in that time zone.', ['n' => count($rows), 'zone' => $zone]));
         return $back;
     }
 
@@ -180,7 +221,7 @@ final class AdminController extends Controller
     /** POST /admin/settings */
     public function saveSettings(Request $request): Response
     {
-        $values = ['product_name' => $request->input('product_name'), 'source_url' => $request->input('source_url')];
+        $values = ['product_name' => $request->input('product_name'), 'source_url' => $request->input('source_url'), 'display_timezone' => $request->input('display_timezone') !== '' ? $request->input('display_timezone') : App::settings()->get('display_timezone')]; // missing: unchanged
         $errors = [];
         if ($values['product_name'] === '' || mb_strlen($values['product_name']) > 60 || preg_match('/[\x00-\x1F\x7F<>]/u', $values['product_name'])) {
             $errors['product_name'] = __('Enter a name of up to 60 characters, without < or >.');
@@ -189,13 +230,12 @@ final class AdminController extends Controller
         if (mb_strlen($values['source_url']) > 255 || filter_var($values['source_url'], FILTER_VALIDATE_URL) === false || !in_array($scheme, ['http', 'https'], true)) {
             $errors['source_url'] = __('Enter a full http:// or https:// address.');
         }
+        // The organisation's time zone (1.48): only a zone from PHP's list (untrusted input).
+        if (!valid_timezone($values['display_timezone'])) {
+            $errors['display_timezone'] = __('Choose a time zone from the list.');
+        }
         if ($errors !== []) {
-            return $this->page('settings/index', __('Settings'), ['values' => $values, 'errors' => $errors,
-                'feeds' => App::vulns()->feedStatuses(), 'nvdKeySet' => trim((string) App::config()->get('nvd.api_key', '')) !== '',
-                'nvdKeyUsable' => \Sentinel\Vulns\FeedUpdater::usableKey(App::config()) !== null, 'alerts' => self::alertSettings(), 'branding' => ReportController::brandingSettings(), 'duePolicy' => App::fixWorkflow()->policy(),
-                'twoPerson' => EngagementController::twoPerson(),
-                'mayChangeTwoPerson' => \Sentinel\Auth\Permissions::isComplete((array) ($this->user()['permissions'] ?? [])) && ($this->user()['client_ids'] ?? null) === null,
-                'feedsRefresh' => (new \Sentinel\Vulns\FeedSchedule(App::settings()))->status()], 422);
+            return $this->settingsPage($values, $errors, 422);
         }
 
         $settings = App::settings();

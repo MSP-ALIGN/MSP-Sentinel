@@ -63,11 +63,11 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
             <?php elseif ($wu['pending']): ?>
             <p class="mb-2"><span class="badge text-bg-info"><?= e(__('Waiting')) ?></span> <?= e(__('The update was requested and starts within a few seconds.')) ?></p>
             <?php elseif ($st['state'] === 'running' && !$st['stale']): ?>
-            <p class="mb-2"><span class="badge text-bg-warning"><i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i><?= e(__('Running')) ?></span> <?= e(__('Started {t} UTC. Sentinel may be unavailable for a minute while it restarts; refresh this page to follow it.', ['t' => $st['started']])) ?></p>
+            <p class="mb-2"><span class="badge text-bg-warning"><i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i><?= e(__('Running')) ?></span> <?= e(__('Started {t}. Sentinel may be unavailable for a minute while it restarts; refresh this page to follow it.', ['t' => when($st['started'])])) ?></p>
             <?php elseif ($st['state'] === 'done'): ?>
-            <p class="mb-2"><span class="badge text-bg-success"><i class="bi bi-check-circle me-1" aria-hidden="true"></i><?= e(__('Done')) ?></span> <?= e(__('Last update finished {t} UTC.', ['t' => $st['finished']])) ?></p>
+            <p class="mb-2"><span class="badge text-bg-success"><i class="bi bi-check-circle me-1" aria-hidden="true"></i><?= e(__('Done')) ?></span> <?= e(__('Last update finished {t}.', ['t' => when($st['finished'])])) ?></p>
             <?php elseif ($st['state'] === 'failed' || $st['stale']): ?>
-            <p class="mb-2"><span class="badge text-bg-danger"><i class="bi bi-x-octagon me-1" aria-hidden="true"></i><?= e(__('Failed')) ?></span> <?= e($st['stale'] ? __('The last update started {t} UTC and never finished (the server may have restarted).', ['t' => $st['started']]) : __('The last update stopped with an error at {t} UTC (exit code {c}). Sentinel kept running the previous version; see the output below.', ['t' => $st['finished'], 'c' => $st['exit']])) ?></p>
+            <p class="mb-2"><span class="badge text-bg-danger"><i class="bi bi-x-octagon me-1" aria-hidden="true"></i><?= e(__('Failed')) ?></span> <?= e($st['stale'] ? __('The last update started {t} and never finished (the server may have restarted).', ['t' => when($st['started'])]) : __('The last update stopped with an error at {t} (exit code {c}). Sentinel kept running the previous version; see the output below.', ['t' => when($st['finished']), 'c' => $st['exit']])) ?></p>
             <?php endif; ?>
             <?php if ($wu['log'] !== ''): ?>
             <details class="mb-2"<?= $st['state'] === 'failed' || ($st['state'] === 'running' && !$st['stale']) ? ' open' : '' ?>><summary><?= e(__('Output of the last update')) ?></summary><pre class="small mb-0 mt-1 update-log"><?= e($wu['log']) ?></pre></details>
@@ -90,7 +90,7 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
             <?php endif; ?>
             <?php endif; ?>
         </div>
-        <p class="text-body-secondary"><?= e($updateEnabled ? __('Once a day the worker asks GitHub for the latest release (and, for installs that follow a branch, how many commits the branch has moved on). Nothing else is sent. Last check: {t}', ['t' => $checkedAt !== '' ? $checkedAt . ' UTC' : __('not yet')]) : __('The update check is off.')) ?></p>
+        <p class="text-body-secondary"><?= e($updateEnabled ? __('Once a day the worker asks GitHub for the latest release (and, for installs that follow a branch, how many commits the branch has moved on). Nothing else is sent. Last check: {t}', ['t' => $checkedAt !== '' ? when($checkedAt) : __('not yet')]) : __('The update check is off.')) ?></p>
         <form method="post" action="<?= e(url('/admin/system/updates')) ?>" class="mb-2">
             <?= Csrf::field() ?>
             <div class="form-check"><input class="form-check-input" type="checkbox" id="update_check_enabled" name="update_check_enabled" value="1" <?= $updateEnabled ? 'checked' : '' ?>>
@@ -136,7 +136,7 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
             <div class="col-12"><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-key me-1" aria-hidden="true"></i><?= e(__('Create release key (downloads the key file)')) ?></button></div>
         </form>
         <?php else: ?>
-        <p><?= e(__('Key {fp}', ['fp' => $fp])) ?><?= $rk['created'] !== '' ? ' · ' . e(__('created {t} UTC', ['t' => $rk['created']])) : '' ?></p>
+        <p><?= e(__('Key {fp}', ['fp' => $fp])) ?><?= $rk['created'] !== '' ? ' · ' . e(__('created {t}', ['t' => when($rk['created'])])) : '' ?></p>
         <?php if ($rk['manifest'] !== null): $mf = json_decode($rk['manifest'], true); ?>
         <form method="post" data-confirm="<?= e(__('Sign version {v} (manifest SHA-256 {h}) with the release key? Every agent will accept it as an update.', ['v' => $mf['version'] ?? '?', 'h' => hash('sha256', $rk['manifest'])])) ?>" data-hash-text="<?= e(__('the files on this server do not match the hash you entered: do not sign, and check the server')) ?>" action="<?= e(url('/admin/system/release-sign')) ?>" class="row g-2 mb-3" data-release-key="sign" data-public-key="<?= e($rk['key']) ?>" <?= $keyAttrs ?>><?= \Sentinel\Core\Csrf::field() ?>
             <input type="hidden" name="manifest" value="<?= e($rk['manifest']) ?>"><input type="hidden" name="signature" value=""><input type="hidden" name="expected_hash" value="">
@@ -192,9 +192,9 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
         <h3 class="h6 mt-3"><?= e(__('Move agents to a new Sentinel address')) ?></h3>
         <p class="text-body-secondary"><?= e(__('When Sentinel gets a new address or certificate authority: agents switch at their next check-in between scans, only after the new address proves it is this Sentinel (it signs a challenge for that address with this Sentinel\'s key; nothing is sent to it before). Shortly after a move, an agent goes back on its own if the new address keeps failing; while moved, it checks with its original address every 6 hours so it can always be recalled. Keep the old address working. Agents need version 1.23.1 or later.')) ?></p>
         <?php if ($agentMove['url'] !== ''): ?>
-            <?php $mvVars = ['url' => $agentMove['url'], 'ca' => $agentMove['ca'] ? ' ' . __('(with its CA)') : '', 't' => $agentMove['since']]; ?>
-            <p><?= e($agentMove['complete'] ? __('Move to {url}{ca} complete (since {t} UTC): moved agents stay there; no more agents are asked to move.', $mvVars)
-                                           : __('Moving agents to {url}{ca}, since {t} UTC.', $mvVars)) ?></p>
+            <?php $mvVars = ['url' => $agentMove['url'], 'ca' => $agentMove['ca'] ? ' ' . __('(with its CA)') : '', 't' => when($agentMove['since'])]; ?>
+            <p><?= e($agentMove['complete'] ? __('Move to {url}{ca} complete (since {t}): moved agents stay there; no more agents are asked to move.', $mvVars)
+                                           : __('Moving agents to {url}{ca}, since {t}.', $mvVars)) ?></p>
             <ul class="list-unstyled">
             <?php foreach ($agentMove['agents'] as $ag): $mr = json_decode((string) ($ag['move_result'] ?? ''), true); $there = rtrim((string) $ag['server_url'], '/') === rtrim($agentMove['url'], '/'); ?>
                 <li><?= e($ag['client_name'] . ' · ' . $ag['name']) ?>:
@@ -235,10 +235,10 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
         <p class="text-body-secondary mb-0"><?= e(__('No backup recorded yet. The nightly backup job (added by the installer) records each run here; run bin/backup.php to make one now.')) ?></p>
         <?php else: ?>
         <div class="table-responsive"><table class="table table-sm mb-2">
-            <thead><tr><th><?= e(__('When (UTC)')) ?></th><th><?= e(__('Result')) ?></th><th><?= e(__('Size')) ?></th><th><?= e(__('Encrypted')) ?></th><th><?= e(__('File or error')) ?></th></tr></thead>
+            <thead><tr><th><?= e(__('When')) ?></th><th><?= e(__('Result')) ?></th><th><?= e(__('Size')) ?></th><th><?= e(__('Encrypted')) ?></th><th><?= e(__('File or error')) ?></th></tr></thead>
             <tbody>
             <?php foreach ($backups as $b): ?>
-            <tr><td><?= e($b['at']) ?></td>
+            <tr><td><?= e(when($b['at'])) ?></td>
                 <td><span class="badge <?= $b['ok'] ? 'text-bg-success' : 'text-bg-danger' ?>"><?= e($b['ok'] ? __('OK') : __('Failed')) ?></span></td>
                 <td><?= e($b['ok'] ? round($b['bytes'] / 1_000_000, 1) . ' MB' : '–') ?></td>
                 <td><?= e($b['encrypted'] ? __('yes') : __('no')) ?></td>
@@ -283,7 +283,7 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
                 <div class="col-4"><input class="form-control form-control-sm" type="number" min="0" max="120" step="1" id="retention_<?= e($k) ?>" name="retention_<?= e($k) ?>" value="<?= e($retention[$k]) ?>"></div>
             </div>
             <?php endforeach; ?>
-            <p class="text-body-secondary mb-0"><?= e(__('Last run: {t}', ['t' => $retentionLast !== '' ? $retentionLast . ' UTC' : __('not yet')])) ?></p>
+            <p class="text-body-secondary mb-0"><?= e(__('Last run: {t}', ['t' => $retentionLast !== '' ? when($retentionLast) : __('not yet')])) ?></p>
         </div>
         <div class="card-footer"><button type="submit" class="btn btn-primary btn-sm"><?= e(__('Save retention')) ?></button></div>
     </form>

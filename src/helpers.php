@@ -89,3 +89,60 @@ function role_label(array $row): string
     $name = (string) ($row['role_name'] ?? $row['name'] ?? '');
     return ($row['role_key'] ?? null) !== null ? __($name) : $name;
 }
+
+/**
+ * The time zone times are shown in for the signed-in user (1.48): their own choice (My profile), else the
+ * organisation's (Settings), else UTC. Times are stored in UTC; only the display changes. Invalid values fall back.
+ */
+function display_zone(): DateTimeZone
+{
+    static $cache = null;
+    if ($cache !== null) {
+        return $cache;
+    }
+    $names = [];
+    try {
+        $user = App::auth()->user();
+        $names[] = (string) ($user['timezone'] ?? '');
+    } catch (\Throwable) {
+        // no session (worker, CLI): the organisation's zone
+    }
+    try {
+        $names[] = App::settings()->get('display_timezone');
+    } catch (\Throwable) {
+        // no database yet
+    }
+    foreach ($names as $name) {
+        if (valid_timezone($name)) {
+            return $cache = new DateTimeZone($name);
+        }
+    }
+    return $cache = new DateTimeZone('UTC');
+}
+
+/**
+ * A stored UTC time ('Y-m-d H:i:s') shown in the viewer's time zone with its abbreviation, e.g. "2026-11-24 13:33 PST"
+ * (1.48). $zone: another zone (a client's, in reports). Null or empty gives $empty; a value that isn't a date and time
+ * is returned as it is. Plain text: print it with e().
+ */
+function when(?string $utc, ?DateTimeZone $zone = null, string $empty = '–', bool $seconds = false): string
+{
+    if ($utc === null || trim($utc) === '') {
+        return $empty;
+    }
+    if (preg_match('/^\d{4}-\d\d-\d\d[ T]\d\d:\d\d(:\d\d(\.\d+)?)?Z?$/', trim($utc)) !== 1) {
+        return $utc;
+    }
+    try {
+        $t = new DateTimeImmutable(trim($utc), new DateTimeZone('UTC'));
+    } catch (\Exception) {
+        return $utc;
+    }
+    return $t->setTimezone($zone ?? display_zone())->format($seconds ? 'Y-m-d H:i:s T' : 'Y-m-d H:i T');
+}
+
+/** A time zone name PHP knows, including older aliases such as US/Pacific (1.48.1). Untrusted input is fine. */
+function valid_timezone(string $name): bool
+{
+    return $name !== '' && in_array($name, DateTimeZone::listIdentifiers(DateTimeZone::ALL_WITH_BC), true);
+}

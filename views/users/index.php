@@ -18,7 +18,7 @@
                 <th scope="col"><?= e(__('Clients')) ?></th>
                 <th scope="col"><?= e(__('Status')) ?></th>
                 <th scope="col"><?= e(__('2FA')) ?></th>
-                <th scope="col"><?= e(__('Last sign-in (UTC)')) ?></th>
+                <th scope="col"><?= e(__('Last sign-in')) ?></th>
             </tr>
             </thead>
             <tbody>
@@ -38,7 +38,7 @@
                 <td><?= $u['totp_enabled_at'] !== null
                         ? '<span class="badge text-bg-success"><i class="bi bi-shield-lock me-1" aria-hidden="true"></i>' . e(__('On')) . '</span>'
                         : '<span class="badge text-bg-warning"><i class="bi bi-hourglass me-1" aria-hidden="true"></i>' . e(__('At next sign-in')) . '</span>' ?></td>
-                <td><?= e($u['last_login_at'] ?? __('Never')) ?></td>
+                <td><?= e(when($u['last_login_at'], null, __('Never'))) ?></td>
             </tr>
             <?php endforeach; ?>
             </tbody>

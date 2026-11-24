@@ -57,10 +57,10 @@ $statusBadge = ['met' => ['success', __('Met')], 'partial' => ['warning', __('Pa
     <?php else: ?>
         <?php $cp = $compliance; ?>
         <?php if ($cp['error'] !== ''): ?>
-        <div class="alert alert-warning py-2 small"><?= e($cp['error']) ?><?= $cp['fetched_at'] !== '' ? ' ' . e(__('Showing what was read at {t} UTC.', ['t' => $cp['fetched_at']])) : '' ?></div>
+        <div class="alert alert-warning py-2 small"><?= e($cp['error']) ?><?= $cp['fetched_at'] !== '' ? ' ' . e(__('Showing what was read at {t}.', ['t' => when($cp['fetched_at'])])) : '' ?></div>
         <?php endif; ?>
         <p class="small text-body-secondary"><?= e(__('Each framework\'s controls that Sentinel\'s checks relate to, matched by MSP Align\'s crosswalk tags. "Open problems" lists Sentinel findings in that area. "No problems found" means Sentinel checked that area and found nothing open: it supports the control but does not prove it is met. Control statuses are set in MSP Align.')) ?>
-            <?= $cp['fetched_at'] !== '' ? e(__('Read from MSP Align at {t} UTC.', ['t' => $cp['fetched_at']])) : '' ?></p>
+            <?= $cp['fetched_at'] !== '' ? e(__('Read from MSP Align at {t}.', ['t' => when($cp['fetched_at'])])) : '' ?></p>
         <?php if ($cp['frameworks'] === [] && $cp['error'] === ''): ?>
         <p class="mb-0"><?= e(__('No frameworks are assigned to this client in MSP Align.')) ?></p>
         <?php endif; ?>

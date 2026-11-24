@@ -40,7 +40,7 @@ $flatRow = static function (array $f) use ($findingSeverityBadge, $findingStatus
         . '<td>' . $findingStatusBadge((string) $f['status'], (int) $f['reappeared'] === 1) . '</td>'
         . '<td class="small">' . ($f['assignee_username'] !== null ? e($f['assignee_username']) : '<span class="text-body-secondary">' . e(__('Unassigned')) . '</span>') . '</td>'
         . '<td class="text-nowrap">' . $findingDueBadge($f) . '</td>'
-        . '<td class="small text-nowrap">' . e($f['first_seen']) . '</td></tr>';
+        . '<td class="small text-nowrap">' . e(when($f['first_seen'])) . '</td></tr>';
 };
 ?>
 <div class="row g-3 mb-3">
@@ -157,7 +157,7 @@ $flatRow = static function (array $f) use ($findingSeverityBadge, $findingStatus
             <thead><tr>
                 <?php if ($selectable): ?><th scope="col"><input class="form-check-input" type="checkbox" data-select-all="sel-bulk" aria-label="<?= e(__('Select all findings on this page')) ?>"></th><?php endif; ?>
                 <th scope="col"><?= e(__('Grade')) ?></th><th scope="col"><?= e(__('Finding')) ?></th><th scope="col"><?= e(__('Client')) ?></th>
-                <th scope="col"><?= e(__('Status')) ?></th><th scope="col"><?= e(__('Owner')) ?></th><th scope="col"><?= e(__('Due')) ?></th><th scope="col"><?= e(__('First seen (UTC)')) ?></th>
+                <th scope="col"><?= e(__('Status')) ?></th><th scope="col"><?= e(__('Owner')) ?></th><th scope="col"><?= e(__('Due')) ?></th><th scope="col"><?= e(__('First seen')) ?></th>
             </tr></thead>
             <tbody>
             <?php if ($rows === [] && $groups === []): ?>
@@ -244,7 +244,7 @@ $flatRow = static function (array $f) use ($findingSeverityBadge, $findingStatus
                 <td><?= $statusText ?></td>
                 <td class="small"><?= $owner ?></td>
                 <td class="text-nowrap"><?= $findingDueBadge(['status' => (int) $g['open_n'] > 0 ? 'open' : '', 'due_at' => $g['due_at']]) ?></td>
-                <td class="small text-nowrap"><?= e($g['first_seen']) ?></td>
+                <td class="small text-nowrap"><?= e(when($g['first_seen'])) ?></td>
             </tr>
             <?php endforeach; ?>
             <?php foreach ($rows as $f) { echo $flatRow($f); } ?>

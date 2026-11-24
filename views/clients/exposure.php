@@ -32,7 +32,7 @@ $badge = static function (string $severity, string $text) use ($sevBadge): strin
         <table class="table table-sm align-middle">
             <thead><tr>
                 <th scope="col"><?= e(__('Endpoint')) ?></th><th scope="col"><?= e(__('Certificate')) ?></th>
-                <th scope="col"><?= e(__('Expires (UTC)')) ?></th><th scope="col"><?= e(__('Issues')) ?></th>
+                <th scope="col"><?= e(__('Expires')) ?></th><th scope="col"><?= e(__('Issues')) ?></th>
             </tr></thead>
             <tbody>
             <?php foreach ($tlsEndpoints as $t): ?>
@@ -48,12 +48,12 @@ $badge = static function (string $severity, string $text) use ($sevBadge): strin
                     <?php endif; ?>
                     <?php if ($t['last_error'] !== ''): ?><div class="text-danger"><?= e($t['last_error']) ?></div><?php endif; ?>
                 </td>
-                <td class="small text-nowrap"><?= e($t['not_after'] ?? '—') ?></td>
+                <td class="small text-nowrap"><?= e(when($t['not_after'] ?? null, null, '—')) ?></td>
                 <td>
                     <?php foreach ($issues as $issue): ?><?= $badge($issue['severity'], $issue['text']) ?><?php endforeach; ?>
                     <?php if ($issues === [] && $t['not_after'] !== null): ?><span class="badge text-bg-success"><i class="bi bi-check-circle me-1" aria-hidden="true"></i><?= e(__('OK')) ?></span><?php endif; ?>
                     <?php if ($issues === [] && $t['not_after'] === null): ?><span class="badge text-bg-secondary"><?= e(__('Not reachable')) ?></span><?php endif; ?>
-                    <div class="small text-body-secondary"><?= e(__('Checked {date}', ['date' => $t['last_checked']])) ?></div>
+                    <div class="small text-body-secondary"><?= e(__('Checked {date}', ['date' => when($t['last_checked'] ?? null)])) ?></div>
                 </td>
             </tr>
             <?php endforeach; ?>

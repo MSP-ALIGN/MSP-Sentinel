@@ -10,16 +10,18 @@ New to MSP Sentinel? Follow these steps on your first day. Each one links to a s
    recovery codes somewhere safe. See [Users and security](guides/users-and-security.md#sign-in-and-two-factor-authentication).
 3. **Add a second admin.** Two admins mean nobody is locked out, and pen-test engagements need a second admin to
    approve them (unless you turn two-person approval off under Settings). See [Users and security](guides/users-and-security.md#add-a-user).
-4. **Add a client.** Give it a name, its time zone and a scan window (when scans may run). See
+4. **Set your time zone** under **Administration → Settings → General**, so times are shown in your time and new
+   clients start in it (each user can pick their own under **My profile**).
+5. **Add a client.** Give it a name, its time zone and a scan window (when scans may run). See
    [Your first client](guides/first-client.md#add-the-client).
-5. **Record the client's authorisation.** Enter who approved scanning, the dates and exactly which addresses and
+6. **Record the client's authorisation.** Enter who approved scanning, the dates and exactly which addresses and
    domains. Nothing is scanned without it. See [Your first client](guides/first-client.md#record-the-authorisation)
    and the [authorisation form](authorisation-form.md) template.
-6. **Scan.** Press **Scan now**, or let the weekly scan run in the client's window. See
+7. **Scan.** Press **Scan now**, or let the weekly scan run in the client's window. See
    [Your first client](guides/first-client.md#scan).
-7. **Read and triage the findings.** Fix what matters first; accept a risk or mark a false positive with a note. See
+8. **Read and triage the findings.** Fix what matters first; accept a risk or mark a false positive with a note. See
    [Findings](guides/findings.md).
-8. **Create a report.** An executive summary for management and a technical report for IT, printed to PDF from the
+9. **Create a report.** An executive summary for management and a technical report for IT, printed to PDF from the
    browser. See [Reports](guides/reports.md).
 
 ## Guides by task

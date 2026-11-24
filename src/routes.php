@@ -67,6 +67,7 @@ $router->add('POST', '/profile/sso-link', [\Sentinel\Controllers\SsoController::
 $router->add('POST', '/profile/sso-unlink', [\Sentinel\Controllers\SsoController::class, 'unlink']);
 $router->add('POST', '/profile/alerts', [AlertController::class, 'preference']);
 $router->add('POST', '/profile/theme', [AlertController::class, 'theme']);
+$router->add('POST', '/profile/timezone', [AlertController::class, 'timezone']);
 $router->add('GET', '/notifications', [AlertController::class, 'notifications']);
 $router->add('POST', '/notifications/read', [AlertController::class, 'markRead']);
 
@@ -203,6 +204,7 @@ $router->add('POST', '/clients/{id}/compliance/refresh', [ComplianceController::
 $router->add('GET', '/admin/settings', [AdminController::class, 'settings'], ['perm' => 'settings.manage', 'all_clients' => true]);
 $router->add('POST', '/admin/settings', [AdminController::class, 'saveSettings'], ['perm' => 'settings.manage', 'all_clients' => true]);
 $router->add('POST', '/admin/settings/due-dates', [AdminController::class, 'saveDuePolicy'], ['perm' => 'settings.manage', 'all_clients' => true]);
+$router->add('POST', '/admin/settings/clients-timezone', [AdminController::class, 'moveClientsTimezone'], ['perm' => 'settings.manage', 'all_clients' => true]);
 $router->add('POST', '/admin/settings/engagements', [AdminController::class, 'saveEngagementPolicy'], ['perm' => 'settings.manage', 'all_clients' => true]);
 $router->add('POST', '/admin/feeds/refresh', [AdminController::class, 'refreshFeeds'], ['perm' => 'settings.manage', 'all_clients' => true]);
 $router->add('POST', '/admin/alerts', [AlertController::class, 'save'], ['perm' => 'settings.manage', 'all_clients' => true]);

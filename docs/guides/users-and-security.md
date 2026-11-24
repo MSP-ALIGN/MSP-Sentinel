@@ -66,6 +66,20 @@ given to someone who sees it. A client a limited user adds becomes one of theirs
 
 Lost both your phone and your recovery codes? Ask an admin to reset your two-factor authentication.
 
+## Time zone
+
+Sentinel stores and compares every time in UTC, so daylight-saving changes never shift a scan. It shows times in
+your time zone, each labelled (for example `2026-11-24 13:33 PST`):
+
+- **The organisation's time zone:** under **Administration → Settings → General** (admins). New clients start in it,
+  also those added from ITFlow. If clients are still on UTC, the Settings page lists them with a button that moves
+  them to your time zone; their scan window times stay the same numbers, now read in that time zone. It needs Manage
+  settings and Edit clients, and the change is in the audit log.
+- **Your own:** under **My profile → Time zone**, for someone who works elsewhere. Leave it empty to use the
+  organisation's.
+- **Scan windows** always follow each client's own time zone (on the client's Edit page).
+- **Reports** show times in their client's time zone.
+
 ## Sign in with Microsoft
 
 Your team can sign in with their Microsoft 365 work account (Microsoft Entra ID). ITFlow itself can't act as a

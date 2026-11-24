@@ -2,7 +2,7 @@
 /**
  * Every pen-test engagement across clients (1.34), with the ones waiting for this admin's approval first.
  * Expects: $engagements (EngagementRepository::all), $awaiting (awaitingApprovalBy, admins only), $adminCount,
- * $currentUser. Times are shown in UTC here (each client's page shows its own time zone). Every value is escaped.
+ * $currentUser. Times are shown in the viewer's time zone (1.48; each client's page shows its own). Every value is escaped.
  */
 use Sentinel\Engagements\EngagementRepository;
 
@@ -23,7 +23,7 @@ $isAdmin = can('engagements.approve');
     <ul class="list-group list-group-flush">
         <?php foreach ($awaiting as $a): ?>
         <li class="list-group-item"><a href="<?= e(url('/engagements/' . (int) $a['id'])) ?>"><?= e($a['name']) ?></a>
-            <span class="text-body-secondary small">· <?= e($a['client_name']) ?> · <?= e(__('created by {u}', ['u' => (string) $a['created_by_name']])) ?> · <?= e(__('starts {t} UTC', ['t' => substr((string) $a['window_start'], 0, 16)])) ?></span></li>
+            <span class="text-body-secondary small">· <?= e($a['client_name']) ?> · <?= e(__('created by {u}', ['u' => (string) $a['created_by_name']])) ?> · <?= e(__('starts {t}', ['t' => when(substr((string) $a['window_start'], 0, 16))])) ?></span></li>
         <?php endforeach; ?>
     </ul>
 </div>
@@ -43,13 +43,13 @@ $isAdmin = can('engagements.approve');
         <p class="text-body-secondary mb-0"><?= e(__('No engagements yet.')) ?> <a href="<?= e(url('/clients')) ?>"><?= e(__('Open a client to create one')) ?></a></p>
         <?php else: ?>
         <div class="table-responsive"><table class="table table-sm align-middle mb-0" id="engagements-table">
-            <thead><tr><th><?= e(__('Engagement')) ?></th><th><?= e(__('Client')) ?></th><th><?= e(__('Window (UTC)')) ?></th><th><?= e(__('State')) ?></th><th><?= e(__('Created / approved by')) ?></th></tr></thead>
+            <thead><tr><th><?= e(__('Engagement')) ?></th><th><?= e(__('Client')) ?></th><th><?= e(__('Window')) ?></th><th><?= e(__('State')) ?></th><th><?= e(__('Created / approved by')) ?></th></tr></thead>
             <tbody>
             <?php foreach ($engagements as $g): [$cls, $label] = $stateBadge[EngagementRepository::state($g, $now)]; ?>
                 <tr data-filter-item>
                     <td><a href="<?= e(url('/engagements/' . (int) $g['id'])) ?>"><?= e($g['name']) ?></a> <span class="text-body-secondary small">#<?= (int) $g['id'] ?></span></td>
                     <td><a href="<?= e(url('/clients/' . (int) $g['client_id'] . '/engagements')) ?>"><?= e($g['client_name']) ?></a></td>
-                    <td class="small"><?= e(substr((string) $g['window_start'], 0, 16)) ?> → <?= e(substr((string) $g['window_end'], 0, 16)) ?></td>
+                    <td class="small"><?= e(when((string) $g['window_start'])) ?> → <?= e(when((string) $g['window_end'])) ?></td>
                     <td><span class="badge <?= e($cls) ?>"><?= e($label) ?></span></td>
                     <td class="small"><?= e((string) $g['created_by_name']) ?> / <?= e((string) ($g['approved_by_name'] ?? '–')) ?></td>
                 </tr>

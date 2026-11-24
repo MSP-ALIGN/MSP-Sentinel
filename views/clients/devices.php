@@ -29,7 +29,7 @@ $chip = static function (string $sev, string $text): string {
                 <?php if ($isAdmin): ?><a class="btn btn-sm btn-outline-primary" href="<?= e(url('/clients/' . (int) $client['id'] . '/inventory/link', ['source' => $name])) ?>"><?= e(__('Link to an organisation')) ?></a><?php endif; ?>
             <?php else: ?>
                 <span><?= e(__('linked to {org}', ['org' => $link['org_name']])) ?></span>
-                <span class="text-body-secondary">· <?= e($link['last_sync_at'] !== null ? __('last sync {t} UTC', ['t' => $link['last_sync_at']]) : __('first sync pending')) ?></span>
+                <span class="text-body-secondary">· <?= e($link['last_sync_at'] !== null ? __('last sync {t}', ['t' => when($link['last_sync_at'])]) : __('first sync pending')) ?></span>
                 <?php if ($link['last_sync_status'] === 'error'): ?><span class="badge text-bg-danger"><i class="bi bi-x-octagon me-1" aria-hidden="true"></i><?= e(__('Sync failed')) ?></span>
                 <?php elseif ($link['last_sync_status'] === 'partial'): ?><span class="badge text-bg-warning"><i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i><?= e(__('Partial data')) ?></span><?php endif; ?>
                 <?php if ($isTech): ?>
@@ -46,7 +46,7 @@ $chip = static function (string $sev, string $text): string {
         <div class="table-responsive">
         <div class="d-flex align-items-center gap-2 mb-2"><label class="visually-hidden" for="devices-filter"><?= e(__('Filter this list')) ?></label><input class="form-control form-control-sm sn-w-20" type="search" id="devices-filter" maxlength="100" data-filter-list="#devices-table" data-filter-count="#devices-filter-count" placeholder="<?= e(__('Filter devices by name, address or problem…')) ?>"><span class="small text-body-secondary" id="devices-filter-count" aria-live="polite"></span></div>
         <table class="table table-sm align-middle small mb-0" id="devices-table">
-            <thead><tr><th><?= e(__('Device')) ?></th><th><?= e(__('Operating system')) ?></th><th><?= e(__('Problems')) ?></th><th class="text-end"><?= e(__('Vulnerabilities')) ?></th><th class="text-nowrap"><?= e(__('Last contact (UTC)')) ?></th></tr></thead>
+            <thead><tr><th><?= e(__('Device')) ?></th><th><?= e(__('Operating system')) ?></th><th><?= e(__('Problems')) ?></th><th class="text-end"><?= e(__('Vulnerabilities')) ?></th><th class="text-nowrap"><?= e(__('Last contact')) ?></th></tr></thead>
             <tbody>
             <?php foreach ($devices as $d): $issues = DeviceRules::issues($d, $devicePatches[(int) $d['id']] ?? []); ?>
             <tr>
@@ -61,7 +61,7 @@ $chip = static function (string $sev, string $text): string {
                     <?php foreach ($issues as $i): ?><?= $chip($i['severity'], $i['text']) ?><?php endforeach; ?>
                     <?php if ($open > 0): ?><a href="<?= e(url('/clients/' . (int) $client['id'] . '/devices/' . (int) $d['id'])) ?>"><?= $chip((int) $d['open_fail'] > 0 ? 'fail' : 'warn', __('{n} open finding(s)', ['n' => $open])) ?></a><?php endif; ?></td>
                 <td class="text-end"><?= (int) $d['vuln_count'] > 0 ? '<span class="badge text-bg-danger">' . e($d['vuln_count']) . '</span>' : '<span class="text-body-secondary">0</span>' ?></td>
-                <td class="text-nowrap"><?= e((string) ($d['last_contact'] ?? '?')) ?></td>
+                <td class="text-nowrap"><?= e(when($d['last_contact'] ?? null, null, '?')) ?></td>
             </tr>
             <?php endforeach; ?>
             </tbody>

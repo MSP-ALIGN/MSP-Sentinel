@@ -21,7 +21,7 @@ $auditValue = static fn (mixed $v): string => match (true) {
         <table class="table table-sm table-striped align-middle mb-0">
             <thead>
             <tr>
-                <th scope="col"><?= e(__('Time (UTC)')) ?></th>
+                <th scope="col"><?= e(__('Time')) ?></th>
                 <th scope="col"><?= e(__('User')) ?></th>
                 <th scope="col"><?= e(__('Action')) ?></th>
                 <th scope="col"><?= e(__('Target')) ?></th>
@@ -35,7 +35,7 @@ $auditValue = static fn (mixed $v): string => match (true) {
             <?php endif; ?>
             <?php foreach ($entries as $row): ?>
             <tr>
-                <td class="text-nowrap"><?= e($row['created_at']) ?></td>
+                <td class="text-nowrap"><?= e(when($row['created_at'], null, '–', true)) ?></td>
                 <td><?= e($row['username'] ?? '—') ?></td>
                 <?php // Readable action ("finding.assigned" -> "Finding assigned"); the exact key stays visible for searching. ?>
                 <td><?= e(ucfirst(str_replace(['.', '_'], ' ', (string) $row['action']))) ?><br><code class="small text-body-secondary"><?= e($row['action']) ?></code></td>

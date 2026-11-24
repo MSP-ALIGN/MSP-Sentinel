@@ -90,9 +90,9 @@ $n = $ninja;
                 <button type="submit" class="btn btn-outline-secondary btn-sm"><?= e(__('Also open tickets for existing Fail findings')) ?></button></form>
             <?php endif; ?>
         </div>
-        <?php if ($it['test_result'] !== ''): ?><p class="small mb-1 mt-2"><?= e($it['test_result']) ?> <span class="text-body-secondary">(<?= e($it['tested_at']) ?> UTC)</span></p><?php endif; ?>
-        <?php if ($it['last_sync'] !== ''): ?><p class="small mb-0 mt-1<?= $it['last_ok'] ? '' : ' text-danger' ?>"><?= e(__('Last sync {t} UTC: {r}', ['t' => $it['last_sync'], 'r' => $it['last_result']])) ?></p><?php endif; ?>
-        <?php if ($it['tickets_last_run'] !== ''): ?><p class="small mb-0 mt-1<?= $it['tickets_last_ok'] ? '' : ' text-danger' ?>"><?= e(__('Tickets {t} UTC: {r} ({n} opened so far)', ['t' => $it['tickets_last_run'], 'r' => $it['tickets_last_result'], 'n' => $it['tickets_total']])) ?></p><?php endif; ?>
+        <?php if ($it['test_result'] !== ''): ?><p class="small mb-1 mt-2"><?= e($it['test_result']) ?> <span class="text-body-secondary">(<?= e(when($it['tested_at'])) ?>)</span></p><?php endif; ?>
+        <?php if ($it['last_sync'] !== ''): ?><p class="small mb-0 mt-1<?= $it['last_ok'] ? '' : ' text-danger' ?>"><?= e(__('Last sync {t}: {r}', ['t' => when($it['last_sync']), 'r' => $it['last_result']])) ?></p><?php endif; ?>
+        <?php if ($it['tickets_last_run'] !== ''): ?><p class="small mb-0 mt-1<?= $it['tickets_last_ok'] ? '' : ' text-danger' ?>"><?= e(__('Tickets {t}: {r} ({n} opened so far)', ['t' => when($it['tickets_last_run']), 'r' => $it['tickets_last_result'], 'n' => $it['tickets_total']])) ?></p><?php endif; ?>
     </div>
 </div>
 <div class="card mb-3" id="ninjaone">
@@ -147,7 +147,7 @@ $n = $ninja;
             <?= Csrf::field() ?>
             <button type="submit" class="btn btn-outline-secondary btn-sm"><i class="bi bi-plug me-1" aria-hidden="true"></i><?= e(__('Test connection')) ?></button>
             <?php if ($n['test_result'] !== ''): ?>
-            <span class="small"><?= e($n['test_result']) ?> <span class="text-body-secondary">(<?= e($n['tested_at']) ?> UTC)</span></span>
+            <span class="small"><?= e($n['test_result']) ?> <span class="text-body-secondary">(<?= e(when($n['tested_at'])) ?>)</span></span>
             <?php endif; ?>
         </form>
     </div>
@@ -197,7 +197,7 @@ $n = $ninja;
             <?= \Sentinel\Core\Csrf::field() ?>
             <button type="submit" class="btn btn-outline-secondary btn-sm"><i class="bi bi-plug me-1" aria-hidden="true"></i><?= e(__('Test connection')) ?></button>
             <?php if ($a['test_result'] !== ''): ?>
-            <span class="small"><?= e($a['test_result']) ?> <span class="text-body-secondary">(<?= e($a['tested_at']) ?> UTC)</span></span>
+            <span class="small"><?= e($a['test_result']) ?> <span class="text-body-secondary">(<?= e(when($a['tested_at'])) ?>)</span></span>
             <?php endif; ?>
         </form>
     </div>
@@ -244,7 +244,7 @@ $n = $ninja;
             <?= Csrf::field() ?>
             <button type="submit" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i><?= e(__('Check now')) ?></button>
             <?php if ($br['last_result'] !== ''): ?>
-            <span class="small <?= $br['last_ok'] ? '' : 'text-danger' ?>"><?= e($br['last_result']) ?> <span class="text-body-secondary">(<?= e($br['last_run']) ?> UTC)</span></span>
+            <span class="small <?= $br['last_ok'] ? '' : 'text-danger' ?>"><?= e($br['last_result']) ?> <span class="text-body-secondary">(<?= e(when($br['last_run'])) ?>)</span></span>
             <?php endif; ?>
         </form>
         <?php if ($br['unmatched'] !== []): ?>

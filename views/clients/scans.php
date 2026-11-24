@@ -36,7 +36,7 @@ $canQueue = can('scans.run') && !$archived && !$paused && !$globallyPaused;
         <?php [$bc, $bi, $bl] = $jobBadges[$openJob['status']] ?? $jobBadges['queued']; ?>
         <div class="d-flex align-items-center gap-2 mb-3" data-testid="open-job">
             <span class="badge <?= e($bc) ?>"><i class="bi <?= e($bi) ?> me-1" aria-hidden="true"></i><?= e($bl) ?></span>
-            <span class="small"><?= e(__('Scan #{id}, queued {date} UTC', ['id' => $openJob['id'], 'date' => $openJob['created_at']])) ?><?= (int) $openJob['outside_window'] === 1 ? ' · ' . e(__('outside the window: {reason}', ['reason' => (string) $openJob['override_reason']])) : '' ?></span>
+            <span class="small"><?= e(__('Scan #{id}, queued {date}', ['id' => $openJob['id'], 'date' => when($openJob['created_at'])])) ?><?= (int) $openJob['outside_window'] === 1 ? ' · ' . e(__('outside the window: {reason}', ['reason' => (string) $openJob['override_reason']])) : '' ?></span>
             <?php if (can('scans.run')): ?>
             <form method="post" action="<?= e(url('/scans/' . (int) $openJob['id'] . '/cancel')) ?>" class="ms-auto" data-confirm="<?= e(__('Cancel this scan?')) ?>">
                 <?= Csrf::field() ?>
@@ -74,7 +74,7 @@ $canQueue = can('scans.run') && !$archived && !$paused && !$globallyPaused;
         <table class="table table-sm align-middle">
             <thead><tr>
                 <th scope="col"><?= e(__('Address')) ?></th><th scope="col"><?= e(__('Port')) ?></th><th scope="col"><?= e(__('Service')) ?></th>
-                <th scope="col"><?= e(__('Product / version (as reported)')) ?></th><th scope="col"><?= e(__('Open since (UTC)')) ?></th><th scope="col"><?= e(__('Last checked (UTC)')) ?></th>
+                <th scope="col"><?= e(__('Product / version (as reported)')) ?></th><th scope="col"><?= e(__('Open since')) ?></th><th scope="col"><?= e(__('Last checked')) ?></th>
             </tr></thead>
             <tbody>
             <?php foreach ($services as $svc): ?>
@@ -88,8 +88,8 @@ $canQueue = can('scans.run') && !$archived && !$paused && !$globallyPaused;
                 </td>
                 <td><?= e($svc['service_name']) ?></td>
                 <td class="small"><?= e(trim($svc['product'] . ' ' . $svc['version'])) ?><?php if ($svc['extra_info'] !== ''): ?> <span class="text-body-secondary">(<?= e($svc['extra_info']) ?>)</span><?php endif; ?></td>
-                <td class="small text-nowrap"><?= e($svc['first_seen']) ?></td>
-                <td class="small text-nowrap"><?= e($svc['last_seen']) ?></td>
+                <td class="small text-nowrap"><?= e(when($svc['first_seen'])) ?></td>
+                <td class="small text-nowrap"><?= e(when($svc['last_seen'])) ?></td>
             </tr>
             <?php endforeach; ?>
             </tbody>
@@ -106,7 +106,7 @@ $canQueue = can('scans.run') && !$archived && !$paused && !$globallyPaused;
             <li class="mb-1">
                 <span class="badge <?= e($bc) ?>"><i class="bi <?= e($bi) ?> me-1" aria-hidden="true"></i><?= e($bl) ?></span>
                 #<?= e($job['id']) ?> · <?= e(($job['job_type'] ?? 'ports') === 'tls' ? __('daily certificate check') : (($job['job_type'] ?? 'ports') === 'verify' ? __('verify fix by {user}', ['user' => $job['requested_by_username'] ?? '?']) : ($job['trigger_type'] === 'manual' ? __('manual by {user}', ['user' => $job['requested_by_username'] ?? '?']) : __('weekly')))) ?>
-                · <?= e($job['finished_at'] ?? $job['created_at']) ?> UTC
+                · <?= e(when($job['finished_at'] ?? $job['created_at'])) ?>
                 <?php if ($sum !== [] && ($job['job_type'] ?? 'ports') === 'tls'): ?>· <?= e(__('{n} endpoint check(s), {k} skipped', ['n' => $sum['endpoints_checked'] ?? 0, 'k' => $sum['hosts_skipped'] ?? 0])) ?>
                 <?php elseif ($sum !== []): ?>· <?= e(__('{s} scanned, {k} skipped, {f} failed, {o} open ports', ['s' => $sum['hosts_scanned'] ?? 0, 'k' => $sum['hosts_skipped'] ?? 0, 'f' => $sum['hosts_failed'] ?? 0, 'o' => $sum['open_ports'] ?? 0])) ?><?php endif; ?>
                 <?php foreach (($sum['messages'] ?? []) as $msg): ?><div class="text-body-secondary ms-4"><?= e($msg) ?></div><?php endforeach; ?>
@@ -120,11 +120,11 @@ $canQueue = can('scans.run') && !$archived && !$paused && !$globallyPaused;
             <summary><?= e(__('Scan log: every host Sentinel touched or skipped (last {n})', ['n' => count($scanLog)])) ?></summary>
             <div class="table-responsive mt-2">
             <table class="table table-sm mb-0">
-                <thead><tr><th scope="col"><?= e(__('Time (UTC)')) ?></th><th scope="col"><?= e(__('Address')) ?></th><th scope="col"><?= e(__('Result')) ?></th><th scope="col"><?= e(__('Detail')) ?></th></tr></thead>
+                <thead><tr><th scope="col"><?= e(__('Time')) ?></th><th scope="col"><?= e(__('Address')) ?></th><th scope="col"><?= e(__('Result')) ?></th><th scope="col"><?= e(__('Detail')) ?></th></tr></thead>
                 <tbody>
                 <?php foreach ($scanLog as $row): ?>
                 <tr>
-                    <td class="text-nowrap"><?= e($row['started_at']) ?></td>
+                    <td class="text-nowrap"><?= e(when($row['started_at'])) ?></td>
                     <td><code><?= e($row['target']) ?></code><?php if ($row['hostname'] !== null): ?> <span class="text-body-secondary"><?= e($row['hostname']) ?></span><?php endif; ?></td>
                     <td><?= e($resultLabels[$row['result']] ?? $row['result']) ?></td>
                     <td><?= e($row['detail']) ?></td>

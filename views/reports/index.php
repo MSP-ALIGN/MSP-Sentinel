@@ -51,14 +51,14 @@ $kindLabel = static fn (string $k): string => match ($k) { 'executive' => __('Ex
     <?php else: ?>
     <div class="card-body p-0 table-responsive">
         <table class="table table-hover align-middle mb-0">
-            <thead><tr><th><?= e(__('Report')) ?></th><th><?= e(__('Client')) ?></th><th><?= e(__('Period')) ?></th><th><?= e(__('Created (UTC)')) ?></th><th><?= e(__('By')) ?></th><th></th></tr></thead>
+            <thead><tr><th><?= e(__('Report')) ?></th><th><?= e(__('Client')) ?></th><th><?= e(__('Period')) ?></th><th><?= e(__('Created')) ?></th><th><?= e(__('By')) ?></th><th></th></tr></thead>
             <tbody>
             <?php foreach ($reports as $r): ?>
             <tr>
                 <td><a href="<?= e(url('/reports/' . (int) $r['id'])) ?>"><?= e($kindLabel((string) $r['kind'])) ?></a> <?php if ($r['source'] === 'scheduled'): ?><span class="badge text-bg-secondary"><?= e(__('Monthly')) ?></span><?php endif; ?></td>
                 <td><?= e($r['client_name']) ?></td>
                 <td class="small"><?= e($r['period_start'] . ' – ' . $r['period_end']) ?></td>
-                <td class="small"><?= e($r['generated_at']) ?></td>
+                <td class="small"><?= e(when($r['generated_at'])) ?></td>
                 <td class="small"><?= e($r['generated_by_name'] ?? __('Monthly schedule')) ?></td>
                 <td class="text-end text-nowrap">
                     <a class="btn btn-sm btn-outline-primary" href="<?= e(url('/reports/' . (int) $r['id'] . '/view')) ?>" target="_blank" rel="noopener"><i class="bi bi-eye me-1" aria-hidden="true"></i><?= e(__('Open')) ?></a>

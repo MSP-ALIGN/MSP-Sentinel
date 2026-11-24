@@ -12,7 +12,8 @@ Add a client, record what they authorised you to scan, and run the first scan.
 
 1. Go to **Clients** and click **Add client**.
 2. Enter the **client name**.
-3. Pick the **client time zone**. The scan window and the authorisation dates use it.
+3. Pick the **client time zone**. The scan window and the authorisation dates use it. It starts as your
+   organisation's time zone (Administration → Settings → General).
 4. Set the **scan window** (from and to, in the client's time), for example 22:00 to 06:00. Scheduled scans only run
    inside it.
 5. Optionally add extra ports to scan, ports never to scan, notes, or the ITFlow client ID. Save.
