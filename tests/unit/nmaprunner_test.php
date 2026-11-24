@@ -44,4 +44,13 @@ return [
         Assert::true(microtime(true) - $start < 10, 'within seconds, not after nmap finished');
         Assert::same($before, $tempFiles(), 'temporary files removed after a stop');
     },
+    'nmap through temporary files: its time limit holds, and the version check works the same way' => function (TestContext $ctx) use ($fake, $tempFiles): void {
+        $before = $tempFiles();
+        $start = microtime(true);
+        $r = (new NmapRunner($fake($ctx), 2, 'gentle', true))->scan('203.0.113.170', [22], static fn (): bool => false);
+        Assert::true($r['timed_out'], 'timed out');
+        Assert::true(microtime(true) - $start < 10, 'stopped at the limit, not after nmap finished');
+        Assert::same($before, $tempFiles(), 'temporary files removed after a timeout');
+        Assert::same((new NmapRunner($fake($ctx), 60, 'gentle', false))->version(), (new NmapRunner($fake($ctx), 60, 'gentle', true))->version(), 'same version line either way');
+    },
 ];

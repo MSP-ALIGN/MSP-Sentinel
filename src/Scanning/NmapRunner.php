@@ -76,14 +76,13 @@ final class NmapRunner
         if (!$this->available()) {
             return '';
         }
-        $p = @proc_open([$this->nmapPath, '--version'], [0 => ['file', self::nullDevice(), 'r'], 1 => ['pipe', 'w'], 2 => ['file', self::nullDevice(), 'w']], $pipes, null, self::environment($this->nmapPath), ['bypass_shell' => true]);
-        if (!is_resource($p)) {
+        // Through the same runner as scans (1.47.2): Windows-safe, and a hung nmap can't block diagnostics (15 s limit).
+        try {
+            $r = $this->run([$this->nmapPath, '--version'], static fn (): bool => false, 15, 100_000);
+        } catch (\RuntimeException) {
             return '';
         }
-        $line = (string) fgets($pipes[1], 200);
-        fclose($pipes[1]);
-        proc_close($p);
-        return trim($line);
+        return trim(mb_substr(strtok($r['xml'], "\n") ?: '', 0, 200));
     }
 
     /** True if the configured nmap binary exists and is executable. */
@@ -247,7 +246,8 @@ final class NmapRunner
      */
     private function run(array $args, callable $shouldStop, int $timeoutSeconds, int $maxBytes): array
     {
-        if ($this->fileCapture ?? PHP_OS_FAMILY === 'Windows') {
+        // Always on Windows (its pipes can't be read without blocking); elsewhere only when a test asks for it.
+        if (PHP_OS_FAMILY === 'Windows' || $this->fileCapture === true) {
             return $this->runToFiles($args, $shouldStop, $timeoutSeconds, $maxBytes);
         }
         $proc = proc_open($args, [0 => ['file', self::nullDevice(), 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, self::environment($this->nmapPath));
@@ -332,7 +332,7 @@ final class NmapRunner
      */
     private function runToFiles(array $args, callable $shouldStop, int $timeoutSeconds, int $maxBytes): array
     {
-        // The service account's own temp folder (a virtual account's profile: nobody else can read it).
+        // The service account's temp folder: only that account, SYSTEM and Administrators can read files made there.
         $out = tempnam(sys_get_temp_dir(), 'snx');
         $err = tempnam(sys_get_temp_dir(), 'sne');
         if ($out === false || $err === false) {
@@ -354,9 +354,9 @@ final class NmapRunner
         try {
             while (proc_get_status($proc)['running']) {
                 usleep(200000);
-                clearstatcache(true, $out);
-                if ((int) @filesize($out) > $maxBytes) {
-                    $overflow = true; // runaway output: stop rather than fill the disk
+                clearstatcache();
+                if ((int) @filesize($out) > $maxBytes || (int) @filesize($err) > 1_000_000) {
+                    $overflow = true; // runaway output (results or errors): stop rather than fill the disk
                 }
                 if (microtime(true) - $lastPoll >= 1.0) {
                     $lastPoll = microtime(true);
