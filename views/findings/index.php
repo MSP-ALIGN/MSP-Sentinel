@@ -132,9 +132,10 @@ $flatRow = static function (array $f) use ($findingSeverityBadge, $findingStatus
     <div class="card-body border-bottom">
         <form method="post" id="sel-bulk" action="<?= e(url('/findings/bulk')) ?>" class="row g-2 align-items-end" data-confirm="<?= e(__('Apply this action to the selected findings?')) ?>">
             <?= Csrf::field() ?><input type="hidden" name="return" value="<?= e($returnTo) ?>">
-            <div class="col-12 small text-body-secondary"><?= e(__('Tick findings below, then choose what to do with them (at most 500 at once).')) ?> <span data-select-count="sel-bulk"></span></div>
+            <div class="col-12 small text-body-secondary"><?= e(__('Tick findings below, then choose what to do with them (at most 500 at once).')) ?> <span data-select-count="sel-bulk" data-select-count-label="<?= e(__('{n} selected')) ?>"></span></div>
             <div class="col-sm-3"><label class="form-label small mb-0" for="sel-action"><?= e(__('Action')) ?></label>
-                <select class="form-select form-select-sm" id="sel-action" name="action">
+                <select class="form-select form-select-sm" id="sel-action" name="action" required>
+                    <option value=""><?= e(__('Choose…')) ?></option>
                     <option value="assign"><?= e(__('Assign')) ?></option>
                     <option value="triage"><?= e(__('Accept risk / false positive / reopen')) ?></option>
                     <?php if ($isAdmin): ?><option value="due"><?= e(__('Set due date')) ?></option><?php endif; ?>
@@ -144,9 +145,9 @@ $flatRow = static function (array $f) use ($findingSeverityBadge, $findingStatus
                 <select class="form-select form-select-sm" id="sel-assignee" name="assignee"><option value="me"><?= e(__('Me')) ?></option><option value=""><?= e(__('Nobody')) ?></option>
                     <?php foreach ($assignable as $u): ?><option value="<?= e($u['id']) ?>"><?= e($u['display_name'] !== '' ? $u['display_name'] . ' (' . $u['username'] . ')' : $u['username']) ?></option><?php endforeach; ?></select></div>
             <div class="col-sm-2"><label class="form-label small mb-0" for="sel-status"><?= e(__('Decision (triage)')) ?></label>
-                <select class="form-select form-select-sm" id="sel-status" name="status"><option value="accepted"><?= e(__('Accept the risk')) ?></option><option value="false_positive"><?= e(__('False positive')) ?></option><option value="open"><?= e(__('Reopen')) ?></option></select></div>
+                <select class="form-select form-select-sm" id="sel-status" name="status"><option value=""><?= e(__('Choose…')) ?></option><option value="accepted"><?= e(__('Accept the risk')) ?></option><option value="false_positive"><?= e(__('False positive')) ?></option><option value="open"><?= e(__('Reopen')) ?></option></select></div>
             <?php if ($isAdmin): ?><div class="col-sm-2"><label class="form-label small mb-0" for="sel-due"><?= e(__('Due date (due)')) ?></label><input class="form-control form-control-sm" type="date" id="sel-due" name="due_date"></div><?php endif; ?>
-            <div class="col-sm-3"><label class="form-label small mb-0" for="sel-note"><?= e(__('Note (triage and due date need one)')) ?></label><input class="form-control form-control-sm" id="sel-note" name="note" maxlength="2000"></div>
+            <div class="col-sm-3"><label class="form-label small mb-0" for="sel-note"><?= e(__('Note (triage and due date need one; up to 500 characters)')) ?></label><input class="form-control form-control-sm" id="sel-note" name="note" maxlength="500"></div>
             <div class="col-12"><button class="btn btn-sm btn-primary" type="submit"><?= e(__('Apply to selected')) ?></button></div>
         </form>
     </div>

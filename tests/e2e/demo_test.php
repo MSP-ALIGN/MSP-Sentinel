@@ -60,16 +60,20 @@ return [
         Assert::contains('>Demo<', $admin->get('/clients')->body, 'Demo badge on the client list');
         $page = $ctx->clientPages($admin, (int) $riverside);
         Assert::contains('Demo client: made-up data', $page);
-        $device = (int) $ctx->db->query("SELECT id FROM devices WHERE client_id = {$riverside} AND source = 'agent' ORDER BY id LIMIT 1")->fetchColumn();
+        $device = (int) $ctx->db->query("SELECT id FROM devices WHERE client_id = {$riverside} AND source = 'agent' AND merged_into IS NULL ORDER BY id LIMIT 1")->fetchColumn();
         $report = (int) $ctx->db->query("SELECT id FROM reports WHERE client_id = {$riverside} ORDER BY id LIMIT 1")->fetchColumn();
         $finding = (int) $ctx->db->query("SELECT id FROM findings WHERE client_id = {$riverside} AND status = 'open' ORDER BY id LIMIT 1")->fetchColumn();
         foreach (['/', '/findings', '/findings/' . $finding, '/clients/' . $riverside . '/overview', '/clients/' . $riverside . '/devices/' . $device,
                   '/reports', '/reports/' . $report, '/reports/' . $report . '/view'] as $path) {
             Assert::same(200, $admin->get($path)->status, $path);
         }
-        foreach (['SMBv1 is enabled', 'Known exploited', 'FS01', 'www.riverside.example', 'sentinel-agent-01'] as $text) {
+        foreach (['SMBv1 is enabled', 'Known exploited', 'RIV-SRV-01', 'www.riverside.example', 'sentinel-agent-01'] as $text) {
             Assert::contains($text, $page . $admin->get('/findings?client=' . $riverside . '&per_page=200')->body . $admin->get('/clients/' . $riverside . '/devices/' . $device)->body, "shows {$text}");
         }
+        // The agent's copy of the file server is merged into the NinjaOne device (1.38): one row, combined page.
+        $merged = (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE client_id = {$riverside} AND source = 'agent' AND merge_state = 'auto'")->fetchColumn();
+        Assert::true($merged >= 1, 'at least one merged device');
+        Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE client_id = {$riverside} AND source <> 'agent' AND device_class = 'other' AND os_name LIKE 'Windows 11%'")->fetchColumn(), 'Windows 11 laptops are workstations');
         Assert::same(2, (int) $ctx->db->query("SELECT COUNT(*) FROM reports WHERE client_id = {$riverside}")->fetchColumn(), 'two reports');
         Assert::same($otherClients, (int) $ctx->db->query('SELECT COUNT(*) FROM clients WHERE is_demo = 0')->fetchColumn(), 'other clients untouched');
         // Loading twice does nothing.

@@ -156,6 +156,9 @@ return [
         Assert::contains('starting point', (string) $ctx->db->query("SELECT summary FROM agent_jobs WHERE id = {$job}")->fetchColumn());
         Assert::contains('Example NAS Login', (string) $ctx->db->query("SELECT web FROM device_ports WHERE device_id = {$dev} AND port = 443")->fetchColumn());
         Assert::contains("10.90.0.10", $ctx->clientSection($ctx->login('admin', 'Admin-Pass-0001!'), (int) $cid, 'devices'));
+        // The OS and type come from the network (1.38): an Ubuntu SSH banner on 10.90.0.10.
+        $os = $ctx->db->query("SELECT os_name, device_class FROM devices WHERE client_id = {$cid} AND source = 'agent' AND ip_addresses = '10.90.0.10'")->fetch();
+        Assert::same(['Ubuntu Linux', 'server'], [$os['os_name'] ?? null, $os['device_class'] ?? null], 'OS from the banner');
     },
     'a light sweep finds a new device and alerts; replays and other jobs are refused' => function (TestContext $ctx) use ($setup, $runAgent, $agentDir): void {
         [$cid, $site] = $setup($ctx);

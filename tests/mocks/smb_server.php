@@ -84,7 +84,15 @@ while (true) {
                 if ($type === 1) {
                     $note('SESSION_SETUP negotiate');
                     $session = 0x5151;
-                    $challenge = "NTLMSSP\0" . pack('V', 2) . pack('vvV', 0, 0, 56) . pack('V', 0x00088207) . random_bytes(8) . str_repeat("\0", 8) . pack('vvV', 0, 0, 56) . str_repeat("\0", 8);
+                    // A Windows Server 2022 answer (1.38): version 10.0.20348 and made-up names in the target info.
+                    $u16 = static fn (string $t): string => (string) mb_convert_encoding($t, 'UTF-16LE', 'UTF-8');
+                    $av = '';
+                    foreach ([2 => 'EXAMPLE', 1 => 'FILESRV01', 4 => 'corp.example', 3 => 'filesrv01.corp.example'] as $id => $text) {
+                        $av .= pack('vv', $id, strlen($u16($text))) . $u16($text);
+                    }
+                    $av .= pack('vv', 0, 0);
+                    $challenge = "NTLMSSP\0" . pack('V', 2) . pack('vvV', 0, 0, 56) . pack('V', 0x02888207) . random_bytes(8) . str_repeat("\0", 8)
+                        . pack('vvV', strlen($av), strlen($av), 56) . pack('CCvCCCC', 10, 0, 20348, 0, 0, 0, 15) . $av;
                     $tok = "\xa1" . chr(strlen($challenge) + 6) . "\x30" . chr(strlen($challenge) + 4) . "\xa2" . chr(strlen($challenge) + 2) . "\x04" . chr(strlen($challenge)) . $challenge;
                     $reply(0xC0000016, pack('vvvv', 9, 0, 72, strlen($tok)) . $tok);
                 } else {

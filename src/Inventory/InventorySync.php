@@ -137,6 +137,7 @@ final class InventorySync
             }
             try {
                 $stats = $this->repo->saveSnapshot($clientId, $sourceName, $snapshot);
+                $this->repo->refreshMerges($clientId); // the agent's copies of these machines show as one (1.38)
             } catch (\Throwable $ex) {
                 // Anything unexpected (bad data, a database error): record it on the link so it shows, and move on.
                 error_log('[msp-sentinel] inventory sync for client ' . $clientId . ' failed: ' . get_class($ex) . ': ' . $ex->getMessage());

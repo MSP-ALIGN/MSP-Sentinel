@@ -1,7 +1,9 @@
 <?php
 /**
  * One internal device: status, problems, open findings, installed software (catalogue matches and CVEs) and missing updates.
- * Expects: $client, $device (with software, patches), $deviceFindings, $issues, $ports (agent-found open ports).
+ * Expects: $client, $device (with software, patches), $deviceFindings, $issues, $ports (agent-found open ports, also of
+ *          merged agent devices), $merged (agent devices merged into it, 1.38), $mergeCandidates (for an unmerged agent
+ *          device: inventory devices it may be merged into), $currentUser.
  * All device data comes from the inventory source (untrusted) and is escaped.
  */
 require __DIR__ . '/../partials/finding_badges.php';
@@ -26,6 +28,22 @@ $other = count($device['software']) - count($matched);
                     <dt class="col-5"><?= e(__('Disk encryption')) ?></dt><dd class="col-7"><?= e(match ($device['encryption']) { 'on' => __('On'), 'off' => __('Off'), default => __('Unknown') }) ?></dd>
                     <dt class="col-5"><?= e(__('Last contact')) ?></dt><dd class="col-7"><?= e(($device['last_contact'] ?? '?') . ' UTC') ?></dd>
                 </dl>
+                <?php if (($device['source'] ?? '') === 'agent' && $device['os_name'] !== ''): ?><div class="text-body-secondary mt-1"><?= e(__('Operating system and type worked out from the network (Windows over SMB, or service banners).')) ?></div><?php endif; ?>
+                <?php $canMerge = ($currentUser['role'] ?? '') === 'admin'; ?>
+                <?php foreach ($merged ?? [] as $m): ?>
+                <div class="alert alert-info mt-2 mb-0 py-2"><i class="bi bi-intersect me-1" aria-hidden="true"></i><?= e(__('Also found by the on-premises agent as {name} ({ip}): shown as one device ({how}).', [
+                    'name' => (string) ($m['name'] ?: $m['dns_name'] ?: '?'), 'ip' => str_replace(',', ', ', (string) $m['ip_addresses']),
+                    'how' => $m['merge_state'] === 'manual' ? __('merged by an admin') : __('matched by address and name')])) ?>
+                    <?php if ($canMerge): ?><form method="post" action="<?= e(url('/clients/' . (int) $client['id'] . '/devices/' . (int) $m['id'] . '/merge')) ?>" class="d-inline" data-confirm="<?= e(__('Show the agent\'s device as a separate machine? It stays separate until merged again by hand.')) ?>"><?= \Sentinel\Core\Csrf::field() ?><input type="hidden" name="target" value=""><button type="submit" class="btn btn-sm btn-link p-0 ms-1"><?= e(__('Not the same machine: split')) ?></button></form><?php endif; ?></div>
+                <?php endforeach; ?>
+                <?php if ($canMerge && ($mergeCandidates ?? []) !== []): ?>
+                <form method="post" action="<?= e(url('/clients/' . (int) $client['id'] . '/devices/' . (int) $device['id'] . '/merge')) ?>" class="d-flex flex-wrap gap-2 align-items-end mt-2"><?= \Sentinel\Core\Csrf::field() ?>
+                    <div><label class="form-label mb-0" for="merge-target"><?= e(__('Same machine as an inventory device?')) ?></label>
+                        <select class="form-select form-select-sm" id="merge-target" name="target" required><option value=""><?= e(__('Choose…')) ?></option>
+                            <?php foreach ($mergeCandidates as $cand): ?><option value="<?= e((int) $cand['id']) ?>"><?= e($cand['name'] . ($cand['same_ip'] ? ' · ' . __('same address') : '')) ?></option><?php endforeach; ?></select></div>
+                    <button type="submit" class="btn btn-sm btn-outline-primary"><?= e(__('Merge')) ?></button>
+                </form>
+                <?php endif; ?>
                 <?php if ($device['removed_at'] !== null): ?><div class="alert alert-secondary mt-2 mb-0 py-2"><?= e(__('No longer reported by the source since {t} UTC.', ['t' => $device['removed_at']])) ?></div><?php endif; ?>
             </div>
         </div>

@@ -386,6 +386,13 @@ final class Runner
                 if ($this->probes !== null && in_array(161, $job['udp_ports'] ?? [], true) && !$shouldStop()) {
                     $found[$ip]['snmp'] = $this->probes->snmp((string) $ip); // UDP 161, listed in the signed job
                 }
+                // Windows version and names from the NTLM challenge over SMB (1.38): read only, no login (SmbShares::ntlmInfo).
+                if ($this->smb !== null && !$shouldStop() && in_array(445, array_map(static fn (array $p): int => (int) $p['port'], $found[$ip]['ports'] ?? []), true)) {
+                    $info = $this->smb->ntlmInfo((string) $ip);
+                    if ($info !== null) {
+                        $found[$ip]['ntlm'] = $info;
+                    }
+                }
                 $found[$ip]['scanned'] = true;
             }
         }

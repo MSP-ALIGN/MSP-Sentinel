@@ -92,6 +92,10 @@ final class HealthCheck
         // Backups (1.37): the nightly job's last runs (BackupStatus).
         $safe('backups', __('Backups'), function () use ($add): void {
             $status = new BackupStatus($this->settings);
+            if ($status->external()) {
+                $add('backups', __('Backups'), 'ok', __('Made another way (an admin said so on the System page): Sentinel doesn\'t check them.'));
+                return;
+            }
             $h = $status->history();
             $problem = $status->problem();
             $add('backups', __('Backups'), $h === [] ? 'warn' : ($problem === null ? 'ok' : 'fail'),

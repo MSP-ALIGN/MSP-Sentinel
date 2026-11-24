@@ -117,7 +117,7 @@ final class ClientController extends Controller
             'devices' => ['inventorySources' => fn () => array_map(static fn (\Sentinel\Inventory\InventorySource $s): string => $s->label(), App::inventorySources()),
                           'inventoryLinks' => fn () => array_map(fn (\Sentinel\Inventory\InventorySource $s): ?array => App::inventory()->link($cid, $s->name()), App::inventorySources()),
                           'devices' => fn () => App::inventory()->devicesForClient($cid, 500),
-                          'deviceTotal' => fn () => (int) App::db()->query('SELECT COUNT(*) FROM devices WHERE removed_at IS NULL AND client_id = ' . $cid)->fetchColumn(),
+                          'deviceTotal' => fn () => (int) App::db()->query('SELECT COUNT(*) FROM devices WHERE removed_at IS NULL AND merged_into IS NULL AND client_id = ' . $cid)->fetchColumn(),
                           'devicePatches' => fn () => App::inventory()->patchesByDevice($cid)],
             'authorisations' => ['authorisations' => $authorisations],
             'engagements' => ['engagements' => fn () => App::engagements()->forClient($cid)],

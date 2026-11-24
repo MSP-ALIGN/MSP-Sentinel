@@ -2,6 +2,23 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.38.0 (2026-11-24): device OS from the network, one device per machine
+
+- **Operating system and type for agent devices.** The agent reads a Windows machine's version and build over SMB
+  without logging in (the NTLM handshake, as nmap's ntlm-info does) and Sentinel recognises other devices from their
+  service banners and web pages (Linux distributions, NAS boxes, printers, firewalls, hypervisors). Devices now show
+  their OS and are typed workstation, server or other. Windows 11 laptops in the demo data are workstations again.
+- **One device per machine.** A machine that both the agent and NinjaOne report is one row in the Devices list
+  (matched by address and name, or address alone when the agent saw no name). Its page combines NinjaOne's OS,
+  antivirus and patches with the agent's services, certificates and findings. Admins can split a wrong match or merge
+  by hand; nothing is deleted (migration 0044).
+- **Fixes to 1.37 from review:**
+  - the bulk action panel on Findings starts with no action and no decision chosen, and its note is limited to 500
+    characters; the selection count is translated and stays right after going back;
+  - **Backups are made another way** on the System page stops backup warnings and alerts;
+  - a backup run stopped by a missing or short encryption passphrase is recorded as failed;
+  - two backup runs at once both stay in the history.
+
 ### 1.37.0 (2026-11-24): backup status, picked findings, client risk at a glance
 
 - **Backups you can see.** Each nightly backup records when it ran, whether it worked, its size and whether it was

@@ -54,7 +54,8 @@ $chip = static function (string $sev, string $text): string {
                 <td><a href="<?= e(url('/clients/' . (int) $client['id'] . '/devices/' . (int) $d['id'])) ?>"><?= e($d['name'] !== '' ? $d['name'] : $d['source_id']) ?></a>
                     <div class="text-body-secondary"><?= e(match ($d['device_class']) { 'server' => __('Server'), 'workstation' => __('Workstation'), default => __('Other') }) ?>
                         <?php if ($d['ip_addresses'] !== ''): ?> · <span class="font-monospace"><?= e(str_replace(',', ', ', mb_strimwidth((string) $d['ip_addresses'], 0, 60, '…'))) ?></span><?php endif; ?>
-                        <?php if ($d['source'] === 'agent'): ?> · <?= e(__('found by agent')) ?><?php endif; ?></div></td>
+                        <?php if ($d['source'] === 'agent'): ?> · <?= e(__('found by agent')) ?><?php endif; ?>
+                        <?php if ((int) ($d['merged_count'] ?? 0) > 0): ?> · <span class="badge text-bg-secondary"><?= e(__('also found by agent')) ?></span><?php endif; ?></div></td>
                 <td><?= e($d['os_name'] ?: '?') ?><?php if ($d['os_build'] !== ''): ?> <span class="text-body-secondary font-monospace"><?= e($d['os_build']) ?></span><?php endif; ?></td>
                 <?php $open = (int) $d['open_fail'] + (int) $d['open_warn']; ?>
                 <td><?php if ($issues === [] && $open === 0): ?><?= $chip('ok', __('No problems found')) ?><?php endif; ?>

@@ -2,6 +2,22 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.36.0 (2026-11-24): agents in Docker and on Proxmox
+
+- **Docker agent.** `docker/agent/Dockerfile` and `docker/agent/docker-compose.yml` run the on-premises agent as a
+  container on a Linux Docker host: host network (so discovery, MAC addresses and name requests work), unprivileged
+  user, every capability dropped, read-only file system, config volume mounted read-only.
+  - Updated by pulling a new image: Docker agents never get an in-place update. The Agents page shows
+    "Update by pulling image x.y.z" instead of an Update button, and **Update all agents** says how many need a new
+    image.
+  - NetBIOS name requests (UDP 137) aren't heard in Docker; LLMNR requests are.
+  - An optional GitHub Actions workflow publishes signed multi-architecture images to GitHub's registry when you push
+    a release tag. See [the Docker guide](guides/docker-agent.md).
+- **Proxmox.** The normal installer works in an unprivileged Debian 13 LXC container. It checks systemd's sandbox and
+  relaxes only that if the container has no nesting, with a warning. `install/proxmox-agent-ct.sh` creates a suitable
+  container on the Proxmox host. See [the Proxmox guide](guides/proxmox-agent.md).
+- Agents report how they are installed: the Agents page shows a **Docker** or **LXC** badge (migration 0043).
+
 ### 1.35.1 (2026-11-24): update hardening, fixes from review
 
 - **Windows: no new code as SYSTEM during an update either.** The update task's pre-flight used to run the new

@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.37.0](https://img.shields.io/badge/version-1.37.0-ff5a1f?style=flat-square)
+![Version 1.38.0](https://img.shields.io/badge/version-1.38.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,23 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.38.0 (2026-11-24): device OS from the network, one device per machine
+
+- **Operating system and type for agent devices.** The agent reads a Windows machine's version and build over SMB
+  without logging in (the NTLM handshake, as nmap's ntlm-info does) and Sentinel recognises other devices from their
+  service banners and web pages (Linux distributions, NAS boxes, printers, firewalls, hypervisors). Devices now show
+  their OS and are typed workstation, server or other. Windows 11 laptops in the demo data are workstations again.
+- **One device per machine.** A machine that both the agent and NinjaOne report is one row in the Devices list
+  (matched by address and name, or address alone when the agent saw no name). Its page combines NinjaOne's OS,
+  antivirus and patches with the agent's services, certificates and findings. Admins can split a wrong match or merge
+  by hand; nothing is deleted (migration 0044).
+- **Fixes to 1.37 from review:**
+  - the bulk action panel on Findings starts with no action and no decision chosen, and its note is limited to 500
+    characters; the selection count is translated and stays right after going back;
+  - **Backups are made another way** on the System page stops backup warnings and alerts;
+  - a backup run stopped by a missing or short encryption passphrase is recorded as failed;
+  - two backup runs at once both stay in the history.
+
 ### 1.37.0 (2026-11-24): backup status, picked findings, client risk at a glance
 
 - **Backups you can see.** Each nightly backup records when it ran, whether it worked, its size and whether it was
@@ -140,22 +157,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 - **Smaller fixes:** the Proxmox helper checks addresses strictly and refuses `--gw` with DHCP; the image workflow tags
   `latest` only for full releases and signs once by digest; an update request ended for a Docker agent is audited;
   `.dockerignore` leaves out `.env` files and bundles.
-
-### 1.36.0 (2026-11-24): agents in Docker and on Proxmox
-
-- **Docker agent.** `docker/agent/Dockerfile` and `docker/agent/docker-compose.yml` run the on-premises agent as a
-  container on a Linux Docker host: host network (so discovery, MAC addresses and name requests work), unprivileged
-  user, every capability dropped, read-only file system, config volume mounted read-only.
-  - Updated by pulling a new image: Docker agents never get an in-place update. The Agents page shows
-    "Update by pulling image x.y.z" instead of an Update button, and **Update all agents** says how many need a new
-    image.
-  - NetBIOS name requests (UDP 137) aren't heard in Docker; LLMNR requests are.
-  - An optional GitHub Actions workflow publishes signed multi-architecture images to GitHub's registry when you push
-    a release tag. See [the Docker guide](docs/guides/docker-agent.md).
-- **Proxmox.** The normal installer works in an unprivileged Debian 13 LXC container. It checks systemd's sandbox and
-  relaxes only that if the container has no nesting, with a warning. `install/proxmox-agent-ct.sh` creates a suitable
-  container on the Proxmox host. See [the Proxmox guide](docs/guides/proxmox-agent.md).
-- Agents report how they are installed: the Agents page shows a **Docker** or **LXC** badge (migration 0043).
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

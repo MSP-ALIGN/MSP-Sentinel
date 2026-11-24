@@ -151,14 +151,18 @@
         var boxes = function () { return document.querySelectorAll('input[type=checkbox][form="' + formId + '"]'); };
         var count = document.querySelector('[data-select-count="' + formId + '"]');
         var update = function () {
-            var n = Array.prototype.filter.call(boxes(), function (b) { return b.checked; }).length;
-            if (count) { count.textContent = n > 0 ? '(' + n + ' selected)' : ''; }
+            var list = boxes();
+            var n = Array.prototype.filter.call(list, function (b) { return b.checked; }).length;
+            if (count) { count.textContent = n > 0 ? '(' + (count.getAttribute('data-select-count-label') || '{n} selected').replace('{n}', String(n)) + ')' : ''; }
+            all.checked = n > 0 && n === list.length;
+            all.indeterminate = n > 0 && n < list.length;
         };
         all.addEventListener('change', function () {
             boxes().forEach(function (b) { b.checked = all.checked; });
             update();
         });
         boxes().forEach(function (b) { b.addEventListener('change', update); });
+        update(); // boxes the browser kept ticked after going back
     });
 
     // Instant list filters (1.34): <input data-filter-list="#container" [data-filter-count="#el"]> hides the

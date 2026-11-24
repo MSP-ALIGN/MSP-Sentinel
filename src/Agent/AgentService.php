@@ -282,6 +282,7 @@ final class AgentService
                         $prev->execute(['id' => $deviceId]);
                         // An undecided (or skipped) check keeps the earlier answer: no answer is not evidence of a fix.
                         $this->db->prepare('UPDATE devices SET checks = :c WHERE id = :id')->execute(['c' => self::checks($snmp, ['snmp_public', 'snmp_private'], (string) $prev->fetchColumn()), 'id' => $deviceId]);
+                        $this->saveOsGuess($deviceId, is_array($h['ntlm'] ?? null) ? $h['ntlm'] : null);
                     }
                     $stats['accepted']++;
                 }
@@ -295,6 +296,7 @@ final class AgentService
             $this->db->prepare("UPDATE devices SET removed_at = UTC_TIMESTAMP() WHERE source = 'agent' AND site_id = :s AND removed_at IS NULL
                                 AND COALESCE(last_full_seen, first_seen) < UTC_TIMESTAMP() - INTERVAL " . self::REMOVE_AFTER_DAYS . ' DAY')->execute(['s' => $siteId]);
         }
+        $this->inventory->refreshMerges($clientId); // machines the inventory source knows show as one device (1.38)
         $remaining = [];
         if ($full && $status !== 'done') {
             foreach (array_slice((array) ($data['unscanned'] ?? []), 0, self::MAX_RESUME) as $ip) {
@@ -632,6 +634,36 @@ final class AgentService
             }
         }
         return $out;
+    }
+
+    /**
+     * The OS and device type of an agent device after a finished host scan (1.38): from the NTLM answer the agent
+     * read over SMB and the banners of its open ports (OsGuess). An unknown result keeps what was known (no answer is
+     * not evidence). The NTLM names fill an empty device name and DNS name.
+     *
+     * @param array<string,mixed>|null $ntlm untrusted (from the agent): numbers range-checked, names cleaned
+     */
+    private function saveOsGuess(int $deviceId, ?array $ntlm): void
+    {
+        $n = null;
+        if ($ntlm !== null) {
+            $int = static fn (mixed $v, int $max): int => is_int($v) && $v >= 0 && $v <= $max ? $v : 0;
+            $n = ['major' => $int($ntlm['major'] ?? 0, 255), 'minor' => $int($ntlm['minor'] ?? 0, 255), 'build' => $int($ntlm['build'] ?? 0, 65535)];
+        }
+        $ports = $this->db->prepare('SELECT port, product, version, extra_info, web FROM device_ports WHERE device_id = :d');
+        $ports->execute(['d' => $deviceId]);
+        $rows = array_map(static fn (array $r): array => $r + ['web' => null] ? array_merge($r, ['web' => json_decode((string) ($r['web'] ?? ''), true)]) : $r, $ports->fetchAll());
+        $g = \Sentinel\Inventory\OsGuess::guess($n, $rows);
+        if ($g !== null) {
+            $this->db->prepare('UPDATE devices SET os_name = :o, os_build = :b, device_class = :c WHERE id = :id')
+                ->execute(['o' => mb_substr($g['os_name'], 0, 255), 'b' => $g['os_build'], 'c' => $g['device_class'], 'id' => $deviceId]);
+        }
+        $nb = InventoryRepository::clean($ntlm['netbios_name'] ?? '', 64);
+        $dns = InventoryRepository::clean($ntlm['dns_name'] ?? '', 255);
+        if ($nb !== '' || $dns !== '') {
+            $this->db->prepare("UPDATE devices SET name = IF(name = '', :n, name), dns_name = IF(dns_name = '', :d, dns_name) WHERE id = :id")
+                ->execute(['n' => $nb !== '' ? $nb : $dns, 'd' => strtolower($dns), 'id' => $deviceId]);
+        }
     }
 
     /** A canonical IP address, or null. */

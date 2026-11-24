@@ -22,12 +22,35 @@ final class BackupStatus
     /** A good backup older than this is a problem (the job runs nightly; two missed nights). */
     public const STALE_HOURS = 48;
 
-    public function __construct(private readonly Settings $settings)
+    /** @param \PDO|null $db for the lock that serialises record() (the backup job passes it) */
+    public function __construct(private readonly Settings $settings, private readonly ?\PDO $db = null)
     {
     }
 
-    /** Record one run of the backup job. */
+    /** Whether an admin said backups are made another way (no warning, no alert; 1.37.1). */
+    public function external(): bool
+    {
+        return $this->settings->fresh('backup_external') === '1';
+    }
+
+    /** Record one run of the backup job (serialised with a lock, so two runs at once both stay in the list). */
     public function record(bool $ok, string $file, int $bytes, bool $encrypted, string $error = ''): void
+    {
+        $db = $this->db;
+        if ($db === null) {
+            $this->recordLocked($ok, $file, $bytes, $encrypted, $error);
+            return;
+        }
+        $lock = $db->quote('msp_sentinel_backup_history_' . substr(hash('sha256', (string) $db->query('SELECT DATABASE()')->fetchColumn()), 0, 16));
+        $db->query("SELECT GET_LOCK({$lock}, 10)");
+        try {
+            $this->recordLocked($ok, $file, $bytes, $encrypted, $error);
+        } finally {
+            $db->query("SELECT RELEASE_LOCK({$lock})");
+        }
+    }
+
+    private function recordLocked(bool $ok, string $file, int $bytes, bool $encrypted, string $error): void
     {
         $entry = ['at' => gmdate('Y-m-d H:i:s'), 'ok' => $ok, 'file' => mb_substr(basename($file), 0, 120), 'bytes' => max(0, $bytes),
                   'encrypted' => $encrypted, 'error' => mb_substr($error, 0, 300)];
@@ -60,7 +83,7 @@ final class BackupStatus
     {
         $now ??= time();
         $h = $this->history();
-        if ($h === []) {
+        if ($h === [] || $this->external()) {
             return null;
         }
         if (!$h[0]['ok']) {

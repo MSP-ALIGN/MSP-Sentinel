@@ -280,6 +280,8 @@ return [
             'section' => 'reference',
             'title' => 'Internal devices',
             'paragraphs' => [
+                'Devices the agent finds get their operating system and type from the network, without logging in: Windows gives its version and build over SMB; other devices are recognised from service banners and web pages (Linux, NAS, printers, firewalls, hypervisors).',
+                'One device per machine: when NinjaOne also reports a machine the agent finds (same address, and the same name or none), the Devices list shows one row and the device page combines both. Admins can split a wrong match, or merge an agent device into a NinjaOne device by hand on its page.',
                 'Internal devices come from the on-premises agent and, once connected, from NinjaOne. They are on the client\'s Devices page; a device page lists its open services, installed software with known vulnerabilities, and missing updates. After the agent\'s first scan (the baseline), devices never seen before are announced as new, unless NinjaOne already knows them.',
                 'Agent findings: known vulnerabilities in the services found (distribution builds are never "confirmed"), and certificates that are expired, accept old TLS or use a weak key. Self-signed certificates are normal inside a network and are not findings.',
                 'Risky internal protocols, checked read-only: SMBv1 enabled, Telnet open and SNMP answering the default "private" community are Fails; SMB signing not required, Remote Desktop without Network Level Authentication, FTP open, SNMP answering "public" and login pages over plain HTTP are Warnings. The SNMP check sends one read request with the default community names.',
@@ -355,6 +357,15 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.38.0',
+            'date' => '2026-11-24',
+            'items' => [
+                'Devices the agent finds get their operating system and type from the network (Windows version over SMB without logging in; banners for Linux, NAS, printers, firewalls). Windows 11 machines show as workstations.',
+                'One device per machine: a machine both the agent and NinjaOne report shows as one row with a combined page; admins can split or merge by hand.',
+                'Fixes to 1.37: the bulk action panel starts with no action chosen; backups can be marked as made another way (no warning or alert); a backup run stopped by a missing passphrase is recorded.',
+            ],
+        ],
         [
             'version' => '1.37.0',
             'date' => '2026-11-24',

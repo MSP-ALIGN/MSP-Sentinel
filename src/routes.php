@@ -128,6 +128,7 @@ $router->add('POST', '/clients/{id}/sites/{site}/directory/trust', [\Sentinel\Co
 $router->add('POST', '/clients/{id}/sites/{site}/directory/remove', [\Sentinel\Controllers\DirectoryController::class, 'remove'], $admin);
 // Internal devices (inventory sources): everyone views; technicians ask for a sync; admins link and unlink.
 $router->add('GET', '/clients/{id}/devices/{device}', [InventoryController::class, 'device']);
+$router->add('POST', '/clients/{id}/devices/{device}/merge', [InventoryController::class, 'merge'], $admin);
 $router->add('GET', '/clients/{id}/inventory/link', [InventoryController::class, 'linkForm'], $admin);
 $router->add('POST', '/clients/{id}/inventory/link', [InventoryController::class, 'link'], $admin);
 $router->add('POST', '/clients/{id}/inventory/unlink', [InventoryController::class, 'unlink'], $admin);
@@ -198,6 +199,7 @@ $router->add('POST', '/admin/system/update', [SystemController::class, 'update']
 $router->add('POST', '/admin/system/agents-update', [SystemController::class, 'updateAgents'], $admin);
 $router->add('POST', '/admin/system/agents-move', [SystemController::class, 'moveAgents'], $admin);
 $router->add('POST', '/admin/system/release-key', [SystemController::class, 'releaseKey'], $admin);
+$router->add('POST', '/admin/system/backups', [SystemController::class, 'backups'], $admin);
 $router->add('POST', '/admin/system/release-sign', [SystemController::class, 'releaseSign'], $admin);
 $router->add('GET', '/admin/api', [ApiAdminController::class, 'index'], $admin);
 $router->add('GET', '/admin/api/docs', [ApiAdminController::class, 'docs'], $admin);

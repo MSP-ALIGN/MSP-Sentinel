@@ -210,6 +210,19 @@ return [
         $old = [['at' => gmdate('Y-m-d H:i:s', time() - 3 * 86400), 'ok' => true, 'file' => 'x.tar.gz', 'bytes' => 1, 'encrypted' => true, 'error' => '']];
         App::settings()->set('backup_history', json_encode($old));
         Assert::contains('No good backup in the last 48 hours', (string) (new \Sentinel\System\BackupStatus(App::settings()))->problem());
+        // Made another way (VM snapshots): no warning, no alert, until switched back (1.37.1).
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $admin->submit('/admin/system', '/admin/system/backups', ['backup_external' => '1']);
+        Assert::same(null, (new \Sentinel\System\BackupStatus(App::settings()))->problem(), 'no problem reported');
+        Assert::same('ok', $health()['status']);
+        $admin->submit('/admin/system', '/admin/system/backups', []);
+        Assert::contains('No good backup', (string) (new \Sentinel\System\BackupStatus(App::settings()))->problem(), 'checked again');
+        Assert::status(400, $ctx->client()->post('/admin/system/backups', ['backup_external' => '1']), 'CSRF-checked');
+        Assert::same('0', App::settings()->fresh('backup_external'));
+        // A cron run with encryption on but no passphrase is recorded as a failure.
+        [$code] = $ctx->cli('bin/backup.php', ['--dir=' . $dir(), '--encrypt'], ['SENTINEL_BACKUP_PASSPHRASE' => 'short']);
+        Assert::same(2, $code);
+        Assert::contains('passphrase', (new \Sentinel\System\BackupStatus(App::settings()))->history()[0]['error']);
         App::settings()->set('backup_history', '');
     },
 ];

@@ -113,6 +113,92 @@ final class SmbShares
         }
     }
 
+    /**
+     * The Windows version and names a server gives in its NTLM challenge (1.38), without logging in: SMB2 negotiate,
+     * then a session setup carrying an NTLM NEGOTIATE; the server's CHALLENGE holds its version (major.minor.build) and
+     * its NetBIOS and DNS names. The handshake stops there (no AUTHENTICATE is sent) and the connection is closed: read
+     * only, nothing to log in with, the same information nmap's ntlm-info reads. Null when it doesn't answer like a
+     * Windows/Samba SMB server.
+     *
+     * Untrusted: everything in the answer (lengths and offsets are bounds-checked, names cleaned and shortened).
+     *
+     * @return array{major:int, minor:int, build:int, netbios_name:string, netbios_domain:string, dns_name:string, dns_domain:string}|null
+     */
+    public function ntlmInfo(string $ip, int $port = 445): ?array
+    {
+        $this->deadline = microtime(true) + 20;
+        $this->messageId = 0;
+        $this->sessionId = 0;
+        try {
+            [$host, $real] = $this->connector->endpoint($ip, $port);
+            $sock = @stream_socket_client('tcp://' . Connector::hostPort($host, $real), $errno, $errstr, self::TIMEOUT);
+            if ($sock === false) {
+                return null;
+            }
+            stream_set_timeout($sock, (int) self::TIMEOUT);
+            $this->sock = $sock;
+            if (!$this->negotiate()) {
+                return null;
+            }
+            // NEGOTIATE asking for the version and target info (NTLMSSP_NEGOTIATE_VERSION, _TARGET_INFO).
+            $flags = 0x00000001 | 0x00000004 | 0x00000200 | 0x00008000 | 0x00080000 | 0x00800000 | 0x02000000 | 0x20000000 | 0x80000000;
+            $ntlmNegotiate = "NTLMSSP\0" . pack('VV', 1, $flags) . str_repeat("\0", 16);
+            $mech = self::der(0x06, "\x2b\x06\x01\x04\x01\x82\x37\x02\x02\x0a");
+            $init = self::der(0x60, self::der(0x06, "\x2b\x06\x01\x05\x05\x02")
+                . self::der(0xa0, self::der(0x30, self::der(0xa0, self::der(0x30, $mech)) . self::der(0xa2, self::der(0x04, $ntlmNegotiate)))));
+            $r = $this->call(1, pack('vCCVVvvP', 25, 0, 1, 0, 0, 88, strlen($init), 0) . $init);
+            $this->sessionId = 0; // never logged in: nothing to log off
+            $p = strpos($r['raw'], "NTLMSSP\0\x02\0\0\0");
+            return $p === false ? null : self::parseChallenge(substr($r['raw'], $p));
+        } catch (\RuntimeException) {
+            return null;
+        } finally {
+            if ($this->sock !== null) {
+                @fclose($this->sock);
+                $this->sock = null;
+            }
+        }
+    }
+
+    /**
+     * An NTLM CHALLENGE message's version and names ([MS-NLMP] 2.2.1.2, 2.2.2.1); null when it is malformed.
+     *
+     * @return array{major:int, minor:int, build:int, netbios_name:string, netbios_domain:string, dns_name:string, dns_domain:string}|null
+     */
+    public static function parseChallenge(string $c): ?array
+    {
+        if (strlen($c) < 48 || substr($c, 0, 12) !== "NTLMSSP\0\x02\0\0\0") {
+            return null;
+        }
+        $flags = unpack('V', substr($c, 20, 4))[1];
+        $out = ['major' => 0, 'minor' => 0, 'build' => 0, 'netbios_name' => '', 'netbios_domain' => '', 'dns_name' => '', 'dns_domain' => ''];
+        if (($flags & 0x02000000) !== 0 && strlen($c) >= 56) {
+            $v = unpack('Cmajor/Cminor/vbuild', substr($c, 48, 4));
+            $out['major'] = $v['major'];
+            $out['minor'] = $v['minor'];
+            $out['build'] = $v['build'];
+        }
+        $ti = unpack('vlen/vmax/Voff', substr($c, 40, 8));
+        if ($ti['len'] > 0 && $ti['off'] >= 48 && $ti['off'] + $ti['len'] <= strlen($c) && $ti['len'] <= 4096) {
+            $info = substr($c, $ti['off'], $ti['len']);
+            $o = 0;
+            $names = [1 => 'netbios_name', 2 => 'netbios_domain', 3 => 'dns_name', 4 => 'dns_domain'];
+            while ($o + 4 <= strlen($info)) {
+                ['id' => $id, 'len' => $len] = unpack('vid/vlen', substr($info, $o, 4));
+                $o += 4;
+                if ($id === 0 || $o + $len > strlen($info)) {
+                    break; // MsvAvEOL, or a pair running past the end
+                }
+                if (isset($names[$id])) {
+                    $text = (string) @mb_convert_encoding(substr($info, $o, $len), 'UTF-8', 'UTF-16LE');
+                    $out[$names[$id]] = mb_substr(trim((string) preg_replace('/[^\p{L}\p{N}._-]+/u', '', $text)), 0, 64);
+                }
+                $o += $len;
+            }
+        }
+        return $out['major'] === 0 && $out['netbios_name'] === '' && $out['dns_name'] === '' ? null : $out;
+    }
+
     // ------------------------------------------------------------------ SMB2 framing
 
     /** Send one SMB2 request; returns its message id. */

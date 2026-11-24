@@ -40,7 +40,8 @@ After updating, sign the new version for your agents: see [On-premises agents](a
 3. Copy the backups off the server on your own schedule. Encrypt every copy that leaves the server.
 4. **Check them** under **Administration → System → Backups**: each run with its time, result, size and whether it was
    encrypted. The health check turns red, and admins get an alert (in-app and email, at most once a day), when the last
-   backup failed or the last good one is more than 2 days old.
+   backup failed or the last good one is more than 2 days old. If backups are made another way (VM snapshots, say), tick
+   **Backups are made another way** there: Sentinel then neither warns nor alerts about its own backup job.
 
 ## Restore
 

@@ -28,6 +28,7 @@ final class SystemController extends Controller
         return $this->page('admin/system', __('System'), [
             'checks' => App::health()->run(),
             'backups' => (new \Sentinel\System\BackupStatus(App::settings()))->history(),
+            'backupExternal' => App::settings()->fresh('backup_external') === '1',
             'version' => App::version(),
             'build' => App::build(),
             'demoLoaded' => (new \Sentinel\Demo\DemoData(App::db(), (int) $this->user()['id']))->isLoaded(),
@@ -157,6 +158,19 @@ final class SystemController extends Controller
             default => __('Release key replaced. Agents that pinned the old key must be given the new one by hand (see the list below). Sign this version with the new key.'),
         });
         return $back;
+    }
+
+    /**
+     * POST /admin/system/backups (admins): whether backups are made another way (VM snapshots...), so Sentinel neither
+     * warns nor alerts about its own backup job (1.37.1). Untrusted: the checkbox (only '1' turns it on). Audited.
+     */
+    public function backups(Request $request): Response
+    {
+        $external = $request->input('backup_external') === '1';
+        App::settings()->set('backup_external', $external ? '1' : '0');
+        $this->audit($request, 'settings.backup_external', null, null, ['external' => $external]);
+        Session::flash('success', $external ? __('Saved: Sentinel no longer warns about its own backups.') : __('Saved: Sentinel checks its backups again.'));
+        return Response::redirect('/admin/system#backups');
     }
 
     /** POST /admin/system/release-sign (admins): keep the signature the admin's browser made for this installation's files. */

@@ -129,12 +129,57 @@ final class InventoryController extends Controller
     {
         $client = $this->client($params);
         $device = App::inventory()->device((int) $client['id'], (int) ($params['device'] ?? 0)) ?? throw new HttpException(404);
-        $stmt = App::db()->prepare("SELECT id, severity, status, title FROM findings WHERE client_id = :c AND device_id = :d AND status <> 'resolved' ORDER BY severity = 'fail' DESC, id");
-        $stmt->execute(['c' => (int) $client['id'], 'd' => (int) $device['id']]);
+        // An agent device merged into an inventory device (1.38): its page is the combined one.
+        if (($device['merged_into'] ?? null) !== null) {
+            return Response::redirect('/clients/' . (int) $client['id'] . '/devices/' . (int) $device['merged_into']);
+        }
+        // The combined device: this row and the agent devices merged into it (findings, open services, protocol issues).
+        $merged = App::inventory()->mergedInto((int) $device['id']);
+        $ids = array_merge([(int) $device['id']], array_map(static fn (array $m): int => (int) $m['id'], $merged));
+        $stmt = App::db()->prepare('SELECT id, severity, status, title FROM findings WHERE client_id = ? AND device_id IN (' . implode(',', array_fill(0, count($ids), '?')) . ")
+                                    AND status <> 'resolved' ORDER BY severity = 'fail' DESC, id");
+        $stmt->execute(array_merge([(int) $client['id']], $ids));
+        $ports = [];
+        foreach ($ids as $id) {
+            $ports = array_merge($ports, App::inventory()->ports($id));
+        }
+        // An unmerged agent device: inventory devices an admin may merge it into (same address first).
+        $candidates = [];
+        if ((string) $device['source'] === 'agent') {
+            $c = App::db()->prepare("SELECT id, name, ip_addresses FROM devices WHERE client_id = :c AND source <> 'agent' AND removed_at IS NULL AND merged_into IS NULL ORDER BY name LIMIT 500");
+            $c->execute(['c' => (int) $client['id']]);
+            $mine = array_map('trim', explode(',', (string) $device['ip_addresses']));
+            foreach ($c->fetchAll() as $row) {
+                $row['same_ip'] = array_intersect($mine, array_map('trim', explode(',', (string) $row['ip_addresses']))) !== [];
+                $candidates[] = $row;
+            }
+            usort($candidates, static fn (array $a, array $b): int => [$b['same_ip'], $a['name']] <=> [$a['same_ip'], $b['name']]);
+        }
         return $this->page('inventory/device', (string) ($device['name'] !== '' ? $device['name'] : $device['source_id']), [
-            'client' => $client, 'device' => $device, 'deviceFindings' => $stmt->fetchAll(), 'ports' => App::inventory()->ports((int) $device['id']),
-            'issues' => array_merge(\Sentinel\Inventory\DeviceRules::issues($device, $device['patches']), \Sentinel\Agent\ProtocolRules::issues($device, App::inventory()->ports((int) $device['id']))),
+            'client' => $client, 'device' => $device, 'deviceFindings' => $stmt->fetchAll(), 'ports' => $ports, 'merged' => $merged, 'mergeCandidates' => $candidates,
+            'issues' => array_merge(\Sentinel\Inventory\DeviceRules::issues($device, $device['patches']), \Sentinel\Agent\ProtocolRules::issues($device, $ports)),
         ]);
+    }
+
+    /**
+     * POST /clients/{id}/devices/{device}/merge (admins): an agent device is the same machine as an inventory device
+     * (target), or (target empty: "split") a different one, which the matching rules then leave alone (1.38).
+     * Untrusted: the device and target IDs (both must belong to this client; the target must be an inventory device).
+     */
+    public function merge(Request $request, array $params): Response
+    {
+        $client = $this->client($params);
+        $deviceId = (int) ($params['device'] ?? 0);
+        $raw = $request->input('target');
+        $target = $raw === '' ? null : (ctype_digit($raw) && strlen($raw) < 10 ? (int) $raw : -1);
+        $ok = $target !== -1 && App::inventory()->setMerge((int) $client['id'], $deviceId, $target);
+        if (!$ok) {
+            Session::flash('danger', __('That merge is not possible: choose a device from this client\'s inventory.'));
+            return Response::redirect('/clients/' . (int) $client['id'] . '/devices/' . $deviceId);
+        }
+        $this->audit($request, $target === null ? 'device.split' : 'device.merged', 'device', $deviceId, ['client_id' => (int) $client['id'], 'into' => $target]);
+        Session::flash('success', $target === null ? __('Shown as a separate device from now on.') : __('Merged: shown as one device.'));
+        return Response::redirect('/clients/' . (int) $client['id'] . '/devices/' . ($target ?? $deviceId));
     }
 
     /**

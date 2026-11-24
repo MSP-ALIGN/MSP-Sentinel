@@ -30,17 +30,27 @@ $opts = getopt('', ['dir:', 'keep:', 'encrypt']);
 $dir = is_string($opts['dir'] ?? null) ? rtrim($opts['dir'], '/') : SENTINEL_ROOT . '/storage/backups';
 $keep = isset($opts['keep']) && ctype_digit((string) $opts['keep']) ? max(1, (int) $opts['keep']) : 14;
 $passphrase = null;
+/** Record a run that stopped before the backup started (1.37.1: cron with a missing passphrase was never recorded). */
+$recordEarlyFailure = static function (string $why): void {
+    try {
+        App::boot();
+        (new \Sentinel\System\BackupStatus(App::settings(), App::db()))->record(false, '', 0, true, $why);
+    } catch (\Throwable) {
+    }
+};
 if (isset($opts['encrypt'])) {
     $passphrase = getenv('SENTINEL_BACKUP_PASSPHRASE') ?: null;
     if ($passphrase === null) {
         $passphrase = sentinel_ask_secret('Backup passphrase (min 12 characters): ');
         if ($passphrase !== sentinel_ask_secret('Repeat the passphrase: ')) {
             fwrite(STDERR, "The passphrases do not match.\n");
+            $recordEarlyFailure('The encryption passphrases did not match.');
             exit(2);
         }
     }
     if (mb_strlen($passphrase) < 12) {
         fwrite(STDERR, "The passphrase must be at least 12 characters.\n");
+        $recordEarlyFailure('Encryption was asked for, but the passphrase is missing or shorter than 12 characters (check /etc/msp-sentinel/backup.env).');
         exit(2);
     }
 }
@@ -52,7 +62,7 @@ try {
     // Recorded for the System page, the health check and the stale-backup alert (1.37). A failure to record never
     // turns a good backup into a failed run.
     try {
-        (new \Sentinel\System\BackupStatus(App::settings()))->record(true, $file, (int) filesize($file), $passphrase !== null);
+        (new \Sentinel\System\BackupStatus(App::settings(), App::db()))->record(true, $file, (int) filesize($file), $passphrase !== null);
     } catch (\Throwable) {
     }
     fwrite(STDOUT, 'Backup written: ' . $file . ' (' . round(filesize($file) / 1_000_000, 1) . " MB)\n");
@@ -66,7 +76,7 @@ try {
 } catch (\Throwable $ex) {
     fwrite(STDERR, 'Backup failed: ' . $ex->getMessage() . "\n");
     try {
-        (new \Sentinel\System\BackupStatus(App::settings()))->record(false, '', 0, $passphrase !== null, $ex->getMessage());
+        (new \Sentinel\System\BackupStatus(App::settings(), App::db()))->record(false, '', 0, $passphrase !== null, $ex->getMessage());
     } catch (\Throwable) {
         // the database may be what failed
     }

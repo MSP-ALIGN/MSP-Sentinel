@@ -67,6 +67,20 @@ its state folder (on Linux `/var/lib/sentinel-agent/dc-pins.json`). It won't sen
 even if Sentinel asks. If the domain controller really moves, someone on the agent machine deletes that file; the
 agent then pins the new address at its next sign-in.
 
+## Devices the agent finds
+
+- **Operating system and type:** the agent works them out from the network without logging in. Windows machines give
+  their exact version and build over SMB (the same read-only handshake as nmap's ntlm-info); other devices are
+  recognised from their service banners and web pages (Linux distributions, NAS boxes, printers, firewalls,
+  hypervisors). The result sets the device type (workstation, server or other). A few Windows builds are shared by a
+  client and a server release; then server clues (a domain controller's ports, IIS, SQL Server) decide, or both names
+  are shown.
+- **One device per machine:** when NinjaOne also reports a machine the agent finds, the Devices list shows one row.
+  They are matched when the agent's address belongs to exactly one NinjaOne device and the name matches (or the agent
+  saw no name). The device page then shows NinjaOne's OS, antivirus and patches together with the agent's open
+  services, certificates and findings. Admins can **split** a wrong match, or **merge** an agent device into a NinjaOne
+  device by hand (on the agent device's page). Nothing is deleted either way.
+
 ## Good to know
 
 - **Pause** on the site stops agent scans within a minute. **Revoke** stops an agent's token at once.

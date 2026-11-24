@@ -114,6 +114,8 @@ final class Settings
         'breach_unmatched' => '',
         // Backup runs (1.37): JSON list written by bin/backup.php (BackupStatus), newest first.
         'backup_history' => '',
+        // '1' when backups are made another way (VM snapshots...): no backup warning or alert (1.37.1).
+        'backup_external' => '0',
         // Git-based installs: commits the followed branch is ahead of the installed commit, its newest commit, and
         // the installed commit the answer is for (so an answer for an older commit is never shown after updating).
         'update_branch_behind' => '',

@@ -238,7 +238,12 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
             </tbody>
         </table></div>
         <?php endif; ?>
-        <p class="small text-body-secondary mb-0"><?= e(__('Backups are kept on the server in /var/backups/msp-sentinel: copy them off the server too. Admins are alerted when a backup fails or the last good one is more than 2 days old.')) ?></p>
+        <p class="small text-body-secondary"><?= e(__('Backups are kept on the server in /var/backups/msp-sentinel: copy them off the server too. Admins are alerted when a backup fails or the last good one is more than 2 days old.')) ?></p>
+        <form method="post" action="<?= e(url('/admin/system/backups')) ?>" class="d-flex flex-wrap align-items-center gap-2"><?= \Sentinel\Core\Csrf::field() ?>
+            <div class="form-check mb-0"><input class="form-check-input" type="checkbox" id="backup_external" name="backup_external" value="1" <?= !empty($backupExternal) ? 'checked' : '' ?>>
+                <label class="form-check-label small" for="backup_external"><?= e(__('Backups are made another way (for example VM snapshots): don\'t warn or alert about Sentinel\'s own backup job')) ?></label></div>
+            <button type="submit" class="btn btn-sm btn-outline-secondary"><?= e(__('Save')) ?></button>
+        </form>
     </div>
 </div>
 

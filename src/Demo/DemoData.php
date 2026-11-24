@@ -232,6 +232,7 @@ final class DemoData
         }
         if (isset($spec['inventory'])) {
             $this->loadInventory($clientId, $siteId, $spec['inventory']);
+            App::inventory()->refreshMerges($clientId); // the agent's copies of these machines show as one (1.38)
         }
         return $clientId;
     }
@@ -548,7 +549,7 @@ final class DemoData
                     ['hostname', 'shop.riverside.example', 'dns', 'Points to a hosted shop platform.', true],
                 ],
                 'agent' => ['hostname' => 'sentinel-agent-01', 'ip' => '10.20.0.5', 'range' => '10.20.0.0/24', 'hosts' => [
-                    ['ip' => '10.20.0.10', 'mac' => '02:00:5e:10:00:10', 'hostname' => 'FS01', 'scanned' => true, 'ports' => [
+                    ['ip' => '10.20.0.10', 'mac' => '02:00:5e:10:00:10', 'hostname' => 'riv-srv-01.corp.riverside.example', 'scanned' => true, 'ports' => [
                         ['port' => 445, 'service' => 'microsoft-ds', 'product' => 'Microsoft Windows SMB', 'checks' => ['smb1' => true, 'signing_required' => false]],
                         ['port' => 3389, 'service' => 'ms-wbt-server', 'checks' => ['nla_required' => true]],
                     ]],
@@ -570,13 +571,13 @@ final class DemoData
                     ]],
                 ]],
                 'inventory' => [
-                    $win('RIV-LT-001', 'laptop', 'Windows 11 Pro', '26200', '25H2', '10.20.0.101', $okAv, 'on', [], [$chrome]),
-                    $win('RIV-LT-002', 'laptop', 'Windows 11 Pro', '26200', '25H2', '10.20.0.102', $okAv, 'off', [['2026-10 Cumulative Update for Windows 11', 'KB5099999', 'critical', 'pending', 45]]),
+                    $win('RIV-LT-001', 'workstation', 'Windows 11 Pro', '26200', '25H2', '10.20.0.101', $okAv, 'on', [], [$chrome]),
+                    $win('RIV-LT-002', 'workstation', 'Windows 11 Pro', '26200', '25H2', '10.20.0.102', $okAv, 'off', [['2026-10 Cumulative Update for Windows 11', 'KB5099999', 'critical', 'pending', 45]]),
                     $win('RIV-WS-003', 'workstation', 'Windows 10 Pro', '19045', '22H2', '10.20.0.103', ['Example AV', 'off', 'outdated'], 'off', [], [$chrome, $sevenzip]),
                     $win('RIV-SRV-01', 'server', 'Windows Server 2012 R2 Standard', '9600', '', '10.20.0.10', ['Example AV', 'ok', 'outdated'], 'off',
                         [['Security update for Windows Server', 'KB5088888', 'important', 'failed', 12]]),
                     $win('RIV-SRV-02', 'server', 'Windows Server 2022 Standard', '20348', '21H2', '10.20.0.40', $okAv, 'on', [], [$sevenzip]),
-                    $win('RIV-LT-004', 'laptop', 'Windows 11 Pro', '26200', '25H2', '10.20.0.104', ['', 'missing', ''], 'on'),
+                    $win('RIV-LT-004', 'workstation', 'Windows 11 Pro', '26200', '25H2', '10.20.0.104', ['', 'missing', ''], 'on'),
                 ],
             ],
             [

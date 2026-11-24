@@ -210,11 +210,94 @@ final class InventoryRepository
             "SELECT d.*, (SELECT COUNT(*) FROM device_patches p WHERE p.device_id = d.id) AS patch_count,
                     (SELECT COUNT(DISTINCT sv.cve_id) FROM software_vulns sv JOIN device_software s ON s.id = sv.software_id WHERE s.device_id = d.id) AS vuln_count,
                     (SELECT COUNT(*) FROM device_software s WHERE s.device_id = d.id) AS software_count,
-                    (SELECT COUNT(*) FROM findings f WHERE f.device_id = d.id AND f.status = 'open' AND f.severity = 'fail') AS open_fail,
-                    (SELECT COUNT(*) FROM findings f WHERE f.device_id = d.id AND f.status = 'open' AND f.severity = 'warn') AS open_warn
-             FROM devices d WHERE d.client_id = :c AND d.removed_at IS NULL ORDER BY d.name, d.id" . ($limit !== null ? ' LIMIT ' . max(1, $limit) : '')
+                    (SELECT COUNT(*) FROM findings f WHERE (f.device_id = d.id OR f.device_id IN (SELECT m.id FROM devices m WHERE m.merged_into = d.id)) AND f.status = 'open' AND f.severity = 'fail') AS open_fail,
+                    (SELECT COUNT(*) FROM findings f WHERE (f.device_id = d.id OR f.device_id IN (SELECT m.id FROM devices m WHERE m.merged_into = d.id)) AND f.status = 'open' AND f.severity = 'warn') AS open_warn,
+                    (SELECT COUNT(*) FROM devices m WHERE m.merged_into = d.id AND m.removed_at IS NULL) AS merged_count
+             FROM devices d WHERE d.client_id = :c AND d.removed_at IS NULL AND d.merged_into IS NULL ORDER BY d.name, d.id" . ($limit !== null ? ' LIMIT ' . max(1, $limit) : '')
         );
         $stmt->execute(['c' => $clientId]);
+        return $stmt->fetchAll();
+    }
+
+    /**
+     * Match the agent's devices to the inventory source's (1.38): an agent device whose IP address belongs to exactly
+     * one active inventory device of the client, and whose name matches it (or that has no name), is the same machine
+     * and is merged into it ('auto'). A match that no longer holds is undone. Devices an admin merged ('manual') or
+     * split ('split') are left as they are. Nothing is deleted: lists show one row, the device page combines both.
+     * Returns how many changed.
+     */
+    public function refreshMerges(int $clientId): int
+    {
+        $short = static fn (string $n): string => strtolower(explode('.', trim($n))[0]);
+        // A merge into a device the source no longer reports is released (else the agent's device would vanish too).
+        $released = $this->db->prepare('UPDATE devices a JOIN devices t ON t.id = a.merged_into SET a.merged_into = NULL, a.merge_state = NULL
+                                        WHERE a.client_id = :c AND t.removed_at IS NOT NULL');
+        $released->execute(['c' => $clientId]);
+        $others = $this->db->prepare("SELECT id, name, dns_name, ip_addresses FROM devices WHERE client_id = :c AND source <> 'agent' AND removed_at IS NULL AND merged_into IS NULL");
+        $others->execute(['c' => $clientId]);
+        $byIp = [];
+        $names = [];
+        foreach ($others->fetchAll() as $o) {
+            $names[(int) $o['id']] = array_filter([$short((string) $o['name']), $short((string) $o['dns_name'])]);
+            foreach (explode(',', (string) $o['ip_addresses']) as $ip) {
+                if (($ip = trim($ip)) !== '') {
+                    $byIp[$ip][(int) $o['id']] = true;
+                }
+            }
+        }
+        $agents = $this->db->prepare("SELECT id, name, dns_name, ip_addresses, merged_into, merge_state FROM devices WHERE client_id = :c AND source = 'agent' AND removed_at IS NULL");
+        $agents->execute(['c' => $clientId]);
+        $set = $this->db->prepare('UPDATE devices SET merged_into = :t, merge_state = :s WHERE id = :id');
+        $changed = 0;
+        foreach ($agents->fetchAll() as $a) {
+            if (in_array($a['merge_state'], ['manual', 'split'], true)) {
+                continue;
+            }
+            $candidates = [];
+            foreach (explode(',', (string) $a['ip_addresses']) as $ip) {
+                $candidates += $byIp[trim($ip)] ?? [];
+            }
+            $own = array_filter([$short((string) $a['name']), $short((string) $a['dns_name'])]);
+            $target = null;
+            if (count($candidates) === 1) {
+                $id = (int) array_key_first($candidates);
+                // A different name on the same address is not proof (a reused address): only a matching or missing name.
+                if ($own === [] || array_intersect($own, $names[$id] ?? []) !== []) {
+                    $target = $id;
+                }
+            }
+            if ($target !== ($a['merged_into'] !== null ? (int) $a['merged_into'] : null)) {
+                $set->execute(['t' => $target, 's' => $target !== null ? 'auto' : null, 'id' => (int) $a['id']]);
+                $changed++;
+            }
+        }
+        return $changed + $released->rowCount();
+    }
+
+    /** An admin's merge (into an inventory device of the same client) or split (1.38). Returns whether it applied. */
+    public function setMerge(int $clientId, int $agentDeviceId, ?int $targetId): bool
+    {
+        if ($targetId !== null) {
+            $t = $this->db->prepare("SELECT COUNT(*) FROM devices WHERE id = :t AND client_id = :c AND source <> 'agent' AND removed_at IS NULL AND merged_into IS NULL");
+            $t->execute(['t' => $targetId, 'c' => $clientId]);
+            if ((int) $t->fetchColumn() !== 1) {
+                return false;
+            }
+        }
+        $stmt = $this->db->prepare("UPDATE devices SET merged_into = :t, merge_state = :s WHERE id = :id AND client_id = :c AND source = 'agent'");
+        $stmt->execute(['t' => $targetId, 's' => $targetId !== null ? 'manual' : 'split', 'id' => $agentDeviceId, 'c' => $clientId]);
+        return $stmt->rowCount() === 1;
+    }
+
+    /**
+     * The agent devices merged into a device (1.38).
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function mergedInto(int $deviceId): array
+    {
+        $stmt = $this->db->prepare('SELECT id, name, dns_name, ip_addresses, merge_state, site_id FROM devices WHERE merged_into = :d AND removed_at IS NULL ORDER BY id');
+        $stmt->execute(['d' => $deviceId]);
         return $stmt->fetchAll();
     }
 
