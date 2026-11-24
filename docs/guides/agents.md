@@ -4,6 +4,10 @@ Scan inside a client's network with a small agent at their site, keep it up to d
 checks. The full detail (safety model, schedule, updates, release key, grading) is in the
 [agent reference](../agent.md); the Windows version is in [windows-agent.md](../windows-agent.md).
 
+
+The agent also runs [in Docker](docker-agent.md) (a container on a Linux Docker host) and [on Proxmox](proxmox-agent.md)
+(an LXC container); Windows has its own [installer](../windows-agent.md).
+
 ## Before you start
 
 - You need the **admin** role.

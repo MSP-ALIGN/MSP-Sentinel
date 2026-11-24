@@ -135,6 +135,38 @@ release_key_and_helper() {
   run systemctl enable --now sentinel-agent-update.path
 }
 
+# Containers (1.36): in an LXC container (Proxmox), systemd's sandboxing needs mount namespaces, which an
+# unprivileged container only allows with "nesting" turned on (Proxmox's default for new unprivileged containers).
+# The sandbox is probed with a throwaway unit; only when it can't start is a drop-in written that turns off the
+# namespace-based options for the agent and its update helper (no new privileges, capability limits and the system
+# call filter stay). A drop-in left from before is removed once the sandbox works. Machines and VMs are untouched.
+# SENTINEL_FORCE_VIRT (dry run only, for the test suite) pretends to be in a container.
+container_compat() {
+  local virt dropin_agent=/etc/systemd/system/sentinel-agent.service.d/container.conf dropin_update=/etc/systemd/system/sentinel-agent-update.service.d/container.conf
+  if [ "$dry" -eq 1 ] && [ -n "${SENTINEL_FORCE_VIRT:-}" ]; then virt="$SENTINEL_FORCE_VIRT"; else virt="$(systemd-detect-virt --container 2>/dev/null || true)"; fi
+  case "$virt" in lxc|lxc-libvirt) ;; *) return 0 ;; esac
+  say "LXC container detected (for example Proxmox)"
+  if [ "$dry" -eq 1 ]; then
+    echo "  [dry-run] probe systemd sandboxing; if it can't start, write $dropin_agent and $dropin_update"
+    return 0
+  fi
+  if systemd-run --quiet --wait --collect -p ProtectSystem=strict -p PrivateTmp=yes -p PrivateDevices=yes -p ProtectKernelTunables=yes \
+       -p ProtectControlGroups=yes -p ProtectHome=yes /bin/true >/dev/null 2>&1; then
+    rm -f "$dropin_agent" "$dropin_update"
+    echo "  Full service hardening works in this container."
+    return 0
+  fi
+  echo "  Warning: this container doesn't allow systemd's sandbox (mount namespaces). The agent runs with reduced"
+  echo "  hardening. To keep the full hardening, on the Proxmox host run: pct set <CTID> --features nesting=1"
+  echo "  then restart the container and run this installer with --upgrade again."
+  for f in "$dropin_agent" "$dropin_update"; do
+    install -d -m 0755 "$(dirname "$f")"
+    printf '%s\n' '# Written by agent-install.sh: this LXC container has no mount namespaces (nesting off).' '[Service]' \
+      'ProtectSystem=no' 'ProtectHome=no' 'PrivateTmp=no' 'PrivateDevices=no' 'ProtectKernelTunables=no' 'ProtectKernelModules=no' \
+      'ProtectControlGroups=no' 'ReadWritePaths=' | write_file "$f" 0644
+  done
+}
+
 [ -f "$SRC/VERSION" ] && [ -f "$SRC/bin/sentinel-agent.php" ] || die "Run this from an unpacked MSP Sentinel release."
 if [ "$dry" -eq 0 ] && [ "$(id -u)" -ne 0 ]; then die "Run as root (sudo)."; fi
 
@@ -174,6 +206,7 @@ if [ "$mode" = upgrade ]; then
   run systemctl stop sentinel-agent || true
   copy_code
   unit | write_file /etc/systemd/system/sentinel-agent.service 0644
+  container_compat
   release_key_and_helper
   run systemctl start sentinel-agent
   say "Done"
@@ -234,6 +267,7 @@ run chmod 0640 "$CONF_DIR/agent.json"
 
 say "Service"
 unit | write_file /etc/systemd/system/sentinel-agent.service 0644
+container_compat
 release_key_and_helper
 run systemctl enable --now sentinel-agent
 say "Done. The agent checks in within a minute; see the client page in Sentinel. Logs: journalctl -u sentinel-agent"

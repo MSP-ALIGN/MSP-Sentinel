@@ -252,12 +252,16 @@ final class AgentRepository
      */
     public function requestUpdates(?int $clientId, string $version, int $userId): array
     {
-        $stmt = $this->db->prepare("SELECT a.id, a.version FROM agents a JOIN clients c ON c.id = a.client_id
+        $stmt = $this->db->prepare("SELECT a.id, a.version, a.install_type FROM agents a JOIN clients c ON c.id = a.client_id
                                     WHERE a.status = 'active' AND c.is_demo = 0" . ($clientId !== null ? ' AND a.client_id = :c' : ''));
         $stmt->execute($clientId !== null ? ['c' => $clientId] : []);
-        $out = ['asked' => 0, 'manual' => 0];
+        $out = ['asked' => 0, 'manual' => 0, 'image' => 0];
         foreach ($stmt->fetchAll() as $a) {
             if (!\Sentinel\System\ReleaseManifest::newer($version, (string) $a['version'])) {
+                continue;
+            }
+            if ((string) $a['install_type'] === 'docker') {
+                $out['image']++; // updated by pulling a new image, never in place (1.36)
                 continue;
             }
             if (!self::canUpdateRemotely((string) $a['version'])) {

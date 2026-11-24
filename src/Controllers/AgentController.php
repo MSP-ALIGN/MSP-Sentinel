@@ -233,7 +233,7 @@ final class AgentController extends Controller
     public function updateAgent(Request $request, array $params): Response
     {
         $client = $this->client($params);
-        $stmt = App::db()->prepare("SELECT id, version FROM agents WHERE id = :a AND client_id = :c AND status = 'active'");
+        $stmt = App::db()->prepare("SELECT id, version, install_type FROM agents WHERE id = :a AND client_id = :c AND status = 'active'");
         $stmt->execute(['a' => (int) ($params['agent'] ?? 0), 'c' => (int) $client['id']]);
         $agent = $stmt->fetch();
         if ($agent === false) {
@@ -242,6 +242,7 @@ final class AgentController extends Controller
         $release = App::agentRelease()->version();
         $error = match (true) {
             (int) ($client['is_demo'] ?? 0) === 1 => __('This is a demo client with made-up data.'),
+            (string) $agent['install_type'] === 'docker' => __('This agent runs in Docker: update it by pulling the new image and recreating the container (docs/guides/docker-agent.md).'),
             $release === null => __('This Sentinel has no signed agent release to hand out: {why}.', ['why' => App::agentRelease()->why()]),
             !\Sentinel\System\ReleaseManifest::newer($release, (string) $agent['version']) => __('This agent already runs {v} or newer.', ['v' => $release]),
             !\Sentinel\Agent\AgentRepository::canUpdateRemotely((string) $agent['version']) => __('Agents older than {v} must be upgraded once by hand (agent-install.sh --upgrade).', ['v' => \Sentinel\Agent\AgentRepository::REMOTE_UPDATE_SINCE]),
@@ -269,7 +270,8 @@ final class AgentController extends Controller
         $n = App::agents()->requestUpdates((int) $client['id'], $release, (int) $this->user()['id']);
         $this->audit($request, 'agent.update_requested', 'client', (int) $client['id'], ['version' => $release] + $n);
         Session::flash('success', __('{n} agent(s) will update to {v}.', ['n' => $n['asked'], 'v' => $release])
-            . ($n['manual'] > 0 ? ' ' . __('{m} must be upgraded once by hand first.', ['m' => $n['manual']]) : ''));
+            . ($n['manual'] > 0 ? ' ' . __('{m} must be upgraded once by hand first.', ['m' => $n['manual']]) : '')
+            . ($n['image'] > 0 ? ' ' . __('{d} run in Docker: pull the new image for those.', ['d' => $n['image']]) : ''));
         return Response::redirect('/clients/' . (int) $client['id'] . '/agents');
     }
 

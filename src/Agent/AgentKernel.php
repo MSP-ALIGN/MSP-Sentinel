@@ -179,6 +179,16 @@ final class AgentKernel
         if ($requests !== []) {
             App::audit()->log('agent.requests_handed_out', null, null, 'agent', (int) $agent['id'], ['client_id' => (int) $agent['client_id'], 'requests' => array_keys($requests)], $request->ip());
         }
+        // How the agent is installed (1.36): '' (machine or VM), 'docker' (updated by pulling a new image) or 'lxc'.
+        $install = in_array($body['install'] ?? '', ['', 'docker', 'lxc'], true) ? (string) ($body['install'] ?? '') : '';
+        if (array_key_exists('install', $body) && $install !== (string) ($agent['install_type'] ?? '')) {
+            App::db()->prepare('UPDATE agents SET install_type = :t WHERE id = :id')->execute(['t' => $install, 'id' => (int) $agent['id']]);
+            $agent['install_type'] = $install;
+        }
+        if ($install === 'docker') {
+            // A Docker agent has no update helper: an earlier request ends here instead of being handed out.
+            App::db()->prepare("UPDATE agents SET update_to = '' WHERE id = :id AND update_to <> ''")->execute(['id' => (int) $agent['id']]);
+        }
         // An update request the agent reports back on: the helper's result (what it installed, or why not).
         if (is_array($body['update_result'] ?? null) && is_string($body['update_result']['version'] ?? null)) {
             $r = $body['update_result'];

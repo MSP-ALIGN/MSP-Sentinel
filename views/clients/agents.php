@@ -82,6 +82,9 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                                 <input type="hidden" name="fingerprint" value="<?= e($pfp) ?>"><button class="btn btn-sm btn-outline-warning" type="submit"><?= e(__('Approve new key')) ?></button></form><?php endif; ?></div>
                         <?php endif; ?></td>
                     <td class="font-monospace"><?= e($a['version'] ?: '?') ?>
+                        <?php $inst = (string) ($a['install_type'] ?? ''); if ($inst !== ''): ?><span class="badge text-bg-secondary font-sans-serif"><?= e($inst === 'docker' ? __('Docker') : __('LXC')) ?></span><?php endif; ?>
+                        <?php if ($inst === 'docker' && $a['status'] === 'active' && $agentRelease !== null && \Sentinel\System\ReleaseManifest::newer($agentRelease, (string) $a['version'])): ?>
+                        <div class="small text-body-secondary font-sans-serif"><?= e(__('Update by pulling image {v} and recreating the container.', ['v' => $agentRelease])) ?></div><?php endif; ?>
                         <?php if ($a['status'] === 'active' && preg_match('/^\d+\.\d+\.\d+$/', (string) $a['version']) === 1 && version_compare((string) $a['version'], '1.21.0', '<')): ?>
                         <div class="small text-warning font-sans-serif"><?= e(__('Upgrade this agent: before 1.21.0 it ignores the gentleness setting, Restart and Diagnostics.')) ?></div><?php endif; ?>
                         <?php if ($a['status'] === 'active' && (string) ($a['update_to'] ?? '') !== ''): ?><div class="small text-body-secondary"><?= e(__('update to {v} requested', ['v' => $a['update_to']])) ?></div><?php endif; ?>
@@ -93,7 +96,7 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                         <?php else: ?><span class="badge text-bg-warning"><i class="bi bi-wifi-off me-1" aria-hidden="true"></i><?= e(__('Offline')) ?></span><?php endif; ?></td>
                     <td class="text-end"><?php if ($isAdmin && $a['status'] === 'active'): ?>
                         <div class="d-flex flex-wrap gap-1 justify-content-end">
-                        <?php if ($agentRelease !== null && \Sentinel\System\ReleaseManifest::newer($agentRelease, (string) $a['version']) && \Sentinel\Agent\AgentRepository::canUpdateRemotely((string) $a['version']) && (string) ($a['update_to'] ?? '') !== $agentRelease): ?>
+                        <?php if ((string) ($a['install_type'] ?? '') !== 'docker' && $agentRelease !== null && \Sentinel\System\ReleaseManifest::newer($agentRelease, (string) $a['version']) && \Sentinel\Agent\AgentRepository::canUpdateRemotely((string) $a['version']) && (string) ($a['update_to'] ?? '') !== $agentRelease): ?>
                         <form method="post" action="<?= e(url('/clients/' . $cid . '/agents/' . (int) $a['id'] . '/update')) ?>" data-confirm="<?= e(__('Update this agent to {v} at its next check-in between scans?', ['v' => $agentRelease])) ?>"><?= Csrf::field() ?><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-cloud-arrow-down me-1" aria-hidden="true"></i><?= e(__('Update to {v}', ['v' => $agentRelease])) ?></button></form>
                         <?php endif; ?>
                         <form method="post" action="<?= e(url('/clients/' . $cid . '/agents/' . (int) $a['id'] . '/diagnostics')) ?>" data-confirm="<?= e(__('Ask this agent for a diagnostics report at its next check-in? It reports its version, settings and health, never passwords.')) ?>"><?= Csrf::field() ?><button class="btn btn-sm btn-outline-secondary" type="submit"><i class="bi bi-clipboard-pulse me-1" aria-hidden="true"></i><?= e(__('Diagnostics')) ?></button></form>

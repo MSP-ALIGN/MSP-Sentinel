@@ -2,6 +2,44 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.34.0 (2026-11-24): security audit, search, confirmations, easier workflows and docs
+
+- **Search.** A search box in the top bar finds clients, findings (title, target or CVE), external hosts, internal
+  devices, engagements and help topics. Findings and the audit log get a "Contains" filter; Clients, Users, Devices,
+  Engagements and Help get instant filter boxes.
+- **"Are you sure?"** An in-page dialog says exactly what will happen before destructive, outbound or costly actions
+  (deleting or revoking, sending tests, starting scans or rechecks, approving engagements, bulk triage).
+- **Security audit fixes:**
+  - Two-person approval of engagements can't be bypassed with an account the creator made or reset (30 days).
+  - Creating a user, resetting a password or 2FA, changing a role or access, and creating API tokens ask for your own
+    password. Engagement approval also refuses accounts linked to the creator the other way round or through a chain.
+  - Changing the ITFlow or MSP Align address, or the SMTP host, clears the saved key or password.
+  - Technicians' verify-fix rechecks wait for the scan window (admins' run straight away).
+  - Encrypted settings and 2FA seeds are bound to their place; migration 0042 upgrades stored values.
+  - Agents send the Active Directory password only to the domain and domain controller address they first signed in
+    to (`dc-pins.json` on the agent; delete it there if the domain controller really moves).
+  - Restoring a backup can't run client commands from a tampered dump, and keeps this server's program and folder
+    settings; the backup passphrase file is owner-only.
+  - Wildcards under shared platforms (`*.s3.amazonaws.com` and similar) are refused in the scan register. Entries
+    saved before are not re-checked: look through your registers for such wildcards.
+  - An enrolment code needs the site's internal authorisation first.
+  - MSP Align links must be web addresses; Teams alert text can't add links or formatting.
+  - Alerts are sent while a long scan runs; API lockouts are audited; notifications are marked read only on request.
+  - The Update now card shows the installed and newest commit (branch code is unsigned).
+- **Easier workflows:**
+  - New engagements start with the gentle pace and without the all-ports test (the least risky choice).
+  - Engagement approvals: other admins are notified, the dashboard shows what awaits you, and a new Engagements page
+    lists every engagement. A lone admin is told to add a second one.
+  - Finding pages show "Why it matters / How to fix".
+  - Reports can be created from the Reports page.
+  - First run: buttons to add a client and record its authorisation, "Not scanned yet" instead of a perfect score,
+    clearer next steps and messages.
+  - Readable evidence in client reports, an API reference page for admins, readable audit log rows, owner names in
+    pickers, a type-to-search time zone field.
+  - Opening a form's address as a page goes to the page that holds the form.
+  - Phones: tables scroll inside their cards and the findings filters fold away.
+- **Documentation:** task-based guides with a "Start here" page on GitHub, and in-app help reorganised the same way.
+
 ### 1.33.1 (2026-11-24): breach monitoring, fixes from review
 
 - **No mass removal from an incomplete answer.** An answer that would remove more than half of the known breached

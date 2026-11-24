@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.35.1](https://img.shields.io/badge/version-1.35.1-ff5a1f?style=flat-square)
+![Version 1.36.0](https://img.shields.io/badge/version-1.36.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -107,6 +107,7 @@ Requirements, a development server, unattended installs and signed release archi
 | [Reports](docs/guides/reports.md) | Executive and technical reports, monthly reports, PDF and CSV |
 | [Pen-test engagements](docs/guides/engagements.md) | Create, approve, run and report a deeper test |
 | [On-premises agents](docs/guides/agents.md) | Scan inside a client's network; Active Directory checks |
+| [Agent in Docker](docs/guides/docker-agent.md) / [on Proxmox](docs/guides/proxmox-agent.md) | Run the agent as a container or in an LXC |
 | [Integrations](docs/guides/integrations.md) | ITFlow, MSP Align, NinjaOne, breach monitoring, API |
 | [Alerts](docs/guides/alerts.md) | Email, Teams/Slack, notifications, fix reminders |
 | [Users and security](docs/guides/users-and-security.md) | Roles, two-factor sign-in, users, API tokens, audit log |
@@ -117,6 +118,22 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 [docs/README.md](docs/README.md#reference). The same help is built into the app (**Help** in the menu).
 
 ## What's new
+
+### 1.36.0 (2026-11-24): agents in Docker and on Proxmox
+
+- **Docker agent.** `docker/agent/Dockerfile` and `docker/agent/docker-compose.yml` run the on-premises agent as a
+  container on a Linux Docker host: host network (so discovery, MAC addresses and name requests work), unprivileged
+  user, every capability dropped, read-only file system, config volume mounted read-only.
+  - Updated by pulling a new image: Docker agents never get an in-place update. The Agents page shows
+    "Update by pulling image x.y.z" instead of an Update button, and **Update all agents** says how many need a new
+    image.
+  - NetBIOS name requests (UDP 137) aren't heard in Docker; LLMNR requests are.
+  - An optional GitHub Actions workflow publishes signed multi-architecture images to GitHub's registry when you push
+    a release tag. See [the Docker guide](docs/guides/docker-agent.md).
+- **Proxmox.** The normal installer works in an unprivileged Debian 13 LXC container. It checks systemd's sandbox and
+  relaxes only that if the container has no nesting, with a warning. `install/proxmox-agent-ct.sh` creates a suitable
+  container on the Proxmox host. See [the Proxmox guide](docs/guides/proxmox-agent.md).
+- Agents report how they are installed: the Agents page shows a **Docker** or **LXC** badge (migration 0043).
 
 ### 1.35.1 (2026-11-24): update hardening, fixes from review
 
@@ -150,44 +167,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
   `php bin/release-sign.php hash --ref vX.Y.Z` (no key needed). Your browser signs only if the files it is about to
   sign match; Sentinel checks again and records the hash in the audit log. Each release build now publishes
   `AGENT-MANIFEST-SHA256` next to `SHA256SUMS`.
-
-### 1.34.0 (2026-11-24): security audit, search, confirmations, easier workflows and docs
-
-- **Search.** A search box in the top bar finds clients, findings (title, target or CVE), external hosts, internal
-  devices, engagements and help topics. Findings and the audit log get a "Contains" filter; Clients, Users, Devices,
-  Engagements and Help get instant filter boxes.
-- **"Are you sure?"** An in-page dialog says exactly what will happen before destructive, outbound or costly actions
-  (deleting or revoking, sending tests, starting scans or rechecks, approving engagements, bulk triage).
-- **Security audit fixes:**
-  - Two-person approval of engagements can't be bypassed with an account the creator made or reset (30 days).
-  - Creating a user, resetting a password or 2FA, changing a role or access, and creating API tokens ask for your own
-    password. Engagement approval also refuses accounts linked to the creator the other way round or through a chain.
-  - Changing the ITFlow or MSP Align address, or the SMTP host, clears the saved key or password.
-  - Technicians' verify-fix rechecks wait for the scan window (admins' run straight away).
-  - Encrypted settings and 2FA seeds are bound to their place; migration 0042 upgrades stored values.
-  - Agents send the Active Directory password only to the domain and domain controller address they first signed in
-    to (`dc-pins.json` on the agent; delete it there if the domain controller really moves).
-  - Restoring a backup can't run client commands from a tampered dump, and keeps this server's program and folder
-    settings; the backup passphrase file is owner-only.
-  - Wildcards under shared platforms (`*.s3.amazonaws.com` and similar) are refused in the scan register. Entries
-    saved before are not re-checked: look through your registers for such wildcards.
-  - An enrolment code needs the site's internal authorisation first.
-  - MSP Align links must be web addresses; Teams alert text can't add links or formatting.
-  - Alerts are sent while a long scan runs; API lockouts are audited; notifications are marked read only on request.
-  - The Update now card shows the installed and newest commit (branch code is unsigned).
-- **Easier workflows:**
-  - New engagements start with the gentle pace and without the all-ports test (the least risky choice).
-  - Engagement approvals: other admins are notified, the dashboard shows what awaits you, and a new Engagements page
-    lists every engagement. A lone admin is told to add a second one.
-  - Finding pages show "Why it matters / How to fix".
-  - Reports can be created from the Reports page.
-  - First run: buttons to add a client and record its authorisation, "Not scanned yet" instead of a perfect score,
-    clearer next steps and messages.
-  - Readable evidence in client reports, an API reference page for admins, readable audit log rows, owner names in
-    pickers, a type-to-search time zone field.
-  - Opening a form's address as a page goes to the page that holds the form.
-  - Phones: tables scroll inside their cards and the findings filters fold away.
-- **Documentation:** task-based guides with a "Start here" page on GitHub, and in-app help reorganised the same way.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

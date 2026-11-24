@@ -196,7 +196,8 @@ final class Runner
         $holds = $this->credentials?->holds() ?? false;
         $result = $idle ? $this->updater?->unreportedResult() : null; // the update helper's last result, until Sentinel has it
         $this->reportedResult = $result;
-        return ['hostname' => (string) gethostname(), 'version' => self::version(), 'running' => $running, 'idle' => $idle, 'server' => $this->http->server()]
+        return ['hostname' => (string) gethostname(), 'version' => self::version(), 'running' => $running, 'idle' => $idle, 'server' => $this->http->server(),
+                'install' => $this->platform?->container() ?? '']
             + ($result !== null ? ['update_result' => $result] : [])
             + ($this->updater !== null ? ['release_key_fp' => \Sentinel\System\ReleaseManifest::keyFingerprint($this->updater->releaseKey())] : [])
             + ($this->key !== null ? ['box_public_key' => $this->key->publicKey(), 'holds_directory' => $holds,

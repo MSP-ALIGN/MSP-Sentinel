@@ -1,0 +1,41 @@
+# MSP Sentinel agent in Docker (1.36). See docs/guides/docker-agent.md.
+#
+# 1. Enrol once (paste the enrolment code from the client's Agents page, then press Enter):
+#      SENTINEL_SERVER=https://sentinel.msp.example docker compose --profile enrol run --rm enrol
+# 2. Start it:   docker compose up -d
+# 3. Update it:  set SENTINEL_AGENT_VERSION to the new version, then  docker compose pull && docker compose up -d
+#
+# Host network: the agent sees the LAN like a normal machine (device discovery, MAC addresses, name requests). Linux
+# Docker hosts only. The container is unprivileged (no capabilities), read-only, and keeps its data in two volumes.
+name: sentinel-agent
+
+x-agent: &agent
+  image: ${SENTINEL_AGENT_IMAGE:-ghcr.io/msp-align/msp-sentinel-agent}:${SENTINEL_AGENT_VERSION:-1.36.0}
+  network_mode: host
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  tmpfs: ["/tmp:size=64m,mode=1777"]
+
+services:
+  agent:
+    <<: *agent
+    restart: unless-stopped
+    volumes:
+      - config:/etc/sentinel-agent:ro   # the agent reads its config but never changes it
+      - state:/var/lib/sentinel-agent
+
+  enrol:
+    <<: *agent
+    profiles: ["enrol"]
+    restart: "no"
+    stdin_open: true
+    command: ["enrol", "--server", "${SENTINEL_SERVER:?Set SENTINEL_SERVER to your Sentinel address}", "--code-stdin",
+              "--config", "/etc/sentinel-agent/agent.json", "--state-dir", "/var/lib/sentinel-agent"]
+    volumes:
+      - config:/etc/sentinel-agent
+      - state:/var/lib/sentinel-agent
+
+volumes:
+  config:
+  state:

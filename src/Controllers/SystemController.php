@@ -189,7 +189,8 @@ final class SystemController extends Controller
         $n = App::agents()->requestUpdates(null, $release, (int) $this->user()['id']);
         $this->audit($request, 'agent.update_requested', null, null, ['version' => $release, 'scope' => 'all'] + $n);
         Session::flash('success', __('{n} agent(s) will update to {v}.', ['n' => $n['asked'], 'v' => $release])
-            . ($n['manual'] > 0 ? ' ' . __('{m} must be upgraded once by hand first.', ['m' => $n['manual']]) : ''));
+            . ($n['manual'] > 0 ? ' ' . __('{m} must be upgraded once by hand first.', ['m' => $n['manual']]) : '')
+            . ($n['image'] > 0 ? ' ' . __('{d} run in Docker: pull the new image for those.', ['d' => $n['image']]) : ''));
         return Response::redirect('/admin/system#agents');
     }
 

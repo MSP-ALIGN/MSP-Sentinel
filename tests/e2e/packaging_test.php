@@ -108,6 +108,14 @@ return [
         foreach (['php8.4-cli', 'nmap', 'useradd --system', 'runuser -u sentinel-agent', 'sentinel-agent.php enrol', 'systemctl enable --now sentinel-agent'] as $step) {
             Assert::contains($step, $out);
         }
+        Assert::notContains('LXC container detected', $out, 'a machine or VM gets no container step');
+        // In an LXC container (Proxmox, 1.36): the sandbox is probed and relaxed only if it can't start.
+        exec('SENTINEL_FORCE_VIRT=lxc bash ' . escapeshellarg($root . '/install/agent-install.sh') . ' --dry-run --skip-os-check --server https://sentinel.example --code ' . $code . ' 2>&1', $lxc, $lxcRc);
+        $lxcOut = implode("\n", $lxc);
+        Assert::same(0, $lxcRc, $lxcOut);
+        Assert::contains('LXC container detected', $lxcOut);
+        Assert::contains('probe systemd sandboxing', $lxcOut);
+        Assert::true(strpos($lxcOut, 'probe systemd sandboxing') < strpos($lxcOut, 'systemctl enable --now sentinel-agent'), 'probed before the service starts');
         foreach ([['--server http://sentinel.example --code ' . $code, 'plain http refused'], ['--server "https://x.example/;rm" --code ' . $code, 'odd server value refused'],
                   ['--server https://sentinel.example --code bad', 'bad code refused']] as [$args, $why]) {
             exec('bash ' . escapeshellarg($root . '/install/agent-install.sh') . ' --dry-run --skip-os-check ' . $args . ' 2>&1', $l, $c);
@@ -279,6 +287,21 @@ return [
             $runStep();
             Assert::true(!file_exists($app), $unitName . ": nothing created");
             exec('rm -rf ' . escapeshellarg($base));
+        }
+    },
+    'Proxmox helper: unprivileged Debian 13 container with nesting, strict input checks, no enrolment code' => function (TestContext $ctx): void {
+        $script = escapeshellarg(dirname(__DIR__, 2) . '/install/proxmox-agent-ct.sh');
+        exec('bash ' . $script . ' --dry-run --bridge vmbr1 --vlan 20 --ip 10.0.20.50/24 --gw 10.0.20.1 --ctid 120 2>&1', $l, $rc);
+        $out = implode("\n", $l);
+        Assert::same(0, $rc, $out);
+        foreach (['pct create 120', '--unprivileged 1', '--features nesting=1', 'bridge=vmbr1,ip=10.0.20.50/24,gw=10.0.20.1,tag=20', '--onboot 1', 'pct start 120', 'pct enter 120'] as $needle) {
+            Assert::contains($needle, $out);
+        }
+        Assert::notContains('--code', $out, 'the enrolment code is never passed on the host');
+        foreach (["--bridge 'vmbr0;rm'", '--bridge vmbr0 --vlan 5000', '--bridge vmbr0 --ctid 12', '--bridge vmbr0 --ip 10.0.0.5', "--bridge vmbr0 --hostname 'a b'", '--bridge vmbr0 --memory 64', ''] as $bad) {
+            exec('bash ' . $script . ' --dry-run ' . $bad . ' 2>&1', $o, $c);
+            Assert::true($c !== 0, 'refused: ' . ($bad === '' ? '(no bridge)' : $bad));
+            $o = [];
         }
     },
 ];

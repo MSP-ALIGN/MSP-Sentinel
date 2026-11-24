@@ -179,8 +179,9 @@ switch ($command) {
             !$platform->namesListener() ? null : ($testMode ? (is_array($c['testing']['names'] ?? null)
                 ? new NameListener('127.0.0.1', (int) $c['testing']['names']['llmnr_port'], (int) $c['testing']['names']['nbns_port'], false, (string) ($c['testing']['names']['loopback_as'] ?? '')) : null)
                 : new NameListener()),
-            // Updates: only code signed with the release key pinned at install (test suite: testing.release_key).
-            new Updater($http, $testMode && is_string($c['testing']['release_key'] ?? null) ? $c['testing']['release_key'] : $platform->releaseKeyFile(),
+            // Updates: only code signed with the release key pinned at install (test suite: testing.release_key). Not in
+            // the Docker image (1.36): it is updated by pulling a new image, and has no root update helper.
+            $platform->container() === 'docker' ? null : new Updater($http, $testMode && is_string($c['testing']['release_key'] ?? null) ? $c['testing']['release_key'] : $platform->releaseKeyFile(),
                 $stateDir, $say, (string) $c['server_public_key'], (int) $c['agent_id'], (int) $c['site_id'], (int) $c['client_id'],
                 // The helper's results: a root-owned folder the agent can read but not change.
                 $testMode && is_string($c['testing']['update_result_dir'] ?? null) ? $c['testing']['update_result_dir'] : $platform->updateResultDir(),

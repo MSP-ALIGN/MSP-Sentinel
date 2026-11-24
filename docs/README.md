@@ -32,6 +32,8 @@ New to MSP Sentinel? Follow these steps on your first day. Each one links to a s
 | [Reports](guides/reports.md) | Executive and technical reports, monthly reports, PDF and CSV |
 | [Pen-test engagements](guides/engagements.md) | Create, approve, run, stop, report and retest |
 | [On-premises agents](guides/agents.md) | Internal scans, enrolment, updates, Active Directory checks |
+| [Agent in Docker](guides/docker-agent.md) | Run the agent as a container on a Linux Docker host |
+| [Agent on Proxmox](guides/proxmox-agent.md) | Run the agent in a Proxmox LXC container |
 | [Integrations](guides/integrations.md) | ITFlow, MSP Align, NinjaOne, breach monitoring, API and events |
 | [Alerts](guides/alerts.md) | Email, Teams/Slack, notifications and daily fix reminders |
 | [Users and security](guides/users-and-security.md) | Roles, two-factor sign-in, users, API tokens, confirmations, audit log |

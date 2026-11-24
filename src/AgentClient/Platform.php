@@ -42,6 +42,21 @@ final class Platform
         return $this->os === self::WINDOWS;
     }
 
+    /**
+     * How the agent is installed (1.36): 'docker' when the official image says so (SENTINEL_AGENT_CONTAINER=docker:
+     * updated by pulling a new image, so no in-place updates), 'lxc' inside an LXC container such as on Proxmox (systemd
+     * records it in /run/systemd/container; a normal install otherwise), or '' for a machine or VM. Only these values.
+     * Untrusted input: the environment variable and file are read, not executed; anything else counts as ''.
+     */
+    public function container(): string
+    {
+        if (getenv('SENTINEL_AGENT_CONTAINER') === 'docker') {
+            return 'docker';
+        }
+        $kind = $this->isWindows() ? '' : trim((string) @file_get_contents('/run/systemd/container', false, null, 0, 64));
+        return $kind === 'lxc' || $kind === 'lxc-libvirt' ? 'lxc' : '';
+    }
+
     /** Base folder of the Windows agent's data (ProgramData). */
     private static function windowsData(): string
     {

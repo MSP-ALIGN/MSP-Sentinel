@@ -171,6 +171,7 @@ return [
                 'Sentinel signs the authorisation and every job; the agent checks both and refuses any target outside the signed networks. Pause on the site stops agent scans within a minute; revoking an agent stops its token at once.',
                 'On the Agents page you can also set scan gentleness per site (very gentle, gentle or faster; never beyond nmap\'s normal -T3), how often agents check in, ask for Diagnostics (versions, disk, memory, clock difference, key fingerprint) and Restart.',
                 'Updates: Update to x.y.z for one agent, or Update all agents (per client, or under Administration → System). An agent installs only releases signed with the release key it pinned at install, and a root helper checks again. Agents older than 1.22.0 must be upgraded once by hand. The release key (Administration → System) is created once in your browser: the private key downloads as a password-protected file, Sentinel keeps only the public half, and it does not expire. Click Sign this version after each Sentinel update, and paste the expected manifest SHA-256 from the release notes (or from php bin/release-sign.php hash --ref vX.Y.Z on your own computer): your browser signs only if it matches. The root (Windows: SYSTEM) update helper runs from a frozen copy that remote updates never change, so a new release never runs with those rights; a release that changes the helper asks for a one-off manual upgrade. Rotate it with the old key file; Replace it only if the file is lost (agents then need it by hand).',
+                'Containers: the agent also runs in Docker (docker/agent/docker-compose.yml: host network, unprivileged, read-only; updated by pulling a new image, so the Agents page shows "Update by pulling image x.y.z" instead of an Update button; NetBIOS name requests are not heard there) and in a Proxmox LXC container (a normal install inside an unprivileged Debian 13 container with nesting on; install/proxmox-agent-ct.sh creates one). Agents show a Docker or LXC badge. Guides: docs/guides/docker-agent.md and proxmox-agent.md.',
                 'New Sentinel address: Administration → System → Move agents (with your password). Each agent switches only after the new address signs a challenge with this Sentinel\'s key; nothing secret is sent before. Right after a move it goes back if the new address keeps failing, and while moved it asks its original address every 6 hours, so keep that address working.',
             ],
         ],
@@ -352,6 +353,14 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.36.0',
+            'date' => '2026-11-24',
+            'items' => [
+                'Agents in Docker: run the agent as an unprivileged, read-only container with host networking (docker/agent/docker-compose.yml). Docker agents are updated by pulling a new image, so the Agents page says "Update by pulling image x.y.z" instead of offering an in-place update.',
+                'Agents on Proxmox: the normal installer works in an unprivileged Debian 13 LXC container (it checks systemd\'s sandbox and warns if nesting is off); install/proxmox-agent-ct.sh creates a suitable container. Agents show a Docker or LXC badge.',
+            ],
+        ],
         [
             'version' => '1.35.1',
             'date' => '2026-11-24',
