@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Sentinel\Controllers;
 
 use Sentinel\Core\App;
+use Sentinel\Core\HttpException;
 use Sentinel\Core\Request;
 use Sentinel\Core\Response;
 use Sentinel\Core\Session;
@@ -172,6 +173,15 @@ final class IntegrationsController extends Controller
     public function saveSso(Request $request): Response
     {
         $back = Response::redirect('/admin/integrations#sso');
+        // Whoever controls sign-in could sign in as anyone linked to it: only someone who holds every permission and
+        // sees every client sets it, with their own password (1.43.1).
+        if (!\Sentinel\Auth\Permissions::isComplete((array) ($this->user()['permissions'] ?? [])) || ($this->user()['client_ids'] ?? null) !== null) {
+            throw new HttpException(403, __('Only someone who holds every permission (an Admin) and sees every client can change Sign in with Microsoft.'));
+        }
+        if (($why = $this->confirmWithOwnPassword($request)) !== null) {
+            Session::flash('danger', $why);
+            return $back;
+        }
         $s = App::settings();
         $tenant = strtolower(trim($request->input('tenant_id')));
         $client = strtolower(trim($request->input('client_id')));
@@ -186,6 +196,11 @@ final class IntegrationsController extends Controller
             return $back;
         }
         $changed = [];
+        // Another tenant means other accounts: every link to the old one is cleared (users link again from My profile).
+        if ($s->get('sso_entra_tenant') !== $tenant && $s->get('sso_entra_tenant') !== '') {
+            $cleared = App::db()->exec('UPDATE users SET sso_subject = NULL WHERE sso_subject IS NOT NULL');
+            $changed['links_cleared'] = (int) $cleared;
+        }
         foreach (['sso_entra_tenant' => $tenant, 'sso_entra_client' => $client] as $name => $value) {
             if ($s->get($name) !== $value) {
                 $s->set($name, $value);

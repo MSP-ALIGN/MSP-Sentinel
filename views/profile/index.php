@@ -35,6 +35,22 @@ use Sentinel\Core\Csrf;
             <div class="card-footer"><button type="submit" class="btn btn-outline-primary btn-sm"><?= e(__('Save preference')) ?></button></div>
             </form>
         </div>
+        <?php if (\Sentinel\Core\App::entraSso() !== null || ($currentUser['sso_subject'] ?? null) !== null): ?>
+        <div class="card mb-3" id="microsoft">
+            <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Microsoft account')) ?></h2></div>
+            <div class="card-body small">
+                <?php if (($currentUser['sso_subject'] ?? null) !== null): ?>
+                <p class="mb-2"><?= e(__('Linked: you can use "Sign in with Microsoft".')) ?></p>
+                <form method="post" action="<?= e(url('/profile/sso-unlink')) ?>" data-confirm="<?= e(__('Unlink your Microsoft account? You then sign in with your password and Sentinel\'s code.')) ?>"><?= \Sentinel\Core\Csrf::field() ?>
+                    <button class="btn btn-outline-danger btn-sm" type="submit"><?= e(__('Unlink')) ?></button></form>
+                <?php else: ?>
+                <p class="mb-2"><?= e(__('Not linked. Link your Microsoft 365 work account once, and then use "Sign in with Microsoft" on the sign-in page. Microsoft asks you to sign in to prove it is yours.')) ?></p>
+                <form method="post" action="<?= e(url('/profile/sso-link')) ?>"><?= \Sentinel\Core\Csrf::field() ?>
+                    <button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-microsoft me-1" aria-hidden="true"></i><?= e(__('Link my Microsoft account')) ?></button></form>
+                <?php endif; ?>
+            </div>
+        </div>
+        <?php endif; ?>
         <div class="card mb-3" id="appearance">
             <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Appearance')) ?></h2></div>
             <form method="post" action="<?= e(url('/profile/theme')) ?>">

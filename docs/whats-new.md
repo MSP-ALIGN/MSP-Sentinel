@@ -2,6 +2,17 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.42.1 (2026-11-24): client lists fixes from review
+
+- **Org-wide pages and actions need every client:** the kill switch for all scanning (pause and resume), settings,
+  integrations, the System page and the audit log, which reach or show every client. A limited user can still manage
+  users, roles and API tokens within their clients.
+- **One link per outside client:** an MSP Align client, and an ITFlow client, can each be linked to only one
+  Sentinel client (before, linking a hidden client's Align record to your own showed its compliance data).
+- **Within your clients:** the Unassigned, Overdue and Due-soon counts and the owner list on the Findings page;
+  engagement approvers counted for the message; failed report-email and recheck notifications.
+- Narrowing someone's clients clears their earlier notifications; an anonymous request's client list is empty.
+
 ### 1.42.0 (2026-11-24): API tokens follow permissions and clients
 
 - **Clients:** a token only covers clients its creator sees ("All clients" only for someone who sees every client),

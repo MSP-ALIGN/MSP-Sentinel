@@ -237,7 +237,7 @@ $n = $ninja;
         <span class="ms-auto small text-body-secondary"><?= e(__('{n} user(s) linked', ['n' => $so['linked']])) ?></span>
     </div>
     <div class="card-body">
-        <p class="small"><?= e(__('Your team signs in with their Microsoft 365 work account. Only users who already exist in Sentinel can sign in: the first time, by the same email address, then by their Microsoft account. Roles and clients stay managed here. Sentinel\'s own code is skipped only when Microsoft confirms MFA. Password sign-in keeps working as a fallback unless you turn it off for a user.')) ?></p>
+        <p class="small"><?= e(__('Your team signs in with their Microsoft 365 work account. Each user links their own Microsoft account once, under My profile, while signed in with their password and Sentinel\'s code; only linked accounts can sign in, and guests from other directories never can. Roles and clients stay managed here. Sentinel\'s own code is skipped only when Microsoft confirms MFA within the last hour. Password sign-in keeps working as a fallback unless you turn it off for a user.')) ?></p>
         <details class="small mb-3">
             <summary><?= e(__('How to set it up')) ?></summary>
             <ol class="mt-2 mb-0">
@@ -260,6 +260,9 @@ $n = $ninja;
             </div>
             <div class="form-check mt-3"><input class="form-check-input" type="checkbox" id="sso-enabled" name="enabled" value="1" <?= $so['enabled'] ? 'checked' : '' ?>>
                 <label class="form-check-label" for="sso-enabled"><?= e(__('Show "Sign in with Microsoft" on the sign-in page')) ?></label></div>
+            <div class="mt-3"><label class="form-label" for="sso-mine"><?= e(__('Your own password (to confirm)')) ?></label>
+                <input class="form-control sn-w-20" type="password" id="sso-mine" name="my_password" required autocomplete="current-password"></div>
+            <div class="form-text"><?= e(__('Only an Admin who sees every client can change this. Changing the tenant clears every user\'s Microsoft link.')) ?></div>
             <button class="btn btn-primary mt-3" type="submit"><?= e(__('Save')) ?></button>
         </form>
     </div>

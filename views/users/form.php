@@ -77,7 +77,7 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
             <label class="form-check-label" for="password_login"><?= e(__('Password sign-in allowed')) ?></label>
         </div>
         <div class="form-text mb-3"><?= e(__('Off: this user can only use "Sign in with Microsoft". One active Admin who sees every client always keeps it.')) ?>
-            <?= e(($target['sso_subject'] ?? null) !== null ? __('Linked to a Microsoft account.') : __('Not linked to a Microsoft account yet (it links at the first Microsoft sign-in, by email address).')) ?></div>
+            <?= e(($target['sso_subject'] ?? null) !== null ? __('Linked to a Microsoft account.') : __('Not linked to a Microsoft account yet (the user links it under My profile).')) ?></div>
         <div class="form-check mb-3">
             <input type="checkbox" class="form-check-input" id="is_active" name="is_active" value="1" <?= (int) $values['is_active'] === 1 ? 'checked' : '' ?> <?= $isSelf ? 'disabled' : '' ?>>
             <label class="form-check-label" for="is_active"><?= e(__('Account is active')) ?></label>
@@ -120,7 +120,7 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
     <?php if (($target['sso_subject'] ?? null) !== null): ?>
     <div class="card mb-3">
         <div class="card-header"><h2 class="card-title h6 mb-0"><?= e(__('Microsoft account')) ?></h2></div>
-        <form method="post" action="<?= e(url('/users/' . (int) $target['id'] . '/sso-unlink')) ?>" data-confirm="<?= e(__('Unlink the Microsoft account? The user is signed out; their next Microsoft sign-in links again by email address.')) ?>">
+        <form method="post" action="<?= e(url('/users/' . (int) $target['id'] . '/sso-unlink')) ?>" data-confirm="<?= e(__('Unlink the Microsoft account? The user is signed out and must link it again under My profile to use Microsoft sign-in.')) ?>">
         <div class="card-body small"><?= Csrf::field() ?><?= e(__('Linked: this user can use "Sign in with Microsoft".')) ?></div>
         <div class="card-footer"><button type="submit" class="btn btn-outline-danger btn-sm"><?= e(__('Unlink Microsoft account')) ?></button></div>
         </form>

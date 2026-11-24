@@ -63,6 +63,8 @@ $router->add('GET', '/profile', [ProfileController::class, 'index']);
 $router->add('GET', '/profile/password', [ProfileController::class, 'showPassword'], $duringPasswordChange);
 $router->add('POST', '/profile/password', [ProfileController::class, 'changePassword'], $duringPasswordChange);
 $router->add('POST', '/profile/recovery-codes', [ProfileController::class, 'regenerateRecoveryCodes']);
+$router->add('POST', '/profile/sso-link', [\Sentinel\Controllers\SsoController::class, 'link']);
+$router->add('POST', '/profile/sso-unlink', [\Sentinel\Controllers\SsoController::class, 'unlink']);
 $router->add('POST', '/profile/alerts', [AlertController::class, 'preference']);
 $router->add('POST', '/profile/theme', [AlertController::class, 'theme']);
 $router->add('GET', '/notifications', [AlertController::class, 'notifications']);

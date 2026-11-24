@@ -12,7 +12,9 @@ namespace Sentinel\Auth;
  * - it came from the token endpoint over HTTPS, in exchange for the one-time code and the PKCE verifier;
  * - its signature is RS256 with a key from the tenant's published key set (no "none", no HMAC, no key in the token);
  * - iss is exactly https://login.microsoftonline.com/{tenant}/v2.0, aud is this app's client ID, tid is the tenant;
- * - it is current (exp, nbf, iat with 2 minutes of clock skew) and carries the nonce this browser's session made.
+ * - it is current (exp, nbf, iat with 2 minutes of clock skew) and carries the nonce this browser's session made;
+ * - it is a member of the tenant, not a guest from another directory (idp, 1.43.1).
+ * MFA counts only when amr lists "mfa" and auth_time is at most an hour old.
  *
  * Untrusted: everything from Microsoft's endpoints and the browser (code, state). Claims are only read after all
  * checks pass, and are cut to length. Errors never contain tokens or the secret.
@@ -21,6 +23,8 @@ final class EntraSso
 {
     public const DEFAULT_AUTHORITY = 'https://login.microsoftonline.com';
     private const SKEW = 120;
+    /** Microsoft's MFA counts for skipping Sentinel's code only when the sign-in is at most this old (seconds). */
+    public const MFA_MAX_AGE = 3600;
     private const MAX_BYTES = 1_000_000;
     private const GUID = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/';
 
@@ -64,6 +68,8 @@ final class EntraSso
             'client_id' => $this->clientId, 'response_type' => 'code', 'redirect_uri' => $redirectUri, 'response_mode' => 'query',
             'scope' => 'openid profile email', 'state' => $state, 'nonce' => $nonce,
             'code_challenge' => self::challenge($verifier), 'code_challenge_method' => 'S256', 'prompt' => 'select_account',
+            // Ask Microsoft for a sign-in at most an hour old, and say when it happened (auth_time), 1.43.1.
+            'max_age' => (string) self::MFA_MAX_AGE,
         ], '', '&', PHP_QUERY_RFC3986);
     }
 
@@ -121,24 +127,24 @@ final class EntraSso
             'issued at' => is_int($claims['iat'] ?? null) && $claims['iat'] <= $now + self::SKEW && $claims['iat'] > $now - 3600,
             'nonce' => is_string($claims['nonce'] ?? null) && $nonce !== '' && hash_equals($nonce, $claims['nonce']),
             'account' => is_string($claims['oid'] ?? null) && self::validGuid(strtolower($claims['oid'])),
+            // A guest (B2B) account gets this tenant's iss and tid; only idp shows its home directory. Guests are
+            // refused: only the tenant's own members may sign in (1.43.1).
+            'member account' => !isset($claims['idp']) || $claims['idp'] === $claims['iss'],
         ];
         foreach ($checks as $what => $ok) {
             if (!$ok) {
                 throw new SsoException('The ID token failed the ' . $what . ' check.');
             }
         }
-        $email = '';
-        foreach (['email', 'preferred_username', 'upn'] as $k) {
-            if (is_string($claims[$k] ?? null) && filter_var($claims[$k], FILTER_VALIDATE_EMAIL) !== false) {
-                $email = strtolower(mb_substr($claims[$k], 0, 190));
-                break;
-            }
-        }
+        // Shown in the audit log only; never used to decide who signs in (1.43.1: accounts are linked from My profile).
+        $email = is_string($claims['email'] ?? null) && filter_var($claims['email'], FILTER_VALIDATE_EMAIL) !== false ? strtolower(mb_substr($claims['email'], 0, 190)) : '';
         $amr = is_array($claims['amr'] ?? null) ? $claims['amr'] : [];
+        // MFA counts only for a fresh sign-in: auth_time within MFA_MAX_AGE (an old Entra session's MFA doesn't).
+        $fresh = is_int($claims['auth_time'] ?? null) && $claims['auth_time'] > $now - self::MFA_MAX_AGE - self::SKEW && $claims['auth_time'] <= $now + self::SKEW;
         return ['oid' => strtolower((string) $claims['oid']), 'tid' => $this->tenantId, 'email' => $email,
                 'name' => is_string($claims['name'] ?? null) ? mb_substr((string) preg_replace('/[\p{Cc}\p{Cf}]/u', '', $claims['name']), 0, 100) : '',
                 // Microsoft says MFA was done when amr lists "mfa" (some flows don't send amr: then Sentinel asks its own code).
-                'mfa' => in_array('mfa', $amr, true)];
+                'mfa' => in_array('mfa', $amr, true) && $fresh];
     }
 
     /** The tenant's signing key with this key ID, as PEM. */
@@ -222,7 +228,8 @@ final class EntraSso
         $err = curl_error($ch);
         curl_close($ch);
         if ($ok === false) {
-            throw new SsoException('Could not reach Microsoft: ' . mb_substr($err, 0, 200));
+            error_log('[msp-sentinel] Sign in with Microsoft: ' . mb_substr($err, 0, 200)); // network details for the admin only
+            throw new SsoException('Could not reach Microsoft. Try again later.');
         }
         $data = json_decode($body, true);
         if (!is_array($data)) {

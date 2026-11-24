@@ -14,7 +14,7 @@ declare(strict_types=1);
  *
  * The test chooses the signed-in account through scenario.json in the state folder (next to FEEDS_LOG): claims to
  * set or override (oid, email, amr, ...), and "tamper" options: wrong_key, wrong_aud, wrong_iss, wrong_tid, expired,
- * wrong_nonce.
+ * wrong_nonce, guest (an idp claim from another directory), stale_mfa (auth_time two hours ago).
  */
 
 $dir = dirname((string) getenv('FEEDS_LOG')) . '/entra';
@@ -70,7 +70,8 @@ $claims = array_merge([
     'iat' => $now - 5, 'nbf' => $now - 5, 'exp' => in_array('expired', $tamper, true) ? $now - 3600 : $now + 3600,
     'nonce' => in_array('wrong_nonce', $tamper, true) ? 'not-the-nonce' : $stored['nonce'],
     'oid' => '0d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6', 'name' => 'Example User', 'email' => 'user@msp.example', 'amr' => ['pwd', 'mfa'],
-], (array) ($scenario['claims'] ?? []));
+    'auth_time' => in_array('stale_mfa', $tamper, true) ? $now - 7200 : $now - 5,
+], in_array('guest', $tamper, true) ? ['idp' => 'https://sts.windows.net/44444444-4444-4444-4444-444444444444/'] : [], (array) ($scenario['claims'] ?? []));
 $header = $b64(json_encode(['alg' => 'RS256', 'typ' => 'JWT', 'kid' => 'mock-key-1']));
 $body = $b64(json_encode($claims));
 $signer = $key;

@@ -231,8 +231,8 @@ final class UserController extends Controller
     }
 
     /**
-     * POST /users/{id}/sso-unlink: forget the Microsoft account linked to this user (1.43); the next Microsoft sign-in
-     * links again by email. For users you may manage; signs them out.
+     * POST /users/{id}/sso-unlink: forget the Microsoft account linked to this user (1.43); they link again from My
+     * profile. For users you may manage; signs them out.
      */
     public function unlinkSso(Request $request, array $params): Response
     {

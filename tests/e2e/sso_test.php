@@ -3,30 +3,35 @@
 declare(strict_types=1);
 
 /**
- * End-to-end tests for "Sign in with Microsoft" (1.43) against the mock Entra ID (tests/mocks/entra_mock.php), never
- * Microsoft: only existing users sign in (linked by email the first time, then by account ID), Sentinel's code is
- * skipped only with MFA, every forged or tampered ID token and callback is refused, password sign-in can be turned
- * off per user (never for the last Admin), and links can be removed. Made-up tenant, app and accounts only.
+ * End-to-end tests for "Sign in with Microsoft" (1.43, 1.43.1) against the mock Entra ID (tests/mocks/entra_mock.php),
+ * never Microsoft: only an Admin with every client sets it up (with their password); users link their own Microsoft
+ * account from My profile while signed in, and only linked accounts sign in; Sentinel's code is skipped only with a
+ * recent MFA; guests and every forged or tampered ID token and callback are refused; password sign-in can be turned off
+ * per user (never for the last Admin); links can be removed, and a new tenant clears them. Made-up tenant, app and
+ * accounts only.
  */
 
 use Sentinel\Core\App;
 use Sentinel\Tests\Assert;
 use Sentinel\Tests\HttpClient;
+use Sentinel\Tests\HttpResult;
 use Sentinel\Tests\TestContext;
 
 const SSO_TENANT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const SSO_CLIENT = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
-/** Turn SSO on (as an admin, through the Integrations form) and give the made-up user its email address. */
-$setup = static function (TestContext $ctx): void {
-    if (App::settings()->fresh('sso_entra_enabled') === '1') {
-        return;
+/** The settings form fields. */
+$ssoForm = static fn (string $tenant = SSO_TENANT): array => ['tenant_id' => $tenant, 'client_id' => SSO_CLIENT, 'client_secret' => 'mock-client-secret-value',
+    'enabled' => '1', 'my_password' => 'Admin-Pass-0001!'];
+/** Turn SSO on (as the admin, through the Integrations form) and make the made-up technician. */
+$setup = static function (TestContext $ctx) use ($ssoForm): void {
+    if (App::settings()->fresh('sso_entra_enabled') !== '1') {
+        $ctx->login('admin', 'Admin-Pass-0001!')->submit('/admin/integrations', '/admin/integrations/sso', $ssoForm());
     }
-    $admin = $ctx->login('admin', 'Admin-Pass-0001!');
-    $admin->submit('/admin/integrations', '/admin/integrations/sso', ['tenant_id' => SSO_TENANT, 'client_id' => SSO_CLIENT,
-        'client_secret' => 'mock-client-secret-value', 'enabled' => '1']);
-    $uid = $ctx->createUser('ssouser', 'technician', 'Ssouser-Pass-0001!');
-    $ctx->db->exec("UPDATE users SET email = 'User@msp.example' WHERE id = {$uid}");
+    if ((int) $ctx->db->query("SELECT COUNT(*) FROM users WHERE username = 'ssouser'")->fetchColumn() === 0) {
+        $uid = $ctx->createUser('ssouser', 'technician', 'Ssouser-Pass-0001!');
+        $ctx->db->exec("UPDATE users SET email = 'user@msp.example' WHERE id = {$uid}");
+    }
 };
 /** The mock's scenario: claims to set, tamper options. */
 $scenario = static function (TestContext $ctx, array $claims = [], array $tamper = []): void {
@@ -34,12 +39,8 @@ $scenario = static function (TestContext $ctx, array $claims = [], array $tamper
     @mkdir($dir, 0700, true);
     file_put_contents($dir . '/scenario.json', json_encode(['claims' => (object) $claims, 'tamper' => $tamper]));
 };
-/**
- * One sign-in through the mock: Sentinel → Microsoft's authorize (mock) → back to the callback. Returns the callback's
- * answer. $state overrides the state sent back (forged callback).
- */
-$signIn = static function (HttpClient $c, ?string $state = null): \Sentinel\Tests\HttpResult {
-    $start = $c->get('/login/sso');
+/** From a response that sends the browser to Microsoft (mock), through the mock's authorize, back to the callback. */
+$follow = static function (HttpClient $c, HttpResult $start, ?string $state = null): HttpResult {
     $authorize = (string) $start->location();
     if (!str_starts_with($authorize, 'http://127.0.0.1')) {
         return $start;
@@ -53,12 +54,32 @@ $signIn = static function (HttpClient $c, ?string $state = null): \Sentinel\Test
     parse_str((string) parse_url(trim($m[1] ?? ''), PHP_URL_QUERY), $q);
     return $c->get('/login/sso/callback?' . http_build_query(['code' => $q['code'] ?? '', 'state' => $state ?? ($q['state'] ?? '')]));
 };
+$signIn = static fn (HttpClient $c, ?string $state = null): HttpResult => $follow($c, $c->get('/login/sso'), $state);
+/** A user links their Microsoft account from My profile (signed in with password and code). */
+$link = static function (TestContext $ctx, string $username = 'ssouser', string $password = 'Ssouser-Pass-0001!') use ($follow): HttpResult {
+    $ctx->clearThrottle();
+    $u = $ctx->login($username, $password);
+    return $follow($u, $u->post('/profile/sso-link', ['_csrf' => $u->get('/profile')->csrf()]));
+};
+$subject = static function (TestContext $ctx, string $username = 'ssouser'): ?string {
+    $v = $ctx->db->query('SELECT sso_subject FROM users WHERE username = ' . $ctx->db->quote($username))->fetchColumn();
+    return $v === null || $v === false ? null : (string) $v;
+};
+$lastFailure = static fn (TestContext $ctx): string => (string) $ctx->db->query("SELECT details FROM audit_log WHERE action = 'auth.sso_failed' ORDER BY id DESC LIMIT 1")->fetchColumn();
 
 return [
-    'sso: set up by an admin; the button shows; the request to Microsoft is well formed' => function (TestContext $ctx) use ($setup): void {
+    'sso: only an Admin with every client sets it up, with their password; the request to Microsoft is well formed' => function (TestContext $ctx) use ($setup, $ssoForm): void {
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
-        $admin->submit('/admin/integrations', '/admin/integrations/sso', ['tenant_id' => 'not-a-guid', 'client_id' => SSO_CLIENT, 'client_secret' => 'x', 'enabled' => '1']);
+        $admin->submit('/admin/integrations', '/admin/integrations/sso', ['tenant_id' => 'not-a-guid'] + $ssoForm());
         Assert::same('0', App::settings()->fresh('sso_entra_enabled'), 'a bad tenant ID is refused');
+        $admin->submit('/admin/integrations', '/admin/integrations/sso', ['my_password' => 'Wrong-Pass-0001!'] + $ssoForm());
+        Assert::same('0', App::settings()->fresh('sso_entra_enabled'), 'needs the right password');
+        $ctx->clearThrottle();
+        // Someone who may manage integrations, but isn't an Admin, can't change sign-in.
+        $admin->submit('/admin/roles/new', '/admin/roles', ['name' => 'Integrations keeper', 'my_password' => 'Admin-Pass-0001!', 'permissions[0]' => 'integrations.manage']);
+        $ctx->createUser('intkeeper', 'Integrations keeper', 'Intkeeper-Pass-0001!');
+        $k = $ctx->login('intkeeper', 'Intkeeper-Pass-0001!');
+        Assert::status(403, $k->post('/admin/integrations/sso', ['_csrf' => $k->get('/admin/integrations')->csrf(), 'my_password' => 'Intkeeper-Pass-0001!'] + $ssoForm()));
         Assert::notContains('Sign in with Microsoft', $ctx->client()->get('/login')->body, 'no button while off');
         $setup($ctx);
         Assert::same('1', App::settings()->fresh('sso_entra_enabled'));
@@ -71,81 +92,106 @@ return [
         Assert::same(SSO_CLIENT, $q['client_id'] ?? null);
         Assert::same('https://sentinel.example/login/sso/callback', $q['redirect_uri'] ?? null);
         Assert::same('S256', $q['code_challenge_method'] ?? null);
+        Assert::same('3600', $q['max_age'] ?? null, 'asks for a recent sign-in');
         Assert::true(strlen((string) ($q['state'] ?? '')) >= 40 && strlen((string) ($q['nonce'] ?? '')) >= 40, 'random state and nonce');
         Assert::notContains('secret', $loc, 'the secret never goes to the browser');
     },
 
-    'sso: an existing user signs in (linked by email, then by account); MFA skips Sentinel\'s code, no MFA asks for it' => function (TestContext $ctx) use ($setup, $scenario, $signIn): void {
+    'sso: an unlinked account never signs in (not even by email); users link their own from My profile' => function (TestContext $ctx) use ($setup, $scenario, $signIn, $link, $subject): void {
         $setup($ctx);
+        $ctx->db->exec("UPDATE users SET sso_subject = NULL WHERE username = 'ssouser'");
         $scenario($ctx, ['email' => 'user@msp.example', 'amr' => ['pwd', 'mfa']]);
         $c = $ctx->client();
-        $res = $signIn($c);
-        Assert::redirect('/', $res, 'straight in with MFA');
-        Assert::contains('Ssouser Example', $c->get('/')->body);
-        $subject = (string) $ctx->db->query("SELECT sso_subject FROM users WHERE username = 'ssouser'")->fetchColumn();
-        Assert::same(SSO_TENANT . ':0d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6', $subject, 'linked to tenant and account');
+        Assert::redirect('/login', $signIn($c), 'the same email address is not enough');
+        Assert::redirect('/login', $c->get('/'), 'not signed in');
+        Assert::same(null, $subject($ctx), 'nothing linked');
+        // Linking: signed in with password and code, then proven at Microsoft.
+        Assert::redirect('/profile', $link($ctx));
+        Assert::same(SSO_TENANT . ':0d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6', $subject($ctx), 'linked to tenant and account');
         Assert::true((int) $ctx->db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'user.sso_linked'")->fetchColumn() >= 1, 'link audited');
+        // Now Microsoft sign-in works: straight in with a recent MFA, Sentinel's code otherwise.
+        $c = $ctx->client();
+        Assert::redirect('/', $signIn($c), 'straight in with MFA');
+        Assert::contains('Ssouser Example', $c->get('/')->body);
         Assert::true((int) $ctx->db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'auth.login' AND details LIKE '%sso%'")->fetchColumn() >= 1, 'sign-in audited');
-        // The same account with another email still signs in as the linked user.
-        $scenario($ctx, ['email' => 'renamed@msp.example', 'amr' => ['pwd', 'mfa']]);
-        Assert::redirect('/', $signIn($ctx->client()), 'by account ID once linked');
-        // Without MFA: Sentinel's own two-factor step, exactly as after a password.
-        $scenario($ctx, ['email' => 'user@msp.example', 'amr' => ['pwd']]);
+        $scenario($ctx, ['amr' => ['pwd']]);
         $res = $signIn($ctx->client());
         Assert::true(in_array($res->location(), ['/2fa/setup', '/login/2fa'], true), 'no MFA claim: Sentinel asks its own code, got ' . $res->location());
+        $scenario($ctx, [], ['stale_mfa']);
+        $res = $signIn($ctx->client());
+        Assert::true(in_array($res->location(), ['/2fa/setup', '/login/2fa'], true), 'MFA from two hours ago: Sentinel asks its own code');
+        $scenario($ctx);
     },
 
-    'sso: forged, tampered or unknown sign-ins are refused' => function (TestContext $ctx) use ($setup, $scenario, $signIn): void {
+    'sso: forged, tampered, guest or disabled sign-ins are refused, each by its own check' => function (TestContext $ctx) use ($setup, $scenario, $signIn, $link, $subject, $lastFailure): void {
         $setup($ctx);
-        $why = ['wrong_key' => 'signature', 'wrong_aud' => 'audience', 'wrong_iss' => 'issuer', 'wrong_tid' => 'tenant', 'expired' => 'expiry', 'wrong_nonce' => 'nonce'];
+        $scenario($ctx);
+        if ($subject($ctx) === null) {
+            $link($ctx);
+        }
+        $why = ['wrong_key' => 'signature', 'wrong_aud' => 'audience', 'wrong_iss' => 'issuer', 'wrong_tid' => 'tenant', 'expired' => 'expiry',
+                'wrong_nonce' => 'nonce', 'guest' => 'member account'];
         foreach ($why as $tamper => $check) {
             $ctx->clearThrottle();
-            $scenario($ctx, ['email' => 'user@msp.example'], [$tamper]);
+            $scenario($ctx, [], [$tamper]);
             $c = $ctx->client();
             Assert::redirect('/login', $signIn($c), $tamper);
             Assert::redirect('/login', $c->get('/'), 'not signed in after ' . $tamper);
-            $reason = (string) $ctx->db->query("SELECT details FROM audit_log WHERE action = 'auth.sso_failed' ORDER BY id DESC LIMIT 1")->fetchColumn();
-            Assert::contains($check, $reason, $tamper . ' refused by the ' . $check . ' check');
+            Assert::contains($check, $lastFailure($ctx), $tamper . ' refused by the ' . $check . ' check');
         }
         $ctx->clearThrottle();
-        $scenario($ctx, ['email' => 'user@msp.example']);
+        $scenario($ctx);
         Assert::redirect('/login', $signIn($ctx->client(), 'forged-state-value'), 'a callback with another state');
         Assert::redirect('/login', $ctx->client()->get('/login/sso/callback?code=abc&state=xyz'), 'a callback nobody started');
-        // An account matching no user, or a disabled user: no sign-in, nothing created.
+        // An account linked to nobody (even with an Admin's address), and a disabled user: no sign-in, nothing created.
         $users = (int) $ctx->db->query('SELECT COUNT(*) FROM users')->fetchColumn();
-        $scenario($ctx, ['oid' => '9e8d7c6b-5a49-4382-a1b0-c9d8e7f6a5b4', 'email' => 'stranger@msp.example']);
-        Assert::redirect('/login', $signIn($ctx->client()));
+        $scenario($ctx, ['oid' => '9e8d7c6b-5a49-4382-a1b0-c9d8e7f6a5b4', 'email' => 'admin@msp.example']);
+        Assert::redirect('/login', $signIn($ctx->client()), 'an Admin\'s email address on an unlinked account');
+        Assert::contains('not_linked', $lastFailure($ctx));
         Assert::same($users, (int) $ctx->db->query('SELECT COUNT(*) FROM users')->fetchColumn(), 'no account created');
         $ctx->db->exec("UPDATE users SET is_active = 0 WHERE username = 'ssouser'");
-        $scenario($ctx, ['email' => 'user@msp.example']);
+        $scenario($ctx);
         Assert::redirect('/login', $signIn($ctx->client()), 'a disabled user');
         $ctx->db->exec("UPDATE users SET is_active = 1 WHERE username = 'ssouser'");
-        Assert::true((int) $ctx->db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'auth.sso_failed'")->fetchColumn() >= 8, 'failures audited');
+        // Someone else can't link a Microsoft account that is already another user's.
+        if ((int) $ctx->db->query("SELECT COUNT(*) FROM users WHERE username = 'othertech'")->fetchColumn() === 0) {
+            $ctx->createUser('othertech', 'technician', 'Othertech-Pass-0001!');
+        }
+        Assert::redirect('/profile', $link($ctx, 'othertech', 'Othertech-Pass-0001!'));
+        Assert::same(null, $subject($ctx, 'othertech'), 'not linked twice');
+        Assert::contains('link_taken', $lastFailure($ctx));
         $ctx->clearThrottle();
     },
 
-    'sso: password sign-in can be turned off per user, never for the last Admin; links can be removed' => function (TestContext $ctx) use ($setup, $scenario, $signIn): void {
+    'sso: password sign-in off per user (never for the last Admin); unlink; a new tenant clears links' => function (TestContext $ctx) use ($setup, $scenario, $signIn, $link, $subject, $ssoForm): void {
         $setup($ctx);
+        $scenario($ctx);
+        if ($subject($ctx) === null) {
+            $link($ctx);
+        }
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $uid = (int) $ctx->db->query("SELECT id FROM users WHERE username = 'ssouser'")->fetchColumn();
         $tech = (string) App::roles()->idForKey('technician');
-        $res = $admin->submit('/users/' . $uid, '/users/' . $uid, ['display_name' => 'Ssouser Example', 'email' => 'User@msp.example', 'role_id' => $tech,
+        $res = $admin->submit('/users/' . $uid, '/users/' . $uid, ['display_name' => 'Ssouser Example', 'email' => 'user@msp.example', 'role_id' => $tech,
             'is_active' => '1', 'password_field' => '1', 'my_password' => 'Admin-Pass-0001!']);
         Assert::redirect('/users', $res);
         Assert::same('0', (string) $ctx->db->query("SELECT password_login FROM users WHERE id = {$uid}")->fetchColumn(), 'turned off');
         $ctx->clearThrottle();
-        $res = $ctx->client()->submit('/login', '/login', ['username' => 'ssouser', 'password' => 'Ssouser-Pass-0001!']);
-        Assert::contains('Password sign-in is turned off', $res->body);
+        Assert::contains('Password sign-in is turned off', $ctx->client()->submit('/login', '/login', ['username' => 'ssouser', 'password' => 'Ssouser-Pass-0001!'])->body);
+        Assert::redirect('/', $signIn($ctx->client()), 'Microsoft sign-in still works');
         // The last Admin who sees every client keeps password sign-in (break-glass).
         $adminId = (int) $ctx->db->query("SELECT id FROM users WHERE username = 'admin'")->fetchColumn();
-        $others = App::roles()->passwordAdminsAfter($adminId, (int) App::roles()->idForKey('admin'), true, true, false);
-        $all = App::roles()->passwordAdminsAfter($adminId, (int) App::roles()->idForKey('admin'), true, true, true);
-        Assert::same($all - 1, $others, 'turning it off for one Admin is counted');
-        // Unlink: the next Microsoft sign-in links again by email.
+        $adminRole = (int) App::roles()->idForKey('admin');
+        Assert::same(App::roles()->passwordAdminsAfter($adminId, $adminRole, true, true, true) - 1, App::roles()->passwordAdminsAfter($adminId, $adminRole, true, true, false), 'counted');
+        // Unlink by an admin; the user links again from My profile.
         $admin->post('/users/' . $uid . '/sso-unlink', ['_csrf' => $admin->get('/users/' . $uid)->csrf()]);
-        Assert::same(null, $ctx->db->query("SELECT sso_subject FROM users WHERE id = {$uid}")->fetchColumn() ?: null, 'unlinked');
-        $scenario($ctx, ['email' => 'user@msp.example', 'amr' => ['pwd', 'mfa']]);
-        Assert::redirect('/', $signIn($ctx->client()), 'links again');
+        Assert::same(null, $subject($ctx), 'unlinked');
         $ctx->db->exec("UPDATE users SET password_login = 1 WHERE id = {$uid}");
+        Assert::redirect('/profile', $link($ctx));
+        Assert::true($subject($ctx) !== null, 'linked again');
+        // A new tenant: every link is cleared.
+        $admin->submit('/admin/integrations', '/admin/integrations/sso', $ssoForm('cccccccc-cccc-4ccc-8ccc-cccccccccccc'));
+        Assert::same(null, $subject($ctx), 'links cleared with the tenant');
+        $admin->submit('/admin/integrations', '/admin/integrations/sso', $ssoForm());
     },
 ];

@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.43.0](https://img.shields.io/badge/version-1.43.0-ff5a1f?style=flat-square)
+![Version 1.43.1](https://img.shields.io/badge/version-1.43.1-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,19 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.43.1 (2026-11-24): Sign in with Microsoft fixes from review
+
+- **Accounts are linked by their owner, never by email address.** Each user signs in with their password and
+  Sentinel's code, then links their Microsoft account under **My profile** (Microsoft asks them to prove it).
+  Before, someone who could set an email address in the tenant (an Entra admin, a helpdesk, a guest invitation)
+  could be linked to a Sentinel user with that address.
+- **Only an Admin who sees every client** can change the Sign in with Microsoft settings, with their own password;
+  before, anyone who could manage integrations could point it at another tenant. Changing the tenant clears every
+  link.
+- **Guests** from other directories are refused, and Sentinel's code is skipped only for MFA within the last hour
+  (`max_age` and `auth_time`).
+- Linking can't race to two accounts; network errors are no longer shown on the sign-in page.
+
 ### 1.43.0 (2026-11-24): Sign in with Microsoft
 
 - **Sign in with Microsoft (Entra ID).** Your team signs in with their Microsoft 365 work account, the same tenant
@@ -144,17 +157,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
   longer blocks other edits, and its message names no other client.
 - Backup and feed notices go only to people who see every client; notifications are cleared only when someone's
   clients shrink. The user form's client choice is laid out properly; 1.40.0's notes now say 27 permissions.
-
-### 1.42.1 (2026-11-24): client lists fixes from review
-
-- **Org-wide pages and actions need every client:** the kill switch for all scanning (pause and resume), settings,
-  integrations, the System page and the audit log, which reach or show every client. A limited user can still manage
-  users, roles and API tokens within their clients.
-- **One link per outside client:** an MSP Align client, and an ITFlow client, can each be linked to only one
-  Sentinel client (before, linking a hidden client's Align record to your own showed its compliance data).
-- **Within your clients:** the Unassigned, Overdue and Due-soon counts and the owner list on the Findings page;
-  engagement approvers counted for the message; failed report-email and recheck notifications.
-- Narrowing someone's clients clears their earlier notifications; an anonymous request's client list is empty.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 
