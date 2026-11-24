@@ -240,6 +240,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.32.1',
+            'date' => '2026-11-24',
+            'items' => [
+                'Shared ITFlow ticket fixes: a fixed target released by a replacement, or whose ticket lost its leading finding or failed for good, gets a ticket again when it is open; large groups recheck each target once per close instead of looping; no repeated notes after a reopen; per-target notes count against the run limit; known-exploited notes when only other targets are open; the finding page shows the shared ticket\'s state; members are not listed in the weekly Warnings ticket.',
+            ],
+        ],
+        [
             'version' => '1.32.0',
             'date' => '2026-11-24',
             'items' => [

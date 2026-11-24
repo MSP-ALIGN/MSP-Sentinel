@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.32.0](https://img.shields.io/badge/version-1.32.0-ff5a1f?style=flat-square)
+![Version 1.32.1](https://img.shields.io/badge/version-1.32.1-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -149,6 +149,21 @@ curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install
 The same help is built into the app (**Help** in the menu), with a "What's new" page for every release.
 
 ## What's new
+
+### 1.32.1 (2026-11-24): shared ITFlow tickets, fixes from review
+
+- **No target is left without a ticket.** A fixed target that stays with a replaced ticket is released, and gets a
+  ticket again if it comes back. So do targets whose ticket lost its leading finding (retention deletes old resolved
+  findings) or whose replacement ticket ITFlow refused for good.
+- **Large groups recheck each target once per close.** Before, more open targets than the recheck limit could queue
+  rechecks in a loop.
+- **No repeated notes** after a ticket is reopened or resolved for all targets.
+- **Per-target notes count against the run's limit.** A refused note no longer holds up the ticket's other steps.
+- **Known-exploited notes** also reach a shared ticket when only other targets are open.
+- **The finding page** shows the shared ticket's real state for every target.
+- **Members aren't listed** in the weekly Warnings ticket.
+- **A retried replacement ticket** names the targets that moved to it.
+- **Docs:** a new target only joins an open ticket; one that appears after the ticket was resolved gets its own.
 
 ### 1.32.0 (2026-11-24): one ITFlow ticket per issue
 

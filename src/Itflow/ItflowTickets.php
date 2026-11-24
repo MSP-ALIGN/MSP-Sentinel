@@ -111,6 +111,7 @@ final class ItflowTickets
             $error = '';
             try {
                 $this->settlePending();
+                $this->releaseOrphans();
                 $this->twoWay();
                 $this->kevNotes();
                 $this->findingTickets();
@@ -235,6 +236,21 @@ final class ItflowTickets
     private const OPEN_MEMBER_SQL = "EXISTS (SELECT 1 FROM itflow_tickets m JOIN findings mf ON mf.id = m.finding_id
         WHERE m.kind = 'member' AND m.parent_id = t.id AND m.state = 'open' AND mf.status = 'open')";
 
+    /**
+     * Release members whose ticket can no longer carry them, so each open one gets a ticket again (findingTickets
+     * handles 'gone' rows): the leading row was replaced or is gone, lost its finding (retention deleted it), or failed
+     * for good with its finding no longer open (its retry would never run). Their findings' history keeps the old ticket.
+     */
+    private function releaseOrphans(): void
+    {
+        $this->db->exec(
+            "UPDATE itflow_tickets m LEFT JOIN itflow_tickets p ON p.id = m.parent_id LEFT JOIN findings pf ON pf.id = p.finding_id
+             SET m.state = 'gone'
+             WHERE m.kind = 'member' AND m.state = 'open'
+               AND (p.id IS NULL OR p.state IN ('replaced', 'gone') OR p.finding_id IS NULL OR (p.state = 'failed' AND pf.status <> 'open'))"
+        );
+    }
+
     /** Follow the finding tickets both ways (see the class notes). */
     private function twoWay(): void
     {
@@ -317,7 +333,7 @@ final class ItflowTickets
                     $this->setRow($rowId, ['state' => $status === 'closed' ? 'done' : 'sentinel_resolved', 'last_note_at' => $now]);
                 } elseif ($status !== 'open') {
                     // Resolved or closed in ITFlow, still open here: check every open target again.
-                    $verify = $this->requestVerifyAll($open);
+                    $verify = $this->requestVerifyAll($open, null);
                     if ($verify === 'later') {
                         $this->setRow($rowId, ['status_checked_at' => null]); // recheck limits reached: try again next run
                         return;
@@ -342,6 +358,8 @@ final class ItflowTickets
                     $this->setRow($rowId, ['state' => 'open', 'closed_seen_at' => null]); // reopened in ITFlow by someone
                     return;
                 }
+                // Targets not rechecked since the close yet (a large group can't all wait at once): queue more as the limits allow.
+                $this->requestVerifyAll($open, (string) $r['closed_seen_at']);
                 if ($this->stillThereAny($open, (string) $r['closed_seen_at'])) {
                     $this->stillOpen($r, $group, $status, 'ITFlow ticket ' . $ref . ' was closed, but Sentinel still sees this problem.');
                     return;
@@ -416,23 +434,42 @@ final class ItflowTickets
                     'false_positive' => 'marked as a false positive in Sentinel.' . ((string) $g['triage_note'] !== '' ? ' Reason: ' . self::h($g['triage_note']) : ''),
                     default => 'closed in Sentinel.',
                 } . ' Other targets of this ticket are still open.</p>';
-            $this->itflow->addNote((int) $g['itflow_client_id'], (int) $g['itflow_ticket_id'], $html);
+            if ($this->budget <= 0) {
+                return; // the rest next run (the notes depend on state, nothing is lost)
+            }
+            try {
+                $this->itflow->addNote((int) $g['itflow_client_id'], (int) $g['itflow_ticket_id'], $html);
+            } catch (ItflowException $ex) {
+                if ($ex->stopsRun()) {
+                    throw $ex;
+                }
+                $this->skip($ex); // this note is retried next run; the ticket's other steps go on
+                continue;
+            }
             $this->setRow((int) $g['row_id'], ['target_noted' => $isOpen ? 0 : 1, 'last_note_at' => gmdate('Y-m-d H:i:s')]);
+            $this->budget--;
             $this->n['notes']++;
         }
     }
 
     /**
-     * Rechecks for every open target of a ticket closed in ITFlow.
+     * Rechecks for the open targets of a ticket closed in ITFlow; with $since, only those without a recheck queued
+     * since then (each target is rechecked once per close, as the limits allow, never in a loop).
      *
      * @param list<array<string,mixed>> $open
-     * @return string 'later' if any must wait for the limits (try again next run), else 'queued' if any was queued,
-     *                else 'no'
+     * @return string 'queued' if any was queued (or is on its way), else 'later' if any must wait for the limits (try
+     *                again next run), else 'no'
      */
-    private function requestVerifyAll(array $open): string
+    private function requestVerifyAll(array $open, ?string $since): string
     {
-        $results = array_map(fn (array $g): string => $this->requestVerify($g), $open);
-        return in_array('later', $results, true) ? 'later' : (in_array('queued', $results, true) ? 'queued' : 'no');
+        $results = [];
+        foreach ($open as $g) {
+            if ($since !== null && $g['vj_created_at'] !== null && (string) $g['vj_created_at'] >= $since) {
+                continue; // already rechecked (or being rechecked) since the close
+            }
+            $results[] = $this->requestVerify($g);
+        }
+        return in_array('queued', $results, true) ? 'queued' : (in_array('later', $results, true) ? 'later' : 'no');
     }
 
     /** Whether any open target was conclusively seen again since the ticket was closed (stillThere). @param list<array<string,mixed>> $open */
@@ -483,6 +520,9 @@ final class ItflowTickets
             $this->itflow->addNote((int) $r['itflow_client_id'], (int) $r['itflow_ticket_id'], '<p><strong>' . self::h($why) . '</strong> The ticket was reopened.</p>'
                 . implode('', array_map(fn (array $g): string => $this->evidenceHtml($g), array_slice($open, 0, 50))));
             $this->setRow($rowId, ['state' => 'open', 'closed_seen_at' => null, 'fixed_noted_at' => null, 'last_note_at' => gmdate('Y-m-d H:i:s')]);
+            foreach ($open as $g) {
+                $this->setRow((int) $g['row_id'], ['target_noted' => 0]); // named in the reopen note: no "seen again" note too
+            }
             $this->eventAll($open, $why . ' Ticket reopened.');
             $this->n['reopened']++;
             return;
@@ -576,6 +616,10 @@ final class ItflowTickets
             : $this->fixedNote($r);
         $this->itflow->addNote((int) $r['itflow_client_id'], (int) $r['itflow_ticket_id'], $html);
         $this->setRow((int) $r['row_id'], ['fixed_noted_at' => gmdate('Y-m-d H:i:s'), 'last_note_at' => gmdate('Y-m-d H:i:s')]);
+        // Every target is in that note: no separate "fixed" note for any of them later.
+        foreach ($group as $g) {
+            $this->setRow((int) $g['row_id'], ['target_noted' => 1]);
+        }
     }
 
     /** The database's current UTC time. */
@@ -616,7 +660,9 @@ final class ItflowTickets
                 $this->db->prepare('UPDATE itflow_tickets SET parent_id = :p, itflow_ticket_id = 0, reference = \'\', target_noted = 0 WHERE id = :id')
                     ->execute(['p' => $newRow, 'id' => $o['row_id']]);
             }
-            $this->db->prepare("UPDATE itflow_tickets SET state = 'done' WHERE kind = 'member' AND parent_id = :p AND state = 'open'")->execute(['p' => $r['row_id']]);
+            // The fixed targets stay with the old ticket in their history, and are released: one that comes back gets a
+            // ticket again (findingTickets handles 'gone' rows).
+            $this->db->prepare("UPDATE itflow_tickets SET state = 'gone' WHERE kind = 'member' AND parent_id = :p AND state = 'open'")->execute(['p' => $r['row_id']]);
             $this->db->commit();
         } catch (\Throwable $ex) {
             $this->db->rollBack();
@@ -759,7 +805,9 @@ final class ItflowTickets
             }
             $rowId ??= $this->newRow((int) $f['client_id'], 'finding', (int) $f['id'], (string) $f['severity'], $kev);
             $this->setRow($rowId, ['kev_noted' => $kev ? 1 : 0, 'severity_at_open' => $f['severity']]);
-            $ticket = $this->openTicket($rowId, (int) $row['itflow_client_id'], $this->subject($f), $this->findingHtml($f), $this->priority($f));
+            // A retried replacement ticket names the targets that moved to it.
+            $also = implode('', array_map(fn (array $m): string => $this->alsoFoundHtml($m), array_slice($this->members($rowId), 0, 50)));
+            $ticket = $this->openTicket($rowId, (int) $row['itflow_client_id'], $this->subject($f), $this->findingHtml($f) . $also, $this->priority($f));
             if ($ticket === null) {
                 continue;
             }
@@ -802,6 +850,8 @@ final class ItflowTickets
         try {
             $this->itflow->addNote($itflowClient, (int) $leader['itflow_ticket_id'], $this->alsoFoundHtml($f));
         } catch (ItflowException $ex) {
+            // Removed again so it is retried. (If ITFlow added the note but the answer was lost, the retry adds it a
+            // second time: a harmless duplicate note, never a missed target.)
             $this->db->prepare('DELETE FROM itflow_tickets WHERE id = :id')->execute(['id' => $memberRow]);
             if ($ex->stopsRun()) {
                 throw $ex;
@@ -824,10 +874,10 @@ final class ItflowTickets
     {
         $rows = $this->db->query(
             "SELECT t.id AS row_id, t.itflow_ticket_id, c.itflow_client_id, k.required_action AS kev_action, k.due_date AS kev_due
-             FROM itflow_tickets t JOIN findings f ON f.id = t.finding_id AND f.status = 'open'
+             FROM itflow_tickets t JOIN findings f ON f.id = t.finding_id
              JOIN clients c ON c.id = f.client_id AND c.is_archived = 0 AND c.is_demo = 0 AND c.itflow_client_id IS NOT NULL
              JOIN kev_catalog k ON k.cve_id = f.cve_id
-             WHERE t.kind = 'finding' AND t.state = 'open' AND t.kev_noted = 0 LIMIT 50"
+             WHERE t.kind = 'finding' AND t.state = 'open' AND t.kev_noted = 0 AND (f.status = 'open' OR " . self::OPEN_MEMBER_SQL . ") LIMIT 50"
         )->fetchAll();
         foreach ($rows as $r) {
             $html = '<p><strong>Sentinel: this problem is now known to be exploited by attackers</strong> (CISA KEV list). Treat it as urgent.</p>'
@@ -878,7 +928,7 @@ final class ItflowTickets
             }
             $cut = $last ?? $since;
             // The new ones first, so the list (at most 100) always holds them.
-            $stmt = $this->db->prepare("SELECT f.* FROM findings f LEFT JOIN itflow_tickets t ON t.kind = 'finding' AND t.finding_id = f.id
+            $stmt = $this->db->prepare("SELECT f.* FROM findings f LEFT JOIN itflow_tickets t ON t.kind IN ('finding', 'member') AND t.finding_id = f.id
                                         WHERE f.client_id = :c AND f.status = 'open' AND f.severity = 'warn' AND t.id IS NULL
                                         ORDER BY COALESCE(f.opened_at, f.first_seen) >= :cut DESC, f.finding_type, f.id LIMIT 100");
             $stmt->execute(['c' => $c['id'], 'cut' => $cut]);

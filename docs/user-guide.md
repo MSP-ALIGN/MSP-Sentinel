@@ -95,7 +95,8 @@ board:
   - closed in ITFlow, each open target is rechecked, and the ticket is reopened (or replaced, with the targets still
     open) if any is still there.
 
-  Tickets opened before 1.32 work the same way: new targets of their issue join them.
+  Tickets opened before 1.32 work the same way: new targets of their issue join them. A new target only joins an
+  open ticket: one that appears after the ticket was resolved gets a ticket of its own.
 - **Warnings** are grouped: one ticket per client, at most once a week, when there are new warnings since the last
   one (it lists all open warnings, the new ones marked).
 - Tickets are internal: ITFlow doesn't email the client.

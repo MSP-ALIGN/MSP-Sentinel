@@ -104,8 +104,12 @@ final class FindingController extends Controller
             // This finding's ITFlow tickets (the current one first, then ones it replaced), with a link to ITFlow's
             // agent view built from the ticket number (never ITFlow's guest link, which holds a secret key).
             'itflowTickets' => (static function (int $id): array {
-                $t = App::db()->prepare("SELECT t.reference, t.itflow_ticket_id, t.created_at, t.state, t.itflow_status, t.last_error, t.finding_id, c.itflow_client_id
-                                         FROM itflow_tickets t JOIN clients c ON c.id = t.client_id
+                // A member shows its shared ticket's state (the leading row follows the ticket).
+                $t = App::db()->prepare("SELECT t.reference, t.itflow_ticket_id, t.created_at,
+                                                CASE WHEN t.kind = 'member' AND t.state = 'open' AND p.id IS NOT NULL THEN p.state ELSE t.state END AS state,
+                                                CASE WHEN t.kind = 'member' AND p.id IS NOT NULL THEN p.itflow_status ELSE t.itflow_status END AS itflow_status,
+                                                t.last_error, t.finding_id, c.itflow_client_id
+                                         FROM itflow_tickets t JOIN clients c ON c.id = t.client_id LEFT JOIN itflow_tickets p ON p.id = t.parent_id
                                          WHERE t.kind IN ('finding', 'member') AND (t.finding_id = :f OR t.history_finding_id = :h) ORDER BY t.finding_id IS NULL, t.id DESC LIMIT 10");
                 $t->execute(['f' => $id, 'h' => $id]);
                 $base = App::settings()->get('itflow_url');

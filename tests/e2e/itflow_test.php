@@ -493,5 +493,33 @@ return [
         Assert::same('replaced', (string) $ctx->db->query("SELECT state FROM itflow_tickets WHERE history_finding_id = {$a} AND kind = 'finding'")->fetchColumn());
         Assert::same(3, count($sent()['tickets']), 'one new ticket, not one per server');
         Assert::same(1, (int) $ctx->db->query("SELECT COUNT(*) FROM itflow_tickets WHERE finding_id = {$other}")->fetchColumn(), 'the other issue is untouched');
+
+        // A fixed target released by a replacement gets a ticket again when it comes back.
+        $t2 = (int) $nb['itflow_ticket_id'];
+        $c = $finding('vuln:203.0.113.172:22:CVE-2099-0950', 'vuln', $title, '203.0.113.172:22', 'CVE-2099-0950');
+        App::itflowTickets()->run();
+        Assert::same($t2, (int) $rowOf($c)['itflow_ticket_id'], 'joins the new ticket');
+        $ctx->db->exec("UPDATE findings SET status = 'resolved', resolved_at = UTC_TIMESTAMP() WHERE id = {$c}");
+        App::itflowTickets()->run();
+        $setStatus($t2, 'closed');
+        App::itflowTickets()->run();
+        $job2 = App::scans()->queue($cid, 'manual', null, true, 'test', ['finding_id' => $b, 'ips' => ['203.0.113.171'], 'ports' => [22]], 'verify');
+        $ctx->db->exec("UPDATE scan_jobs SET status = 'done', created_at = UTC_TIMESTAMP() + INTERVAL 1 SECOND WHERE id = {$job2}");
+        $ctx->db->exec("UPDATE findings SET verify_job_id = {$job2}, verify_result = 'still_present', verify_result_at = UTC_TIMESTAMP() + INTERVAL 2 SECOND WHERE id = {$b}");
+        App::itflowTickets()->run();
+        $t3 = (int) $rowOf($b)['itflow_ticket_id'];
+        Assert::true($t3 > 0 && $t3 !== $t2, 'replaced again');
+        Assert::same('gone', (string) $rowOf($c)['state'], 'the fixed target is released, not left behind');
+        $ctx->db->exec("UPDATE findings SET status = 'open', resolved_at = NULL, reappeared = 1 WHERE id = {$c}");
+        App::itflowTickets()->run();
+        $rc = $rowOf($c);
+        Assert::true($rc !== false && (int) $rc['itflow_ticket_id'] === $t3 && $rc['kind'] === 'member', 'it came back and joined the current ticket');
+        Assert::contains('ticket_id=' . $t3, $admin->get('/findings/' . $c)->body);
+        // The leading finding disappears (retention deletes old resolved findings): its members are released and ticketed again.
+        $ctx->db->exec("UPDATE itflow_tickets SET finding_id = NULL WHERE kind = 'finding' AND finding_id = {$b}");
+        App::itflowTickets()->run();
+        $rc = $rowOf($c);
+        // (The leading finding lost its row too, so it opens the new ticket and the released target joins it.)
+        Assert::true($rc !== false && $rc['state'] === 'open' && (int) $rc['itflow_ticket_id'] > 0 && (int) $rc['itflow_ticket_id'] !== $t3, 'released and ticketed again');
     },
 ];
