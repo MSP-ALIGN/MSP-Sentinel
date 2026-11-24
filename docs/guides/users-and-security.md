@@ -137,7 +137,7 @@ keeps working throughout.
    authentication.
 
 Add a second admin early: nobody gets locked out, and pen-test engagements need a second person who may approve
-them.
+them (unless an Admin turns two-person approval off under **Settings → Pen-test engagements**).
 
 ## Change a user, reset a password or two-factor
 

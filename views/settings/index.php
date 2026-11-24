@@ -10,7 +10,7 @@ use Sentinel\Core\Csrf;
 $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' : '';
 ?>
 <ul class="nav nav-tabs mb-3" role="tablist" data-hash-tabs>
-    <?php foreach (['general' => [__('General'), 'bi-sliders'], 'alerts' => [__('Alerts'), 'bi-bell'], 'due-dates' => [__('Fix due dates'), 'bi-calendar-check'],
+    <?php foreach (['general' => [__('General'), 'bi-sliders'], 'alerts' => [__('Alerts'), 'bi-bell'], 'due-dates' => [__('Fix due dates'), 'bi-calendar-check'], 'engagements' => [__('Pen-test engagements'), 'bi-shield-lock'],
                     'branding' => [__('Report branding'), 'bi-palette'], 'feeds' => [__('Vulnerability data'), 'bi-database']] as $id => [$label, $icon]): ?>
     <li class="nav-item" role="presentation"><button class="nav-link<?= $id === 'general' ? ' active' : '' ?>" id="<?= e($id) ?>-tab" data-bs-toggle="tab" data-bs-target="#<?= e($id) ?>" type="button" role="tab"
         aria-controls="<?= e($id) ?>" aria-selected="<?= $id === 'general' ? 'true' : 'false' ?>"><i class="bi <?= e($icon) ?> me-1" aria-hidden="true"></i><?= e($label) ?></button></li>
@@ -42,6 +42,7 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
 </div>
 <div class="tab-pane fade" id="alerts" role="tabpanel" aria-labelledby="alerts-tab" tabindex="0"><?php require __DIR__ . '/alerts.php'; ?></div>
 <div class="tab-pane fade" id="due-dates" role="tabpanel" aria-labelledby="due-dates-tab" tabindex="0"><?php require __DIR__ . '/due.php'; ?></div>
+<div class="tab-pane fade" id="engagements" role="tabpanel" aria-labelledby="engagements-tab" tabindex="0"><?php require __DIR__ . '/engagements.php'; ?></div>
 <div class="tab-pane fade" id="branding" role="tabpanel" aria-labelledby="branding-tab" tabindex="0"><?php require __DIR__ . '/branding.php'; ?></div>
 <div class="tab-pane fade" id="feeds" role="tabpanel" aria-labelledby="feeds-tab" tabindex="0">
 <div class="card">

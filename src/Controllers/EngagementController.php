@@ -235,16 +235,25 @@ final class EngagementController extends Controller
             'name' => $v['name'], 'window_start' => $start->setTimezone($utc)->format('Y-m-d H:i:s'), 'window_end' => $end->setTimezone($utc)->format('Y-m-d H:i:s'),
             'intensity' => $v['intensity'], 'tests' => $v['tests'], 'signer_name' => $v['signer_name'], 'signer_role' => $v['signer_role'], 'signed_on' => $v['signed_on'],
             'document_sha256' => $sha, 'document_name' => mb_substr($name, 0, 190), 'document_bytes' => $docBytes, 'notes' => $v['notes'], 'retest_of' => $retestOf,
+            // The approval rule in force now is kept with it (1.47): turning two-person approval off later never weakens it.
+            'single_approval' => !self::twoPerson(),
         ], $targets, (int) $this->user()['id']);
-        $this->audit($request, 'engagement.created', 'engagement', $id, ['client_id' => $clientId, 'tests' => $v['tests'], 'intensity' => $v['intensity'],
+        $this->audit($request, 'engagement.created', 'engagement', $id, ['client_id' => $clientId, 'tests' => $v['tests'], 'intensity' => $v['intensity'], 'two_person' => self::twoPerson(),
             'default_passwords_confirmed' => in_array('default_creds', $v['tests'], true),
             'external' => count($external), 'internal' => count(array_filter($targets, static fn (array $t): bool => $t['kind'] === 'internal')), 'document_sha256' => $sha]);
         // Tell the approvers: the engagement can't run until one of them approves it (1.34). Approvers other than the creator.
         $me = (int) $this->user()['id'];
         $approvers = count(array_filter(App::roles()->usersWith('engagements.approve', $clientId), static fn (array $u): bool => $u['id'] !== $me)); // who see the client (1.42.1)
         App::alerts()->notifyUsers('engagement', 'warn', __('Engagement awaiting approval: {name}', ['name' => $v['name']]),
-            __('{user} created it for {client}. A different admin must approve it before anything runs.', ['user' => (string) ($this->user()['display_name'] ?? ''), 'client' => (string) $client['name']]),
+            self::twoPerson() ? __('{user} created it for {client}. A different admin must approve it before anything runs.', ['user' => (string) ($this->user()['display_name'] ?? ''), 'client' => (string) $client['name']])
+                : __('{user} created it for {client}. It must be approved before anything runs (two-person approval is off: its creator may approve it).', ['user' => (string) ($this->user()['display_name'] ?? ''), 'client' => (string) $client['name']]),
             '/engagements/' . $id, 'engagements.approve', $clientId);
+        if (!self::twoPerson()) {
+            Session::flash('success', App::auth()->can('engagements.approve')
+                ? __('Engagement created. Check it, then approve it below (two-person approval is off). Nothing runs before it is approved.')
+                : __('Engagement created. Someone who may approve engagements must approve it before anything runs; they were notified.'));
+            return Response::redirect('/engagements/' . $id);
+        }
         Session::flash('success', $approvers >= 1
             ? __('Engagement created. Someone else who may approve engagements must approve it before anything runs; they were notified.')
             : __('Engagement created. Nobody else may approve engagements yet: give a second person a role that can approve them (Users) first.'));
@@ -257,7 +266,7 @@ final class EngagementController extends Controller
         $canApprove = App::auth()->can('engagements.approve');
         return $this->page('engagements/index', __('Pen-test engagements'), [
             'engagements' => App::engagements()->all(200, App::auth()->clientIds()),
-            'awaiting' => $canApprove ? App::engagements()->awaitingApprovalBy((int) $this->user()['id'], App::auth()->clientIds()) : [],
+            'awaiting' => $canApprove ? App::engagements()->awaitingApprovalBy((int) $this->user()['id'], App::auth()->clientIds(), self::twoPerson()) : [],
             'approverCount' => count(App::roles()->usersWith('engagements.approve')),
         ]);
     }
@@ -277,6 +286,7 @@ final class EngagementController extends Controller
             'agentJobs' => App::agents()->engagementJobs((int) $e['id']), 'reports' => App::reports()->forEngagement((int) $e['id']),
             'retestOf' => $e['retest_of'] !== null ? App::engagements()->find((int) $e['retest_of']) : null,
             'state' => EngagementRepository::state($e, gmdate('Y-m-d H:i:s')), 'testLabels' => self::testLabels(),
+            'selfApproval' => EngagementRepository::selfApprovalAllowed($e, self::twoPerson()),
             'clientNav' => ClientController::nav($client, 'engagements', App::findings()->counts((int) $client['id']))]);
     }
 
@@ -286,14 +296,16 @@ final class EngagementController extends Controller
         $e = $this->engagementOr404($params);
         $back = Response::redirect('/engagements/' . (int) $e['id']);
         $me = (int) $this->user()['id'];
-        if ((int) $e['created_by'] === $me) {
+        // Single-person approval (1.47): only for an engagement created while two-person approval was off, and still off.
+        $self = EngagementRepository::selfApprovalAllowed($e, self::twoPerson());
+        if ((int) $e['created_by'] === $me && !$self) {
             Session::flash('danger', __('You created this engagement: a different admin must approve it.'));
             return $back;
         }
         // The second person must really be someone else: not linked to the creator in the last 30 days (either one
         // created the other or reset its password or 2FA, directly or through a chain of such accounts), otherwise one
         // admin could approve their own engagement through an account they control.
-        if (in_array((int) $e['created_by'], App::engagements()->linkedAccounts($me), true)) {
+        if (!$self && in_array((int) $e['created_by'], App::engagements()->linkedAccounts($me), true)) {
             $this->audit($request, 'engagement.approval_refused', 'engagement', (int) $e['id'], ['reason' => 'account linked to the creator']);
             Session::flash('danger', __('Your account and the creator\'s are linked: one created the other, or reset its password or two-factor authentication, in the last 30 days (directly or through another account). Another admin must approve it.'));
             return $back;
@@ -303,13 +315,19 @@ final class EngagementController extends Controller
             Session::flash('danger', __('Enter your Sentinel password to approve.') . ' ' . $why);
             return $back;
         }
-        if (!App::engagements()->approve((int) $e['id'], $me)) {
+        if (!App::engagements()->approve((int) $e['id'], $me, $self)) {
             Session::flash('danger', __('It can no longer be approved (stopped, cancelled, already approved or its window has ended).'));
             return $back;
         }
-        $this->audit($request, 'engagement.approved', 'engagement', (int) $e['id'], ['client_id' => (int) $e['client_id']]);
+        $this->audit($request, 'engagement.approved', 'engagement', (int) $e['id'], ['client_id' => (int) $e['client_id'], 'by_creator' => (int) $e['created_by'] === $me]);
         Session::flash('success', __('Engagement approved. Tests can run inside its window.'));
         return $back;
+    }
+
+    /** Whether pen-test engagements need a second person to approve them now (Settings, 1.47; on unless turned off). */
+    public static function twoPerson(): bool
+    {
+        return App::settings()->get('engagement_two_person') !== '0';
     }
 
     /** POST /engagements/{id}/stop (technicians and admins): the kill switch, for good. */

@@ -14,7 +14,8 @@
 <?php if (($awaitingApproval ?? []) !== []): ?>
 <div class="alert alert-warning d-flex flex-wrap align-items-center gap-2" role="status">
     <i class="bi bi-hourglass-split" aria-hidden="true"></i>
-    <span><?= e(__('{n} pen-test engagement(s) awaiting your approval: nothing runs until a second admin approves.', ['n' => count($awaitingApproval)])) ?></span>
+    <span><?= e(\Sentinel\Controllers\EngagementController::twoPerson() ? __('{n} pen-test engagement(s) awaiting your approval: nothing runs until a second admin approves.', ['n' => count($awaitingApproval)])
+        : __('{n} pen-test engagement(s) awaiting approval: nothing runs until it is approved.', ['n' => count($awaitingApproval)])) ?></span>
     <a class="btn btn-sm btn-warning ms-auto" href="<?= e(url(count($awaitingApproval) === 1 ? '/engagements/' . (int) $awaitingApproval[0]['id'] : '/engagements')) ?>"><?= e(__('Review')) ?></a>
 </div>
 <?php endif; ?>

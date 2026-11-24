@@ -2,6 +2,27 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.46.0 (2026-11-24): Sign in with Microsoft sets itself up
+
+- **No more app registration by hand.** Under **Administration → Integrations → Sign in with Microsoft**, enter your
+  password and click **Create setup code**. Run the PowerShell command Sentinel shows on any Windows PC and sign in at
+  Microsoft as an Entra admin. The script (`entra-sso-setup.ps1`) creates the app registration: single tenant,
+  Sentinel's redirect address, sign-in permissions only (granted for the organisation), the auth_time claim and a
+  12-month client secret. It sends the details to Sentinel with the one-time code, so the secret is never shown or
+  copied. Then turn the switch on.
+- **Renewals and reminders.** The card shows when the secret expires. Admins are reminded 30 and 7 days before and
+  when it has expired. Running the script again with a new code adds a new secret and removes its older ones.
+- **Safe by default.** The code lasts 30 minutes, works once, and only an Admin who sees every client can create one.
+  The script never turns sign-in on, and a new tenant still clears every user's Microsoft link.
+
+### 1.45.3 (2026-11-24): Windows agent installer and nmap
+
+- **nmap's setup opens for you.** The free nmap installer has no silent mode (nmap.org keeps that for the paid OEM
+  edition), so the Windows installer stopped after 5 minutes. It now says the nmap setup window is opening, to untick
+  Npcap, and waits up to 30 minutes for you to click through. An nmap that is already installed is used as it is.
+- **Unattended installs.** Run through an RMM tool as SYSTEM (no desktop), the installer stops at once when nmap is
+  missing and says to install nmap first, instead of waiting for a window nobody can see.
+
 ### 1.45.2 (2026-11-24): Windows agent installer fix
 
 - **The Windows installer runs again.** `install-agent.ps1` stopped with a parse error ("Unexpected token 'PHP'")

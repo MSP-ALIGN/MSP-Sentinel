@@ -203,6 +203,7 @@ $router->add('POST', '/clients/{id}/compliance/refresh', [ComplianceController::
 $router->add('GET', '/admin/settings', [AdminController::class, 'settings'], ['perm' => 'settings.manage', 'all_clients' => true]);
 $router->add('POST', '/admin/settings', [AdminController::class, 'saveSettings'], ['perm' => 'settings.manage', 'all_clients' => true]);
 $router->add('POST', '/admin/settings/due-dates', [AdminController::class, 'saveDuePolicy'], ['perm' => 'settings.manage', 'all_clients' => true]);
+$router->add('POST', '/admin/settings/engagements', [AdminController::class, 'saveEngagementPolicy'], ['perm' => 'settings.manage', 'all_clients' => true]);
 $router->add('POST', '/admin/feeds/refresh', [AdminController::class, 'refreshFeeds'], ['perm' => 'settings.manage', 'all_clients' => true]);
 $router->add('POST', '/admin/alerts', [AlertController::class, 'save'], ['perm' => 'settings.manage', 'all_clients' => true]);
 $router->add('POST', '/admin/alerts/test', [AlertController::class, 'test'], ['perm' => 'settings.manage', 'all_clients' => true]);

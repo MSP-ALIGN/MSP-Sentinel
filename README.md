@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.46.1](https://img.shields.io/badge/version-1.46.1-ff5a1f?style=flat-square)
+![Version 1.47.1](https://img.shields.io/badge/version-1.47.1-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,28 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.47.1 (2026-11-24): Engagement approval fixes from review
+
+- **Back on means back on.** Approving checks the setting again in the same database statement, so turning
+  two-person approval back on wins over a self-approval that was already in progress.
+- **Everyone is told.** Approvers limited to some clients are now notified when the rule changes too.
+- **Only on purpose.** The setting is turned off only by an explicit choice in the form, never by a request that
+  leaves the field out.
+- The dashboard and Engagements page wording follow the setting, and the "awaiting your approval" list no longer
+  hides engagements you may approve behind ones you may not.
+
+### 1.47.0 (2026-11-24): Choose one- or two-person approval for pen tests
+
+- **Your choice.** Under **Administration → Settings → Pen-test engagements**, an Admin who holds every permission and
+  sees every client can turn off two-person approval, with their own password. Everyone who may approve engagements
+  is told, and the change is audited. It stays on by default.
+- **With it off,** whoever creates an engagement may approve it themselves if their role may approve engagements,
+  still with their password and still before anything runs. The engagement page, the audit log and the pen-test
+  report say "single-person approval". A technician who can't approve still needs someone who can.
+- **Never weaker after the fact.** Each engagement keeps the rule in force when it was created. One made under the
+  two-person rule always needs a second person, and one made while it was off needs a second person again once the
+  rule is back on.
+
 ### 1.46.1 (2026-11-24): Sign in with Microsoft setup fixes from review
 
 - **No lock-out from the wrong tenant.** Once a tenant is saved, the setup script's details must come from that same
@@ -132,27 +154,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
   asks before changing it, keeps the app's other web settings, waits for a new app to be ready, accepts a Sentinel
   address with a sub-folder, and sends the expiry date in a format every regional setting gets right.
 - Expiry reminders also come while sign-in is switched off.
-
-### 1.46.0 (2026-11-24): Sign in with Microsoft sets itself up
-
-- **No more app registration by hand.** Under **Administration → Integrations → Sign in with Microsoft**, enter your
-  password and click **Create setup code**. Run the PowerShell command Sentinel shows on any Windows PC and sign in at
-  Microsoft as an Entra admin. The script (`entra-sso-setup.ps1`) creates the app registration: single tenant,
-  Sentinel's redirect address, sign-in permissions only (granted for the organisation), the auth_time claim and a
-  12-month client secret. It sends the details to Sentinel with the one-time code, so the secret is never shown or
-  copied. Then turn the switch on.
-- **Renewals and reminders.** The card shows when the secret expires. Admins are reminded 30 and 7 days before and
-  when it has expired. Running the script again with a new code adds a new secret and removes its older ones.
-- **Safe by default.** The code lasts 30 minutes, works once, and only an Admin who sees every client can create one.
-  The script never turns sign-in on, and a new tenant still clears every user's Microsoft link.
-
-### 1.45.3 (2026-11-24): Windows agent installer and nmap
-
-- **nmap's setup opens for you.** The free nmap installer has no silent mode (nmap.org keeps that for the paid OEM
-  edition), so the Windows installer stopped after 5 minutes. It now says the nmap setup window is opening, to untick
-  Npcap, and waits up to 30 minutes for you to click through. An nmap that is already installed is used as it is.
-- **Unattended installs.** Run through an RMM tool as SYSTEM (no desktop), the installer stops at once when nmap is
-  missing and says to install nmap first, instead of waiting for a window nobody can see.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

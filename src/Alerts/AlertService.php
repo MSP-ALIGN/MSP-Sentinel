@@ -289,6 +289,17 @@ final class AlertService
         $this->queueWebhook(['title' => $title, 'text' => __('Devices not seen on this network before.'), 'severity' => 'warn', 'client' => $client, 'items' => $items, 'link' => $this->absolute($link)]);
     }
 
+    /**
+     * An in-app notification for every active user whose role holds $permission, whatever clients they see (1.47.1:
+     * a rule that changes what each of them may do, so nobody is left out).
+     */
+    public function notifyAllWith(string $permission, string $kind, string $severity, string $title, string $body, string $link): void
+    {
+        foreach ((new \Sentinel\Auth\RoleRepository($this->db))->usersWith($permission) as $u) {
+            $this->notifyUser((int) $u['id'], $kind, $severity, $title, $body, $link);
+        }
+    }
+
     /** One in-app notification for one user. */
     private function notifyUser(int $userId, string $kind, string $severity, string $title, string $body, string $link): void
     {
