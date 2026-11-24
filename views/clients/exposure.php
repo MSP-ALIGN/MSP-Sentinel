@@ -53,7 +53,7 @@ $badge = static function (string $severity, string $text) use ($sevBadge): strin
                     <?php foreach ($issues as $issue): ?><?= $badge($issue['severity'], $issue['text']) ?><?php endforeach; ?>
                     <?php if ($issues === [] && $t['not_after'] !== null): ?><span class="badge text-bg-success"><i class="bi bi-check-circle me-1" aria-hidden="true"></i><?= e(__('OK')) ?></span><?php endif; ?>
                     <?php if ($issues === [] && $t['not_after'] === null): ?><span class="badge text-bg-secondary"><?= e(__('Not reachable')) ?></span><?php endif; ?>
-                    <div class="small text-body-secondary"><?= e(__('Checked {date}', ['date' => $t['last_checked']])) ?></div>
+                    <div class="small text-body-secondary"><?= e(__('Checked {date}', ['date' => when($t['last_checked'] ?? null)])) ?></div>
                 </td>
             </tr>
             <?php endforeach; ?>

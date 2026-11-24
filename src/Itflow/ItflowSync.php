@@ -298,6 +298,6 @@ final class ItflowSync
     private static function orgZone(Settings $settings): string
     {
         $zone = $settings->get('display_timezone');
-        return in_array($zone, \DateTimeZone::listIdentifiers(), true) ? $zone : 'UTC';
+        return valid_timezone($zone) ? $zone : 'UTC';
     }
 }

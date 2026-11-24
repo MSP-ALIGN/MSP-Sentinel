@@ -52,13 +52,13 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
 <?php if (($utcClients ?? []) !== [] && ($mayEditClients ?? false)): ?>
 <div class="card mt-3">
     <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Clients still on UTC')) ?></h2></div>
-    <form method="post" action="<?= e(url('/admin/settings/clients-timezone')) ?>" data-confirm="<?= e(__('Move these clients to {zone}? Their scan windows keep the same times, now in that time zone.', ['zone' => $values['display_timezone'] ?? ''])) ?>">
+    <form method="post" action="<?= e(url('/admin/settings/clients-timezone')) ?>" data-confirm="<?= e(__('Move these clients to {zone}? Their scan windows keep the same times, now in that time zone.', ['zone' => $orgZone ?? ''])) ?>">
     <div class="card-body">
         <?= Csrf::field() ?>
-        <p class="small mb-2"><?= e(__('These clients use UTC, so their scan windows count in UTC. Move them to {zone} to count their windows in your time; the window times (for example 22:00 to 06:00) stay the same numbers.', ['zone' => $values['display_timezone'] ?? ''])) ?></p>
+        <p class="small mb-2"><?= e(__('These clients use UTC, so their scan windows count in UTC. Move them to {zone} to count their windows in your time; the window times (for example 22:00 to 06:00) stay the same numbers.', ['zone' => $orgZone ?? ''])) ?></p>
         <p class="small text-body-secondary mb-0"><?= e(implode(', ', array_map(static fn (array $c): string => (string) $c['name'], $utcClients))) ?></p>
     </div>
-    <div class="card-footer"><button type="submit" class="btn btn-outline-primary btn-sm"><?= e(__('Move {n} client(s) to {zone}', ['n' => count($utcClients), 'zone' => $values['display_timezone'] ?? ''])) ?></button></div>
+    <div class="card-footer"><button type="submit" class="btn btn-outline-primary btn-sm"><?= e(__('Move {n} client(s) to {zone}', ['n' => count($utcClients), 'zone' => $orgZone ?? ''])) ?></button></div>
     </form>
 </div>
 <?php endif; ?>

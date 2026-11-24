@@ -54,7 +54,7 @@ $w = $ov['window'];
         <ol class="feed">
             <?php foreach ($ov['activity'] as $a): ?>
             <li class="<?= e($eventClass($a['kind'], $a['severity'])) ?>">
-                <span class="feed-time"><?= e(substr($a['at'], 5, 11)) ?></span>
+                <span class="feed-time"><?= e(substr(when((string) $a['at']), 5, 11)) ?></span>
                 <span class="feed-kind"><?= e($eventWord($a['kind'])) ?></span>
                 <a href="<?= e(url($a['link'])) ?>"><?= e(str_starts_with($a['kind'], 'scan_') ? __('{type} scan', ['type' => strtoupper($a['title'])]) : $a['title']) ?></a>
             </li>

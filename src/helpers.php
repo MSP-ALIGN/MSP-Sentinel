@@ -113,7 +113,7 @@ function display_zone(): DateTimeZone
         // no database yet
     }
     foreach ($names as $name) {
-        if ($name !== '' && in_array($name, DateTimeZone::listIdentifiers(), true)) {
+        if (valid_timezone($name)) {
             return $cache = new DateTimeZone($name);
         }
     }
@@ -130,7 +130,7 @@ function when(?string $utc, ?DateTimeZone $zone = null, string $empty = '–', b
     if ($utc === null || trim($utc) === '') {
         return $empty;
     }
-    if (preg_match('/^\d{4}-\d\d-\d\d[ T]\d\d:\d\d(:\d\d)?$/', trim($utc)) !== 1) {
+    if (preg_match('/^\d{4}-\d\d-\d\d[ T]\d\d:\d\d(:\d\d(\.\d+)?)?Z?$/', trim($utc)) !== 1) {
         return $utc;
     }
     try {
@@ -141,9 +141,8 @@ function when(?string $utc, ?DateTimeZone $zone = null, string $empty = '–', b
     return $t->setTimezone($zone ?? display_zone())->format($seconds ? 'Y-m-d H:i:s T' : 'Y-m-d H:i T');
 }
 
-/** The viewer's time zone abbreviation now (for table headings: "Time (PST)"). */
-function tz_label(?DateTimeZone $zone = null): string
+/** A time zone name PHP knows, including older aliases such as US/Pacific (1.48.1). Untrusted input is fine. */
+function valid_timezone(string $name): bool
 {
-    return (new DateTimeImmutable('now', $zone ?? display_zone()))->format('T');
+    return $name !== '' && in_array($name, DateTimeZone::listIdentifiers(DateTimeZone::ALL_WITH_BC), true);
 }
-

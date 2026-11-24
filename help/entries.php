@@ -363,6 +363,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.48.1',
+            'date' => '2026-11-24',
+            'items' => [
+                'Time zone fixes: the activity feeds, certificate check times and report dates use your (or the client\'s) time zone too; after a failed Settings save, the "move clients" button names the zone it really uses; time zone names PHP knows by an older alias are accepted.',
+            ],
+        ],
+        [
             'version' => '1.48.0',
             'date' => '2026-11-24',
             'items' => [

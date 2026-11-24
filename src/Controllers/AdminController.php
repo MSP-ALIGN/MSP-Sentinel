@@ -93,6 +93,7 @@ final class AdminController extends Controller
             // Clients still on UTC while the organisation's zone is another (1.48: the one-time "move" button).
             'utcClients' => App::settings()->get('display_timezone') === 'UTC' ? [] : App::db()->query("SELECT id, name FROM clients WHERE timezone = 'UTC' AND is_archived = 0 AND is_demo = 0 ORDER BY name")->fetchAll(),
             'mayEditClients' => App::auth()->can('clients.manage'),
+            'orgZone' => App::settings()->get('display_timezone'), // the stored zone: what the move button really uses (1.48.1)
             'feeds' => App::vulns()->feedStatuses(),
             'nvdKeySet' => trim((string) App::config()->get('nvd.api_key', '')) !== '',
             'nvdKeyUsable' => \Sentinel\Vulns\FeedUpdater::usableKey(App::config()) !== null,
@@ -154,7 +155,7 @@ final class AdminController extends Controller
             throw new \Sentinel\Core\HttpException(403, __('Changing clients needs the permission to edit clients.'));
         }
         $zone = App::settings()->get('display_timezone');
-        if ($zone === 'UTC' || !in_array($zone, \DateTimeZone::listIdentifiers(), true)) {
+        if ($zone === 'UTC' || !valid_timezone($zone)) {
             Session::flash('warning', __('Choose the organisation\'s time zone first.'));
             return $back;
         }
@@ -230,7 +231,7 @@ final class AdminController extends Controller
             $errors['source_url'] = __('Enter a full http:// or https:// address.');
         }
         // The organisation's time zone (1.48): only a zone from PHP's list (untrusted input).
-        if (!in_array($values['display_timezone'], \DateTimeZone::listIdentifiers(), true)) {
+        if (!valid_timezone($values['display_timezone'])) {
             $errors['display_timezone'] = __('Choose a time zone from the list.');
         }
         if ($errors !== []) {

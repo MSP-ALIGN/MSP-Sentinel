@@ -24,7 +24,7 @@ $rating = [
 ][$r['rating']['level']];
 $docTitle = $exec ? __('Security summary') : __('Technical findings');
 $pct = static fn ($v): string => $v === null ? '—' : rtrim(rtrim(number_format((float) $v * 100, 1), '0'), '.') . '%';
-$date = static fn ($v): string => $v === null || $v === '' ? '—' : substr((string) $v, 0, 10);
+$date = static fn ($v): string => $v === null || $v === '' ? '—' : substr(when((string) $v, $rz), 0, 10); // the client's date (1.48.1)
 ?><!doctype html>
 <html lang="en">
 <head>

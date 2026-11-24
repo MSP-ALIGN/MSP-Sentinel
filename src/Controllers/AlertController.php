@@ -208,7 +208,7 @@ final class AlertController extends Controller
     public function timezone(Request $request): Response
     {
         $zone = $request->input('timezone');
-        if ($zone !== '' && !in_array($zone, \DateTimeZone::listIdentifiers(), true)) {
+        if ($zone !== '' && !valid_timezone($zone)) {
             Session::flash('danger', __('Choose a time zone from the list, or leave it empty.'));
             return Response::redirect('/profile#timezone');
         }

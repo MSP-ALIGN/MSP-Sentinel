@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.48.0](https://img.shields.io/badge/version-1.48.0-ff5a1f?style=flat-square)
+![Version 1.48.1](https://img.shields.io/badge/version-1.48.1-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,16 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.48.1 (2026-11-24): Time zone fixes from review
+
+- **Everything in your time.** The activity feeds on the dashboard and client overview, the certificate "Checked"
+  times, and the dates in reports (first seen, fixed, decided) now use your time zone, or the client's in reports,
+  like the rest.
+- **The button says what it does.** After a Settings save that failed (for example a bad source address), the "move
+  clients still on UTC" button named the time zone just typed, but moved clients to the saved one. It now names the
+  saved one.
+- Time zone names that PHP knows by an older alias are accepted, and stored times in ISO format are shown converted.
+
 ### 1.48.0 (2026-11-24): Times in your time zone
 
 - **Your time, everywhere.** Under **Administration → Settings → General**, choose your time zone (for example
@@ -141,16 +151,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
   switch and time limits keep working during a scan. Linux agents and Sentinel's own scans are unchanged.
 - To get the fix, upgrade the Windows agent: run the install command again with `-Upgrade`, or send a signed remote
   update from the agent's page.
-
-### 1.47.1 (2026-11-24): Engagement approval fixes from review
-
-- **Back on means back on.** Approving checks the setting again in the same database statement, so turning
-  two-person approval back on wins over a self-approval that was already in progress.
-- **Everyone is told.** Approvers limited to some clients are now notified when the rule changes too.
-- **Only on purpose.** The setting is turned off only by an explicit choice in the form, never by a request that
-  leaves the field out.
-- The dashboard and Engagements page wording follow the setting, and the "awaiting your approval" list no longer
-  hides engagements you may approve behind ones you may not.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 
