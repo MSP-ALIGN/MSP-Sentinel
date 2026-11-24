@@ -2,6 +2,19 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.43.1 (2026-11-24): Sign in with Microsoft fixes from review
+
+- **Accounts are linked by their owner, never by email address.** Each user signs in with their password and
+  Sentinel's code, then links their Microsoft account under **My profile** (Microsoft asks them to prove it).
+  Before, someone who could set an email address in the tenant (an Entra admin, a helpdesk, a guest invitation)
+  could be linked to a Sentinel user with that address.
+- **Only an Admin who sees every client** can change the Sign in with Microsoft settings, with their own password;
+  before, anyone who could manage integrations could point it at another tenant. Changing the tenant clears every
+  link.
+- **Guests** from other directories are refused, and Sentinel's code is skipped only for MFA within the last hour
+  (`max_age` and `auth_time`).
+- Linking can't race to two accounts; network errors are no longer shown on the sign-in page.
+
 ### 1.43.0 (2026-11-24): Sign in with Microsoft
 
 - **Sign in with Microsoft (Entra ID).** Your team signs in with their Microsoft 365 work account, the same tenant

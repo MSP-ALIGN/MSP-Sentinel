@@ -73,6 +73,13 @@ final class ItflowSync
                     $summary .= ' ' . $s['conflicts'] . ' name(s) left as they were because another client has that name.';
                 }
                 $ok = true;
+                // Keep the board list fresh for the Integrations page (1.44.1); a board problem never fails the sync.
+                if ($this->settings->get('itflow_tickets_enabled') === '1') {
+                    try {
+                        $this->itflow->refreshBoards($this->settings);
+                    } catch (ItflowException) {
+                    }
+                }
             } catch (ItflowException $ex) {
                 $summary = 'Failed: ' . $ex->getMessage();
                 $ok = false;

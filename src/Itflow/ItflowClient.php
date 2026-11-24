@@ -134,26 +134,58 @@ final class ItflowClient
             throw new ItflowException('ITFlow refused the API key (wrong or expired).', ItflowException::KIND_AUTH);
         }
         $data = json_decode($body, true);
+        if ($status === 403) {
+            throw self::denied(is_array($data) && is_string($data['message'] ?? null) ? mb_substr((string) preg_replace('/[^\P{C}]/u', '', $data['message']), 0, 200) : '');
+        }
         if ($status !== 200 || !is_array($data) || ($data['success'] ?? '') !== 'True') {
             throw new ItflowException('ITFlow did not list its boards (HTTP ' . $status . ').', ItflowException::KIND_REFUSED);
         }
         $out = [];
         foreach ((array) ($data['data'] ?? []) as $b) {
             if (is_array($b) && is_numeric($b['board_id'] ?? null) && (int) $b['board_id'] > 0) {
-                $out[] = ['id' => (int) $b['board_id'], 'name' => mb_substr((string) preg_replace('/[^\P{C}]/u', '', (string) ($b['board_name'] ?? '')), 0, 100),
+                $out[] = ['id' => (int) $b['board_id'], 'name' => trim(mb_substr((string) preg_replace('/[^\P{C}]/u', '', (string) ($b['board_name'] ?? '')), 0, 100)),
                           'is_default' => in_array($b['board_is_default'] ?? 0, [1, '1', true], true)];
             }
         }
+        usort($out, static fn (array $a, array $b): int => $a['id'] <=> $b['id']); // lowest ID first: "Alerts" picks the first
         return $out;
+    }
+
+    /** The board named "Alerts" (ignoring case and spaces; the lowest ID if several), or null. @param list<array{id:int,name:string,is_default:bool}> $boards */
+    public static function alertsBoard(array $boards): ?array
+    {
+        foreach ($boards as $b) {
+            if (strcasecmp(trim($b['name']), 'Alerts') === 0) {
+                return $b;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Read the boards and keep them in the settings for the Integrations page (1.44.1). Returns them (null: none).
+     * Errors are kept out of the cache: the last good list stays.
+     *
+     * @return list<array{id:int, name:string, is_default:bool}>|null
+     */
+    public function refreshBoards(\Sentinel\Core\Settings $settings): ?array
+    {
+        $boards = $this->boards();
+        $settings->set('itflow_boards_cache', (string) json_encode($boards));
+        return $boards;
     }
 
     /**
      * Move a ticket to a service board (1.44: POST /api/v1/mit_boards/move.php), left unassigned so the board's own
      * rules (auto-assign, member notifications) pick it up.
      */
-    public function moveTicket(int $clientId, int $ticketId, int $boardId): void
+    public function moveTicket(int $clientId, int $ticketId, int $boardId, bool $unassign = true): void
     {
-        $this->post('/api/v1/mit_boards/move.php', ['client_id' => $clientId, 'ticket_id' => $ticketId, 'board_id' => $boardId, 'unassign' => 1]);
+        $fields = ['client_id' => $clientId, 'ticket_id' => $ticketId, 'board_id' => $boardId];
+        if ($unassign) {
+            $fields['unassign'] = 1;
+        }
+        $this->post('/api/v1/mit_boards/move.php', $fields);
     }
 
     /**

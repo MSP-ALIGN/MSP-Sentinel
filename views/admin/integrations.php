@@ -53,7 +53,7 @@ $n = $ninja;
                 <div class="form-text"><?= e(__('Each Fail, and anything known to be exploited, gets its own ticket (High; Urgent when exploited) with how to fix it. Warnings get one ticket per client a week when there are new ones. Tickets are internal: ITFlow does not email the client. Status goes both ways: fixed in Sentinel resolves the ticket; resolved or closed in ITFlow makes Sentinel check again, and the ticket is reopened (or replaced, if closed) when the problem is still there. Only findings that appear after this is turned on get tickets, unless you open them for the existing ones below.')) ?></div></div>
             <div class="mt-3">
                 <label class="form-label" for="itflow-board"><?= e(__('Board for new tickets')) ?></label>
-                <?php $alerts = null; foreach ($it['boards'] ?? [] as $b) { if (strcasecmp($b['name'], 'Alerts') === 0) { $alerts = $b; } } ?>
+                <?php $alerts = \Sentinel\Itflow\ItflowClient::alertsBoard($it['boards'] ?? []); ?>
                 <select class="form-select form-select-sm sn-w-20" id="itflow-board" name="board">
                     <option value="" <?= $it['board'] === '' ? 'selected' : '' ?>><?= e($alerts !== null ? __('Alerts (the board named "Alerts")') : __('The board named "Alerts", when there is one')) ?></option>
                     <option value="0" <?= $it['board'] === '0' ? 'selected' : '' ?>><?= e(__('Leave on ITFlow\'s default board')) ?></option>
@@ -65,7 +65,8 @@ $n = $ninja;
                     <?php endif; ?>
                 </select>
                 <div class="form-text"><?= e($it['boards'] === null
-                    ? __('For ITFlow builds with service boards: Sentinel moves each new ticket to this board, unassigned, so the board\'s own rules pick it up. This ITFlow lists no boards (stock ITFlow, or not reachable now), so tickets stay where ITFlow puts them.')
+                    ? __('For ITFlow builds with service boards: Sentinel moves each new ticket to this board, unassigned, so the board\'s own rules pick it up.') . ' '
+                      . ($it['boards_checked'] ? __('This ITFlow lists no boards (stock ITFlow), so tickets stay where ITFlow puts them.') : __('The boards are listed after Test connection or the next sync.'))
                     : __('Sentinel moves each new ticket to this board right after opening it, unassigned, so the board\'s auto-assign and notifications pick it up. If a move fails, the ticket stays on ITFlow\'s default board and the last run says so.')) ?></div>
             </div>
             <button type="submit" class="btn btn-primary btn-sm mt-3"><?= e(__('Save')) ?></button>

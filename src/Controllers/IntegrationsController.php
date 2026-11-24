@@ -54,13 +54,12 @@ final class IntegrationsController extends Controller
                 'tickets' => $s->get('itflow_tickets_enabled') === '1',
                 // Service boards (1.44, ITFlow builds with boards); null: this ITFlow has none, or isn't reachable now.
                 'board' => $s->get('itflow_board'),
-                'boards' => (static function (): ?array {
-                    try {
-                        return App::itflow()?->boards();
-                    } catch (\Throwable) {
-                        return null;
-                    }
+                // The list kept by the last sync, test or ticket run: the page never waits on ITFlow (1.44.1).
+                'boards' => (static function () use ($s): ?array {
+                    $c = json_decode($s->get('itflow_boards_cache'), true);
+                    return is_array($c) ? array_values(array_filter($c, static fn ($b): bool => is_array($b) && is_int($b['id'] ?? null) && is_string($b['name'] ?? null))) : null;
                 })(),
+                'boards_checked' => $s->get('itflow_boards_cache') !== '',
                 'tickets_last_run' => $s->get('itflow_tickets_last_run'),
                 'tickets_last_result' => $s->get('itflow_tickets_last_result'),
                 'tickets_last_ok' => $s->get('itflow_tickets_last_ok') !== '0',
@@ -451,6 +450,14 @@ final class IntegrationsController extends Controller
             $active = count(array_filter($clients, static fn (array $c): bool => !$c['archived']));
             $result = __('Connected: the key can see {n} client(s) in ITFlow ({a} active).', ['n' => count($clients), 'a' => $active]);
             $ok = true;
+            try {
+                $boards = $itflow->refreshBoards(App::settings()); // also refresh the board list for the drop-down (1.44.1)
+                if ($boards !== null) {
+                    $result .= ' ' . __('{n} service board(s).', ['n' => count($boards)]);
+                }
+            } catch (\Sentinel\Itflow\ItflowException $ex) {
+                $result .= ' ' . __('Boards could not be read: {e}', ['e' => $ex->getMessage()]);
+            }
         } catch (\Sentinel\Itflow\ItflowException $ex) {
             $result = __('Failed: {e}', ['e' => $ex->getMessage()]);
         }

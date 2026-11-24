@@ -187,25 +187,31 @@ final class ItflowTickets
      * (the default) = the board named "Alerts" when there is one, '0' = leave it on ITFlow's default board, else a
      * board ID. A move that fails never undoes the ticket: it stays on ITFlow's default board and the run says so.
      */
-    private function placeOnBoard(int $itflowClient, int $ticketId): void
+    private function placeOnBoard(int $itflowClient, int $ticketId, bool $unassign = true): void
     {
         if ($this->boardId === false) {
             $this->boardId = null;
             $choice = $this->settings->get('itflow_board');
             if ($choice !== '0') {
+                $failed = false;
                 try {
-                    $boards = $this->itflow->boards();
+                    $boards = $this->itflow->refreshBoards($this->settings);
                 } catch (ItflowException $ex) {
                     $boards = null;
+                    $failed = true;
                     $this->boardNote = 'boards could not be read: ' . mb_substr($ex->getMessage(), 0, 120);
                 }
-                foreach ($boards ?? [] as $b) {
-                    if ($choice === '' ? strcasecmp($b['name'], 'Alerts') === 0 : $b['id'] === (int) $choice) {
-                        $this->boardId = $b['id'];
+                if ($choice === '') {
+                    $this->boardId = ItflowClient::alertsBoard($boards ?? [])['id'] ?? null;
+                } else {
+                    foreach ($boards ?? [] as $b) {
+                        if ($b['id'] === (int) $choice) {
+                            $this->boardId = $b['id'];
+                        }
                     }
-                }
-                if ($boards !== null && $this->boardId === null && $choice !== '') {
-                    $this->boardNote = 'the chosen board no longer exists';
+                    if (!$failed && $this->boardId === null) {
+                        $this->boardNote = $boards === null ? 'this ITFlow lists no boards now, so tickets stay on its default board' : 'the chosen board no longer exists';
+                    }
                 }
             }
         }
@@ -213,10 +219,18 @@ final class ItflowTickets
             return;
         }
         try {
-            $this->itflow->moveTicket($itflowClient, $ticketId, $this->boardId);
+            $this->itflow->moveTicket($itflowClient, $ticketId, $this->boardId, $unassign);
         } catch (ItflowException $ex) {
             $this->boardNote = 'ticket #' . $ticketId . ' stayed on the default board: ' . mb_substr($ex->getMessage(), 0, 120);
         }
+    }
+
+    /** Minutes since a database time (UTC), using the database clock. */
+    private function dbAgeMinutes(string $at): int
+    {
+        $stmt = $this->db->prepare('SELECT TIMESTAMPDIFF(MINUTE, :t, UTC_TIMESTAMP())');
+        $stmt->execute(['t' => $at === '' ? '1970-01-01 00:00:00' : $at]);
+        return (int) $stmt->fetchColumn();
     }
 
     /** The board for this run's new tickets: false = not looked up yet, null = none. */
@@ -271,7 +285,11 @@ final class ItflowTickets
             }
             $this->setRow($rowId, ['state' => 'open', 'itflow_ticket_id' => $found['id'], 'reference' => $found['reference'], 'attempts' => 0, 'retry_at' => null, 'last_error' => '']);
             $this->syncMembers($rowId, (int) $found['id'], (string) $found['reference']);
-            $this->placeOnBoard((int) $r['itflow_client_id'], (int) $found['id']); // the move may not have happened before
+            // Found again after an unclear answer: moved only if it is still new (within 15 minutes of opening it), and
+            // then never unassigned, so a ticket a tech already took or moved stays as they left it (1.44.1).
+            if ($this->dbAgeMinutes((string) $r['marker_at']) <= 15) {
+                $this->placeOnBoard((int) $r['itflow_client_id'], (int) $found['id'], false);
+            }
             if ($r['finding_id'] !== null) {
                 $this->event((int) $r['finding_id'], 'ITFlow ticket ' . ($found['reference'] !== '' ? $found['reference'] : '#' . $found['id']) . ' opened.');
             }

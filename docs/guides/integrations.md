@@ -24,7 +24,8 @@ Keeps Sentinel's clients in step with ITFlow and puts security work on the ITFlo
    it, unassigned, so the board's auto-assign and notifications pick it up. Choose **Leave on ITFlow's default board**
    to skip the move. On stock ITFlow (no boards), tickets stay where ITFlow puts them. If a move is refused, the
    ticket stays on ITFlow's default board and the last ticket run says so. The ITFlow agent needs the Support role at
-   edit level to move tickets.
+   edit level to move tickets. The board list is read by **Test connection**, the sync and ticket runs, so the page
+   never waits on ITFlow; click **Test connection** after adding or renaming a board.
 
 What happens next:
 

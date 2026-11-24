@@ -561,6 +561,10 @@ return [
                 ->execute(['c' => $cid, 'k' => 'port:203.0.113.95:' . (3000 + $n), 't' => 'Board test service ' . $n, 'tg' => '203.0.113.95:' . (3000 + $n)]);
         };
         $sent = static fn (): array => json_decode((string) @file_get_contents($store), true) ?: ['tickets' => [], 'moves' => []];
+        // The page never asks ITFlow itself: the boards are listed after Test connection (or a sync or ticket run).
+        App::settings()->set('itflow_boards_cache', '');
+        Assert::contains('listed after Test connection', $admin->get('/admin/integrations')->body);
+        $admin->submit('/admin/integrations', '/admin/integrations/itflow/test', []);
         // The drop-down lists the boards, Alerts first by default.
         $page = $admin->get('/admin/integrations')->body;
         Assert::contains('Board for new tickets', $page);
@@ -572,6 +576,12 @@ return [
         $fail();
         App::itflowTickets()->run();
         Assert::same(5, (int) (end($sent()['moves'])['board_id'] ?? 0), 'moved to the chosen board');
+        // An invalid choice keeps the saved one; a board that disappeared is reported.
+        $admin->submit('/admin/integrations', '/admin/integrations/itflow', $form + ['board' => '-1']);
+        Assert::same('5', App::settings()->fresh('itflow_board'), 'invalid input ignored');
+        $admin->submit('/admin/integrations', '/admin/integrations/itflow', $form + ['board' => '99']);
+        $fail();
+        Assert::contains('the chosen board no longer exists', App::itflowTickets()->run());
         // Leave on ITFlow's default board: no move.
         $admin->submit('/admin/integrations', '/admin/integrations/itflow', $form + ['board' => '0']);
         $moves = count($sent()['moves'] ?? []);
@@ -587,14 +597,14 @@ return [
         Assert::same($tickets + 1, count($sent()['tickets']), 'ticket opened on stock ITFlow');
         Assert::same($moves, count($sent()['moves'] ?? []), 'no move without boards');
         Assert::notContains('Board:', $summary, 'nothing to report without boards');
-        Assert::contains('stay where ITFlow puts them', $admin->get('/admin/integrations')->body);
+        Assert::contains('This ITFlow lists no boards', $admin->get('/admin/integrations')->body);
         // A refused move: the ticket stays (on the default board) and the run says so.
         file_put_contents($failFile, json_encode(['move_refused' => true]));
         $fail();
         $summary = App::itflowTickets()->run();
         Assert::same($tickets + 2, count($sent()['tickets']), 'ticket kept when the move is refused');
         Assert::contains('stayed on the default board', $summary);
-        Assert::same('0', App::settings()->fresh('itflow_tickets_last_ok') ?: '0', 'the run is flagged');
+        Assert::same('0', App::settings()->fresh('itflow_tickets_last_ok'), 'the run is flagged');
         @unlink($failFile);
     },
 ];

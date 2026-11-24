@@ -361,6 +361,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.44.1',
+            'date' => '2026-11-24',
+            'items' => [
+                'ITFlow boards fixes: the Integrations page no longer waits on ITFlow (the board list is read by Test connection, the sync and ticket runs); a ticket found again later is not moved or unassigned if a tech may already have it; a chosen board that ITFlow no longer lists is reported; "Alerts" matches with spaces and picks the first.',
+            ],
+        ],
+        [
             'version' => '1.44.0',
             'date' => '2026-11-24',
             'items' => [

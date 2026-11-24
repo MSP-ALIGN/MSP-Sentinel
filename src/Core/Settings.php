@@ -110,6 +110,9 @@ final class Settings
         // ITFlow service board for new tickets (1.44, ITFlow builds with boards): '' = the board named "Alerts",
         // '0' = ITFlow's default board, else a board ID.
         'itflow_board' => '',
+        // The boards ITFlow listed last (1.44.1, JSON; 'null' = this ITFlow has none, '' = not checked yet): refreshed by
+        // the sync, Test connection and ticket runs, so the Integrations page never waits on ITFlow.
+        'itflow_boards_cache' => '',
         // Sign in with Microsoft (1.43): on/off, the Entra tenant and app (client) IDs; the client secret is a secret.
         'sso_entra_enabled' => '0',
         'sso_entra_tenant' => '',

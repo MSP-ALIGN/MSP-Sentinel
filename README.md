@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.44.0](https://img.shields.io/badge/version-1.44.0-ff5a1f?style=flat-square)
+![Version 1.44.1](https://img.shields.io/badge/version-1.44.1-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,16 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.44.1 (2026-11-24): ITFlow boards fixes from review
+
+- **The Integrations page never waits on ITFlow.** The board list is read by **Test connection**, the client sync and
+  ticket runs, and kept; before, every page view asked ITFlow and could hang while it was down.
+- **A tech's work is never undone.** A ticket found again after an unclear answer is moved only while still new
+  (15 minutes), and then without unassigning it.
+- A chosen board that ITFlow no longer lists, or an ITFlow that lists no boards any more, is reported in the ticket
+  run; "Alerts" is matched ignoring spaces, and the first such board is used; ITFlow's reason for refusing to list
+  boards is shown.
+
 ### 1.44.0 (2026-11-24): ITFlow tickets on your Alerts board
 
 - **Service boards.** On ITFlow builds with board support (the MountaineerIT build's `mit_boards` API), Sentinel moves
@@ -138,19 +148,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 - Members whose tokens name the tenant in the older v1 form aren't refused as guests; a refused guest's directory is
   logged. Without the `auth_time` claim Sentinel always asks its own code and the server log says how to add it.
   Only a real duplicate counts as "already linked".
-
-### 1.43.1 (2026-11-24): Sign in with Microsoft fixes from review
-
-- **Accounts are linked by their owner, never by email address.** Each user signs in with their password and
-  Sentinel's code, then links their Microsoft account under **My profile** (Microsoft asks them to prove it).
-  Before, someone who could set an email address in the tenant (an Entra admin, a helpdesk, a guest invitation)
-  could be linked to a Sentinel user with that address.
-- **Only an Admin who sees every client** can change the Sign in with Microsoft settings, with their own password;
-  before, anyone who could manage integrations could point it at another tenant. Changing the tenant clears every
-  link.
-- **Guests** from other directories are refused, and Sentinel's code is skipped only for MFA within the last hour
-  (`max_age` and `auth_time`).
-- Linking can't race to two accounts; network errors are no longer shown on the sign-in page.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 
