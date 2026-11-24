@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.44.1](https://img.shields.io/badge/version-1.44.1-ff5a1f?style=flat-square)
+![Version 1.45.0](https://img.shields.io/badge/version-1.45.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,15 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.45.0 (2026-11-24): Choose which ITFlow clients sync
+
+- **Only tagged clients.** Under **Administration → Integrations → ITFlow**, tick **Only sync ITFlow clients with this
+  tag** (default **Sentinel**, any case) and tag those clients in ITFlow. Untagged clients are not added; ones already
+  in Sentinel are archived, and restored when the tag is added back. If the tags can't be read, or no client tag has
+  that name, the sync stops and changes nothing. Needs an ITFlow with the tags API.
+- **Leave a client out.** **Don't sync with ITFlow** on a client's Edit page: the sync never renames, archives or
+  restores it, and Sentinel opens no ITFlow tickets for it.
+
 ### 1.44.1 (2026-11-24): ITFlow boards fixes from review
 
 - **The Integrations page never waits on ITFlow.** The board list is read by **Test connection**, the client sync and
@@ -137,17 +146,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
   board**, under **Administration → Integrations → ITFlow**.
 - **Never loses a ticket.** On stock ITFlow (no boards) nothing changes. If a move is refused, the ticket stays on
   ITFlow's default board and the last ticket run says so. A ticket found again after an unclear answer is moved too.
-
-### 1.43.2 (2026-11-24): Sign in with Microsoft linking fixes from review
-
-- **Linking needs your password** (a stolen session alone can't plant a lasting Microsoft sign-in) and **no existing
-  link** (unlink first; a link is never replaced quietly). The linked account's name is shown on My profile and the
-  user's page, and the user gets a notification when one is linked (migration 0050).
-- **Resets remove the link:** an admin's password reset or two-factor reset clears the Microsoft link, as the account
-  may be compromised. Unlinking a user whose password sign-in was off turns it back on, so they aren't locked out.
-- Members whose tokens name the tenant in the older v1 form aren't refused as guests; a refused guest's directory is
-  logged. Without the `auth_time` claim Sentinel always asks its own code and the server log says how to add it.
-  Only a real duplicate counts as "already linked".
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

@@ -110,6 +110,9 @@ final class Settings
         // ITFlow service board for new tickets (1.44, ITFlow builds with boards): '' = the board named "Alerts",
         // '0' = ITFlow's default board, else a board ID.
         'itflow_board' => '',
+        // Sync only ITFlow clients with this tag (1.45): on/off and the tag's name (matched ignoring case).
+        'itflow_tag_filter' => '0',
+        'itflow_tag_name' => 'Sentinel',
         // The boards ITFlow listed last (1.44.1, JSON; 'null' = this ITFlow has none, '' = not checked yet): refreshed by
         // the sync, Test connection and ticket runs, so the Integrations page never waits on ITFlow.
         'itflow_boards_cache' => '',

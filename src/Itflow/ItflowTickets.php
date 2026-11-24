@@ -325,7 +325,7 @@ final class ItflowTickets
                     vj.created_at AS vj_created_at, vj.status AS vj_status,
                     IF(d.source = 'agent', d.last_full_seen, d.last_seen) AS d_seen
              FROM itflow_tickets t JOIN findings f ON f.id = t.finding_id
-             JOIN clients c ON c.id = t.client_id AND c.is_archived = 0 AND c.is_demo = 0 AND c.itflow_client_id IS NOT NULL
+             JOIN clients c ON c.id = t.client_id AND c.is_archived = 0 AND c.is_demo = 0 AND c.itflow_client_id IS NOT NULL AND c.itflow_sync_off = 0
              LEFT JOIN scan_jobs vj ON vj.id = f.verify_job_id
              LEFT JOIN devices d ON d.id = f.device_id
              WHERE t.kind = 'finding' AND (t.state IN ('open', 'sentinel_resolved', 'awaiting_check')
@@ -834,7 +834,7 @@ final class ItflowTickets
         $since = $since !== '' ? $since : gmdate('Y-m-d H:i:s');
         $stmt = $this->db->prepare(
             "SELECT f.id, c.itflow_client_id, t.id AS row_id
-             FROM findings f JOIN clients c ON c.id = f.client_id AND c.is_archived = 0 AND c.is_demo = 0 AND c.itflow_client_id IS NOT NULL
+             FROM findings f JOIN clients c ON c.id = f.client_id AND c.is_archived = 0 AND c.is_demo = 0 AND c.itflow_client_id IS NOT NULL AND c.itflow_sync_off = 0
              LEFT JOIN kev_catalog k ON k.cve_id = f.cve_id
              LEFT JOIN itflow_tickets t ON t.kind IN ('finding', 'member') AND t.finding_id = f.id
              WHERE f.status = 'open' AND (t.id IS NULL OR t.state = 'gone' OR (t.state = 'failed' AND t.retry_at <= UTC_TIMESTAMP()))
@@ -940,7 +940,7 @@ final class ItflowTickets
         $rows = $this->db->query(
             "SELECT t.id AS row_id, t.itflow_ticket_id, c.itflow_client_id, k.required_action AS kev_action, k.due_date AS kev_due
              FROM itflow_tickets t JOIN findings f ON f.id = t.finding_id
-             JOIN clients c ON c.id = f.client_id AND c.is_archived = 0 AND c.is_demo = 0 AND c.itflow_client_id IS NOT NULL
+             JOIN clients c ON c.id = f.client_id AND c.is_archived = 0 AND c.is_demo = 0 AND c.itflow_client_id IS NOT NULL AND c.itflow_sync_off = 0
              JOIN kev_catalog k ON k.cve_id = f.cve_id
              WHERE t.kind = 'finding' AND t.state = 'open' AND t.kev_noted = 0 AND (f.status = 'open' OR " . self::OPEN_MEMBER_SQL . ") LIMIT 50"
         )->fetchAll();
@@ -977,7 +977,7 @@ final class ItflowTickets
             "SELECT c.id, c.name, c.itflow_client_id,
                     (SELECT MAX(t.created_at) FROM itflow_tickets t WHERE t.client_id = c.id AND t.kind = 'weekly' AND t.state NOT IN ('pending', 'failed')) AS last_weekly,
                     (SELECT MAX(t.id) FROM itflow_tickets t WHERE t.client_id = c.id AND t.kind = 'weekly' AND t.state = 'failed' AND t.retry_at <= UTC_TIMESTAMP()) AS retry_row
-             FROM clients c WHERE c.is_archived = 0 AND c.is_demo = 0 AND c.itflow_client_id IS NOT NULL
+             FROM clients c WHERE c.is_archived = 0 AND c.is_demo = 0 AND c.itflow_client_id IS NOT NULL AND c.itflow_sync_off = 0
                AND EXISTS (SELECT 1 FROM findings f WHERE f.client_id = c.id AND f.status = 'open' AND f.severity = 'warn')
                AND NOT EXISTS (SELECT 1 FROM itflow_tickets t WHERE t.client_id = c.id AND t.kind = 'weekly'
                                AND (t.state = 'pending' OR (t.state = 'failed' AND t.retry_at > UTC_TIMESTAMP())))

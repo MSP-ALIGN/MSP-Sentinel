@@ -52,6 +52,9 @@ final class IntegrationsController extends Controller
                 'last_ok' => $s->get('itflow_last_ok') !== '0',
                 'linked' => (int) App::db()->query('SELECT COUNT(*) FROM clients WHERE itflow_client_id IS NOT NULL AND is_demo = 0')->fetchColumn(),
                 'tickets' => $s->get('itflow_tickets_enabled') === '1',
+                'tag_filter' => $s->get('itflow_tag_filter') === '1',
+                'tag_name' => $s->get('itflow_tag_name'),
+                'sync_off' => (int) App::db()->query('SELECT COUNT(*) FROM clients WHERE itflow_sync_off = 1 AND is_demo = 0')->fetchColumn(),
                 // Service boards (1.44, ITFlow builds with boards); null: this ITFlow has none, or isn't reachable now.
                 'board' => $s->get('itflow_board'),
                 // The list kept by the last sync, test or ticket run: the page never waits on ITFlow (1.44.1).
@@ -388,6 +391,16 @@ final class IntegrationsController extends Controller
             Session::flash('danger', __('That does not look like an ITFlow API key. Copy it again from ITFlow (Admin, API Keys).'));
             return $back;
         }
+        // Only clients with this ITFlow tag (1.45). Untrusted: a short name without control characters.
+        $tagFilter = $request->input('tag_filter') === '1';
+        $tagName = trim($request->input('tag_name'));
+        if ($tagName === '') {
+            $tagName = 'Sentinel';
+        }
+        if (mb_strlen($tagName) > 100 || preg_match('/[\x00-\x1F\x7F]/u', $tagName)) {
+            Session::flash('danger', __('The ITFlow tag name can be at most 100 characters, without line breaks.'));
+            return $back;
+        }
         $changed = [];
         // A saved key never follows a new address: a changed address needs the key entered again (so a typo, a hijacked
         // session or a rogue admin can't send the stored key to another server).
@@ -410,10 +423,11 @@ final class IntegrationsController extends Controller
             $s->set('itflow_board', $board);
             $changed['itflow_board'] = $board;
         }
-        foreach (['itflow_url' => $url, 'itflow_enabled' => $enabled ? '1' : '0', 'itflow_tickets_enabled' => $tickets ? '1' : '0'] as $key => $value) {
+        foreach (['itflow_url' => $url, 'itflow_enabled' => $enabled ? '1' : '0', 'itflow_tickets_enabled' => $tickets ? '1' : '0',
+                  'itflow_tag_filter' => $tagFilter ? '1' : '0', 'itflow_tag_name' => $tagName] as $key => $value) {
             if ($s->get($key) !== $value) {
                 $s->set($key, $value);
-                $changed[$key] = in_array($key, ['itflow_enabled', 'itflow_tickets_enabled'], true) ? $value === '1' : $value;
+                $changed[$key] = in_array($key, ['itflow_enabled', 'itflow_tickets_enabled', 'itflow_tag_filter'], true) ? $value === '1' : $value;
             }
         }
         if ($request->input('clear_key') === '1') {

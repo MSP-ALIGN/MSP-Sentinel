@@ -27,7 +27,7 @@ $n = $ninja;
         <details class="small mb-3">
             <summary><?= e(__('How to create the API key in ITFlow')) ?></summary>
             <ol class="mt-2 mb-0">
-                <li><?= e(__('In ITFlow, add an agent named MSP Sentinel with a role that can read clients and create tickets and ticket replies, with access to all clients.')) ?></li>
+                <li><?= e(__('In ITFlow, add an agent named MSP Sentinel with a role that can read clients (and tags, to sync only tagged clients) and create tickets and ticket replies, with access to all clients.')) ?></li>
                 <li><?= e(__('Go to Admin, API Keys, create a key for that agent with an expiry date, and copy it into the form below. Each API key acts as its agent.')) ?></li>
             </ol>
         </details>
@@ -48,6 +48,12 @@ $n = $ninja;
             </div>
             <div class="form-check mt-3"><input class="form-check-input" type="checkbox" id="itflow-enabled" name="enabled" value="1" <?= $it['enabled'] ? 'checked' : '' ?>>
                 <label class="form-check-label" for="itflow-enabled"><?= e(__('Sync clients from ITFlow')) ?></label></div>
+            <div class="form-check ms-4"><input class="form-check-input" type="checkbox" id="itflow-tag-filter" name="tag_filter" value="1" <?= $it['tag_filter'] ? 'checked' : '' ?>>
+                <label class="form-check-label" for="itflow-tag-filter"><?= e(__('Only sync ITFlow clients with this tag:')) ?></label>
+                <label class="visually-hidden" for="itflow-tag-name"><?= e(__('ITFlow tag name')) ?></label>
+                <input class="form-control form-control-sm d-inline-block sn-w-20 ms-1" id="itflow-tag-name" name="tag_name" value="<?= e($it['tag_name']) ?>" maxlength="100">
+                <div class="form-text"><?= e(__('Uses ITFlow\'s client tags (any case). Clients without the tag are not added, and ones already here are archived (restored when the tag is added back). If the tag can\'t be read, or no client tag has this name, the sync stops and nothing changes.')) ?>
+                    <?php if ($it['sync_off'] > 0): ?><?= e(__('{n} client(s) are set to "Don\'t sync with ITFlow" on their Edit page.', ['n' => $it['sync_off']])) ?><?php endif; ?></div></div>
             <div class="form-check"><input class="form-check-input" type="checkbox" id="itflow-tickets" name="tickets" value="1" <?= $it['tickets'] ? 'checked' : '' ?>>
                 <label class="form-check-label" for="itflow-tickets"><?= e(__('Open ITFlow tickets for findings')) ?></label>
                 <div class="form-text"><?= e(__('Each Fail, and anything known to be exploited, gets its own ticket (High; Urgent when exploited) with how to fix it. Warnings get one ticket per client a week when there are new ones. Tickets are internal: ITFlow does not email the client. Status goes both ways: fixed in Sentinel resolves the ticket; resolved or closed in ITFlow makes Sentinel check again, and the ticket is reopened (or replaced, if closed) when the problem is still there. Only findings that appear after this is turned on get tickets, unless you open them for the existing ones below.')) ?></div></div>

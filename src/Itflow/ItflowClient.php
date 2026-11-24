@@ -119,6 +119,73 @@ final class ItflowClient
     }
 
     /**
+     * IDs of the ITFlow clients that carry a tag (1.45), through ITFlow's tags API: GET /api/v1/tags/read.php with
+     * kind=client and tag_name (any case) finds the tag(s), then tag_id=... lists tag_record_ids (the clients the key
+     * may see). Null when no client tag has that name (a typo must not look like "nobody is tagged"). Throws when this
+     * ITFlow has no tags API or refuses it, so the caller never mistakes "can't tell" for "no clients tagged".
+     *
+     * Untrusted: everything ITFlow answers (only numeric IDs are kept).
+     *
+     * @return list<int>|null
+     */
+    public function taggedClientIds(string $tagName): ?array
+    {
+        $tags = $this->tagsRead(['kind' => 'client', 'tag_name' => $tagName, 'limit' => 1000]);
+        $ids = [];
+        $found = false;
+        foreach ($tags as $t) {
+            if (!is_array($t) || !is_numeric($t['tag_id'] ?? null) || strcasecmp(trim((string) ($t['tag_name'] ?? '')), trim($tagName)) !== 0) {
+                continue;
+            }
+            $found = true;
+            foreach ($this->tagsRead(['tag_id' => (int) $t['tag_id']]) as $one) {
+                $records = is_array($one) ? ($one['tag_record_ids'] ?? []) : [];
+                if (is_string($records)) {
+                    $records = explode(',', $records); // tolerated: a comma-separated list
+                }
+                foreach (is_array($records) ? $records : [] as $rid) {
+                    if (is_numeric($rid) && (int) $rid > 0) {
+                        $ids[(int) $rid] = true;
+                    }
+                }
+            }
+        }
+        return $found ? array_keys($ids) : null;
+    }
+
+    /**
+     * One call to ITFlow's tags API. A 404 means this ITFlow has none: an error, never "no tags".
+     *
+     * @param array<string,int|string> $query
+     * @return list<mixed>
+     */
+    private function tagsRead(array $query): array
+    {
+        [$status, $body] = $this->request('/api/v1/tags/read.php', $query, null);
+        $data = json_decode($body, true);
+        if ($status === 404 && !is_array($data)) {
+            throw new ItflowException('This ITFlow has no tags API (tags/read.php), so clients can\'t be filtered by tag.', ItflowException::KIND_REFUSED);
+        }
+        if ($status === 401) {
+            throw new ItflowException('ITFlow refused the API key (wrong or expired).', ItflowException::KIND_AUTH);
+        }
+        if ($status === 403) {
+            throw self::denied(is_array($data) && is_string($data['message'] ?? null) ? mb_substr((string) preg_replace('/[^\P{C}]/u', '', $data['message']), 0, 200) : '');
+        }
+        if (!is_array($data)) {
+            throw new ItflowException('ITFlow answered HTTP ' . $status . ' for its tags.', ItflowException::KIND_REFUSED);
+        }
+        if (($data['success'] ?? '') === 'True') {
+            return is_array($data['data'] ?? null) && array_is_list($data['data']) ? $data['data'] : [];
+        }
+        $msg = is_string($data['message'] ?? null) ? $data['message'] : '';
+        if (str_starts_with($msg, 'No resource')) {
+            return []; // nothing with that name
+        }
+        throw new ItflowException('ITFlow refused the tag lookup: ' . mb_substr((string) preg_replace('/[^\P{C}]/u', '', $msg), 0, 200), ItflowException::KIND_REFUSED);
+    }
+
+    /**
      * The service boards of an ITFlow build with board support (1.44: the MountaineerIT build's
      * GET /api/v1/mit_boards/read.php), or null when this ITFlow has none (stock ITFlow answers 404 there).
      *

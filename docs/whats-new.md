@@ -2,6 +2,17 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.43.2 (2026-11-24): Sign in with Microsoft linking fixes from review
+
+- **Linking needs your password** (a stolen session alone can't plant a lasting Microsoft sign-in) and **no existing
+  link** (unlink first; a link is never replaced quietly). The linked account's name is shown on My profile and the
+  user's page, and the user gets a notification when one is linked (migration 0050).
+- **Resets remove the link:** an admin's password reset or two-factor reset clears the Microsoft link, as the account
+  may be compromised. Unlinking a user whose password sign-in was off turns it back on, so they aren't locked out.
+- Members whose tokens name the tenant in the older v1 form aren't refused as guests; a refused guest's directory is
+  logged. Without the `auth_time` claim Sentinel always asks its own code and the server log says how to add it.
+  Only a real duplicate counts as "already linked".
+
 ### 1.43.1 (2026-11-24): Sign in with Microsoft fixes from review
 
 - **Accounts are linked by their owner, never by email address.** Each user signs in with their password and
