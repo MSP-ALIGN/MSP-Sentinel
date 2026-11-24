@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.33.0](https://img.shields.io/badge/version-1.33.0-ff5a1f?style=flat-square)
+![Version 1.33.1](https://img.shields.io/badge/version-1.33.1-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -149,6 +149,25 @@ curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install
 The same help is built into the app (**Help** in the menu), with a "What's new" page for every release.
 
 ## What's new
+
+### 1.33.1 (2026-11-24): breach monitoring, fixes from review
+
+- **No mass removal from an incomplete answer.** An answer that would remove more than half of the known breached
+  addresses, or covers no domain at all, removes nothing and says so on the settings card. Only addresses of domains
+  the answer covers (or that left the client's register) are ever removed.
+- **An expired authorisation is not a fix:** that client's addresses and findings stay as they are.
+- **A failed check is retried after 6 hours** (not a week), and a new API key can be checked at once.
+- **Addresses are masked** in finding titles and targets, so in alerts, Teams/Slack messages and lists
+  (`j***@client.example`). Viewers see them masked on the client page; the full address is in the finding's details
+  for technicians and admins.
+- **Archived clients' breach data is removed.**
+- **Smaller fixes:**
+  - each client's results are stored in one transaction;
+  - breach evidence no longer changes with the provider's ordering;
+  - future-dated breaches are treated as undated;
+  - stricter domain checks;
+  - a broader API key format;
+  - a smaller answer size limit.
 
 ### 1.33.0 (2026-11-24): breach monitoring
 

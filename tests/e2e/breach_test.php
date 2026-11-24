@@ -65,6 +65,9 @@ return [
         Assert::true($alice !== false && $alice['severity'] === 'fail', 'a breach in the last 12 months: Fail');
         Assert::contains('appeared in 2 data breach(es) (latest: RecentLeak, ' . gmdate('Y-m', strtotime('-2 months')), (string) $alice['title']);
         Assert::contains('Passwords', (string) $alice['detail'], 'what was exposed');
+        Assert::contains('a***@breachco.example appeared', (string) $alice['title'], 'masked in the title (alerts, chat)');
+        Assert::notContains('alice@', (string) $alice['title']);
+        Assert::contains('alice@breachco.example', (string) $alice['detail'], 'in full in the detail');
         Assert::same('warn', ($finding($ctx, $cid, 'bob@breachco.example') ?: [])['severity'] ?? null, 'only old breaches: Warning');
         Assert::same('warn', ($finding($ctx, $cid, 'carol@sub.branch.example') ?: [])['severity'] ?? null, '*.branch.example covers sub.branch.example');
         Assert::same(false, $finding($ctx, $cid, 'dave@branch.example'), '*.branch.example does not cover branch.example itself');
@@ -85,6 +88,13 @@ return [
         }
         $tech = $ctx->login('brview', 'Brview-Pass-0001!');
         Assert::status(403, $tech->post('/admin/integrations/breach', ['_csrf' => $tech->get('/findings')->csrf(), 'api_key' => 'x', 'enabled' => '0']));
+        if ((int) $ctx->db->query("SELECT COUNT(*) FROM users WHERE username = 'brviewer'")->fetchColumn() === 0) {
+            $ctx->createUser('brviewer', 'viewer', 'Brviewer-Pass-0001!');
+        }
+        $viewer = $ctx->login('brviewer', 'Brviewer-Pass-0001!');
+        $vp = $ctx->clientSection($viewer, $cid, 'website');
+        Assert::contains('a***@breachco.example', $vp, 'viewers see masked addresses');
+        Assert::notContains('alice@breachco.example', $vp);
     },
     'breach monitoring: errors change nothing; addresses no longer listed resolve; weekly schedule' => function (TestContext $ctx) use ($brSetup, $brData, $brAll, $finding): void {
         $cid = $brSetup($ctx);
@@ -95,6 +105,15 @@ return [
             Assert::same('open', ($finding($ctx, $cid, 'alice@breachco.example') ?: [])['status'] ?? null, 'a failed read changes nothing (' . $mode . ')');
         }
         @unlink($dir . '/xon-mode.txt');
+        // A failed check is tried again after a few hours, not a week.
+        App::settings()->set('breach_last_run', gmdate('Y-m-d H:i:s', time() - 7 * 3600));
+        App::settings()->set('breach_last_ok_run', gmdate('Y-m-d H:i:s', time() - 8 * 86400));
+        Assert::true(App::breachMonitor()->runIfDue() !== null, 'retried after a failure');
+        // An answer that would remove most of what is known (an outage, a lapsed verification) removes nothing.
+        $brData($ctx, []);
+        $guarded = App::breachMonitor()->run();
+        Assert::contains('Nothing was removed', $guarded);
+        Assert::same('open', ($finding($ctx, $cid, 'alice@breachco.example') ?: [])['status'] ?? null, 'kept');
         // Bob is no longer listed: his row goes and his finding resolves.
         $brData($ctx, array_values(array_filter($brAll, static fn (array $e): bool => $e[0] !== 'bob@breachco.example')));
         App::breachMonitor()->run();
@@ -104,6 +123,7 @@ return [
         @unlink($dir . '/xon-calls.log');
         Assert::same(null, App::breachMonitor()->runIfDue(), 'not due yet');
         App::settings()->set('breach_last_run', gmdate('Y-m-d H:i:s', time() - 8 * 86400));
+        App::settings()->set('breach_last_ok_run', gmdate('Y-m-d H:i:s', time() - 8 * 86400));
         Assert::true(App::breachMonitor()->runIfDue() !== null, 'due after a week');
         Assert::same(1, count(file($dir . '/xon-calls.log') ?: []), 'one call per check');
         Assert::notContains('xon-test-key', (string) file_get_contents($dir . '/xon-calls.log'), 'the key is never logged');
@@ -111,6 +131,13 @@ return [
         App::settings()->setSecret('xon_api_key', 'xon-wrong-key-0123456789abcdef');
         Assert::contains('refused the API key', App::breachMonitor()->run());
         Assert::same('open', ($finding($ctx, $cid, 'alice@breachco.example') ?: [])['status'] ?? null);
+        // An expired authorisation is not a fix: the client's addresses stay.
+        App::settings()->setSecret('xon_api_key', 'xon-test-key-0123456789abcdef');
+        $ctx->db->exec("UPDATE scan_authorisations SET valid_until = UTC_DATE() - INTERVAL 1 DAY WHERE client_id = {$cid}");
+        $brData($ctx, [['carol@sub.branch.example', 'sub.branch.example', 'OldLeak']]);
+        App::breachMonitor()->run();
+        Assert::same('open', ($finding($ctx, $cid, 'alice@breachco.example') ?: [])['status'] ?? null, 'not removed while the authorisation is expired');
+        $ctx->db->exec("UPDATE scan_authorisations SET valid_until = UTC_DATE() + INTERVAL 200 DAY WHERE client_id = {$cid}");
         App::settings()->set('breach_enabled', '0');
         Assert::same(null, App::breachMonitor()->runIfDue(), 'off: never runs');
     },

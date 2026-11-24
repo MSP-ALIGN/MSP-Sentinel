@@ -178,6 +178,8 @@ final class IntegrationsController extends Controller
             }
             $s->setSecret('xon_api_key', $apiKey);
             $changed['xon_api_key'] = 'changed';
+            $s->set('breach_last_run', ''); // a new key may be checked at once (and the weekly check starts again)
+            $s->set('breach_last_ok_run', '');
         }
         if ($changed !== []) {
             $this->audit($request, 'settings.breach_updated', null, null, ['changed' => $changed]);

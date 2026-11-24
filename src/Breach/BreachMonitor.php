@@ -18,12 +18,17 @@ use Sentinel\Scope\ScopeService;
  * what was exposed (never a password or hash); the findings refresh turns them into findings (FindingsEngine): a
  * breach in the last 12 months is a Fail, older ones a Warning, one finding per address.
  *
- * Archived and demo clients are skipped. An address the provider no longer lists (or whose domain left the client's
- * register) is removed after a successful read, so its finding resolves. A failed read changes nothing.
+ * Archived and demo clients are skipped (archived clients' rows are removed). A client without an active
+ * authorisation is left as it is (not checked is not fixed). An address of a domain the answer covers that it no
+ * longer lists, or whose domain left the client's register, is removed after a successful read, so its finding
+ * resolves; but an answer that would remove more than half of what is known (or covers no domain at all) removes
+ * nothing and says so (an outage or a lapsed verification is likelier than a mass clean-up). A failed read changes
+ * nothing and is retried RETRY_HOURS later.
  *
  * Untrusted: everything from XposedOrNot (validated in XonClient). Security assumptions: the API key is a secret
- * setting (encrypted, never shown or logged); addresses are personal data, shown only to signed-in users and never
- * logged; runs are serialised with a database lock.
+ * setting (encrypted, never shown or logged); addresses are personal data: full addresses only on the client page for
+ * technicians and admins and in the finding's detail; titles, targets (so alerts, chat webhooks and lists) carry the
+ * masked form (j***@client.example); never logged. Runs are serialised with a database lock.
  */
 final class BreachMonitor
 {
@@ -36,14 +41,26 @@ final class BreachMonitor
     {
     }
 
-    /** Run when due (worker). Returns the summary, or null when nothing ran. */
+    /** Hours before an automatic check is tried again after one that failed. */
+    public const RETRY_HOURS = 6;
+    /** Above this share of stored addresses disappearing in one answer, nothing is removed (an incomplete answer). */
+    public const MAX_DROP_SHARE = 0.5;
+
+    /**
+     * Run when due (worker): a week after the last successful check, and after a failed one RETRY_HOURS later.
+     * Returns the summary, or null when nothing ran.
+     */
     public function runIfDue(): ?string
     {
         if ($this->xon === null || $this->settings->fresh('breach_enabled') !== '1') {
             return null;
         }
-        $last = $this->settings->fresh('breach_last_run');
-        if ($last !== '' && strtotime($last . ' UTC') > time() - self::INTERVAL_DAYS * 86400) {
+        $lastOk = $this->settings->fresh('breach_last_ok_run');
+        $lastTry = $this->settings->fresh('breach_last_run');
+        if ($lastOk !== '' && strtotime($lastOk . ' UTC') > time() - self::INTERVAL_DAYS * 86400) {
+            return null;
+        }
+        if ($lastTry !== '' && strtotime($lastTry . ' UTC') > time() - self::RETRY_HOURS * 3600) {
             return null;
         }
         return $this->run();
@@ -64,25 +81,30 @@ final class BreachMonitor
             try {
                 $data = $this->xon->domainBreaches();
             } catch (XonException $ex) {
-                $summary = 'Stopped: ' . $ex->getMessage();
-                $this->settings->set('breach_last_result', $summary);
-                $this->settings->set('breach_last_ok', '0');
-                return $summary;
+                return $this->stopped($ex->getMessage());
             }
             $byDomain = [];
             foreach ($data['exposures'] as $e) {
                 $byDomain[$e['domain']][$e['email']][$e['breach']] = true;
             }
+            // The domains this answer speaks for: only their addresses can be judged "no longer listed".
             $verified = array_values(array_unique(array_merge($data['domains'], array_keys($byDomain))));
+            $stored = (int) $this->db->query('SELECT COUNT(*) FROM breach_exposures')->fetchColumn();
+            // Archived clients keep no breach data (personal data with no use).
+            $this->db->exec('DELETE b FROM breach_exposures b JOIN clients c ON c.id = b.client_id WHERE c.is_archived = 1');
             $clients = $this->db->query('SELECT id, timezone FROM clients WHERE is_archived = 0 AND is_demo = 0')->fetchAll();
+            // Plan first, write after the guard: per client, the rows to write and the ones to remove.
+            $plans = [];
             $matched = [];
-            $addresses = 0;
-            $touched = [];
+            $drops = 0;
             foreach ($clients as $c) {
                 $cid = (int) $c['id'];
                 $entries = array_values(array_filter($this->authorisations->activeEntries($cid, ScopeService::today((string) $c['timezone'])),
                     static fn (array $e): bool => $e['entry_type'] === 'domain'));
-                $keep = [];
+                if ($entries === []) {
+                    continue; // no active authorisation (expired, or none): left as it is; not checked is not fixed
+                }
+                $rows = [];
                 foreach ($verified as $domain) {
                     if (!ScopeService::matches($entries, $domain)) {
                         continue;
@@ -94,24 +116,50 @@ final class BreachMonitor
                             $info = $data['breaches'][$name] ?? ['date' => '', 'data' => []];
                             $list[] = ['name' => $name, 'date' => $info['date'], 'data' => $info['data']];
                         }
-                        usort($list, static fn (array $a, array $b): int => strcmp($b['date'], $a['date'])); // newest first
+                        usort($list, static fn (array $a, array $b): int => [$b['date'], $a['name']] <=> [$a['date'], $b['name']]); // newest first, then by name
+                        $rows[$email] = ['domain' => $domain, 'breaches' => array_slice($list, 0, 200)];
+                    }
+                }
+                // Removed: addresses of domains this answer covers that it no longer lists, and addresses of domains no
+                // longer in the client's (active) register.
+                $remove = [];
+                $cur = $this->db->prepare('SELECT email, domain FROM breach_exposures WHERE client_id = :c');
+                $cur->execute(['c' => $cid]);
+                foreach ($cur->fetchAll() as $old) {
+                    $covered = in_array((string) $old['domain'], $verified, true);
+                    $inRegister = ScopeService::matches($entries, (string) $old['domain']);
+                    if (!isset($rows[$old['email']]) && (($covered && $inRegister) || !$inRegister)) {
+                        $remove[] = (string) $old['email'];
+                    }
+                }
+                $drops += count($remove);
+                $plans[$cid] = ['rows' => $rows, 'remove' => $remove];
+            }
+            // An answer that would remove most of what is known is more likely incomplete than a mass clean-up.
+            $guard = $stored > 0 && ($verified === [] || $drops > $stored * self::MAX_DROP_SHARE);
+            $addresses = 0;
+            $touched = [];
+            foreach ($plans as $cid => $plan) {
+                $this->db->beginTransaction();
+                try {
+                    foreach ($plan['rows'] as $email => $row) {
                         $this->db->prepare('INSERT INTO breach_exposures (client_id, email, domain, breaches, first_seen, last_seen)
                                             VALUES (:c, :e, :d, :b, UTC_TIMESTAMP(), UTC_TIMESTAMP())
                                             ON DUPLICATE KEY UPDATE domain = VALUES(domain), breaches = VALUES(breaches), last_seen = UTC_TIMESTAMP()')
-                            ->execute(['c' => $cid, 'e' => $email, 'd' => $domain, 'b' => json_encode(array_slice($list, 0, 200))]);
-                        $keep[] = $email;
+                            ->execute(['c' => $cid, 'e' => (string) $email, 'd' => $row['domain'], 'b' => json_encode($row['breaches'])]);
                         $addresses++;
                     }
+                    if (!$guard && $plan['remove'] !== []) {
+                        $del = $this->db->prepare('DELETE FROM breach_exposures WHERE client_id = ? AND email IN (' . implode(',', array_fill(0, count($plan['remove']), '?')) . ')');
+                        $del->execute(array_merge([$cid], $plan['remove']));
+                    }
+                    $this->db->commit();
+                } catch (\Throwable $ex) {
+                    $this->db->rollBack();
+                    error_log('[msp-sentinel] breach monitoring: storing client ' . $cid . ' failed: ' . $ex->getMessage());
+                    return $this->stopped('the results could not be stored (see the PHP error log).');
                 }
-                // Addresses no longer listed (or whose domain left the register): removed, so their findings resolve.
-                if ($keep === []) {
-                    $del = $this->db->prepare('DELETE FROM breach_exposures WHERE client_id = :c');
-                    $del->execute(['c' => $cid]);
-                } else {
-                    $del = $this->db->prepare('DELETE FROM breach_exposures WHERE client_id = ? AND email NOT IN (' . implode(',', array_fill(0, count($keep), '?')) . ')');
-                    $del->execute(array_merge([$cid], $keep));
-                }
-                if ($keep !== [] || $del->rowCount() > 0) {
+                if ($plan['rows'] !== [] || (!$guard && $plan['remove'] !== [])) {
                     $touched[] = $cid;
                 }
             }
@@ -126,14 +174,32 @@ final class BreachMonitor
             sort($unmatched);
             $this->settings->set('breach_unmatched', implode(',', array_slice($unmatched, 0, 100)));
             $summary = sprintf('%d verified domain(s), %d in clients\' registers; %d breached address(es) for %d client(s).',
-                count($verified), count($matched), $addresses, count(array_unique($touched)));
+                count($verified), count($matched), $addresses, count($touched))
+                . ($guard ? ' ' . sprintf('Nothing was removed: this answer would have removed %d of %d known address(es), which looks incomplete (check the verified domains in XposedOrNot).', $drops, $stored) : '');
             $this->settings->set('breach_last_result', $summary);
-            $this->settings->set('breach_last_ok', '1');
-            $this->audit->log('breach.checked', null, 'breach-monitor', null, null, ['domains' => count($verified), 'addresses' => $addresses]);
+            $this->settings->set('breach_last_ok', $guard ? '0' : '1');
+            $this->settings->set('breach_last_ok_run', gmdate('Y-m-d H:i:s'));
+            $this->audit->log('breach.checked', null, 'breach-monitor', null, null, ['domains' => count($verified), 'addresses' => $addresses, 'removal_held' => $guard]);
             return $summary;
         } finally {
             $this->db->query("SELECT RELEASE_LOCK({$lock})");
         }
+    }
+
+    /** Record a check that stopped (nothing changed); tried again RETRY_HOURS later. */
+    private function stopped(string $why): string
+    {
+        $summary = 'Stopped: ' . $why;
+        $this->settings->set('breach_last_result', $summary);
+        $this->settings->set('breach_last_ok', '0');
+        return $summary;
+    }
+
+    /** An address for titles, alerts and chat: the first character and the domain (j***@client.example). */
+    public static function masked(string $email): string
+    {
+        $at = strrpos($email, '@');
+        return $at === false ? '***' : mb_substr($email, 0, 1) . '***' . substr($email, $at);
     }
 
     /**
@@ -154,7 +220,10 @@ final class BreachMonitor
         return $out;
     }
 
-    /** Whether a breach date (Y-m-d) is within the last 12 months: such a breach is a Fail. */
+    /**
+     * Whether a breach date (Y-m-d) is within the last 12 months: such a breach is a Fail. A breach without a date
+     * counts as older (Warning): the provider dates nearly all breaches, and an undated one can't be called recent.
+     */
     public static function recent(string $date): bool
     {
         return $date !== '' && $date >= gmdate('Y-m-d', strtotime('-12 months'));

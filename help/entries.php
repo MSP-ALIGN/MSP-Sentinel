@@ -247,6 +247,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.33.1',
+            'date' => '2026-11-24',
+            'items' => [
+                'Breach monitoring fixes: an answer that would remove most known addresses removes nothing (and says so); only addresses of domains the answer covers are removed; clients with an expired authorisation keep theirs; a failed check is retried after 6 hours, and a new key can be checked at once; addresses are masked in finding titles, alerts and chat (and for viewers); archived clients\' breach data is removed.',
+            ],
+        ],
+        [
             'version' => '1.33.0',
             'date' => '2026-11-24',
             'items' => [

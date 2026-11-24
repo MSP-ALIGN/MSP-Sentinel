@@ -26,7 +26,7 @@ namespace Sentinel\Breach;
 final class XonClient
 {
     public const DEFAULT_BASE = 'https://api.xposedornot.com';
-    private const MAX_BYTES = 16777216;
+    private const MAX_BYTES = 8388608; // decoded JSON takes several times this in memory
     private const MAX_ENTRIES = 50000;
     private const MAX_BREACHES = 5000;
 
@@ -38,7 +38,7 @@ final class XonClient
     /** Whether a value looks like an API key (printable, no spaces, a sensible length). */
     public static function validKey(string $key): bool
     {
-        return preg_match('/^[A-Za-z0-9_\-]{16,128}$/', $key) === 1;
+        return preg_match('/^[\x21-\x7E]{16,256}$/', $key) === 1; // printable ASCII: no spaces or line breaks (header safe)
     }
 
     /**
@@ -86,7 +86,7 @@ final class XonClient
         $domains = [];
         foreach (array_keys(is_array($metrics['Domain_Summary'] ?? null) ? $metrics['Domain_Summary'] : []) as $d) {
             $d = strtolower(self::str((string) $d, 253));
-            if ($d !== '' && count($domains) < 1000) {
+            if (preg_match('/^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/', $d) === 1 && count($domains) < 1000) {
                 $domains[] = $d;
             }
         }
@@ -147,6 +147,10 @@ final class XonClient
     private static function date(mixed $v): string
     {
         $s = is_string($v) ? $v : '';
-        return preg_match('/^(\d{4})-(\d{2})-(\d{2})/', $s, $m) === 1 && checkdate((int) $m[2], (int) $m[3], (int) $m[1]) ? $m[1] . '-' . $m[2] . '-' . $m[3] : '';
+        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})/', $s, $m) !== 1 || !checkdate((int) $m[2], (int) $m[3], (int) $m[1])) {
+            return '';
+        }
+        $d = $m[1] . '-' . $m[2] . '-' . $m[3];
+        return $d > gmdate('Y-m-d', time() + 86400) ? '' : $d; // a date in the future is a typo: treated as unknown
     }
 }

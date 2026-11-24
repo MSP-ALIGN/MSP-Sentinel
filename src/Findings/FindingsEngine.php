@@ -338,11 +338,18 @@ final class FindingsEngine
                 $latest = $list[0];
                 $add('breach:' . $b['email'], [
                     'type' => 'breach', 'severity' => $recent !== [] ? 'fail' : 'warn',
-                    'title' => __('{email} appeared in {n} data breach(es) (latest: {name}{date})', ['email' => $b['email'], 'n' => count($list),
+                    // The address is masked in the title and target (alerts, chat webhooks, lists); in full only in the detail.
+                    'title' => __('{email} appeared in {n} data breach(es) (latest: {name}{date})', ['email' => \Sentinel\Breach\BreachMonitor::masked($b['email']), 'n' => count($list),
                         'name' => (string) ($latest['name'] ?? '?'), 'date' => (string) ($latest['date'] ?? '') !== '' ? ', ' . substr((string) $latest['date'], 0, 7) : '']),
-                    'detail' => implode('; ', array_map(static fn (array $x): string => (string) ($x['name'] ?? '?') . ((string) ($x['date'] ?? '') !== '' ? ' (' . $x['date'] . ')' : '')
+                    'detail' => $b['email'] . ': ' . implode('; ', array_map(static fn (array $x): string => (string) ($x['name'] ?? '?') . ((string) ($x['date'] ?? '') !== '' ? ' (' . $x['date'] . ')' : '')
                         . ((array) ($x['data'] ?? []) !== [] ? ': ' . implode(', ', array_slice((array) $x['data'], 0, 8)) : ''), array_slice($list, 0, 20))),
-                    'target' => $b['email'], 'evidence' => implode('|', array_map(static fn (array $x): string => (string) ($x['name'] ?? ''), $list)),
+                    'target' => \Sentinel\Breach\BreachMonitor::masked($b['email']),
+                    // Sorted names: a new breach changes the evidence (and reopens a false positive); the provider's order doesn't.
+                    'evidence' => (static function (array $l): string {
+                        $n = array_map(static fn (array $x): string => (string) ($x['name'] ?? ''), $l);
+                        sort($n);
+                        return implode('|', $n);
+                    })($list),
                 ]);
             }
             // DNS: zone transfers and subdomain takeover (1.28).

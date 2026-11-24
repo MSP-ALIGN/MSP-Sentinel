@@ -66,7 +66,8 @@ $chip = static function (string $sev, string $text): string {
         </div>
         <?php endif; ?>
         <h3 class="h6 mt-3"><?= e(__('Breached accounts')) ?></h3>
-        <?php $breaches ??= []; if ($breaches === []): ?>
+        <?php $breaches ??= []; $canSeeAddresses = \Sentinel\Auth\Role::atLeast((string) ($currentUser['role'] ?? ''), \Sentinel\Auth\Role::TECHNICIAN); // viewers see masked addresses
+        if ($breaches === []): ?>
         <p class="small text-body-secondary"><?= e(__('No breached addresses known. Addresses come from breach monitoring (Administration, Integrations) for the client\'s verified domains.')) ?></p>
         <?php else: ?>
         <div class="table-responsive">
@@ -75,7 +76,7 @@ $chip = static function (string $sev, string $text): string {
             <tbody>
             <?php foreach ($breaches as $b): ?>
             <tr>
-                <td><code><?= e($b['email']) ?></code><br><span class="text-body-secondary"><?= e(__('Known since {d} UTC', ['d' => $b['first_seen']])) ?></span></td>
+                <td><code><?= e($canSeeAddresses ? $b['email'] : \Sentinel\Breach\BreachMonitor::masked($b['email'])) ?></code><br><span class="text-body-secondary"><?= e(__('Known since {d} UTC', ['d' => $b['first_seen']])) ?></span></td>
                 <td><?php foreach (array_slice($b['breaches'], 0, 10) as $x): $recent = \Sentinel\Breach\BreachMonitor::recent((string) ($x['date'] ?? '')); ?>
                     <?= $chip($recent ? 'fail' : 'warn', (string) ($x['name'] ?? '?') . ((string) ($x['date'] ?? '') !== '' ? ' (' . $x['date'] . ')' : '')) ?>
                     <?php if ((array) ($x['data'] ?? []) !== []): ?><span class="text-body-secondary"><?= e(implode(', ', array_slice((array) $x['data'], 0, 8))) ?></span><?php endif; ?><br>

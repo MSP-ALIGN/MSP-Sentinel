@@ -108,6 +108,7 @@ final class Settings
         'breach_enabled' => '0',
         'xon_api_key' => '',
         'breach_last_run' => '',
+        'breach_last_ok_run' => '',
         'breach_last_result' => '',
         'breach_last_ok' => '',
         'breach_unmatched' => '',

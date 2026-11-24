@@ -221,7 +221,11 @@ How the results are used:
   are older. The finding lists each breach, its date and what was exposed. Passwords are never stored or shown.
 - An address the provider no longer lists resolves on the next check. A check that fails (provider unreachable, the
   key refused, its daily limit) changes nothing.
-- The client's **Website & email** page lists the breached addresses.
+- The client's **Website & email** page lists the breached addresses (viewers see them masked, like `j***@client.example`).
+  Finding titles, alerts and chat messages use the masked form; the full address is in the finding's details.
+- An answer that would remove more than half of the known addresses removes nothing and says so (an outage or a
+  lapsed verification is likelier). A client whose authorisation has expired keeps its addresses. A failed check is
+  tried again 6 hours later.
 
 XposedOrNot's free key is meant for personal, low-volume use. For monitoring clients they offer paid xonAPI+ keys,
 which work the same way here. **Check now** runs at most once an hour.
