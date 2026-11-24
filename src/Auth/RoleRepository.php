@@ -134,21 +134,24 @@ final class RoleRepository
      * so as long as one active Admin is left, someone can always give any right. A custom role that happens to hold
      * every permission today would fall short the day a new permission appears, and nobody could give it then.
      */
-    public function completeHoldersAfter(?int $userId = null, ?int $userRoleId = null, ?bool $userActive = null): int
+    public function completeHoldersAfter(?int $userId = null, ?int $userRoleId = null, ?bool $userActive = null, ?bool $userAllClients = null): int
     {
+        // An Admin limited to some clients (1.41) doesn't count either: full control means every client too.
         $complete = [];
         foreach ($this->db->query('SELECT id, role_key FROM roles')->fetchAll() as $r) {
             $complete[(int) $r['id']] = $r['role_key'] === 'admin';
         }
         $n = 0;
-        foreach ($this->db->query('SELECT id, role_id, is_active FROM users')->fetchAll() as $u) {
+        foreach ($this->db->query('SELECT id, role_id, is_active, all_clients FROM users')->fetchAll() as $u) {
             $role = (int) $u['role_id'];
             $active = (int) $u['is_active'] === 1;
+            $all = (int) $u['all_clients'] === 1;
             if ($userId !== null && (int) $u['id'] === $userId) {
                 $role = $userRoleId ?? $role;
                 $active = $userActive ?? $active;
+                $all = $userAllClients ?? $all;
             }
-            if ($active && ($complete[$role] ?? false)) {
+            if ($active && $all && ($complete[$role] ?? false)) {
                 $n++;
             }
         }

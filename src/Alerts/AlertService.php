@@ -81,14 +81,14 @@ final class AlertService
             $title = __('Fail: {title}', ['title' => $f['title']]);
             $text = __('{client}: {target}', ['client' => $client, 'target' => $f['target']]) . ((int) $f['reappeared'] === 1 ? ' ' . __('(reappeared)') : '');
             $link = '/findings/' . (int) $f['id'];
-            $this->notifyUsers('finding_fail', 'fail', $title, $text . "\n" . $f['detail'], $link, null);
-            $this->queueEmail($this->emailRecipients(['immediate', 'both']), '[' . $client . '] ' . $title,
+            $this->notifyUsers('finding_fail', 'fail', $title, $text . "\n" . $f['detail'], $link, null, $clientId);
+            $this->queueEmail($this->emailRecipients(['immediate', 'both'], $clientId), '[' . $client . '] ' . $title,
                 $title . "\n\n" . $text . "\n\n" . $f['detail'] . "\n\n" . $this->absolute($link));
             $this->queueWebhook(['title' => $title, 'text' => $text, 'severity' => 'fail', 'client' => $client, 'items' => [], 'link' => $this->absolute($link)]);
         }
         if (count($fresh) > self::MAX_IMMEDIATE) {
             $more = count($fresh) - self::MAX_IMMEDIATE;
-            $this->notifyUsers('finding_fail', 'fail', __('{n} more new Fail findings for {client}', ['n' => $more, 'client' => $client]), '', '/findings?client=' . $clientId, null);
+            $this->notifyUsers('finding_fail', 'fail', __('{n} more new Fail findings for {client}', ['n' => $more, 'client' => $client]), '', '/findings?client=' . $clientId, null, $clientId);
         }
 
         if (!$digest || ($fails === [] && $warns === [] && $resolved === [])) {
@@ -106,8 +106,8 @@ final class AlertService
             $items[] = __('RESOLVED: {t} ({target})', ['t' => $f['title'], 'target' => $f['target']]);
         }
         $link = '/clients/' . $clientId . '/findings';
-        $this->notifyUsers('digest', $fails !== [] ? 'fail' : ($warns !== [] ? 'warn' : 'info'), $title, implode("\n", array_slice($items, 0, 30)), $link, null);
-        $this->queueEmail($this->emailRecipients(['digest', 'both']), '[' . $client . '] ' . __('Scan summary'),
+        $this->notifyUsers('digest', $fails !== [] ? 'fail' : ($warns !== [] ? 'warn' : 'info'), $title, implode("\n", array_slice($items, 0, 30)), $link, null, $clientId);
+        $this->queueEmail($this->emailRecipients(['digest', 'both'], $clientId), '[' . $client . '] ' . __('Scan summary'),
             $title . "\n\n" . implode("\n", array_slice($items, 0, 200)) . "\n\n" . $this->absolute($link));
         $this->queueWebhook(['title' => $title, 'text' => __('Changes after the latest checks.'), 'severity' => $fails !== [] ? 'fail' : ($warns !== [] ? 'warn' : 'info'),
                              'client' => $client, 'items' => $items, 'link' => $this->absolute($link)]);
@@ -121,7 +121,7 @@ final class AlertService
         }
         $client = (string) $this->db->query('SELECT name FROM clients WHERE id = ' . (int) $clientId)->fetchColumn();
         $title = __('Scan #{id} for {client} failed', ['id' => $jobId, 'client' => $client]);
-        $this->notifyUsers('scan_failed', 'warn', $title, $message, '/clients/' . $clientId . '/scans', 'system.manage');
+        $this->notifyUsers('scan_failed', 'warn', $title, $message, '/clients/' . $clientId . '/scans', 'system.manage', $clientId);
         $this->queueEmail($this->teamAddresses(), '[Sentinel] ' . $title, $title . "\n\n" . $message . "\n\n" . $this->absolute('/clients/' . $clientId . '/scans'));
     }
 
@@ -185,8 +185,18 @@ final class AlertService
     {
         $byUser = [];
         $overdueByClient = [];
-        // Who may own findings (1.40: by permission, as the assignment list): others get no reminder.
+        // Who may own findings (1.40: by permission, as the assignment list): others get no reminder. An owner who no
+        // longer sees the finding's client (1.41) doesn't either.
         $owners = array_flip(array_column((new \Sentinel\Auth\RoleRepository($this->db))->usersWith('findings.triage'), 'id'));
+        $sees = [];
+        $isOwner = function (array $f) use ($owners, &$sees): bool {
+            if ($f['assigned_to'] === null || !isset($owners[(int) $f['assigned_to']])) {
+                return false;
+            }
+            $cid = (int) $f['client_id'];
+            $sees[$cid] ??= array_flip($this->usersSeeing($cid));
+            return isset($sees[$cid][(int) $f['assigned_to']]);
+        };
         foreach ($items as $f) {
             $overdue = (int) $f['overdue'] === 1;
             if ($overdue) {
@@ -194,11 +204,11 @@ final class AlertService
                 $overdueByClient[$c] ??= ['total' => 0, 'unassigned' => 0];
                 $overdueByClient[$c]['total']++;
                 // An owner who left (inactive) or can't own findings any more (their role changed) gets no reminder: count it as unassigned.
-                if ($f['assigned_to'] === null || !isset($owners[(int) $f['assigned_to']])) {
+                if (!$isOwner($f)) {
                     $overdueByClient[$c]['unassigned']++;
                 }
             }
-            if ($f['assigned_to'] !== null && isset($owners[(int) $f['assigned_to']])) {
+            if ($isOwner($f)) {
                 $byUser[(int) $f['assigned_to']]['user'] = $f;
                 $byUser[(int) $f['assigned_to']][$overdue ? 'overdue' : 'soon'][] = $f;
             }
@@ -251,8 +261,8 @@ final class AlertService
         $title = __('{n} new device(s) on the {site} network of {client}', ['n' => count($devices), 'site' => $site, 'client' => $client]);
         $items = array_map(static fn (array $d): string => trim($d['ip'] . ' ' . ($d['hostname'] !== '' ? '(' . $d['hostname'] . ')' : '') . ($d['mac'] !== '' ? ' ' . $d['mac'] : '')), array_slice($devices, 0, 50));
         $link = '/clients/' . $clientId . '/devices';
-        $this->notifyUsers('new_device', 'warn', $title, implode("\n", array_slice($items, 0, 20)), $link, null);
-        $this->queueEmail($this->emailRecipients(['immediate', 'both']), '[' . $client . '] ' . $title,
+        $this->notifyUsers('new_device', 'warn', $title, implode("\n", array_slice($items, 0, 20)), $link, null, $clientId);
+        $this->queueEmail($this->emailRecipients(['immediate', 'both'], $clientId), '[' . $client . '] ' . $title,
             $title . "\n\n" . implode("\n", $items) . "\n\n" . __('If you don\'t recognise a device, find out what it is and who connected it.') . "\n\n" . $this->absolute($link));
         $this->queueWebhook(['title' => $title, 'text' => __('Devices not seen on this network before.'), 'severity' => 'warn', 'client' => $client, 'items' => $items, 'link' => $this->absolute($link)]);
     }
@@ -267,14 +277,19 @@ final class AlertService
 
     /**
      * Create an in-app notification for every active user, or only those whose role holds $permission (1.40; before,
-     * 'admin' meant admins only).
+     * 'admin' meant admins only), and (about a client) only those who see that client (1.41).
      *
      * @param string|null $permission a Sentinel\Auth\Permissions name, or null for everyone
+     * @param int|null    $clientId   the client it is about, or null for a system-wide notice
      */
-    public function notifyUsers(string $kind, string $severity, string $title, string $body, string $link, ?string $permission): void
+    public function notifyUsers(string $kind, string $severity, string $title, string $body, string $link, ?string $permission, ?int $clientId = null): void
     {
-        $users = $permission === null ? $this->db->query('SELECT id FROM users WHERE is_active = 1')->fetchAll(PDO::FETCH_COLUMN)
+        $users = $permission === null ? array_map('intval', $this->db->query('SELECT id FROM users WHERE is_active = 1')->fetchAll(PDO::FETCH_COLUMN))
             : array_column((new \Sentinel\Auth\RoleRepository($this->db))->usersWith($permission), 'id');
+        if ($clientId !== null) {
+            $seeing = array_flip($this->usersSeeing($clientId));
+            $users = array_values(array_filter($users, static fn (int $u): bool => isset($seeing[$u])));
+        }
         $stmt = $this->db->prepare('INSERT INTO notifications (user_id, kind, severity, title, body, link, created_at) VALUES (:u, :k, :s, :t, :b, :l, UTC_TIMESTAMP())');
         foreach ($users as $uid) {
             $stmt->execute(['u' => $uid, 'k' => $kind, 's' => $severity, 't' => mb_substr($title, 0, 300), 'b' => mb_substr($body, 0, 2000), 'l' => mb_substr($link, 0, 300)]);
@@ -320,11 +335,27 @@ final class AlertService
      * @param list<string> $prefs
      * @return list<string>
      */
-    private function emailRecipients(array $prefs): array
+    private function emailRecipients(array $prefs, ?int $clientId = null): array
     {
         $in = implode(',', array_map(fn (string $p): string => $this->db->quote($p), $prefs));
-        $users = $this->db->query("SELECT email FROM users WHERE is_active = 1 AND email <> '' AND alert_email IN ({$in})")->fetchAll(PDO::FETCH_COLUMN);
+        $rows = $this->db->query("SELECT id, email FROM users WHERE is_active = 1 AND email <> '' AND alert_email IN ({$in})")->fetchAll();
+        // About a client: only users who see it (1.41). The team addresses are the MSP's own and always get it.
+        $seeing = $clientId === null ? null : array_flip($this->usersSeeing($clientId));
+        $users = array_values(array_map(static fn (array $r): string => (string) $r['email'],
+            array_filter($rows, static fn (array $r): bool => $seeing === null || isset($seeing[(int) $r['id']]))));
         return array_merge($users, $this->teamAddresses());
+    }
+
+    /**
+     * IDs of the users (active or not) who see a client: every client, or a list that includes it (1.41).
+     *
+     * @return list<int>
+     */
+    private function usersSeeing(int $clientId): array
+    {
+        $stmt = $this->db->prepare('SELECT u.id FROM users u WHERE u.all_clients = 1 OR EXISTS (SELECT 1 FROM user_clients uc WHERE uc.user_id = u.id AND uc.client_id = :c)');
+        $stmt->execute(['c' => $clientId]);
+        return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
     }
 
     /** @return list<string> Valid team addresses from settings. */

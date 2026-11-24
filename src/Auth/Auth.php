@@ -250,6 +250,8 @@ final class Auth
         // What the user may do (1.40): read fresh with the role on every request, like the role itself, so a change
         // to the user or their role applies at once (it also ends their sessions).
         $user['permissions'] = $this->users->permissions($user);
+        // Which clients they see (1.41): null for every client. Read fresh like the permissions.
+        $user['client_ids'] = $this->users->clientIds($user);
         return $this->current = $user;
     }
 
@@ -262,6 +264,25 @@ final class Auth
     {
         $user = $this->user();
         return $user !== null && in_array($permission, (array) ($user['permissions'] ?? []), true);
+    }
+
+    /** True when the signed-in user sees this client (1.41). Nobody signed in sees nothing. */
+    public function canSeeClient(int $clientId): bool
+    {
+        $user = $this->user();
+        return $user !== null && ClientAccess::allows($user['client_ids'] ?? null, $clientId);
+    }
+
+    /**
+     * The signed-in user's client list for filtering lists: null for every client (also for background work with
+     * nobody signed in, which isn't limited), else the IDs.
+     *
+     * @return list<int>|null
+     */
+    public function clientIds(): ?array
+    {
+        $user = $this->user();
+        return $user === null ? null : ($user['client_ids'] ?? null);
     }
 
     public function refreshSessionVersion(): void

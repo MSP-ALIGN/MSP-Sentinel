@@ -12,6 +12,7 @@ use Sentinel\Core\Csrf;
                     <dt class="col-sm-4"><?= e(__('Name')) ?></dt><dd class="col-sm-8"><?= e($currentUser['display_name']) ?></dd>
                     <dt class="col-sm-4"><?= e(__('Email')) ?></dt><dd class="col-sm-8"><?= e($currentUser['email'] !== '' ? $currentUser['email'] : '—') ?></dd>
                     <dt class="col-sm-4"><?= e(__('Role')) ?></dt><dd class="col-sm-8"><?= e(role_label($currentUser)) ?></dd>
+                    <dt class="col-sm-4"><?= e(__('Clients')) ?></dt><dd class="col-sm-8"><?= e(($currentUser['client_ids'] ?? null) === null ? __('All clients') : __('{n} client(s)', ['n' => count($currentUser['client_ids'])])) ?></dd>
                 </dl>
             </div>
             <div class="card-footer"><a href="<?= e(url('/profile/password')) ?>" class="btn btn-outline-primary btn-sm"><i class="bi bi-key me-1" aria-hidden="true"></i><?= e(__('Change password')) ?></a></div>

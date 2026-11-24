@@ -15,6 +15,7 @@
                 <th scope="col"><?= e(__('Username')) ?></th>
                 <th scope="col"><?= e(__('Name')) ?></th>
                 <th scope="col"><?= e(__('Role')) ?></th>
+                <th scope="col"><?= e(__('Clients')) ?></th>
                 <th scope="col"><?= e(__('Status')) ?></th>
                 <th scope="col"><?= e(__('2FA')) ?></th>
                 <th scope="col"><?= e(__('Last sign-in (UTC)')) ?></th>
@@ -26,6 +27,7 @@
                 <td><a href="<?= e(url('/users/' . (int) $u['id'])) ?>"><?= e($u['username']) ?></a></td>
                 <td><?= e($u['display_name']) ?></td>
                 <td><?= e(role_label($u)) ?></td>
+                <td><?= e((int) ($u['all_clients'] ?? 1) === 1 ? __('All') : __('{n} client(s)', ['n' => (int) ($u['client_count'] ?? 0)])) ?></td>
                 <td>
                     <?php if ((int) $u['is_active'] === 1): ?>
                     <span class="badge text-bg-success"><i class="bi bi-check-circle me-1" aria-hidden="true"></i><?= e(__('Active')) ?></span>

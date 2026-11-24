@@ -244,7 +244,7 @@ final class EngagementController extends Controller
         $approvers = count(array_filter(App::roles()->usersWith('engagements.approve'), static fn (array $u): bool => $u['id'] !== $me));
         App::alerts()->notifyUsers('engagement', 'warn', __('Engagement awaiting approval: {name}', ['name' => $v['name']]),
             __('{user} created it for {client}. A different admin must approve it before anything runs.', ['user' => (string) ($this->user()['display_name'] ?? ''), 'client' => (string) $client['name']]),
-            '/engagements/' . $id, 'engagements.approve');
+            '/engagements/' . $id, 'engagements.approve', $clientId);
         Session::flash('success', $approvers >= 1
             ? __('Engagement created. Someone else who may approve engagements must approve it before anything runs; they were notified.')
             : __('Engagement created. Nobody else may approve engagements yet: give a second person a role that can approve them (Users) first.'));
@@ -256,8 +256,8 @@ final class EngagementController extends Controller
     {
         $canApprove = App::auth()->can('engagements.approve');
         return $this->page('engagements/index', __('Pen-test engagements'), [
-            'engagements' => App::engagements()->all(),
-            'awaiting' => $canApprove ? App::engagements()->awaitingApprovalBy((int) $this->user()['id']) : [],
+            'engagements' => App::engagements()->all(200, App::auth()->clientIds()),
+            'awaiting' => $canApprove ? App::engagements()->awaitingApprovalBy((int) $this->user()['id'], App::auth()->clientIds()) : [],
             'approverCount' => count(App::roles()->usersWith('engagements.approve')),
         ]);
     }

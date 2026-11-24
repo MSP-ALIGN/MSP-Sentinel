@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.40.1](https://img.shields.io/badge/version-1.40.1-ff5a1f?style=flat-square)
+![Version 1.41.0](https://img.shields.io/badge/version-1.41.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,18 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.41.0 (2026-11-24): limit users to their clients
+
+- **Per-user client lists.** Each user sees every client (the default, so nothing changes on upgrade) or only a
+  chosen list: **Administration → Users →** the user **→ Clients** (migration 0047).
+- **Nothing of other clients.** For a limited user, other clients' pages and records (findings, reports, scans,
+  engagements, authorisations, sites) answer "not found", checked once in the request kernel before any page code
+  runs, and lists, counts, search, the dashboard, reports, engagements, notifications and alert emails leave them out.
+  A test fails if any page with an ID lacks a client check.
+- **Never more than you see.** You can only give clients you see yourself, and only manage users whose clients you
+  all see. Findings can only be given to someone who sees the client; a client a limited user adds becomes theirs.
+  The last active Admin who sees every client can't be limited, demoted or disabled.
+
 ### 1.40.1 (2026-11-24): roles and permissions fixes from review
 
 - **API tokens never do more than their creator.** Only someone who may triage findings or start scans can give a
@@ -150,20 +162,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 - **Alerts, owners and approvals follow permissions:** system, backup and feed alerts go to those who manage the
   system or settings; findings can be given to anyone who may triage; any second person who may approve engagements
   can approve; API tokens keep working while their creator may manage the API.
-
-### 1.39.1 (2026-11-24): pen-test findings fixes from review
-
-- **Retests only resolve what they really tested.** A host whose retest was stopped (kill switch), timed out or failed
-  no longer resolves its findings, and neither does a retest that skipped a check on a host (UDP, the share check, the
-  default-password test). Open ports found by an all-ports test need an all-ports retest, as in the retest letter.
-- **No old results coming back.** Once the external scan has looked at a port again, or the agent has swept an address
-  again (for the protocol problems it checks itself), that result decides. Before, fixing something the regular check
-  reported could reopen the months-old pen-test result.
-- **The masked default password stays in the pen-test report.** The finding (and so the API, ITFlow tickets and client
-  reports) shows the account and service only.
-- **A long share name with accents no longer breaks the client's findings refresh** (long keys are now shortened
-  without cutting a character in two).
-- A device whose name is one of several addresses gets its NTLM name too.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

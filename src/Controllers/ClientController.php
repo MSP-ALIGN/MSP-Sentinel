@@ -35,7 +35,7 @@ final class ClientController extends Controller
     public function index(Request $request): Response
     {
         $showArchived = $request->query('archived') === '1';
-        $clients = App::clients()->all($showArchived);
+        $clients = App::clients()->all($showArchived, App::auth()->clientIds()); // only the user's clients (1.41)
         $authRepo = App::authorisations();
         foreach ($clients as &$client) {
             $client['auth_summary'] = $this->authSummary($authRepo->forClient((int) $client['id']), (string) $client['timezone']);
@@ -73,6 +73,10 @@ final class ClientController extends Controller
             return $this->page('clients/form', __('Add client'), ['mode' => 'create', 'values' => $values, 'errors' => $errors], 422);
         }
         $id = App::clients()->create($clean, (int) $this->user()['id']);
+        // Someone limited to some clients gets the client they just added (1.41), else they couldn't open it.
+        if (App::auth()->clientIds() !== null) {
+            App::db()->prepare('INSERT IGNORE INTO user_clients (user_id, client_id) VALUES (:u, :c)')->execute(['u' => (int) $this->user()['id'], 'c' => $id]);
+        }
         $this->audit($request, 'client.created', 'client', $id, ['name' => $clean['name']]);
         Session::flash('success', __('Client {name} created. Next, choose Record authorisation (below) to note who approved scanning and what may be scanned.', ['name' => $clean['name']]));
         return Response::redirect('/clients/' . $id);

@@ -3,6 +3,7 @@
  * Add or edit a user.
  * Expects: $mode ('create'|'edit'), $values (untrusted form values or public user fields),
  *          $errors (field => message), $roles (UserController::roleChoices: roles you may give are 'allowed'),
+ *          $clients (the clients you may give; $values['client_ids'] is null for every client, 1.41),
  *          and in edit mode $target (public fields), $isSelf and $outranks (the user's role has permissions you
  *          don't hold: shown read-only, no resets).
  */
@@ -52,18 +53,35 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
             <div class="form-text"><?= e(__('Viewer reads everything and changes nothing; Technician does the day-to-day work; Admin can do everything. What each role allows is on the Roles page.')) ?> <a href="<?= e(url('/admin/roles')) ?>"><?= e(__('Roles')) ?></a></div>
             <?php $field = 'role_id'; require __DIR__ . '/../partials/field_error.php'; ?>
         </div>
+        <fieldset class="mb-3">
+            <legend class="form-label fs-6 mb-1"><?= e(__('Clients')) ?></legend>
+            <input type="hidden" name="clients_field" value="1">
+            <?php $allClients = $values['client_ids'] === null; ?>
+            <div class="form-check">
+                <input type="checkbox" class="form-check-input" id="all_clients" name="all_clients" value="1" <?= $allClients ? 'checked' : '' ?> <?= $isSelf || $outranks || ($currentUser['client_ids'] ?? null) !== null ? 'disabled' : '' ?>>
+                <label class="form-check-label" for="all_clients"><?= e(__('All clients (also clients added later)')) ?></label>
+            </div>
+            <div class="form-text mb-1"><?= e(__('Or only these (when "All clients" is off). The user sees nothing of other clients: not in lists, search, alerts or emails.')) ?></div>
+            <select class="form-select<?= $invalid('clients') ?>" id="clients" name="clients[]" multiple size="<?= e(min(8, max(3, count($clients)))) ?>" aria-label="<?= e(__('Clients')) ?>" <?= $isSelf || $outranks ? 'disabled' : '' ?>>
+                <?php foreach ($clients as $c): ?>
+                <option value="<?= e($c['id']) ?>" <?= !$allClients && in_array((int) $c['id'], $values['client_ids'], true) ? 'selected' : '' ?>><?= e($c['name']) ?><?= (int) $c['is_archived'] === 1 ? ' ' . e(__('(archived)')) : '' ?></option>
+                <?php endforeach; ?>
+            </select>
+            <?php $field = 'clients'; require __DIR__ . '/../partials/field_error.php'; ?>
+            <?php if (($currentUser['client_ids'] ?? null) !== null): ?><div class="form-text"><?= e(__('You can only give clients you see yourself.')) ?></div><?php endif; ?>
+        </fieldset>
         <?php if ($isEdit): ?>
         <div class="form-check mb-3">
             <input type="checkbox" class="form-check-input" id="is_active" name="is_active" value="1" <?= (int) $values['is_active'] === 1 ? 'checked' : '' ?> <?= $isSelf ? 'disabled' : '' ?>>
             <label class="form-check-label" for="is_active"><?= e(__('Account is active')) ?></label>
         </div>
         <?php if ($isSelf): ?>
-        <p class="form-text"><?= e(__('You cannot change your own role or disable your own account.')) ?></p>
+        <p class="form-text"><?= e(__('You cannot change your own role or clients, or disable your own account.')) ?></p>
         <?php elseif ($outranks): ?>
         <p class="form-text"><?= e(__('This user\'s role has permissions you don\'t hold, so you can\'t change their account, password or two-factor authentication.')) ?></p>
         <?php else: ?>
         <div class="mb-3">
-            <label for="my_password" class="form-label"><?= e(__('Your own password (only needed when changing the role or access)')) ?></label>
+            <label for="my_password" class="form-label"><?= e(__('Your own password (only needed when changing the role, clients or access)')) ?></label>
             <input type="password" class="form-control<?= $invalid('my_password') ?>" id="my_password" name="my_password" autocomplete="current-password">
             <?php $field = 'my_password'; require __DIR__ . '/../partials/field_error.php'; ?>
         </div>

@@ -26,8 +26,11 @@ use Sentinel\Core\Session;
  * - Never more than you hold (1.40): you can only give a role whose permissions you all hold yourself, and only edit,
  *   reset or disable a user whose role you could give. So someone allowed to manage users can't make anyone, or
  *   take over anyone, more powerful than themselves.
- * - Nobody changes their own role or disables themselves, and at least one active user always has the built-in Admin
- *   role (which holds every permission, now and in later releases; checked with the rows locked, so two people can't
+ * - Clients too (1.41): you can only give clients you see yourself ("all clients" only if you see all), and only
+ *   manage a user whose clients you all see.
+ * - Nobody changes their own role or clients or disables themselves, and at least one active user always has the
+ *   built-in Admin
+ *   role with every client (which holds every permission, now and in later releases; checked with the rows locked, so two people can't
  *   race it), so nobody gets locked out.
  * - Who may manage whom, and which role may be given, is checked again with the rows locked (1.40.1), so a role
  *   changed meanwhile by someone more powerful can't slip through.
@@ -46,9 +49,12 @@ final class UserController extends Controller
     {
         return $this->page('users/form', __('Add user'), [
             'mode' => 'create',
-            'values' => ['username' => '', 'display_name' => '', 'email' => '', 'role_id' => (int) App::roles()->idForKey('viewer'), 'is_active' => 1],
+            // A new user sees what you see by default: every client, or your own list (1.41).
+            'values' => ['username' => '', 'display_name' => '', 'email' => '', 'role_id' => (int) App::roles()->idForKey('viewer'), 'is_active' => 1,
+                         'client_ids' => $this->myClients()],
             'errors' => [],
             'roles' => $this->roleChoices(),
+            'clients' => $this->clientChoices(),
         ]);
     }
 
@@ -61,6 +67,7 @@ final class UserController extends Controller
             'email' => $request->input('email'),
             'role_id' => $this->roleIdFrom($request),
             'is_active' => 1,
+            'client_ids' => $this->clientsFrom($request, $this->myClients()),
         ];
         $password = $request->raw('password');
         $errors = $this->validateAccount($values);
@@ -78,7 +85,7 @@ final class UserController extends Controller
             $errors['my_password'] = $why;
         }
         if ($errors !== []) {
-            return $this->page('users/form', __('Add user'), ['mode' => 'create', 'values' => $values, 'errors' => $errors, 'roles' => $this->roleChoices()], 422);
+            return $this->page('users/form', __('Add user'), ['mode' => 'create', 'values' => $values, 'errors' => $errors, 'roles' => $this->roleChoices(), 'clients' => $this->clientChoices()], 422);
         }
 
         // The role is checked again with the role rows locked (1.40.1): it may have been changed or deleted meanwhile.
@@ -88,9 +95,10 @@ final class UserController extends Controller
             App::roles()->lockForUpdate();
             if (($again = $this->validateAccount($values)) !== []) {
                 $db->rollBack();
-                return $this->page('users/form', __('Add user'), ['mode' => 'create', 'values' => $values, 'errors' => $again, 'roles' => $this->roleChoices()], 422);
+                return $this->page('users/form', __('Add user'), ['mode' => 'create', 'values' => $values, 'errors' => $again, 'roles' => $this->roleChoices(), 'clients' => $this->clientChoices()], 422);
             }
             $id = App::users()->create($values['username'], $values['display_name'], $values['email'], (int) $values['role_id'], Passwords::hash($password), true);
+            App::users()->setClients($id, $values['client_ids']);
             $db->commit();
         } catch (\Throwable $ex) {
             if ($db->inTransaction()) {
@@ -98,7 +106,8 @@ final class UserController extends Controller
             }
             throw $ex;
         }
-        $this->audit($request, 'user.created', 'user', $id, ['username' => $values['username'], 'role' => $this->roleName((int) $values['role_id'])]);
+        $this->audit($request, 'user.created', 'user', $id, ['username' => $values['username'], 'role' => $this->roleName((int) $values['role_id']),
+            'clients' => $values['client_ids'] ?? 'all']);
         Session::flash('success', __('User {name} created. They must change the temporary password and set up two-factor authentication at first sign-in.', ['name' => $values['username']]));
         return Response::redirect('/users');
     }
@@ -110,10 +119,11 @@ final class UserController extends Controller
         return $this->page('users/form', __('Edit user'), [
             'mode' => 'edit',
             'target' => UserRepository::publicFields($target),
-            'values' => UserRepository::publicFields($target),
+            'values' => UserRepository::publicFields($target) + ['client_ids' => App::users()->clientIds($target)],
             'errors' => [],
             'isSelf' => (int) $target['id'] === (int) $this->user()['id'],
             'roles' => $this->roleChoices(),
+            'clients' => $this->clientChoices(),
             'outranks' => !$this->mayManage($target),
         ]);
     }
@@ -135,17 +145,21 @@ final class UserController extends Controller
             // Nobody changes their own role or active flag.
             'role_id' => $isSelf ? (int) $target['role_id'] : $this->roleIdFrom($request),
             'is_active' => $isSelf ? 1 : ($request->input('is_active') === '1' ? 1 : 0),
+            // Nor their own clients (1.41).
+            'client_ids' => $isSelf ? App::users()->clientIds($target) : $this->clientsFrom($request, App::users()->clientIds($target)),
         ];
         $roleChanged = (int) $values['role_id'] !== (int) $target['role_id'];
-        $accessChanged = $roleChanged || $values['is_active'] !== (int) $target['is_active'];
-        $errors = $this->validateAccount($values, $roleChanged);
+        $oldClients = App::users()->clientIds($target);
+        $clientsChanged = $values['client_ids'] !== $oldClients;
+        $accessChanged = $roleChanged || $clientsChanged || $values['is_active'] !== (int) $target['is_active'];
+        $errors = $this->validateAccount($values, $roleChanged, $clientsChanged);
         // Changing someone's role or access is confirmed with your own password.
         if ($errors === [] && $accessChanged && ($why = $this->confirmWithOwnPassword($request)) !== null) {
             $errors['my_password'] = $why;
         }
         $renderErrors = fn (array $errs): Response => $this->page('users/form', __('Edit user'), [
             'mode' => 'edit', 'target' => UserRepository::publicFields($target), 'values' => $values, 'errors' => $errs, 'isSelf' => $isSelf,
-            'roles' => $this->roleChoices(), 'outranks' => false,
+            'roles' => $this->roleChoices(), 'clients' => $this->clientChoices(), 'outranks' => false,
         ], 422);
         if ($errors !== []) {
             return $renderErrors($errors);
@@ -162,15 +176,18 @@ final class UserController extends Controller
                 $db->rollBack();
                 throw new HttpException(403, __('This user\'s role has permissions you don\'t hold, so you can\'t change their account.'));
             }
-            if ($roleChanged && ($again = $this->validateAccount($values)) !== []) {
+            if (($roleChanged || $clientsChanged) && ($again = $this->validateAccount($values, $roleChanged, $clientsChanged)) !== []) {
                 $db->rollBack();
                 return $renderErrors($again);
             }
-            if ($accessChanged && App::roles()->completeHoldersAfter($id, (int) $values['role_id'], $values['is_active'] === 1) < 1) {
+            if ($accessChanged && App::roles()->completeHoldersAfter($id, (int) $values['role_id'], $values['is_active'] === 1, $values['client_ids'] === null) < 1) {
                 $db->rollBack();
-                return $renderErrors(['role_id' => __('This is the last active Admin. Make another user an Admin first.')]);
+                return $renderErrors(['role_id' => __('This is the last active Admin who sees every client. Make another user such an Admin first.')]);
             }
             App::users()->updateAccount($id, $values['display_name'], $values['email'], (int) $values['role_id'], $values['is_active'] === 1, $accessChanged);
+            if ($clientsChanged) {
+                App::users()->setClients($id, $values['client_ids']);
+            }
             $db->commit();
         } catch (\Throwable $ex) {
             if ($db->inTransaction()) {
@@ -186,6 +203,9 @@ final class UserController extends Controller
         }
         if ($roleChanged) {
             $changes['role'] = ['from' => (string) ($target['role_name'] ?? ''), 'to' => $this->roleName((int) $values['role_id'])];
+        }
+        if ($clientsChanged) {
+            $changes['clients'] = ['from' => $oldClients ?? 'all', 'to' => $values['client_ids'] ?? 'all'];
         }
         $this->audit($request, 'user.updated', 'user', $id, ['changes' => $changes]);
         if ($isSelf && $accessChanged) {
@@ -258,7 +278,7 @@ final class UserController extends Controller
      * @param array<string,mixed> $values Untrusted form values.
      * @return array<string,string> field => error message
      */
-    private function validateAccount(array $values, bool $checkRole = true): array
+    private function validateAccount(array $values, bool $checkRole = true, bool $checkClients = true): array
     {
         $errors = [];
         $name = (string) $values['display_name'];
@@ -268,6 +288,14 @@ final class UserController extends Controller
         $email = (string) $values['email'];
         if ($email !== '' && (mb_strlen($email) > 190 || filter_var($email, FILTER_VALIDATE_EMAIL) === false)) {
             $errors['email'] = __('Enter a valid email address, or leave it empty.');
+        }
+        // Clients (1.41): a list of existing clients, at least one, within your own.
+        if ($checkClients && array_key_exists('client_ids', $values)) {
+            if ($values['client_ids'] === []) {
+                $errors['clients'] = __('Choose at least one client, or all clients.');
+            } elseif (!\Sentinel\Auth\ClientAccess::within($values['client_ids'], $this->myClients())) {
+                $errors['clients'] = __('You can only give clients you see yourself.');
+            }
         }
         if ($checkRole) {
             $role = $values['role_id'] > 0 ? App::roles()->find((int) $values['role_id']) : null;
@@ -296,10 +324,52 @@ final class UserController extends Controller
         return array_diff($permissions, (array) ($this->user()['permissions'] ?? [])) === [];
     }
 
-    /** True when the signed-in user may manage this user: they hold every permission of the user's role. */
+    /**
+     * True when the signed-in user may manage this user: they hold every permission of the user's role and see every
+     * client the user sees (1.41).
+     */
     private function mayManage(array $target): bool
     {
-        return $this->holdsAll(App::users()->permissions($target));
+        return $this->holdsAll(App::users()->permissions($target))
+            && \Sentinel\Auth\ClientAccess::within(App::users()->clientIds($target), $this->myClients());
+    }
+
+    /** @return list<int>|null the signed-in user's clients (null: every client) */
+    private function myClients(): ?array
+    {
+        return $this->user()['client_ids'] ?? null;
+    }
+
+    /**
+     * The clients field: null for "all clients", else the chosen IDs of existing clients (unknown IDs dropped). A form
+     * without the client fields (marked by clients_field) keeps $unchanged.
+     *
+     * @param list<int>|null $unchanged
+     * @return list<int>|null
+     */
+    private function clientsFrom(Request $request, ?array $unchanged): ?array
+    {
+        if ($request->input('clients_field') !== '1') {
+            return $unchanged;
+        }
+        if ($request->input('all_clients') === '1') {
+            return null;
+        }
+        $picked = array_values(array_unique(array_map('intval', array_filter($request->postList('clients'), static fn ($v): bool => is_string($v) && ctype_digit($v) && strlen($v) < 10))));
+        $known = array_map(static fn (array $c): int => (int) $c['id'], App::clients()->all(true));
+        $ids = array_values(array_intersect($picked, $known));
+        sort($ids);
+        return $ids;
+    }
+
+    /**
+     * The clients you may give (yours), for the picker.
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function clientChoices(): array
+    {
+        return App::clients()->all(true, $this->myClients());
     }
 
     /**

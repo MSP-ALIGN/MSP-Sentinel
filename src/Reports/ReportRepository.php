@@ -66,12 +66,13 @@ final class ReportRepository
      *
      * @return list<array<string,mixed>>
      */
-    public function list(?int $clientId = null, int $limit = 200): array
+    public function list(?int $clientId = null, int $limit = 200, ?array $clientIds = null): array
     {
         $sql = 'SELECT r.id, r.client_id, r.kind, r.source, r.title, r.period_start, r.period_end, r.generated_at, r.html_sha256, c.name AS client_name,
                        u.display_name AS generated_by_name, LENGTH(r.html) AS size
-                FROM reports r JOIN clients c ON c.id = r.client_id LEFT JOIN users u ON u.id = r.generated_by'
-            . ($clientId !== null ? ' WHERE r.client_id = :c' : '') . ' ORDER BY r.id DESC LIMIT ' . max(1, min(1000, $limit));
+                FROM reports r JOIN clients c ON c.id = r.client_id LEFT JOIN users u ON u.id = r.generated_by WHERE 1 = 1'
+            . ($clientId !== null ? ' AND r.client_id = :c' : '') . \Sentinel\Auth\ClientAccess::sql('r.client_id', $clientIds) // 1.41
+            . ' ORDER BY r.id DESC LIMIT ' . max(1, min(1000, $limit));
         $stmt = $this->db->prepare($sql);
         $stmt->execute($clientId !== null ? ['c' => $clientId] : []);
         return $stmt->fetchAll();

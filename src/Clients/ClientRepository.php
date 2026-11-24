@@ -29,10 +29,11 @@ final class ClientRepository
      * @param bool $includeArchived Also list archived clients.
      * @return list<array<string,mixed>>
      */
-    public function all(bool $includeArchived = false): array
+    public function all(bool $includeArchived = false, ?array $clientIds = null): array
     {
         $sql = 'SELECT c.*, (SELECT COUNT(*) FROM sites s WHERE s.client_id = c.id) AS site_count
-                FROM clients c' . ($includeArchived ? '' : ' WHERE c.is_archived = 0') . ' ORDER BY c.name';
+                FROM clients c WHERE 1 = 1' . ($includeArchived ? '' : ' AND c.is_archived = 0')
+            . \Sentinel\Auth\ClientAccess::sql('c.id', $clientIds) . ' ORDER BY c.name'; // only these clients (1.41; null: all)
         return $this->db->query($sql)->fetchAll();
     }
 

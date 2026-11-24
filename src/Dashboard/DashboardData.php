@@ -28,14 +28,22 @@ use Sentinel\Scanning\ScanWindow;
  * Security assumptions: read-only queries; every value placed in SQL is an
  * integer cast or a constant. Archived clients are left out. Every value returned is scan
  * data or admin input (untrusted) and is escaped by the views. Callers
- * pass a client ID only after the route has authorised the user; every
- * signed-in role may see every client today.
+ * pass a client ID only after the route has authorised the user. Every query
+ * is limited to the client list given (1.41: the signed-in user's clients; null
+ * means every client).
  */
 final class DashboardData
 {
     /** Uses the database and settings (for the kill switch and worker heartbeat). */
-    public function __construct(private readonly PDO $db, private readonly Settings $settings)
+    /** @param list<int>|null $clientIds the clients to include (null: every client; 1.41) */
+    public function __construct(private readonly PDO $db, private readonly Settings $settings, private readonly ?array $clientIds = null)
     {
+    }
+
+    /** The client-list condition for a client ID column (fixed names only), with a leading AND, or ''. */
+    private function only(string $column): string
+    {
+        return \Sentinel\Auth\ClientAccess::sql($column, $this->clientIds);
     }
 
     /** Score from counts (see class notes). */
@@ -66,7 +74,7 @@ final class DashboardData
                 FROM clients c
                 LEFT JOIN findings f ON f.client_id = c.id AND f.status = 'open'
                 LEFT JOIN kev_catalog k ON k.cve_id = f.cve_id
-                WHERE c.is_archived = 0" . ($onlyId !== null ? ' AND c.id = ' . (int) $onlyId : '') . '
+                WHERE c.is_archived = 0" . ($onlyId !== null ? ' AND c.id = ' . (int) $onlyId : '') . $this->only('c.id') . '
                 GROUP BY c.id, c.name, c.scanning_paused';
         $rows = [];
         foreach ($this->db->query($sql)->fetchAll() as $r) {
@@ -92,7 +100,7 @@ final class DashboardData
         $stmt = $this->db->prepare(
             'SELECT s.day, SUM(s.fail_open) AS fail, SUM(s.warn_open) AS warn FROM finding_stats s JOIN clients c ON c.id = s.client_id AND c.is_archived = 0
              WHERE s.day >= UTC_DATE() - INTERVAL ' . max(1, min(366, $days)) . ' DAY AND s.day < UTC_DATE()'
-            . ($clientId !== null ? ' AND s.client_id = ' . (int) $clientId : '') . ' GROUP BY s.day ORDER BY s.day'
+            . ($clientId !== null ? ' AND s.client_id = ' . (int) $clientId : '') . $this->only('s.client_id') . ' GROUP BY s.day ORDER BY s.day'
         );
         $stmt->execute();
         $out = [];
@@ -111,7 +119,7 @@ final class DashboardData
     public function activity(int $limit = 12, ?int $clientId = null): array
     {
         $limit = max(1, min(50, $limit));
-        $clientSql = $clientId !== null ? ' AND c.id = ' . (int) $clientId : '';
+        $clientSql = ($clientId !== null ? ' AND c.id = ' . (int) $clientId : '') . $this->only('c.id');
         // For one client, look only at that client's findings (uses the client index) instead of walking all events.
         $eventScope = $clientId !== null ? ' AND e.finding_id IN (SELECT id FROM findings WHERE client_id = ' . (int) $clientId . ')' : '';
         $events = $this->db->query(
@@ -141,7 +149,7 @@ final class DashboardData
      */
     public function surface(?int $clientId = null): array
     {
-        $clientSql = $clientId !== null ? ' AND a.client_id = ' . (int) $clientId : '';
+        $clientSql = ($clientId !== null ? ' AND a.client_id = ' . (int) $clientId : '') . $this->only('a.client_id');
         $join = ' JOIN clients c ON c.id = a.client_id AND c.is_archived = 0';
         $hosts = (int) $this->db->query("SELECT COUNT(*) FROM assets a{$join} WHERE 1=1{$clientSql}")->fetchColumn();
         $ports = $this->db->query("SELECT s.port FROM services s JOIN assets a ON a.id = s.asset_id{$join} WHERE s.is_open = 1{$clientSql}")->fetchAll(PDO::FETCH_COLUMN);
@@ -188,7 +196,7 @@ final class DashboardData
         return $this->db->query(
             "SELECT f.id, f.severity, f.title, f.target, c.name AS client, c.id AS client_id, (k.cve_id IS NOT NULL) AS kev
              FROM findings f JOIN clients c ON c.id = f.client_id AND c.is_archived = 0 LEFT JOIN kev_catalog k ON k.cve_id = f.cve_id
-             WHERE f.status = 'open'" . ($clientId !== null ? ' AND c.id = ' . (int) $clientId : '') . "
+             WHERE f.status = 'open'" . ($clientId !== null ? ' AND c.id = ' . (int) $clientId : '') . $this->only('c.id') . "
              ORDER BY f.severity = 'fail' DESC, (k.cve_id IS NOT NULL) DESC, f.finding_type = 'port' DESC, f.first_seen DESC
              LIMIT " . max(1, min(20, $limit))
         )->fetchAll();
@@ -206,7 +214,7 @@ final class DashboardData
              FROM tls_endpoints t JOIN assets a ON a.id = t.asset_id JOIN clients c ON c.id = a.client_id AND c.is_archived = 0
              JOIN services s ON s.asset_id = t.asset_id AND s.port = t.port AND s.protocol = 'tcp' AND s.is_open = 1
              WHERE t.not_after IS NOT NULL AND t.not_after < UTC_TIMESTAMP() + INTERVAL " . max(1, min(365, $days)) . ' DAY'
-            . ($clientId !== null ? ' AND c.id = ' . (int) $clientId : '') . ' ORDER BY t.not_after LIMIT 12'
+            . ($clientId !== null ? ' AND c.id = ' . (int) $clientId : '') . $this->only('c.id') . ' ORDER BY t.not_after LIMIT 12'
         )->fetchAll();
         return array_map(static fn (array $r): array => [
             'endpoint' => $r['ip'] . ':' . $r['port'], 'name' => (string) ($r['sni'] ?: $r['subject_cn'] ?: '?'), 'client' => (string) $r['client'],
@@ -220,7 +228,7 @@ final class DashboardData
         return (int) $this->db->query(
             "SELECT COUNT(*) FROM tls_endpoints t JOIN assets a ON a.id = t.asset_id JOIN clients c ON c.id = a.client_id AND c.is_archived = 0
              JOIN services s ON s.asset_id = t.asset_id AND s.port = t.port AND s.protocol = 'tcp' AND s.is_open = 1
-             WHERE t.not_after IS NOT NULL AND t.not_after < UTC_TIMESTAMP() + INTERVAL " . max(0, min(365, $days)) . ' DAY'
+             WHERE t.not_after IS NOT NULL AND t.not_after < UTC_TIMESTAMP() + INTERVAL " . max(0, min(365, $days)) . ' DAY' . $this->only('c.id')
         )->fetchColumn();
     }
 
@@ -233,13 +241,13 @@ final class DashboardData
     {
         $tick = $this->settings->fresh('worker_last_tick');
         $feeds = $this->db->query('SELECT name, last_success FROM feed_status')->fetchAll(PDO::FETCH_KEY_PAIR);
-        $running = (int) $this->db->query("SELECT COUNT(*) FROM scan_jobs WHERE status = 'running'")->fetchColumn();
-        $queued = (int) $this->db->query("SELECT COUNT(*) FROM scan_jobs WHERE status = 'queued'")->fetchColumn();
+        $running = (int) $this->db->query("SELECT COUNT(*) FROM scan_jobs WHERE status = 'running'" . $this->only('client_id'))->fetchColumn();
+        $queued = (int) $this->db->query("SELECT COUNT(*) FROM scan_jobs WHERE status = 'queued'" . $this->only('client_id'))->fetchColumn();
         $next = null;
         $openNow = 0;
         $paused = $this->settings->fresh('scanning_paused') === '1';
         // Demo clients are never scanned, so they have no scan window here.
-        foreach ($this->db->query('SELECT id, name, timezone, scan_window_start, scan_window_end, scanning_paused FROM clients WHERE is_archived = 0 AND is_demo = 0')->fetchAll() as $c) {
+        foreach ($this->db->query('SELECT id, name, timezone, scan_window_start, scan_window_end, scanning_paused FROM clients WHERE is_archived = 0 AND is_demo = 0' . $this->only('id'))->fetchAll() as $c) {
             $w = ScanWindow::nextChange($c);
             if ($w === null || (int) $c['scanning_paused'] === 1) {
                 continue;

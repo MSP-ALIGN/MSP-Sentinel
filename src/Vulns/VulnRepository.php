@@ -367,14 +367,14 @@ final class VulnRepository
      *
      * @return array{confirmed_kev:int, possible_kev:int}
      */
-    public function kevCounts(): array
+    public function kevCounts(?array $clientIds = null): array
     {
         $row = $this->db->query(
             "SELECT COUNT(DISTINCT IF(sv.confidence = 'confirmed', sv.cve_id, NULL)) AS confirmed_kev,
                     COUNT(DISTINCT IF(sv.confidence <> 'confirmed', sv.cve_id, NULL)) AS possible_kev
              FROM service_vulns sv JOIN kev_catalog k ON k.cve_id = sv.cve_id
              JOIN services s ON s.id = sv.service_id AND s.is_open = 1 JOIN assets a ON a.id = s.asset_id
-             JOIN clients c ON c.id = a.client_id AND c.is_archived = 0"
+             JOIN clients c ON c.id = a.client_id AND c.is_archived = 0 WHERE 1 = 1" . \Sentinel\Auth\ClientAccess::sql('a.client_id', $clientIds) // 1.41
         )->fetch();
         return ['confirmed_kev' => (int) ($row['confirmed_kev'] ?? 0), 'possible_kev' => (int) ($row['possible_kev'] ?? 0)];
     }

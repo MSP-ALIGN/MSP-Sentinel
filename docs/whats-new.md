@@ -2,6 +2,20 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.39.1 (2026-11-24): pen-test findings fixes from review
+
+- **Retests only resolve what they really tested.** A host whose retest was stopped (kill switch), timed out or failed
+  no longer resolves its findings, and neither does a retest that skipped a check on a host (UDP, the share check, the
+  default-password test). Open ports found by an all-ports test need an all-ports retest, as in the retest letter.
+- **No old results coming back.** Once the external scan has looked at a port again, or the agent has swept an address
+  again (for the protocol problems it checks itself), that result decides. Before, fixing something the regular check
+  reported could reopen the months-old pen-test result.
+- **The masked default password stays in the pen-test report.** The finding (and so the API, ITFlow tickets and client
+  reports) shows the account and service only.
+- **A long share name with accents no longer breaks the client's findings refresh** (long keys are now shortened
+  without cutting a character in two).
+- A device whose name is one of several addresses gets its NTLM name too.
+
 ### 1.39.0 (2026-11-24): pen-test results become findings
 
 - **Pen-test findings.** Each Fail and Warning of an approved engagement is now a finding (type **Pen test**), with the

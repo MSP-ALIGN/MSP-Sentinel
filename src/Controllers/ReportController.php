@@ -46,8 +46,8 @@ final class ReportController extends Controller
     {
         $clientId = ctype_digit($request->query('client')) ? (int) $request->query('client') : null;
         return $this->page('reports/index', __('Reports'), [
-            'reports' => App::reports()->list($clientId),
-            'clients' => App::clients()->all(),
+            'reports' => App::reports()->list($clientId, 200, App::auth()->clientIds()),
+            'clients' => App::clients()->all(false, App::auth()->clientIds()),
             'clientFilter' => $clientId,
         ]);
     }
@@ -59,7 +59,7 @@ final class ReportController extends Controller
     public function storeFromList(Request $request): Response
     {
         $id = (int) $request->input('client_id');
-        if ($id <= 0 || App::clients()->find($id) === null) {
+        if ($id <= 0 || App::clients()->find($id) === null || !App::auth()->canSeeClient($id)) {
             Session::flash('danger', __('Choose a client for the report.'));
             return Response::redirect('/reports');
         }

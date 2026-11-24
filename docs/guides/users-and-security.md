@@ -35,6 +35,22 @@ releases (signed releases run on every agent), the system, the API, integrations
 you would make Admin. API tokens never do more than the person who made them: a token can only triage or start scans
 if its creator may, and loses those rights when its creator does.
 
+## Limit a user to some clients
+
+By default a user sees every client. To limit someone to the clients they look after:
+
+1. Open the user under **Administration → Users**.
+2. Under **Clients**, untick **All clients** and pick their clients. Enter your own password and save.
+
+They then see nothing of other clients: those clients' pages and findings answer "not found", and lists, search, the
+dashboard, reports, engagements, notifications and alert emails leave them out. Findings of a client can only be
+given to someone who sees it. A client a limited user adds becomes one of theirs.
+
+- You can only give clients you see yourself, and only manage users whose clients you all see.
+- Administration pages (users, settings, integrations, the API, the system) work across all clients: give those
+  permissions to people who see every client.
+- The last active Admin who sees every client can't be limited, demoted or disabled.
+
 ## Sign in and two-factor authentication
 
 1. The first time you sign in, change the temporary password if asked.

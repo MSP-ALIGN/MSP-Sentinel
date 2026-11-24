@@ -144,6 +144,11 @@ final class FindingRepository
     {
         $where = ['c.is_archived = 0'];
         $params = [];
+        // Only the signed-in user's clients (1.41): 'client_ids' is set by the controller (null: every client).
+        $limit = \Sentinel\Auth\ClientAccess::sql('f.client_id', $f['client_ids'] ?? null);
+        if ($limit !== '') {
+            $where[] = substr($limit, 5); // without the leading " AND "
+        }
         if (!empty($f['client'])) {
             $where[] = 'f.client_id = :client';
             $params['client'] = (int) $f['client'];
@@ -255,15 +260,17 @@ final class FindingRepository
     }
 
     /**
-     * Counts of open (untriaged) findings by severity, for all clients or one.
+     * Counts of open (untriaged) findings by severity, for all clients or one, limited to a client list (1.41;
+     * null: every client).
      *
      * @return array{fail:int, warn:int, accepted:int, false_positive:int}
      */
-    public function counts(?int $clientId = null): array
+    public function counts(?int $clientId = null, ?array $clientIds = null): array
     {
         $sql = "SELECT SUM(f.status = 'open' AND f.severity = 'fail') AS fail, SUM(f.status = 'open' AND f.severity = 'warn') AS warn,
                        SUM(f.status = 'accepted') AS accepted, SUM(f.status = 'false_positive') AS false_positive
-                FROM findings f JOIN clients c ON c.id = f.client_id AND c.is_archived = 0" . ($clientId === null ? '' : ' WHERE f.client_id = :c');
+                FROM findings f JOIN clients c ON c.id = f.client_id AND c.is_archived = 0 WHERE 1 = 1" . ($clientId === null ? '' : ' AND f.client_id = :c')
+            . \Sentinel\Auth\ClientAccess::sql('f.client_id', $clientIds);
         $stmt = $this->db->prepare($sql);
         $stmt->execute($clientId === null ? [] : ['c' => $clientId]);
         $row = $stmt->fetch() ?: [];
@@ -272,12 +279,13 @@ final class FindingRepository
     }
 
     /**
-     * Clients (not archived) that have any findings, for the filter dropdown.
+     * Clients (not archived) that have any findings, for the filter dropdown (only those in the client list, 1.41).
      *
      * @return list<array{id:int,name:string}>
      */
-    public function clientsWithFindings(): array
+    public function clientsWithFindings(?array $clientIds = null): array
     {
-        return $this->db->query('SELECT DISTINCT c.id, c.name FROM findings f JOIN clients c ON c.id = f.client_id AND c.is_archived = 0 ORDER BY c.name')->fetchAll();
+        return $this->db->query('SELECT DISTINCT c.id, c.name FROM findings f JOIN clients c ON c.id = f.client_id AND c.is_archived = 0 WHERE 1 = 1'
+            . \Sentinel\Auth\ClientAccess::sql('c.id', $clientIds) . ' ORDER BY c.name')->fetchAll();
     }
 }

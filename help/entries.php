@@ -230,6 +230,7 @@ return [
             'paragraphs' => [
                 'Each user has one role, and a role is a set of permissions. Everyone can see clients, findings, scans, devices, reports and engagements; permissions decide what a user may change (and a few sensitive views: breached addresses in full, the signed engagement document, the audit log).',
                 'Built-in roles (can\'t be changed): Viewer sees everything and changes nothing. Technician also runs scans and discovery, triages, assigns and verifies findings, sees breached addresses, creates reports, runs engagements and pauses scanning. Admin holds every permission.',
+                'Clients: a user sees every client, or only a list (Administration → Users → the user → Clients: untick "All clients" and pick them). A limited user sees nothing of other clients: their pages answer "not found", and lists, search, the dashboard, reports, engagements, notifications and alert emails leave them out. You can only give clients you see yourself. Administration pages work across all clients.',
                 'Your own roles: Administration → Roles → New role (or Copy a built-in role), tick the permissions, confirm with your password, then give the role to users on their account page. The "Who can do what" table lists every permission and the roles that hold it.',
                 'Never more than you hold: you can only tick permissions you hold, give roles whose permissions you all hold, and change, reset or disable users whose role you could give. You can\'t change your own role, built-in roles never change, and at least one active Admin always stays. Permissions marked "Near full control" (agent releases, the system, the API, integrations, users) reach the whole system: give them only to people you would make Admin. API tokens never do more than the person who made them. Everyone with a changed role is signed out so the change applies at once.',
             ],
@@ -358,6 +359,14 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.41.0',
+            'date' => '2026-11-24',
+            'items' => [
+                'Limit a user to some clients: under Administration → Users → Clients, untick "All clients" and pick theirs. They see nothing of other clients (pages, lists, search, dashboard, reports, engagements, notifications and alert emails). Everyone keeps every client on upgrade.',
+                'You can only give clients you see yourself; findings can only be given to someone who sees the client; a client a limited user adds becomes theirs.',
+            ],
+        ],
         [
             'version' => '1.40.1',
             'date' => '2026-11-24',

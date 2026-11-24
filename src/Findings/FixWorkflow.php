@@ -75,15 +75,23 @@ final class FixWorkflow
      *
      * @return list<array{id:int, username:string, display_name:string}>
      */
-    public function assignableUsers(): array
+    public function assignableUsers(?int $clientId = null): array
     {
-        return (new \Sentinel\Auth\RoleRepository($this->db))->usersWith('findings.triage');
+        $users = (new \Sentinel\Auth\RoleRepository($this->db))->usersWith('findings.triage');
+        if ($clientId === null) {
+            return $users;
+        }
+        // Only those who see this client (1.41).
+        $stmt = $this->db->prepare('SELECT u.id FROM users u WHERE u.all_clients = 1 OR EXISTS (SELECT 1 FROM user_clients uc WHERE uc.user_id = u.id AND uc.client_id = :c)');
+        $stmt->execute(['c' => $clientId]);
+        $seeing = array_flip(array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN)));
+        return array_values(array_filter($users, static fn (array $u): bool => isset($seeing[$u['id']])));
     }
 
-    /** True if the user exists, is active and may own findings. */
-    public function isAssignable(int $userId): bool
+    /** True if the user exists, is active, may own findings and (given a client) sees that client (1.41). */
+    public function isAssignable(int $userId, ?int $clientId = null): bool
     {
-        return in_array($userId, array_column($this->assignableUsers(), 'id'), true);
+        return in_array($userId, array_column($this->assignableUsers($clientId), 'id'), true);
     }
 
     /**

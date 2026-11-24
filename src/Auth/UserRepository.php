@@ -37,6 +37,38 @@ final class UserRepository
     }
 
     /**
+     * The clients a user sees (1.41): null for every client, else the IDs in user_clients.
+     *
+     * @param array<string,mixed> $user a users row (all_clients, id)
+     * @return list<int>|null
+     */
+    public function clientIds(array $user): ?array
+    {
+        if ((int) ($user['all_clients'] ?? 1) === 1) {
+            return null;
+        }
+        $stmt = $this->db->prepare('SELECT client_id FROM user_clients WHERE user_id = :u ORDER BY client_id');
+        $stmt->execute(['u' => (int) $user['id']]);
+        return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    /**
+     * Set a user's clients: null for every client, else exactly this list (1.41). Signs the user out if it changed,
+     * so the change applies at once. Call inside the caller's transaction.
+     *
+     * @param list<int>|null $clientIds existing client IDs (the caller checked them)
+     */
+    public function setClients(int $userId, ?array $clientIds): void
+    {
+        $this->db->prepare('UPDATE users SET all_clients = :a, updated_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['a' => $clientIds === null ? 1 : 0, 'id' => $userId]);
+        $this->db->prepare('DELETE FROM user_clients WHERE user_id = :u')->execute(['u' => $userId]);
+        $ins = $this->db->prepare('INSERT INTO user_clients (user_id, client_id) VALUES (:u, :c)');
+        foreach (array_unique($clientIds ?? []) as $c) {
+            $ins->execute(['u' => $userId, 'c' => (int) $c]);
+        }
+    }
+
+    /**
      * What a user may do (1.40): their role's permissions. A user without a role (never after migration 0046) holds
      * nothing.
      *
@@ -68,6 +100,7 @@ final class UserRepository
     {
         $stmt = $this->db->query(
             'SELECT u.id, u.username, u.display_name, u.email, u.role, u.role_id, r.name AS role_name, r.role_key, u.is_active, u.must_change_password,
+                    u.all_clients, (SELECT COUNT(*) FROM user_clients uc WHERE uc.user_id = u.id) AS client_count,
                     u.totp_enabled_at, u.last_login_at, u.created_at
              FROM users u LEFT JOIN roles r ON r.id = u.role_id ORDER BY u.username'
         );

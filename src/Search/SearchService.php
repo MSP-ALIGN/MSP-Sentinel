@@ -43,8 +43,10 @@ final class SearchService
      * @return array{clients:list<array<string,mixed>>, findings:list<array<string,mixed>>, hosts:list<array<string,mixed>>,
      *               devices:list<array<string,mixed>>, engagements:list<array<string,mixed>>, help:list<array{title:string, snippet:string}>, total:int}
      */
-    public function search(string $q, array $helpTopics = []): array
+    public function search(string $q, array $helpTopics = [], ?array $clientIds = null): array
     {
+        // Only the signed-in user's clients (1.41; null: every client). Fixed column names, integer IDs.
+        $only = static fn (string $col): string => \Sentinel\Auth\ClientAccess::sql($col, $clientIds);
         $q = self::normalise($q);
         $out = ['clients' => [], 'findings' => [], 'hosts' => [], 'devices' => [], 'engagements' => [], 'help' => [], 'total' => 0];
         if ($q === '') {
@@ -52,22 +54,22 @@ final class SearchService
         }
         $p = self::like($q);
         $n = self::PER_GROUP;
-        $out['clients'] = $this->rows("SELECT id, name, is_archived FROM clients WHERE name LIKE :p ESCAPE '!' ORDER BY is_archived, name LIMIT {$n}", ['p' => $p]);
+        $out['clients'] = $this->rows("SELECT id, name, is_archived FROM clients WHERE name LIKE :p ESCAPE '!'" . $only('id') . " ORDER BY is_archived, name LIMIT {$n}", ['p' => $p]);
         // Breach findings carry the full address only in the detail, which isn't searched.
         $out['findings'] = $this->rows(
             "SELECT f.id, f.title, f.target, f.severity, f.status, f.finding_type, c.name AS client_name FROM findings f JOIN clients c ON c.id = f.client_id
-             WHERE c.is_archived = 0 AND (f.title LIKE :p1 ESCAPE '!' OR f.target LIKE :p2 ESCAPE '!' OR f.cve_id LIKE :p3 ESCAPE '!')
+             WHERE c.is_archived = 0 AND (f.title LIKE :p1 ESCAPE '!' OR f.target LIKE :p2 ESCAPE '!' OR f.cve_id LIKE :p3 ESCAPE '!')" . $only('f.client_id') . "
              ORDER BY f.status = 'open' DESC, f.severity = 'fail' DESC, f.last_seen DESC LIMIT {$n}", ['p1' => $p, 'p2' => $p, 'p3' => $p]);
         $out['hosts'] = $this->rows(
             "SELECT a.id, a.ip, a.hostnames, a.client_id, c.name AS client_name FROM assets a JOIN clients c ON c.id = a.client_id
-             WHERE c.is_archived = 0 AND (a.ip LIKE :p1 ESCAPE '!' OR a.hostnames LIKE :p2 ESCAPE '!') ORDER BY c.name, a.ip LIMIT {$n}", ['p1' => $p, 'p2' => $p]);
+             WHERE c.is_archived = 0 AND (a.ip LIKE :p1 ESCAPE '!' OR a.hostnames LIKE :p2 ESCAPE '!')" . $only('a.client_id') . " ORDER BY c.name, a.ip LIMIT {$n}", ['p1' => $p, 'p2' => $p]);
         $out['devices'] = $this->rows(
             "SELECT d.id, d.name, d.dns_name, d.ip_addresses, d.client_id, c.name AS client_name FROM devices d JOIN clients c ON c.id = d.client_id
-             WHERE c.is_archived = 0 AND (d.name LIKE :p1 ESCAPE '!' OR d.dns_name LIKE :p2 ESCAPE '!' OR d.ip_addresses LIKE :p3 ESCAPE '!')
+             WHERE c.is_archived = 0 AND (d.name LIKE :p1 ESCAPE '!' OR d.dns_name LIKE :p2 ESCAPE '!' OR d.ip_addresses LIKE :p3 ESCAPE '!')" . $only('d.client_id') . "
              ORDER BY c.name, d.name LIMIT {$n}", ['p1' => $p, 'p2' => $p, 'p3' => $p]);
         $out['engagements'] = $this->rows(
             "SELECT e.id, e.name, e.window_start, e.client_id, c.name AS client_name FROM engagements e JOIN clients c ON c.id = e.client_id
-             WHERE e.name LIKE :p ESCAPE '!' ORDER BY e.id DESC LIMIT {$n}", ['p' => $p]);
+             WHERE e.name LIKE :p ESCAPE '!'" . $only('e.client_id') . " ORDER BY e.id DESC LIMIT {$n}", ['p' => $p]);
         $needle = mb_strtolower($q);
         foreach ($helpTopics as $t) {
             $text = $t['title'] . ' ' . implode(' ', $t['paragraphs']);

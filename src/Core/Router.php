@@ -16,6 +16,9 @@ use Sentinel\Auth\Permissions;
  * - 'passive' => true    : background request (auto-refresh); does not reset the idle sign-out timer
  * - 'perm' => the permission a 'user' route needs, or a list of which any one will do (default: none, any
  *   signed-in user). Names come from Sentinel\Auth\Permissions (1.40; replaces the old minimum role).
+ * - 'client' => the kind of record {id} names (Sentinel\Auth\ClientAccess::RECORDS, e.g. 'finding'): the kernel looks
+ *   up its client and answers 404 to a user who doesn't see that client (1.41). Routes under /clients/{id} are
+ *   checked by their client ID without it.
  *
  * Security assumptions:
  * - The default is the most restrictive useful option: signed in plus 2FA.
@@ -38,7 +41,10 @@ final class Router
      */
     public function add(string $method, string $pattern, array $handler, array $opts = []): void
     {
-        $opts += ['auth' => 'user', 'perm' => [], 'allow_password_change' => false, 'passive' => false];
+        $opts += ['auth' => 'user', 'perm' => [], 'allow_password_change' => false, 'passive' => false, 'client' => null];
+        if ($opts['client'] !== null && !isset(\Sentinel\Auth\ClientAccess::RECORDS[$opts['client']])) {
+            throw new \InvalidArgumentException('Unknown record kind for route ' . $pattern);
+        }
         if (!in_array($opts['auth'], ['public', 'pending', 'user'], true)) {
             throw new \InvalidArgumentException('Unknown auth level for route ' . $pattern);
         }
@@ -56,6 +62,7 @@ final class Router
         if (str_contains($regex, '\\{') || @preg_match($regex, '') === false) {
             throw new \InvalidArgumentException('Invalid route pattern: ' . $pattern);
         }
+        $opts['client_path'] = str_starts_with($pattern, '/clients/{id}'); // the client's own pages (1.41)
         $this->routes[] = ['method' => strtoupper($method), 'regex' => $regex, 'handler' => $handler, 'opts' => $opts];
     }
 

@@ -185,7 +185,7 @@ final class ReportService
         if ($attempts === 1 || $attempts >= self::MAX_MONTHLY_ATTEMPTS) {
             $this->alerts?->notifyUsers('report_failed', 'warn', __('The monthly reports for {client} could not be created', ['client' => $client['name']]),
                 $message . ($attempts >= self::MAX_MONTHLY_ATTEMPTS ? ' ' . __('Sentinel has stopped retrying; create them by hand.') : ' ' . __('Sentinel will try again in an hour.')),
-                '/clients/' . (int) $client['id'] . '/reports', 'reports.schedule');
+                '/clients/' . (int) $client['id'] . '/reports', 'reports.schedule', (int) $client['id']);
         }
     }
 }

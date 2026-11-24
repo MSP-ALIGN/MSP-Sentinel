@@ -108,11 +108,11 @@ final class EngagementRepository
      *
      * @return list<array<string,mixed>>
      */
-    public function all(int $limit = 200): array
+    public function all(int $limit = 200, ?array $clientIds = null): array
     {
         return $this->db->query('SELECT e.*, c.name AS client_name, uc.display_name AS created_by_name, ua.display_name AS approved_by_name FROM engagements e
-            JOIN clients c ON c.id = e.client_id LEFT JOIN users uc ON uc.id = e.created_by LEFT JOIN users ua ON ua.id = e.approved_by
-            ORDER BY e.id DESC LIMIT ' . max(1, $limit))->fetchAll();
+            JOIN clients c ON c.id = e.client_id LEFT JOIN users uc ON uc.id = e.created_by LEFT JOIN users ua ON ua.id = e.approved_by WHERE 1 = 1'
+            . \Sentinel\Auth\ClientAccess::sql('e.client_id', $clientIds) . ' ORDER BY e.id DESC LIMIT ' . max(1, $limit))->fetchAll(); // 1.41
     }
 
     /**
@@ -152,12 +152,12 @@ final class EngagementRepository
      *
      * @return list<array<string,mixed>>
      */
-    public function awaitingApprovalBy(int $userId): array
+    public function awaitingApprovalBy(int $userId, ?array $clientIds = null): array
     {
         $stmt = $this->db->prepare('SELECT e.id, e.name, e.window_start, e.window_end, e.created_by, c.name AS client_name, uc.display_name AS created_by_name
             FROM engagements e JOIN clients c ON c.id = e.client_id LEFT JOIN users uc ON uc.id = e.created_by
-            WHERE e.approved_at IS NULL AND e.stopped_at IS NULL AND e.cancelled_at IS NULL AND e.window_end > UTC_TIMESTAMP() AND e.created_by <> :u
-            ORDER BY e.window_start LIMIT 20');
+            WHERE e.approved_at IS NULL AND e.stopped_at IS NULL AND e.cancelled_at IS NULL AND e.window_end > UTC_TIMESTAMP() AND e.created_by <> :u'
+            . \Sentinel\Auth\ClientAccess::sql('e.client_id', $clientIds) . ' ORDER BY e.window_start LIMIT 20'); // only their clients (1.41)
         $stmt->execute(['u' => $userId]);
         // Only those this admin may really approve (not linked to the creator; see linkedAccounts()).
         $linked = $this->linkedAccounts($userId);

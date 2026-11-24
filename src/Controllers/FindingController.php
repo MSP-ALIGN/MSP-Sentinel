@@ -55,6 +55,7 @@ final class FindingController extends Controller
             'source' => in_array($request->query('source'), FindingRepository::SOURCES, true) ? $request->query('source') : '',
             'group' => preg_match('/^[0-9a-f]{40}$/', $request->query('group')) === 1 ? $request->query('group') : '',
             'q' => \Sentinel\Search\SearchService::normalise($request->query('q')),
+            'client_ids' => App::auth()->clientIds(), // only the user's clients (1.41)
         ];
         // Grouped by issue unless asked for one row per target (or showing one whole group).
         $grouped = $request->query('view') !== 'flat' && $filters['group'] === '';
@@ -72,8 +73,8 @@ final class FindingController extends Controller
             'total' => $result['total'],
             'page' => $page,
             'pages' => max(1, (int) ceil($result['total'] / ($grouped ? FindingRepository::GROUPS_PER_PAGE : FindingRepository::PAGE_SIZE))),
-            'clients' => $repo->clientsWithFindings(),
-            'counts' => $repo->counts(),
+            'clients' => $repo->clientsWithFindings(App::auth()->clientIds()),
+            'counts' => $repo->counts(null, App::auth()->clientIds()),
             'fixCounts' => App::fixWorkflow()->counts((int) $this->user()['id']),
             'assignable' => App::fixWorkflow()->assignableUsers(),
         ]);
@@ -106,7 +107,7 @@ final class FindingController extends Controller
             'events' => App::findings()->events((int) $finding['id']),
             'errors' => $errors,
             'values' => $values + ['status' => '', 'note' => ''],
-            'assignable' => App::fixWorkflow()->assignableUsers(),
+            'assignable' => App::fixWorkflow()->assignableUsers((int) $finding['client_id']),
             'verifiable' => VerifyTarget::fromKey((string) $finding['finding_key']) !== null,
             // The same "Why it matters / How to fix" text the client report shows (1.34).
             'guidance' => (static function (array $f): array {
@@ -153,8 +154,8 @@ final class FindingController extends Controller
         if ($finding['status'] === 'resolved') {
             return $this->showPage($finding, ['assign' => __('This finding is resolved: there is nothing to fix.')], [], 422);
         }
-        if ($assignee !== null && ($assignee < 1 || !App::fixWorkflow()->isAssignable($assignee))) {
-            return $this->showPage($finding, ['assign' => __('Choose an active technician or admin.')], [], 422);
+        if ($assignee !== null && ($assignee < 1 || !App::fixWorkflow()->isAssignable($assignee, (int) $finding['client_id']))) {
+            return $this->showPage($finding, ['assign' => __('Choose an active user who can work on this client\'s findings.')], [], 422);
         }
         if (mb_strlen($note) > 500) {
             return $this->showPage($finding, ['assign' => __('The note can be up to 500 characters.')], [], 422);
@@ -382,7 +383,8 @@ final class FindingController extends Controller
         $clientsTouched = [];
         foreach ($ids as $id) {
             $finding = App::findings()->find($id);
-            if ($finding === null || (int) $finding['client_archived'] === 1) {
+            // A finding of a client the user doesn't see is treated as missing (1.41).
+            if ($finding === null || (int) $finding['client_archived'] === 1 || !App::auth()->canSeeClient((int) $finding['client_id'])) {
                 $skipped++;
                 continue;
             }
@@ -415,6 +417,10 @@ final class FindingController extends Controller
                 continue;
             }
             if ($action === 'assign') {
+                if ($assignee !== null && !App::fixWorkflow()->isAssignable($assignee, $cid)) {
+                    $skipped++; // the chosen owner doesn't see this client
+                    continue;
+                }
                 $change = App::fixWorkflow()->assign($id, $assignee, $me, $note);
                 if ($change === null) {
                     $skipped++;

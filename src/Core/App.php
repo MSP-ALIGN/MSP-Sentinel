@@ -325,7 +325,8 @@ final class App
     /** Dashboard numbers (main dashboard and client overviews). */
     public static function dashboard(): \Sentinel\Dashboard\DashboardData
     {
-        return new \Sentinel\Dashboard\DashboardData(self::db(), self::settings());
+        // Limited to the signed-in user's clients (1.41); everything for background work.
+        return new \Sentinel\Dashboard\DashboardData(self::db(), self::settings(), self::auth()->clientIds());
     }
 
     /** Outbound events (event webhook). */
@@ -703,6 +704,21 @@ final class App
                 self::audit()->log('access.denied', (int) $user['id'], (string) $user['username'], null, null,
                     ['path' => mb_substr($request->path, 0, 200), 'required' => implode(' or ', $need)], $request->ip());
                 throw new HttpException(403);
+            }
+            // Only the user's own clients (1.41): a client's pages, and records addressed by their own ID, answer 404
+            // for any other client, as if they didn't exist. Checked here, once, before any controller runs.
+            $clientId = null;
+            if ($opts['client_path'] ?? false) {
+                $clientId = (int) $route['params']['id'];
+            } elseif (($opts['client'] ?? null) !== null) {
+                [$table, $column] = \Sentinel\Auth\ClientAccess::RECORDS[$opts['client']];
+                $find = self::db()->prepare("SELECT {$column} FROM {$table} WHERE id = :id");
+                $find->execute(['id' => (int) $route['params']['id']]);
+                $found = $find->fetchColumn();
+                $clientId = $found === false ? null : (int) $found;
+            }
+            if ($clientId !== null && !\Sentinel\Auth\ClientAccess::allows($user['client_ids'] ?? null, $clientId)) {
+                throw new HttpException(404);
             }
         }
 
