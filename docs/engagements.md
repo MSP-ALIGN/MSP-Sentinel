@@ -62,8 +62,12 @@ Nothing faster exists. All 65,535 ports need the normal pace: at the gentle pace
    (through each site's agent; agents need version 1.27.0 or later). External tests run in slices: after 20 minutes,
    a slice ends when its current host is done, and the rest continues as a new job, so other clients' scans get their
    turn.
-4. **Read the results.** The engagement page lists the findings, with evidence and how to fix them. The results are
-   evidence only: they don't change the client's day-to-day findings or device inventory.
+4. **Read the results.** The engagement page lists the findings, with evidence and how to fix them. Since 1.39 the
+   Fails and Warnings also become findings (type **Pen test**) with the usual triage, owners, due dates, groups and
+   ITFlow tickets; the engagement page keeps the raw results, and the client's services, certificates and device
+   inventory are not changed. A result the regular checks already raise isn't doubled. For each host and test, the
+   newest engagement that ran it decides, so a retest resolves what it no longer finds and leaves alone what it
+   didn't test.
 5. **Issue penetration test report.** The report is a frozen copy with your branding. It contains:
    - a summary and rating;
    - how the findings chain together;

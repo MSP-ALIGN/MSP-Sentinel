@@ -39,7 +39,10 @@ final class OsGuess
         $major = is_int($ntlm['major'] ?? null) ? $ntlm['major'] : 0;
         $minor = is_int($ntlm['minor'] ?? null) ? $ntlm['minor'] : 0;
         $build = is_int($ntlm['build'] ?? null) ? $ntlm['build'] : 0;
-        if ($major > 0 && !str_contains($products, 'samba')) {
+        // Samba answers NTLM too, with build 0 (Windows always gives its build): not Windows, and the banner rules
+        // below (a NAS names itself) decide, with "Linux or Unix (Samba)" as the fallback (1.39).
+        $samba = $major > 0 && ($build === 0 || str_contains($products, 'samba'));
+        if ($major > 0 && !$samba) {
             [$name, $class] = self::windows($major, $minor, $build, $serverClues);
             return ['os_name' => $name, 'os_build' => $build > 0 ? (string) $build : '', 'device_class' => $class];
         }
@@ -64,6 +67,9 @@ final class OsGuess
             if (in_array($cat, $categories, true)) {
                 return ['os_name' => $name, 'os_build' => '', 'device_class' => $cat === 'hypervisor_admin' ? 'server' : 'other'];
             }
+        }
+        if ($samba) {
+            return ['os_name' => 'Linux or Unix (Samba)', 'os_build' => '', 'device_class' => 'server'];
         }
         if (array_intersect($open, [9100, 631, 515]) !== []) {
             return ['os_name' => 'Printer', 'os_build' => '', 'device_class' => 'other'];

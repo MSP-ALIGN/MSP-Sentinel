@@ -21,6 +21,9 @@ final class DeviceRules
 {
     /** Missing patches older than this become a finding. */
     public const PATCH_GRACE_DAYS = 30;
+    /** Windows builds that also ship as a long-term (LTSC) edition, supported far longer than the feature release. */
+    private const LTSC_BUILDS = ['10240', '14393', '17763', '19044'];
+
     /** A device the source hasn't heard from for this long is "stale". */
     public const STALE_DAYS = 30;
 
@@ -36,7 +39,18 @@ final class DeviceRules
         $now ??= time();
         $out = [];
         $eos = OsLifecycle::endOfSupport((string) $device['os_name'], (string) $device['os_build']);
-        if ($eos !== null && strtotime($eos . ' 23:59:59 UTC') < $now) {
+        // An agent device's OS is a guess from the network (OsGuess, 1.38): the edition is unknown, so builds that also
+        // ship as a long-term (LTSC/IoT) edition, supported for years longer, are not judged, and the rest is a Warning
+        // worded as a guess. Only an inventory source (which reads the installed OS) raises the Fail (1.39).
+        $guessed = (string) ($device['source'] ?? '') === 'agent';
+        if ($guessed && in_array((string) $device['os_build'], self::LTSC_BUILDS, true)) {
+            $eos = null;
+        }
+        if ($eos !== null && $guessed && strtotime($eos . ' 23:59:59 UTC') < $now) {
+            $out[] = ['code' => 'os_unsupported', 'severity' => 'warn', 'text' => __('Operating system looks out of support (seen from the network)'),
+                      'detail' => __('{os} (build {build}), as the network scan saw it: security updates for this version ended on {date}. The edition is not visible from the network: check the device, and mark this as an accepted risk if it has Extended Security Updates or a long-term edition.',
+                          ['os' => $device['os_name'], 'build' => $device['os_build'] ?: '?', 'date' => $eos])];
+        } elseif ($eos !== null && strtotime($eos . ' 23:59:59 UTC') < $now) {
             $out[] = ['code' => 'os_unsupported', 'severity' => 'fail', 'text' => __('Operating system no longer gets security updates'),
                       'detail' => __('{os} (build {build}): Microsoft security updates ended on {date}. If the device is enrolled in Extended Security Updates, mark this as an accepted risk.',
                           ['os' => $device['os_name'], 'build' => $device['os_build'] ?: '?', 'date' => $eos])];

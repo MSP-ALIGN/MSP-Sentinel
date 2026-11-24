@@ -56,6 +56,7 @@ final class AlignCompliance
         'email' => ['*' => ['email_auth']],
         'dns' => ['*' => ['cfg_baseline']],
         'breach' => ['*' => ['iam_passwords']],
+        'pentest' => ['*' => ['vuln_scan', 'cfg_baseline']],
         'dev' => ['os_unsupported' => ['ep_lifecycle'], 'av_missing' => ['ep_malware', 'ep_edr'], 'av_off' => ['ep_malware', 'ep_edr'], 'av_outdated' => ['ep_malware'],
                   'encryption_off' => ['ep_encryption', 'data_encrypt_rest'], 'encryption_off_server' => ['ep_encryption', 'data_encrypt_rest'], 'patches_missing' => ['vuln_patch_os', 'vuln_remediation'],
                   'patches_failed' => ['vuln_patch_os', 'vuln_remediation'], '*' => []],

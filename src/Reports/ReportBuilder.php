@@ -243,6 +243,9 @@ final class ReportBuilder
             $product = str_starts_with($p[1], 'cpe:') ? implode(' ', array_slice(explode(':', $p[1]), 3, 3)) : $p[1];
             return __('Matched on: {p}', ['p' => trim(str_replace('_', ' ', $product))]);
         }
+        if ($type === 'pentest' && trim($p[1] ?? '') !== '') {
+            return __('Evidence: {e}', ['e' => mb_substr(trim($p[1]), 0, 300)]);
+        }
         if ($type === 'tls' && (trim($p[1] ?? '') !== '' || trim($p[2] ?? '') !== '')) {
             return trim(__('Certificate: {cn}', ['cn' => trim($p[1] ?? '') ?: '?']) . (trim($p[2] ?? '') !== '' ? ' · ' . __('valid until {d}', ['d' => substr(trim($p[2]), 0, 10)]) : ''));
         }

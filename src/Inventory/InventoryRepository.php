@@ -199,6 +199,16 @@ final class InventoryRepository
     }
 
     /**
+     * SQL: the device (alias $a) is not shown merged into another (1.38.1/1.39). A merge counts only while its target
+     * still exists, is current and belongs to the same client, so a removed, deleted or moved target never hides the
+     * agent's device, even before refreshMerges() releases it. $a is a fixed alias from this code, never input.
+     */
+    public static function notMerged(string $a): string
+    {
+        return "({$a}.merged_into IS NULL OR NOT EXISTS (SELECT 1 FROM devices mt WHERE mt.id = {$a}.merged_into AND mt.client_id = {$a}.client_id AND mt.removed_at IS NULL))";
+    }
+
+    /**
      * Current (not removed) devices of a client, with counts. No limit for findings (every device counts);
      * the client page passes a limit.
      *
@@ -210,10 +220,12 @@ final class InventoryRepository
             "SELECT d.*, (SELECT COUNT(*) FROM device_patches p WHERE p.device_id = d.id) AS patch_count,
                     (SELECT COUNT(DISTINCT sv.cve_id) FROM software_vulns sv JOIN device_software s ON s.id = sv.software_id WHERE s.device_id = d.id) AS vuln_count,
                     (SELECT COUNT(*) FROM device_software s WHERE s.device_id = d.id) AS software_count,
-                    (SELECT COUNT(*) FROM findings f WHERE (f.device_id = d.id OR f.device_id IN (SELECT m.id FROM devices m WHERE m.merged_into = d.id)) AND f.status = 'open' AND f.severity = 'fail') AS open_fail,
-                    (SELECT COUNT(*) FROM findings f WHERE (f.device_id = d.id OR f.device_id IN (SELECT m.id FROM devices m WHERE m.merged_into = d.id)) AND f.status = 'open' AND f.severity = 'warn') AS open_warn,
-                    (SELECT COUNT(*) FROM devices m WHERE m.merged_into = d.id AND m.removed_at IS NULL) AS merged_count
-             FROM devices d WHERE d.client_id = :c AND d.removed_at IS NULL AND d.merged_into IS NULL ORDER BY d.name, d.id" . ($limit !== null ? ' LIMIT ' . max(1, $limit) : '')
+                    (SELECT COUNT(*) FROM findings f WHERE f.device_id IN (SELECT m.id FROM devices m WHERE m.id = d.id OR (m.merged_into = d.id AND m.client_id = d.client_id AND m.removed_at IS NULL))
+                        AND f.status = 'open' AND f.severity = 'fail') AS open_fail,
+                    (SELECT COUNT(*) FROM findings f WHERE f.device_id IN (SELECT m.id FROM devices m WHERE m.id = d.id OR (m.merged_into = d.id AND m.client_id = d.client_id AND m.removed_at IS NULL))
+                        AND f.status = 'open' AND f.severity = 'warn') AS open_warn,
+                    (SELECT COUNT(*) FROM devices m WHERE m.merged_into = d.id AND m.client_id = d.client_id AND m.removed_at IS NULL) AS merged_count
+             FROM devices d WHERE d.client_id = :c AND d.removed_at IS NULL AND " . self::notMerged('d') . " ORDER BY d.name, d.id" . ($limit !== null ? ' LIMIT ' . max(1, $limit) : '')
         );
         $stmt->execute(['c' => $clientId]);
         return $stmt->fetchAll();
@@ -230,8 +242,11 @@ final class InventoryRepository
     {
         $short = static fn (string $n): string => strtolower(explode('.', trim($n))[0]);
         // A merge into a device the source no longer reports is released (else the agent's device would vanish too).
-        $released = $this->db->prepare('UPDATE devices a JOIN devices t ON t.id = a.merged_into SET a.merged_into = NULL, a.merge_state = NULL
-                                        WHERE a.client_id = :c AND t.removed_at IS NOT NULL');
+        // So is one whose target was deleted, moved to another client (its source re-linked elsewhere) or is no longer an
+        // inventory device: manual merges too, as the device they named is no longer this client's.
+        $released = $this->db->prepare("UPDATE devices a LEFT JOIN devices t ON t.id = a.merged_into SET a.merged_into = NULL, a.merge_state = NULL
+                                        WHERE a.client_id = :c AND a.merged_into IS NOT NULL
+                                          AND (t.id IS NULL OR t.removed_at IS NOT NULL OR t.client_id <> a.client_id OR t.source = 'agent' OR t.merged_into IS NOT NULL)");
         $released->execute(['c' => $clientId]);
         $others = $this->db->prepare("SELECT id, name, dns_name, ip_addresses FROM devices WHERE client_id = :c AND source <> 'agent' AND removed_at IS NULL AND merged_into IS NULL");
         $others->execute(['c' => $clientId]);
@@ -257,7 +272,12 @@ final class InventoryRepository
             foreach (explode(',', (string) $a['ip_addresses']) as $ip) {
                 $candidates += $byIp[trim($ip)] ?? [];
             }
-            $own = array_filter([$short((string) $a['name']), $short((string) $a['dns_name'])]);
+            // The agent stores the address as the name when a device has no host name: that is no name (1.39).
+            $ownName = (string) $a['name'];
+            if ($ownName !== '' && in_array($ownName, array_map('trim', explode(',', (string) $a['ip_addresses'])), true)) {
+                $ownName = '';
+            }
+            $own = array_filter([$short($ownName), $short((string) $a['dns_name'])]);
             $target = null;
             if (count($candidates) === 1) {
                 $id = (int) array_key_first($candidates);
@@ -290,14 +310,15 @@ final class InventoryRepository
     }
 
     /**
-     * The agent devices merged into a device (1.38).
+     * The agent devices of the same client merged into a device (1.38; client-checked since 1.39).
      *
      * @return list<array<string,mixed>>
      */
-    public function mergedInto(int $deviceId): array
+    public function mergedInto(int $clientId, int $deviceId): array
     {
-        $stmt = $this->db->prepare('SELECT id, name, dns_name, ip_addresses, merge_state, site_id FROM devices WHERE merged_into = :d AND removed_at IS NULL ORDER BY id');
-        $stmt->execute(['d' => $deviceId]);
+        $stmt = $this->db->prepare('SELECT id, name, dns_name, ip_addresses, merge_state, site_id, checks FROM devices
+                                    WHERE merged_into = :d AND client_id = :c AND removed_at IS NULL ORDER BY id');
+        $stmt->execute(['d' => $deviceId, 'c' => $clientId]);
         return $stmt->fetchAll();
     }
 
@@ -405,7 +426,7 @@ final class InventoryRepository
      */
     public function agentDevicesWithPorts(int $clientId): array
     {
-        $stmt = $this->db->prepare("SELECT id, source, source_id, name, checks FROM devices WHERE client_id = :c AND source = 'agent' AND removed_at IS NULL");
+        $stmt = $this->db->prepare("SELECT id, source, source_id, name, ip_addresses, checks FROM devices WHERE client_id = :c AND source = 'agent' AND removed_at IS NULL");
         $stmt->execute(['c' => $clientId]);
         $devices = [];
         foreach ($stmt->fetchAll() as $d) {
@@ -527,6 +548,7 @@ final class InventoryRepository
     {
         $this->db->prepare('DELETE FROM source_links WHERE client_id = :c AND source = :s')->execute(['c' => $clientId, 's' => $source]);
         $this->db->prepare('UPDATE devices SET removed_at = UTC_TIMESTAMP() WHERE client_id = :c AND source = :s AND removed_at IS NULL')->execute(['c' => $clientId, 's' => $source]);
+        $this->refreshMerges($clientId); // the agent's devices merged into them show again at once (1.39)
     }
 
     /** Record the outcome of a sync on the link. */

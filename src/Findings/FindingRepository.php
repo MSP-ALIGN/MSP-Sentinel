@@ -17,7 +17,7 @@ final class FindingRepository
 {
     public const STATUSES = ['open', 'accepted', 'false_positive', 'resolved'];
     public const SEVERITIES = ['fail', 'warn'];
-    public const TYPES = ['port', 'tls', 'web', 'vuln', 'email', 'patch', 'device', 'directory', 'dns', 'breach'];
+    public const TYPES = ['port', 'tls', 'web', 'vuln', 'email', 'patch', 'device', 'directory', 'dns', 'breach', 'pentest'];
     /** Where a finding came from: the external scan, or an inventory source (internal devices). */
     public const SOURCES = ['external', 'internal'];
     public const PAGE_SIZE = 100;

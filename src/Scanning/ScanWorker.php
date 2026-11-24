@@ -721,7 +721,9 @@ final class ScanWorker
         if (count($targets) >= self::MAX_TARGETS) {
             $summary['messages'][] = __('Only the first {n} addresses are tested per run.', ['n' => self::MAX_TARGETS]);
         }
-        // Evidence only (engagement_results): the client's day-to-day services, certificates and findings are untouched.
+        // Evidence (engagement_results): the client's day-to-day services and certificates are untouched; the pen-test
+        // findings it confirms become findings (1.39, FindingsEngine::pentestIssues).
+        $this->refreshFindings($clientId, $summary);
         $this->scans->finish($jobId, $status, $summary);
         $this->publishFinished($jobId, $clientId, 'ports', $status);
         return "Engagement job {$jobId} {$status}: {$summary['hosts_scanned']} scanned, {$summary['hosts_skipped']} skipped, {$summary['hosts_failed']} failed.";

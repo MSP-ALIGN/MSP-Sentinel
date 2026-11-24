@@ -2,6 +2,19 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.36.1 (2026-11-24): Docker and Proxmox agents, fixes from review
+
+- **Docker:** `docker compose up`, `pull` and `logs` no longer need `SENTINEL_SERVER` (only enrolling does). A revoked
+  agent's container stops for good instead of restarting. No PHP memory limit (as on the appliance). The enrolment
+  code isn't shown while typed. Diagnostics say NetBIOS isn't heard in Docker. The guide covers a private CA and
+  revoking.
+- **Proxmox / LXC:** without nesting, the relaxed service settings now cover every option that needs a mount namespace
+  (the agent would otherwise not start); the installer checks the service really started; a drop-in left from a
+  container is removed on a VM and on uninstall.
+- **Smaller fixes:** the Proxmox helper checks addresses strictly and refuses `--gw` with DHCP; the image workflow tags
+  `latest` only for full releases and signs once by digest; an update request ended for a Docker agent is audited;
+  `.dockerignore` leaves out `.env` files and bundles.
+
 ### 1.36.0 (2026-11-24): agents in Docker and on Proxmox
 
 - **Docker agent.** `docker/agent/Dockerfile` and `docker/agent/docker-compose.yml` run the on-premises agent as a

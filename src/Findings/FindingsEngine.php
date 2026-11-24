@@ -213,6 +213,7 @@ final class FindingsEngine
     public function currentIssues(int $clientId): array
     {
         $issues = [];
+        $protoByIp = [];
         $add = static function (string $key, array $issue) use (&$issues): void {
             // Long keys (IPv6 + long hostnames) keep a readable prefix plus a hash of the whole key, so they never collide.
             if (strlen($key) > 190) {
@@ -413,6 +414,9 @@ final class FindingsEngine
             // Risky internal protocols (on-premises agent): SMBv1, SMB signing, RDP without NLA, Telnet, FTP, SNMP defaults, HTTP logins.
             foreach ($this->inventory->agentDevicesWithPorts($clientId) as $d) {
                 foreach (\Sentinel\Agent\ProtocolRules::issues($d, $d['ports']) as $issue) {
+                    foreach (explode(',', (string) ($d['ip_addresses'] ?? '')) as $pip) {
+                        $protoByIp[trim($pip)][$issue['code']] = true; // pen-test findings don't repeat these (below)
+                    }
                     $add("proto:{$d['source']}:{$d['source_id']}:{$issue['code']}", [
                         'type' => 'device', 'severity' => $issue['severity'], 'title' => $issue['text'], 'detail' => $issue['detail'],
                         'target' => (string) $d['name'], 'evidence' => $issue['code'], 'source' => (string) $d['source'], 'device_id' => (int) $d['id'],
@@ -499,7 +503,59 @@ final class FindingsEngine
                 ]);
             }
         }
+        // Pen-test engagements (1.39): each fail/warn issue an engagement confirmed is a finding. For each host and kind
+        // of test, the newest engagement that ran that test on that host decides, so a retest resolves what it no longer
+        // finds, and a retest without a test never resolves that test's findings. Issues a regular check already
+        // reports for the same address (exposed ports and Telnet from external scans; the agent's protocol checks)
+        // are not repeated.
+        $this->pentestIssues($clientId, $add, $issues, $protoByIp);
         return $issues;
+    }
+
+    /**
+     * @param \Closure(string, array<string,mixed>):void $add
+     * @param array<string, array<string,mixed>> $issues  what the other checks found (to avoid repeating them)
+     * @param array<string, array<string,true>> $protoByIp  the agent's protocol issue codes per address
+     */
+    private function pentestIssues(int $clientId, \Closure $add, array $issues, array $protoByIp): void
+    {
+        $engs = $this->db->prepare("SELECT id, name, tests, window_start FROM engagements WHERE client_id = :c AND cancelled_at IS NULL AND approved_at IS NOT NULL ORDER BY window_start DESC, id DESC");
+        $engs->execute(['c' => $clientId]);
+        $repo = new \Sentinel\Engagements\EngagementRepository($this->db);
+        $decided = []; // origin|ip|test => engagement id that decides
+        foreach ($engs->fetchAll() as $e) {
+            $tests = array_merge([''], array_values(array_filter(explode(',', (string) $e['tests']))));
+            $results = $repo->results((int) $e['id']);
+            if ($results === []) {
+                continue;
+            }
+            foreach (\Sentinel\Engagements\EngagementFindings::analyse($results) as $f) {
+                if (!in_array($f['severity'], ['fail', 'warn'], true)) {
+                    continue; // "worth knowing" stays in the pen-test report only
+                }
+                $slot = $f['origin'] . '|' . $f['host'] . '|' . $f['test'];
+                if (isset($decided[$slot]) && $decided[$slot] !== (int) $e['id']) {
+                    continue; // a newer engagement ran this test on this host
+                }
+                $covered = ($f['origin'] === 'external' && (str_starts_with($f['key'], 'exposed_') || $f['key'] === 'telnet')
+                        && isset($issues['port:' . $f['target']]))
+                    || ($f['origin'] === 'internal' && isset($protoByIp[$f['host']][$f['key']]));
+                if ($covered) {
+                    continue;
+                }
+                $add('pentest:' . $f['key'] . ':' . $f['origin'] . ':' . $f['target'], [
+                    'type' => 'pentest', 'severity' => $f['severity'], 'title' => $f['title'],
+                    'detail' => $f['fix'] . ' ' . __('Found by the pen-test engagement "{name}" (#{id}).', ['name' => (string) $e['name'], 'id' => (int) $e['id']]),
+                    'target' => $f['target'], 'evidence' => $f['key'] . '|' . mb_substr($f['evidence'], 0, 400), 'source' => $f['origin'] === 'internal' ? 'agent' : 'external',
+                ]);
+            }
+            // This engagement decides every slot it covered for its hosts (also those where it found nothing).
+            foreach ($results as $r) {
+                foreach ($tests as $t) {
+                    $decided[(string) $r['origin'] . '|' . (string) $r['ip'] . '|' . $t] ??= (int) $e['id'];
+                }
+            }
+        }
     }
 
     /** Insert a new open finding and its "opened" event. Returns the new ID. */

@@ -40,7 +40,7 @@ return [
         $ninja = $add('ninjaone', 'merge-1', 'SRV-FILES', 'srv-files.corp.example', '10.93.0.10');
         $ninja2 = $add('ninjaone', 'merge-2', 'SRV-APPS', 'srv-apps.corp.example', '10.93.0.20');
         $sameName = $add('agent', 'agent-a', '', 'srv-files.corp.example', '10.93.0.10');   // same address and name: merged
-        $noName = $add('agent', 'agent-b', '', '', '10.93.0.20');                          // same address, no name: merged
+        $noName = $add('agent', 'agent-b', '10.93.0.20', '', '10.93.0.20');                // same address, no name (the agent stores the address): merged
         $otherName = $add('agent', 'agent-c', 'PRINTER-2', '', '10.93.0.10');                // same address, another name: not merged
         $ctx->db->prepare("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, detail, target, evidence, status, first_seen, last_seen, opened_at, device_id)
                            VALUES (:c, 'device:merge-test', 'device', 'fail', 'SMBv1 is enabled (merge test)', '', 'srv-files', 'x', 'open', UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP(), :d)")
@@ -83,5 +83,71 @@ return [
         $tech = $ctx->login('mergetech', 'Mergetech-Pass-0001!');
         Assert::status(403, $tech->post('/clients/' . $cid . '/devices/' . $otherName . '/merge', ['_csrf' => $tech->get('/clients/' . $cid . '/devices/' . $ninja2)->csrf(), 'target' => (string) $ninja2]));
         $ctx->db->exec("UPDATE clients SET is_archived = 1 WHERE id = {$cid}");
+    },
+
+    'merged devices (1.39 fixes): unlinking or moving the target shows the agent device again; OS guesses stay cautious' => function (TestContext $ctx): void {
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $mk = static function (string $name) use ($admin): int {
+            $res = $admin->submit('/clients/new', '/clients', ['name' => $name, 'itflow_client_id' => '', 'timezone' => 'UTC', 'scan_window_start' => '00:00',
+                'scan_window_end' => '23:59', 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);
+            return (int) basename((string) $res->location());
+        };
+        $cid = $mk('Merge Fix Example');
+        $other = $mk('Merge Fix Other Example');
+        $site = (int) $ctx->db->query("SELECT id FROM sites WHERE client_id = {$cid} AND is_default = 1")->fetchColumn();
+        $add = static function (string $source, string $sid, string $name, string $ip, string $os = '', string $build = '') use ($ctx, $cid, $site): int {
+            $ctx->db->prepare("INSERT INTO devices (client_id, site_id, source, source_id, name, dns_name, device_class, os_name, os_build, ip_addresses, first_seen, last_seen)
+                               VALUES (:c, :s, :src, :sid, :n, '', 'server', :os, :b, :ip, UTC_TIMESTAMP(), UTC_TIMESTAMP())")
+                ->execute(['c' => $cid, 's' => $site, 'src' => $source, 'sid' => $sid, 'n' => $name, 'os' => $os, 'b' => $build, 'ip' => $ip]);
+            return (int) $ctx->db->lastInsertId();
+        };
+        $ctx->db->prepare("INSERT INTO source_links (client_id, source, org_id, org_name, linked_by, linked_at) VALUES (:c, 'ninjaone', 'org-fix', 'Fix Org', 1, UTC_TIMESTAMP())")
+            ->execute(['c' => $cid]);
+        $inv = $add('ninjaone', 'fix-1', 'SRV-FIX', '10.94.0.10');
+        $inv2 = $add('ninjaone', 'fix-2', 'SRV-MOVE', '10.94.0.20');
+        $agent = $add('agent', 'fix-a', 'SRV-FIX', '10.94.0.10');
+        $agent2 = $add('agent', 'fix-b', 'SRV-MOVE', '10.94.0.20');
+        App::inventory()->refreshMerges($cid);
+        $merged = static fn (int $id): ?string => ($v = $ctx->db->query("SELECT merged_into FROM devices WHERE id = {$id}")->fetchColumn()) === null ? null : (string) $v;
+        Assert::same((string) $inv, $merged($agent));
+        Assert::same((string) $inv2, $merged($agent2));
+        $list = static fn (): string => $ctx->clientSection($admin, $cid, 'devices');
+        Assert::notContains('/devices/' . $agent2 . '"', $list());
+        // The source's devices move to another client (its organisation linked there): the agent device shows again at
+        // once, its page no longer redirects, and the next refresh releases the merge.
+        $ctx->db->exec("UPDATE devices SET client_id = {$other} WHERE id = {$inv2}");
+        Assert::contains('/devices/' . $agent2 . '"', $list(), 'a target in another client never hides it');
+        Assert::status(200, $admin->get('/clients/' . $cid . '/devices/' . $agent2), 'no redirect into another client');
+        App::inventory()->refreshMerges($cid);
+        Assert::same(null, $merged($agent2), 'released');
+        // Unlinking the source shows the merged agent device again straight away.
+        App::inventory()->unlink($cid, 'ninjaone');
+        Assert::same(null, $merged($agent), 'released on unlink');
+        Assert::contains('/devices/' . $agent . '"', $list());
+
+        // Samba answers NTLM with build 0: not Windows; a NAS banner wins.
+        Assert::same('Linux or Unix (Samba)', \Sentinel\Inventory\OsGuess::guess(['major' => 6, 'minor' => 1, 'build' => 0], [['port' => 445]])['os_name']);
+        Assert::same('Synology DSM (NAS)', \Sentinel\Inventory\OsGuess::guess(['major' => 6, 'minor' => 1, 'build' => 0], [['port' => 5001, 'product' => 'Synology DiskStation']])['os_name']);
+        Assert::same('Windows Server 2022', \Sentinel\Inventory\OsGuess::guess(['major' => 10, 'minor' => 0, 'build' => 20348], [['port' => 445]])['os_name']);
+
+        // An OS guessed from the network: an expired release is a Warning worded as a guess; a build that is also a
+        // long-term (LTSC) edition is not judged; the inventory source's own OS still raises the Fail.
+        $rule = static fn (string $source, string $os, string $build): array => array_values(array_filter(\Sentinel\Inventory\DeviceRules::issues(
+            ['source' => $source, 'os_name' => $os, 'os_build' => $build, 'av_state' => '', 'av_product' => '', 'av_definitions' => '', 'encryption' => '', 'device_class' => 'workstation',
+             'last_contact' => gmdate('Y-m-d H:i:s')], []), static fn (array $i): bool => $i['code'] === 'os_unsupported'));
+        Assert::same('warn', $rule('agent', 'Windows 10 21H1', '19043')[0]['severity'] ?? null, 'guessed: a warning');
+        Assert::same([], $rule('agent', 'Windows 10 21H2', '19044'), 'an LTSC build is not judged from the network');
+        Assert::same('fail', $rule('ninjaone', 'Windows 10 21H2', '19044')[0]['severity'] ?? null, 'the installed OS (from the source) still fails');
+
+        // A banner-only guess never replaces one with a build; the NTLM name fills a name that is only the address.
+        $nameless = $add('agent', 'fix-c', '10.94.0.30', '10.94.0.30', 'Windows Server 2022', '20348');
+        $ctx->db->exec("INSERT INTO device_ports (device_id, port, first_seen, last_seen) VALUES ({$nameless}, 22, UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+        $ctx->db->exec("UPDATE device_ports SET product = 'OpenSSH' WHERE device_id = {$nameless}");
+        $save = new \ReflectionMethod(App::agentService(), 'saveOsGuess');
+        $save->invoke(App::agentService(), $nameless, null);
+        Assert::same('Windows Server 2022', (string) $ctx->db->query("SELECT os_name FROM devices WHERE id = {$nameless}")->fetchColumn(), 'the weaker guess is ignored');
+        $save->invoke(App::agentService(), $nameless, ['major' => 10, 'minor' => 0, 'build' => 20348, 'netbios_name' => 'SRV-NB', 'dns_name' => '']);
+        Assert::same('SRV-NB', (string) $ctx->db->query("SELECT name FROM devices WHERE id = {$nameless}")->fetchColumn(), 'the NetBIOS name replaces the bare address');
+        $ctx->db->exec("UPDATE clients SET is_archived = 1 WHERE id IN ({$cid}, {$other})");
     },
 ];

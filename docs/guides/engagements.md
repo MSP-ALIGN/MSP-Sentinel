@@ -34,8 +34,10 @@ fixes, a retest letter. Every test, rule and finding is described in the [engage
 
 1. Inside the window, open the engagement.
 2. Click **Run external tests** (from Sentinel) and/or **Run internal tests** (through each site's agent).
-3. Read the results on the engagement page: each finding with its evidence and how to fix it. They are evidence only
-   and don't change the client's day-to-day findings.
+3. Read the results on the engagement page: each finding with its evidence and how to fix it.
+4. The Fails and Warnings also become **findings** on the client's Findings page (type **Pen test**), so you can
+   triage them, give them an owner and a due date, group them and open ITFlow tickets like any other finding. See
+   [Pen-test findings](#pen-test-findings) below.
 
 ## Stop it (kill switch)
 
@@ -53,6 +55,18 @@ Pausing all scanning, or the client, stops engagements too. Before approval, **C
    needs its own signed PDF, window and approval.
 3. Run its tests and click **Issue retest letter**. Each earlier finding is marked **fixed**, **still open** or
    **not retested**.
+
+## Pen-test findings
+
+- **What becomes a finding:** each Fail and Warning of an approved engagement. "Worth knowing" results stay in the
+  pen-test report only. The finding says which engagement found it.
+- **No doubles:** a result the regular checks already raise (a risky port open to the internet, or a protocol problem
+  an agent already reports on that address) isn't added a second time.
+- **Retests resolve them.** For each host and test, the newest engagement that ran that test on that host decides: a
+  retest that no longer finds the problem resolves the finding; a retest that didn't run that test, or didn't reach
+  that host, leaves it open.
+- Cancelled engagements, and engagements never approved, never create findings. The client's services, certificates
+  and device inventory are still not changed by an engagement.
 
 ## Good to know
 

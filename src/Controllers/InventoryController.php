@@ -129,19 +129,38 @@ final class InventoryController extends Controller
     {
         $client = $this->client($params);
         $device = App::inventory()->device((int) $client['id'], (int) ($params['device'] ?? 0)) ?? throw new HttpException(404);
-        // An agent device merged into an inventory device (1.38): its page is the combined one.
+        // An agent device merged into an inventory device (1.38): its page is the combined one, while that device is
+        // still current and this client's (else this page shows on its own).
         if (($device['merged_into'] ?? null) !== null) {
-            return Response::redirect('/clients/' . (int) $client['id'] . '/devices/' . (int) $device['merged_into']);
+            $t = App::db()->prepare('SELECT COUNT(*) FROM devices WHERE id = :t AND client_id = :c AND removed_at IS NULL');
+            $t->execute(['t' => (int) $device['merged_into'], 'c' => (int) $client['id']]);
+            if ((int) $t->fetchColumn() === 1) {
+                return Response::redirect('/clients/' . (int) $client['id'] . '/devices/' . (int) $device['merged_into']);
+            }
         }
         // The combined device: this row and the agent devices merged into it (findings, open services, protocol issues).
-        $merged = App::inventory()->mergedInto((int) $device['id']);
+        $merged = App::inventory()->mergedInto((int) $client['id'], (int) $device['id']);
         $ids = array_merge([(int) $device['id']], array_map(static fn (array $m): int => (int) $m['id'], $merged));
         $stmt = App::db()->prepare('SELECT id, severity, status, title FROM findings WHERE client_id = ? AND device_id IN (' . implode(',', array_fill(0, count($ids), '?')) . ")
                                     AND status <> 'resolved' ORDER BY severity = 'fail' DESC, id");
         $stmt->execute(array_merge([(int) $client['id']], $ids));
+        // One row per port (two agents may have seen the same machine), and the device-level checks (e.g. SNMP) of the
+        // merged agent devices with this device's own winning.
         $ports = [];
         foreach ($ids as $id) {
-            $ports = array_merge($ports, App::inventory()->ports($id));
+            foreach (App::inventory()->ports($id) as $p) {
+                $ports[(string) ($p['protocol'] ?? 'tcp') . '/' . (int) $p['port']] ??= $p;
+            }
+        }
+        ksort($ports, SORT_NATURAL);
+        $ports = array_values($ports);
+        $checks = [];
+        foreach (array_reverse($merged) as $m) {
+            $checks = array_replace($checks, json_decode((string) ($m['checks'] ?? ''), true) ?: []);
+        }
+        $ruleDevice = $device;
+        if ($checks !== []) {
+            $ruleDevice['checks'] = (string) json_encode(array_replace($checks, json_decode((string) ($device['checks'] ?? ''), true) ?: []));
         }
         // An unmerged agent device: inventory devices an admin may merge it into (same address first).
         $candidates = [];
@@ -157,7 +176,7 @@ final class InventoryController extends Controller
         }
         return $this->page('inventory/device', (string) ($device['name'] !== '' ? $device['name'] : $device['source_id']), [
             'client' => $client, 'device' => $device, 'deviceFindings' => $stmt->fetchAll(), 'ports' => $ports, 'merged' => $merged, 'mergeCandidates' => $candidates,
-            'issues' => array_merge(\Sentinel\Inventory\DeviceRules::issues($device, $device['patches']), \Sentinel\Agent\ProtocolRules::issues($device, $ports)),
+            'issues' => array_merge(\Sentinel\Inventory\DeviceRules::issues($device, $device['patches']), \Sentinel\Agent\ProtocolRules::issues($ruleDevice, $ports)),
         ]);
     }
 

@@ -106,7 +106,7 @@ return [
                 'To run one: 1. Open the client → Pen-test engagements → New engagement (Technician or Admin). 2. Enter the name, window (at most 14 days), tests, pace (gentle or normal; all ports needs normal), targets inside the authorised scope, exclusions by address or range, and upload the client\'s signed PDF. 3. Wait for a second admin to approve it. 4. Inside the window, run the external tests (from Sentinel) and the internal tests (through each site\'s agent, 1.27.0 or later). 5. Issue penetration test report.',
                 'Approval: a different admin approves, with their password, after checking that the signed document matches the scope. Nothing runs before. The other admins get a notification and a banner on the dashboard, and the Engagements page lists what awaits them. An account the creator created, or whose password or 2FA the creator reset, in the last 30 days cannot approve. With only one admin, add another first.',
                 'Stop engagement (kill switch) ends it for good within a minute. Technicians and admins can stop or cancel an engagement. Demo and archived clients have no New engagement button.',
-                'Results: the engagement page lists findings with evidence and fixes; they don\'t change the client\'s day-to-day findings or inventory. The report is branded and frozen (summary, how findings chain together, scope and authorisation, method, findings, systems tested). After fixes, create a retest engagement (This is a retest of) and issue its retest letter: each earlier finding is marked fixed, still open or not retested.',
+                'Results: the engagement page lists findings with evidence and fixes. Fails and Warnings also become findings of type "Pen test" (triage, owners, due dates, groups, ITFlow tickets), unless the regular checks already raise the same problem; worth-knowing results stay in the report. For each host and test the newest engagement that ran it decides: a retest that no longer finds a problem resolves its finding, one that did not run that test leaves it open. The client\'s services and inventory are not changed. The report is branded and frozen (summary, how findings chain together, scope and authorisation, method, findings, systems tested). After fixes, create a retest engagement (This is a retest of) and issue its retest letter: each earlier finding is marked fixed, still open or not retested.',
             ],
         ],
         [
@@ -357,6 +357,15 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.39.0',
+            'date' => '2026-11-24',
+            'items' => [
+                'Pen-test results become findings: each Fail and Warning of an approved engagement is a finding of type "Pen test" with triage, owners, due dates, groups and ITFlow tickets. A retest resolves what it no longer finds; what it did not test stays open. Problems the regular checks already raise are not doubled.',
+                'Devices: unlinking NinjaOne, or its organisation moving to another client, shows the agent\'s merged devices again at once. A Windows version seen from the network is a Warning (edition unknown), and builds that also ship as long-term editions are not judged. Samba servers are no longer shown as Windows. A device without a host name gets the name its NTLM answer gives and can be matched. A scan without the NTLM answer no longer overwrites the known Windows build.',
+                'The device page lists each port once and shows protocol issues from the merged agent device; the device list counts findings faster (migration 0045).',
+            ],
+        ],
         [
             'version' => '1.38.0',
             'date' => '2026-11-24',

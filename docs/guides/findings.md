@@ -36,6 +36,9 @@ distribution build that may already carry the fix). Sentinel never guesses a ver
   DMARC and DKIM by DNS. Results are on the client's **Website & email** page.
 - **DNS checks**, once a day: zone transfers from the domain's own nameservers, and names pointing at a cloud service
   that no longer exists (subdomain takeover). Both are Fails.
+- **Pen-test engagements**: the Fails and Warnings of an approved engagement (type **Pen test**). A retest that runs
+  the same test on the same host and no longer finds the problem resolves them. See
+  [Pen-test engagements](engagements.md#pen-test-findings).
 - **Agents and NinjaOne** for internal devices, and **breach monitoring** for breached accounts: see
   [On-premises agents](agents.md) and [Integrations](integrations.md).
 

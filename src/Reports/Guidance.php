@@ -43,6 +43,11 @@ final class Guidance
             'dns' => self::dns(str_starts_with((string) ($f['evidence'] ?? ''), 'takeover|') ? 'takeover' : substr($key, (int) strrpos($key, ':') + 1)),
             'device', 'patch' => self::device(substr($key, (int) strrpos($key, ':') + 1)),
             'directory' => self::directory(substr($key, (int) strrpos($key, ':') + 1)),
+            // Pen-test findings (1.39): the engagement's own advice is in the detail.
+            'pentest' => ['meaning' => (string) ($f['severity'] ?? '') === 'fail'
+                    ? __('A penetration test confirmed this weakness: it can be used to break in or to move further once inside.')
+                    : __('A penetration test found this weakness: it makes an attack easier and should be fixed.'),
+                'fix' => trim((string) preg_replace('/\s*Found by the pen-test engagement .*$/u', '', (string) ($f['detail'] ?? ''))) ?: __('Follow the pen-test report\'s advice for this item.')],
             default => ['meaning' => __('This item needs a review by your IT provider.'), 'fix' => __('Review the details and decide whether to fix or accept it.')],
         };
     }

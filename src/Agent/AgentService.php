@@ -559,6 +559,14 @@ final class AgentService
         }
         $messages = array_slice(array_map(static fn ($m): string => InventoryRepository::clean($m, 300), (array) ($data['messages'] ?? [])), 0, 10);
         $this->agents->finishJob((int) $job['id'], $status, ['messages' => $messages, 'hosts' => $stats['accepted'], 'rejected' => $stats['rejected']]);
+        // The pen-test findings it confirms become findings (1.39).
+        if ($this->findings !== null) {
+            try {
+                $this->alerts?->findingsChanged((int) $job['client_id'], $this->findings->refreshClient((int) $job['client_id']), true);
+            } catch (\Throwable $ex) {
+                error_log('[msp-sentinel] findings refresh after engagement results failed: ' . $ex->getMessage());
+            }
+        }
         return $stats;
     }
 
@@ -652,16 +660,19 @@ final class AgentService
         }
         $ports = $this->db->prepare('SELECT port, product, version, extra_info, web FROM device_ports WHERE device_id = :d');
         $ports->execute(['d' => $deviceId]);
-        $rows = array_map(static fn (array $r): array => $r + ['web' => null] ? array_merge($r, ['web' => json_decode((string) ($r['web'] ?? ''), true)]) : $r, $ports->fetchAll());
+        $rows = array_map(static fn (array $r): array => array_merge($r, ['web' => json_decode((string) ($r['web'] ?? ''), true)]), $ports->fetchAll());
         $g = \Sentinel\Inventory\OsGuess::guess($n, $rows);
+        // A guess without a build (banners only, e.g. one scan where the NTLM answer timed out) never replaces one with
+        // a build (from NTLM): the weaker guess would flip the name back and forth between scans (1.39).
         if ($g !== null) {
-            $this->db->prepare('UPDATE devices SET os_name = :o, os_build = :b, device_class = :c WHERE id = :id')
-                ->execute(['o' => mb_substr($g['os_name'], 0, 255), 'b' => $g['os_build'], 'c' => $g['device_class'], 'id' => $deviceId]);
+            $this->db->prepare("UPDATE devices SET os_name = :o, os_build = :b, device_class = :c WHERE id = :id AND (:b2 <> '' OR os_build = '' OR os_build IS NULL)")
+                ->execute(['o' => mb_substr($g['os_name'], 0, 255), 'b' => $g['os_build'], 'b2' => $g['os_build'], 'c' => $g['device_class'], 'id' => $deviceId]);
         }
         $nb = InventoryRepository::clean($ntlm['netbios_name'] ?? '', 64);
         $dns = InventoryRepository::clean($ntlm['dns_name'] ?? '', 255);
         if ($nb !== '' || $dns !== '') {
-            $this->db->prepare("UPDATE devices SET name = IF(name = '', :n, name), dns_name = IF(dns_name = '', :d, dns_name) WHERE id = :id")
+            // The agent stores the address as the name when it had no host name: that counts as empty (1.39).
+            $this->db->prepare("UPDATE devices SET name = IF(name = '' OR name = ip_addresses, :n, name), dns_name = IF(dns_name = '', :d, dns_name) WHERE id = :id")
                 ->execute(['n' => $nb !== '' ? $nb : $dns, 'd' => strtolower($dns), 'id' => $deviceId]);
         }
     }
