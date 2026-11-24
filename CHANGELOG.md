@@ -2,6 +2,20 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.46.1 (2026-11-24): Sign in with Microsoft setup fixes from review
+
+- **No lock-out from the wrong tenant.** Once a tenant is saved, the setup script's details must come from that same
+  tenant (409 otherwise), so a run signed in to the wrong one changes nothing. Switching needs **Switch to another
+  Microsoft tenant** ticked for the code. Switching tenants, here or by hand, now also turns password sign-in back on
+  for everyone whose Microsoft link it clears.
+- **All or nothing.** Using the code and saving the details is one transaction. The code only works while the Admin
+  who made it is still an active Admin with every client. Wrong details sent with the right code no longer count
+  toward the address's rate limit.
+- **The script.** The command shown works on Windows PowerShell 5.1 (TLS 1.2 first). The script shows the tenant and
+  asks before changing it, keeps the app's other web settings, waits for a new app to be ready, accepts a Sentinel
+  address with a sub-folder, and sends the expiry date in a format every regional setting gets right.
+- Expiry reminders also come while sign-in is switched off.
+
 ### 1.46.0 (2026-11-24): Sign in with Microsoft sets itself up
 
 - **No more app registration by hand.** Under **Administration → Integrations → Sign in with Microsoft**, enter your

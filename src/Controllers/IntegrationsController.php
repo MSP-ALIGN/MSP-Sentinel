@@ -219,8 +219,9 @@ final class IntegrationsController extends Controller
         $changed = [];
         // Another tenant means other accounts: every link to the old one is cleared (users link again from My profile).
         if ($s->get('sso_entra_tenant') !== $tenant && $s->get('sso_entra_tenant') !== '') {
-            $cleared = App::db()->exec('UPDATE users SET sso_subject = NULL WHERE sso_subject IS NOT NULL');
-            $changed['links_cleared'] = (int) $cleared;
+            // Password sign-in comes back on for everyone who had it off, so nobody is locked out (1.46.1).
+            $changed['links_cleared'] = \Sentinel\Auth\SsoSetup::clearAllLinks();
+            App::auth()->refreshSessionVersion(); // this admin stays signed in
         }
         foreach (['sso_entra_tenant' => $tenant, 'sso_entra_client' => $client] as $name => $value) {
             if ($s->get($name) !== $value) {
@@ -271,9 +272,9 @@ final class IntegrationsController extends Controller
             Session::flash('danger', $why);
             return $back;
         }
-        $code = \Sentinel\Auth\SsoSetup::issue((int) $this->user()['id']);
+        $code = \Sentinel\Auth\SsoSetup::issue((int) $this->user()['id'], $request->input('new_tenant') === '1');
         Session::set('sso_setup_show', ['code' => $code, 'until' => time() + \Sentinel\Auth\SsoSetup::TTL]);
-        $this->audit($request, 'settings.sso_setup_code', null, null, []);
+        $this->audit($request, 'settings.sso_setup_code', null, null, ['new_tenant' => $request->input('new_tenant') === '1']);
         return $back;
     }
 

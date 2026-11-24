@@ -21,9 +21,12 @@ use Sentinel\Core\Response;
  *   atomic UPDATE, so two requests can't both use it). Only an Admin who holds every permission, sees every client and
  *   typed their own password can create one (IntegrationsController::ssoSetupCode); a new code replaces the old one.
  * - Whoever holds the code can only point sign-in at an Entra app: signing in still needs a Microsoft account each
- *   user linked themselves (with their password and Sentinel's code), and a new tenant clears every link (as in
- *   IntegrationsController::saveSso). The on/off switch is never changed here: an Admin turns it on and tests it.
- * - Failures are rate limited per address and audited; the secret is never logged or echoed.
+ *   user linked themselves (with their password and Sentinel's code). Another tenant is refused (409) unless the Admin
+ *   allowed it when creating the code (1.46.1); switching clears every link and turns password sign-in back on for
+ *   everyone, so nobody is locked out. The on/off switch is never changed here: an Admin turns it on and tests it.
+ * - The code works only while the Admin who made it is still an active Admin with every client (1.46.1).
+ * - Using the code and every change are one transaction: a failure leaves the code and the settings as they were.
+ * - Wrong codes are rate limited per address and audited; the secret is never logged or echoed.
  */
 final class SsoSetup
 {
@@ -31,8 +34,21 @@ final class SsoSetup
     private const MAX_FAILS = 10;
     private const WINDOW = 900;
 
-    /** Create a one-time setup code for user $userId (replacing any earlier one). Returns the code, shown once. */
-    public static function issue(int $userId): string
+    /**
+     * Forget every user's Microsoft link (another tenant means other accounts) and turn password sign-in back on for
+     * them, signing them out, so nobody whose password sign-in was off is locked out (1.46.1). Returns how many.
+     */
+    public static function clearAllLinks(): int
+    {
+        return (int) App::db()->exec("UPDATE users SET sso_subject = NULL, sso_name = '', password_login = 1, session_version = session_version + 1,
+                                      updated_at = UTC_TIMESTAMP() WHERE sso_subject IS NOT NULL");
+    }
+
+    /**
+     * Create a one-time setup code for user $userId (replacing any earlier one). Returns the code, shown once.
+     * $allowNewTenant: the details may be for another tenant than the one saved (clears every link).
+     */
+    public static function issue(int $userId, bool $allowNewTenant = false): string
     {
         $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
         $raw = '';
@@ -44,6 +60,7 @@ final class SsoSetup
         $s->set('sso_setup_code', App::crypto()->hmac('sso-setup|' . $code));
         $s->set('sso_setup_expires', (string) (time() + self::TTL));
         $s->set('sso_setup_by', (string) $userId);
+        $s->set('sso_setup_new_tenant', $allowNewTenant ? '1' : '0');
         return $code;
     }
 
@@ -76,8 +93,12 @@ final class SsoSetup
         if ($limiter->tooMany($bucket, self::MAX_FAILS, self::WINDOW)) {
             return self::json(429, false, 'Too many attempts. Wait 15 minutes, create a new setup code in Sentinel and run the script again.');
         }
-        $fail = static function (int $status, string $reason, string $shown) use ($request, $limiter, $bucket): Response {
-            $limiter->hit($bucket);
+        // Wrong codes count toward the limit; wrong details sent with the right code don't (1.46.1: the code already proved
+        // who is calling, and an office's typo retries shouldn't block everyone behind the same address).
+        $fail = static function (int $status, string $reason, string $shown, bool $count = true) use ($request, $limiter, $bucket): Response {
+            if ($count) {
+                $limiter->hit($bucket);
+            }
             App::audit()->log('settings.sso_setup_failed', null, null, null, null, ['reason' => $reason], $request->ip());
             return self::json($status, false, $shown);
         };
@@ -98,40 +119,62 @@ final class SsoSetup
         $client = strtolower($str('client_id'));
         $secret = is_string($body['client_secret'] ?? null) ? (string) $body['client_secret'] : '';
         if (!EntraSso::validGuid($tenant) || !EntraSso::validGuid($client)) {
-            return $fail(422, 'bad_ids', 'The tenant ID and client ID must be GUIDs.');
+            return $fail(422, 'bad_ids', 'The tenant ID and client ID must be GUIDs.', false);
         }
         if ($secret === '' || strlen($secret) > 200 || preg_match('/[\x00-\x20\x7F-\xFF]/', $secret) === 1) {
-            return $fail(422, 'bad_secret', 'The client secret is not valid.');
+            return $fail(422, 'bad_secret', 'The client secret is not valid.', false);
+        }
+        $current = $s->fresh('sso_entra_tenant');
+        if ($current !== '' && $current !== $tenant && $s->fresh('sso_setup_new_tenant') !== '1') {
+            // Probably signed in to the wrong tenant (an MSP has several): switching would clear every user's link.
+            return $fail(409, 'other_tenant', 'You signed in to Microsoft tenant ' . $tenant . ', but Sentinel uses tenant ' . $current
+                . '. Run the script again and sign in to that tenant. To really switch tenants (every user\'s Microsoft link is cleared), create a new setup code with "Switch to another tenant" ticked.', false);
+        }
+        if (!self::issuerOk((int) $s->fresh('sso_setup_by'))) {
+            return $fail(403, 'issuer_gone', 'The admin who created this setup code can no longer change sign-in settings. Create a new code.');
         }
         if ($str('redirect_uri') !== App::ssoRedirectUri() || App::ssoRedirectUri() === '') {
             return $fail(422, 'redirect_mismatch', 'The app was registered for ' . mb_substr((string) preg_replace('/[^\x21-\x7E]/', '', $str('redirect_uri')), 0, 200)
-                . ', but Sentinel expects ' . App::ssoRedirectUri() . '. Run the script with -Server set to Sentinel\'s address exactly as on its Integrations page.');
+                . ', but Sentinel expects ' . App::ssoRedirectUri() . '. Run the script with -Server set to Sentinel\'s address exactly as on its Integrations page.', false);
         }
         // Expiry: a date within the next 25 months, else unknown (no warning rather than a wrong one).
         $expTs = $str('secret_expires') === '' ? false : strtotime($str('secret_expires'));
         $expires = $expTs !== false && $expTs > time() && $expTs < time() + 25 * 31 * 86400 ? gmdate('Y-m-d H:i:s', $expTs) : '';
 
-        // Use the code: one atomic claim, so only one request can.
-        $claim = App::db()->prepare("UPDATE settings SET value = '' WHERE name = 'sso_setup_code' AND value = :h");
-        $claim->execute(['h' => $hash]);
-        if ($claim->rowCount() !== 1) {
-            return $fail(403, 'raced', 'That setup code was just used. Create a new one on Sentinel\'s Integrations page.');
-        }
+        // Use the code and save, all in one transaction: the code rows are locked, checked again (still this code, still
+        // valid), cleared, and the settings written; any failure rolls everything back, code included.
+        $db = App::db();
         $byId = (int) $s->fresh('sso_setup_by');
         $by = App::users()->find($byId);
         $changed = [];
-        if ($s->fresh('sso_entra_tenant') !== $tenant && $s->fresh('sso_entra_tenant') !== '') {
-            $changed['links_cleared'] = (int) App::db()->exec('UPDATE users SET sso_subject = NULL WHERE sso_subject IS NOT NULL');
-        }
-        foreach (['sso_entra_tenant' => $tenant, 'sso_entra_client' => $client] as $name => $value) {
-            if ($s->fresh($name) !== $value) {
-                $s->set($name, $value);
-                $changed[$name] = $value;
+        $db->beginTransaction();
+        try {
+            $rows = $db->query("SELECT name, value FROM settings WHERE name IN ('sso_setup_code', 'sso_setup_expires') FOR UPDATE")->fetchAll(\PDO::FETCH_KEY_PAIR);
+            if (!hash_equals((string) ($rows['sso_setup_code'] ?? ''), $hash) || (int) ($rows['sso_setup_expires'] ?? 0) <= time()) {
+                $db->rollBack();
+                return $fail(403, 'raced', 'That setup code was just used. Create a new one on Sentinel\'s Integrations page.');
             }
+            $s->set('sso_setup_code', '');
+            if ($current !== '' && $current !== $tenant) {
+                $changed['links_cleared'] = self::clearAllLinks();
+            }
+            foreach (['sso_entra_tenant' => $tenant, 'sso_entra_client' => $client] as $name => $value) {
+                if ($s->fresh($name) !== $value) {
+                    $s->set($name, $value);
+                    $changed[$name] = $value;
+                }
+            }
+            $s->setSecret('sso_entra_secret', $secret);
+            $s->set('sso_entra_secret_expires', $expires);
+            $s->set('sso_secret_warned', '');
+            $db->commit();
+        } catch (\Throwable $ex) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            error_log('[msp-sentinel] SSO setup: ' . $ex->getMessage());
+            return self::json(500, false, 'Sentinel could not save the app details (see its PHP error log). Nothing was changed; run the script again with the same code.');
         }
-        $s->setSecret('sso_entra_secret', $secret);
-        $s->set('sso_entra_secret_expires', $expires);
-        $s->set('sso_secret_warned', '');
         $changed['sso_entra_secret'] = 'changed (setup script)';
         $changed['secret_expires'] = $expires;
         $limiter->clear($bucket);
@@ -144,6 +187,16 @@ final class SsoSetup
         $on = $s->fresh('sso_entra_enabled') === '1';
         return self::json(200, true, $on ? 'Saved. Sign in with Microsoft is on and now uses this app.'
             : 'Saved. In Sentinel, open Administration > Integrations and turn on "Sign in with Microsoft".');
+    }
+
+    /** The Admin who made the code may still change sign-in: active, every permission, every client. */
+    private static function issuerOk(int $userId): bool
+    {
+        $stmt = App::db()->prepare('SELECT u.is_active, u.all_clients, r.* FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = :id');
+        $stmt->execute(['id' => $userId]);
+        $row = $stmt->fetch();
+        return $row !== false && (int) $row['is_active'] === 1 && (int) $row['all_clients'] === 1
+            && Permissions::isComplete(App::roles()->permissionsOf($row));
     }
 
     private static function json(int $status, bool $ok, string $message): Response

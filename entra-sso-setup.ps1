@@ -6,7 +6,7 @@
   In Sentinel, open Administration > Integrations > Sign in with Microsoft and click "Create setup code". Then, on any
   Windows PC, in PowerShell (no admin rights on the PC needed):
 
-    & ([scriptblock]::Create((Invoke-RestMethod https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/entra-sso-setup.ps1))) -Server https://sentinel.example
+    [Net.ServicePointManager]::SecurityProtocol = 'Tls12'; & ([scriptblock]::Create((Invoke-RestMethod https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/entra-sso-setup.ps1))) -Server https://sentinel.example
 
   What it does:
   - installs the Microsoft Graph PowerShell authentication module for you (current user) if it is missing;
@@ -68,14 +68,15 @@ $connected = $false
 $newKeyId = $null
 $appObjectId = $null
 try {
-    # Sentinel's address: https only, no path (the redirect address is built from it, exactly as Sentinel does).
-    if ($Server -notmatch '^https://[^\s/]+$') {
-        $Server = (Read-Host "Sentinel's address (https://..., as shown on its Integrations page)").Trim()
+    # Sentinel's address (its app.public_url, a sub-folder allowed): the redirect address is built from it exactly as
+    # Sentinel does, and Sentinel refuses the details if they differ.
+    $Server = $Server.Trim().TrimEnd('/')
+    if ($Server -notmatch '^https://') {
+        $Server = (Read-Host "Sentinel's address (https://..., as shown on its Integrations page)").Trim().TrimEnd('/')
     }
-    $Server = $Server.TrimEnd('/')
-    if ($Server -notmatch '^https://[A-Za-z0-9.-]+(:\d{1,5})?$') { Fail 'The Sentinel address must look like https://sentinel.example (no path).' }
+    if ($Server -notmatch '^https://[A-Za-z0-9.-]+(:\d{1,5})?(/[A-Za-z0-9._~/-]*)?$') { Fail 'The Sentinel address must look like https://sentinel.example (as shown on its Integrations page).' }
     $Redirect = "$Server/login/sso/callback"
-    $HostName = ([Uri]$Server).Authority.ToLowerInvariant()
+    $HostName = (([Uri]$Server).Authority + ([Uri]$Server).AbsolutePath.TrimEnd('/')).ToLowerInvariant()
     $Tag = "msp-sentinel-sso:$HostName"
 
     $secure = Read-Host 'One-time setup code from Sentinel' -AsSecureString
@@ -97,7 +98,13 @@ try {
     $connected = $true
     $tenant = (Get-MgContext).TenantId
     if (-not $tenant) { Fail 'Microsoft did not say which tenant you signed in to.' }
-    Say "Signed in to tenant $tenant"
+    # Show which tenant this is and ask, so an MSP signed in to the wrong one stops here (Sentinel refuses another
+    # tenant too, unless the setup code allows switching).
+    $orgName = ''
+    try { $org = Get-First '/organization?$select=displayName'; if ($null -ne $org) { $orgName = [string]$org['displayName'] } } catch { $orgName = '' }
+    Say "Signed in to tenant $tenant $(if ($orgName) { "($orgName)" })"
+    $ok = Read-Host "Create or update the MSP Sentinel app in this tenant? (y/N)"
+    if ($ok -notmatch '^(y|yes)$') { Fail 'Stopped: nothing was changed in Microsoft Entra or Sentinel.' }
 
     # The app: the one this script made before for this Sentinel (by its tag), else a new one.
     $app = Get-First ('/applications?$filter=' + (Enc "tags/any(t:t eq '$Tag')") + '&$select=id,appId,displayName,web,optionalClaims')
@@ -113,8 +120,14 @@ try {
         }
     } else {
         Say "Updating the existing app registration ""$($app['displayName'])"""
-        $uris = @($app['web']['redirectUris'])
+        # PATCH replaces the whole "web" object: send back what is there (logout and home page addresses, implicit grant
+        # settings), with Sentinel's redirect address added.
+        $web = $app['web']
+        if ($null -eq $web) { $web = @{} }
+        $uris = @($web['redirectUris'] | Where-Object { $_ })
         if ($uris -notcontains $Redirect) { $uris += $Redirect }
+        $web['redirectUris'] = @($uris)
+        if ($web.ContainsKey('redirectUriSettings')) { $web.Remove('redirectUriSettings') }  # read-only, follows redirectUris
         # Keep any optional claims someone added; make sure auth_time is among the ID token's.
         $claims = $app['optionalClaims']
         if ($null -eq $claims) { $claims = @{ idToken = @(); accessToken = @(); saml2Token = @() } }
@@ -122,7 +135,7 @@ try {
         if (-not ($idClaims | Where-Object { $_['name'] -eq 'auth_time' })) { $idClaims += @{ name = 'auth_time'; essential = $false } }
         $claims['idToken'] = @($idClaims)
         Invoke-Graph 'PATCH' "/applications/$($app['id'])" @{
-            web                    = @{ redirectUris = @($uris) }
+            web                    = $web
             requiredResourceAccess = @(@{ resourceAppId = $GraphAppId; resourceAccess = $SignInScopes })
             optionalClaims         = $claims
         } | Out-Null
@@ -133,7 +146,15 @@ try {
     # Its service principal (the app's presence in this tenant), so users can sign in.
     $sp = Get-First ('/servicePrincipals?$filter=' + (Enc "appId eq '$clientId'") + '&$select=id')
     if ($null -eq $sp) {
-        $sp = Invoke-Graph 'POST' '/servicePrincipals' @{ appId = $clientId; tags = @('WindowsAzureActiveDirectoryIntegratedApp') }
+        # A brand-new app takes a few seconds to reach every Microsoft server: retry for about 30 seconds.
+        for ($try = 1; $null -eq $sp; $try++) {
+            try {
+                $sp = Invoke-Graph 'POST' '/servicePrincipals' @{ appId = $clientId; tags = @('WindowsAzureActiveDirectoryIntegratedApp') }
+            } catch {
+                if ($try -ge 6) { throw }
+                Start-Sleep -Seconds (2 * $try)
+            }
+        }
     }
 
     # Organisation-wide consent for the sign-in permissions only (otherwise each user is asked, or blocked by policy).
@@ -155,7 +176,8 @@ try {
     $pw = Invoke-Graph 'POST' "/applications/$appObjectId/addPassword" @{ passwordCredential = @{ displayName = "$SecretPrefix $((Get-Date).ToString('yyyy-MM-dd'))"; endDateTime = $until.ToString('o') } }
     $newKeyId = $pw['keyId']
     $secret = $pw['secretText']
-    $expires = ([datetime]$pw['endDateTime']).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+    # Invariant culture: some regional settings would otherwise change the time separator.
+    $expires = ([datetime]$pw['endDateTime']).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ', [Globalization.CultureInfo]::InvariantCulture)
 
     # Hand it to Sentinel with the setup code. Microsoft may take a minute to accept a new secret; Sentinel only stores it.
     Say 'Sending the app details to Sentinel'

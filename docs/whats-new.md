@@ -2,6 +2,14 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.45.2 (2026-11-24): Windows agent installer fix
+
+- **The Windows installer runs again.** `install-agent.ps1` stopped with a parse error ("Unexpected token 'PHP'")
+  before it did anything, because one line of the php.ini it writes left a string unclosed. Nothing was installed or
+  changed by the failed run; run the same command again.
+- The test suite now checks the quoting and brackets of every PowerShell script, so a script that doesn't parse
+  can't ship again.
+
 ### 1.45.1 (2026-11-24): ITFlow tag filter fixes from review
 
 - **No mass archive.** The sync also stops, changing nothing, when no client the key can see has the tag, or when

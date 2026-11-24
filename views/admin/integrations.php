@@ -274,7 +274,7 @@ $n = $ninja;
         <div class="alert alert-info" role="status">
             <p class="mb-2"><strong><?= e(__('Setup code (shown once, valid for 30 minutes):')) ?></strong> <code class="fs-6 user-select-all" data-testid="sso-setup-code"><?= e($so['setup']['code']) ?></code></p>
             <p class="small mb-1"><?= e(__('On any Windows PC, in PowerShell, run this. Sign in at Microsoft as an Entra admin (Application Administrator or Global Administrator) when asked, then enter the setup code:')) ?></p>
-            <pre class="small mb-2 user-select-all text-wrap"><code>&amp; ([scriptblock]::Create((Invoke-RestMethod https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/entra-sso-setup.ps1))) -Server <?= e($so['public_url']) ?></code></pre>
+            <pre class="small mb-2 user-select-all text-wrap"><code>[Net.ServicePointManager]::SecurityProtocol = 'Tls12'; &amp; ([scriptblock]::Create((Invoke-RestMethod https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/entra-sso-setup.ps1))) -Server <?= e($so['public_url']) ?></code></pre>
             <p class="small mb-0"><?= e(__('It installs the Microsoft Graph PowerShell module if needed, creates (or updates) the "MSP Sentinel" app registration in your tenant, grants it sign-in permissions only, adds a 12-month client secret and sends the details here. The secret is never shown. Then turn on the switch below.')) ?></p>
         </div>
         <?php endif; ?>
@@ -287,6 +287,11 @@ $n = $ninja;
                     <input class="form-control form-control-sm sn-w-20" type="password" id="sso-setup-pw" name="my_password" required autocomplete="current-password"></div>
                 <button class="btn btn-outline-primary btn-sm" type="submit"<?= $so['public_url'] === '' ? ' disabled' : '' ?>><i class="bi bi-magic me-1" aria-hidden="true"></i><?= e(__('Create setup code')) ?></button>
             </div>
+            <?php if ($so['tenant'] !== ''): ?>
+            <div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="sso-setup-tenant" name="new_tenant" value="1">
+                <label class="form-check-label small" for="sso-setup-tenant"><?= e(__('Switch to another Microsoft tenant (every user\'s Microsoft link is cleared, and password sign-in is turned back on for them)')) ?></label></div>
+            <div class="form-text"><?= e(__('Without this, the script must sign in to the tenant Sentinel uses now ({tenant}), so a run in the wrong tenant changes nothing.', ['tenant' => $so['tenant']])) ?></div>
+            <?php endif; ?>
             <?php if ($so['public_url'] === ''): ?><div class="form-text"><?= e(__('Set app.public_url in the config file first.')) ?></div><?php endif; ?>
         </form>
         <details class="small mb-3">

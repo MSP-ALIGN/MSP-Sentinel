@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.46.0](https://img.shields.io/badge/version-1.46.0-ff5a1f?style=flat-square)
+![Version 1.46.1](https://img.shields.io/badge/version-1.46.1-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,20 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.46.1 (2026-11-24): Sign in with Microsoft setup fixes from review
+
+- **No lock-out from the wrong tenant.** Once a tenant is saved, the setup script's details must come from that same
+  tenant (409 otherwise), so a run signed in to the wrong one changes nothing. Switching needs **Switch to another
+  Microsoft tenant** ticked for the code. Switching tenants, here or by hand, now also turns password sign-in back on
+  for everyone whose Microsoft link it clears.
+- **All or nothing.** Using the code and saving the details is one transaction. The code only works while the Admin
+  who made it is still an active Admin with every client. Wrong details sent with the right code no longer count
+  toward the address's rate limit.
+- **The script.** The command shown works on Windows PowerShell 5.1 (TLS 1.2 first). The script shows the tenant and
+  asks before changing it, keeps the app's other web settings, waits for a new app to be ready, accepts a Sentinel
+  address with a sub-folder, and sends the expiry date in a format every regional setting gets right.
+- Expiry reminders also come while sign-in is switched off.
+
 ### 1.46.0 (2026-11-24): Sign in with Microsoft sets itself up
 
 - **No more app registration by hand.** Under **Administration → Integrations → Sign in with Microsoft**, enter your
@@ -139,14 +153,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
   Npcap, and waits up to 30 minutes for you to click through. An nmap that is already installed is used as it is.
 - **Unattended installs.** Run through an RMM tool as SYSTEM (no desktop), the installer stops at once when nmap is
   missing and says to install nmap first, instead of waiting for a window nobody can see.
-
-### 1.45.2 (2026-11-24): Windows agent installer fix
-
-- **The Windows installer runs again.** `install-agent.ps1` stopped with a parse error ("Unexpected token 'PHP'")
-  before it did anything, because one line of the php.ini it writes left a string unclosed. Nothing was installed or
-  changed by the failed run; run the same command again.
-- The test suite now checks the quoting and brackets of every PowerShell script, so a script that doesn't parse
-  can't ship again.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

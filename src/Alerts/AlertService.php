@@ -143,7 +143,7 @@ final class AlertService
     public function ssoSecretExpiring(Settings $settings): void
     {
         $days = \Sentinel\Auth\SsoSetup::secretDaysLeft();
-        if ($days === null || $days > 30 || $settings->get('sso_entra_enabled') !== '1') {
+        if ($days === null || $days > 30 || $settings->getSecret('sso_entra_secret') === '') {
             return;
         }
         $stage = $settings->get('sso_entra_secret_expires') . '|' . ($days < 0 ? 'expired' : ($days <= 7 ? '7' : '30'));

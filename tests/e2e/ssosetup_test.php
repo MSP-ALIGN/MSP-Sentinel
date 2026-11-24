@@ -24,9 +24,9 @@ $receive = static function (TestContext $ctx, array $body): array {
     return [$status, (array) json_decode($raw, true)];
 };
 /** A setup code, created on the Integrations page by the admin (with their password). */
-$newCode = static function (TestContext $ctx): string {
+$newCode = static function (TestContext $ctx, bool $newTenant = false): string {
     $admin = $ctx->login('admin', 'Admin-Pass-0001!');
-    $admin->submit('/admin/integrations', '/admin/integrations/sso/setup-code', ['my_password' => 'Admin-Pass-0001!']);
+    $admin->submit('/admin/integrations', '/admin/integrations/sso/setup-code', ['my_password' => 'Admin-Pass-0001!'] + ($newTenant ? ['new_tenant' => '1'] : []));
     $page = $admin->get('/admin/integrations')->body;
     Assert::true(preg_match('/data-testid="sso-setup-code">(SSO(?:-[A-Z2-9]{5}){4})</', $page, $m) === 1, 'the code is shown');
     return $m[1];
@@ -69,7 +69,13 @@ return [
         $before = ['sso_entra_tenant' => $s->fresh('sso_entra_tenant'), 'sso_entra_client' => $s->fresh('sso_entra_client'), 'sso_entra_enabled' => $s->fresh('sso_entra_enabled')];
         $beforeSecret = $s->getSecret('sso_entra_secret');
         $s->set('sso_entra_enabled', '0');
+        $s->set('sso_entra_tenant', ''); // a first setup: any tenant
         $code = $newCode($ctx);
+        // Only POST, with the usual safety headers.
+        $get = @file_get_contents($ctx->baseUrl . '/sso-setup/v1/receive', false, stream_context_create(['http' => ['ignore_errors' => true]]));
+        Assert::contains('404', (string) ($http_response_header[0] ?? ''), 'GET is not found');
+        $raw = @file_get_contents($ctx->baseUrl . '/sso-setup/v1/receive', false, stream_context_create(['http' => ['method' => 'POST', 'header' => "Content-Type: application/json\r\n", 'content' => '{}', 'ignore_errors' => true]]));
+        Assert::true(preg_grep('/^Cache-Control:.*no-store/i', $http_response_header) !== [] && preg_grep('/^Content-Security-Policy:/i', $http_response_header) !== [], 'no-store and CSP headers');
         // Wrong, malformed or missing codes are refused.
         Assert::same(403, $receive($ctx, $body('SSO-AAAAA-AAAAA-AAAAA-AAAAA'))[0], 'wrong code');
         Assert::same(403, $receive($ctx, $body('not-a-code'))[0], 'malformed code');
@@ -80,8 +86,12 @@ return [
         [$st, $ans] = $receive($ctx, $body($code, ['redirect_uri' => 'https://other.example/login/sso/callback']));
         Assert::same(422, $st, 'another redirect address');
         Assert::contains('Sentinel expects https://sentinel.example/login/sso/callback', (string) ($ans['message'] ?? ''));
+        // Wrong details sent with the right code don't count toward the address's limit (only wrong codes do).
+        for ($i = 0; $i < 12; $i++) {
+            $receive($ctx, $body($code, ['client_id' => 'bad']));
+        }
+        App::limiter()->clear('sso-setup:' . \Sentinel\Auth\Auth::ipBucketKey('127.0.0.1')); // the three wrong codes above
         // The right details: saved, the secret encrypted, the expiry kept, sign-in still off.
-        $ctx->clearThrottle();
         [$st, $ans] = $receive($ctx, $body($code));
         Assert::same(200, $st, json_encode($ans));
         Assert::true(($ans['ok'] ?? false) === true, 'ok');
@@ -98,11 +108,36 @@ return [
         // The card shows the expiry; a renewal into another tenant clears every Microsoft link.
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         Assert::contains('The client secret expires on ' . gmdate('Y-m-d', time() + 365 * 86400), $admin->get('/admin/integrations')->body);
-        $ctx->db->exec("UPDATE users SET sso_subject = '" . SETUP_TENANT . ":eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' WHERE username = 'setuptech'");
+        $ctx->db->exec("UPDATE users SET sso_subject = '" . SETUP_TENANT . ":eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', password_login = 0 WHERE username = 'setuptech'");
+        // A renewal in the same tenant keeps every link.
         $code = $newCode($ctx);
+        Assert::same(200, $receive($ctx, $body($code, ['client_secret' => 'Renewed~Secret-0123456789']))[0]);
+        Assert::same(1, (int) $ctx->db->query('SELECT COUNT(*) FROM users WHERE sso_subject IS NOT NULL')->fetchColumn(), 'same tenant: links kept');
+        // Another tenant (signed in to the wrong one?) is refused, the code kept, unless the code allows switching.
+        $code = $newCode($ctx);
+        [$st, $ans] = $receive($ctx, $body($code, ['tenant_id' => 'ffffffff-ffff-4fff-8fff-ffffffffffff']));
+        Assert::same(409, $st, 'another tenant refused');
+        Assert::contains('Sentinel uses tenant ' . SETUP_TENANT, (string) $ans['message']);
+        Assert::same(SETUP_TENANT, $s->fresh('sso_entra_tenant'));
+        Assert::same(1, (int) $ctx->db->query('SELECT COUNT(*) FROM users WHERE sso_subject IS NOT NULL')->fetchColumn(), 'refused: links kept');
+        $code = $newCode($ctx, true);
         [$st] = $receive($ctx, $body($code, ['tenant_id' => 'ffffffff-ffff-4fff-8fff-ffffffffffff']));
         Assert::same(200, $st);
-        Assert::same(0, (int) $ctx->db->query('SELECT COUNT(*) FROM users WHERE sso_subject IS NOT NULL')->fetchColumn(), 'another tenant clears the links');
+        Assert::same(0, (int) $ctx->db->query('SELECT COUNT(*) FROM users WHERE sso_subject IS NOT NULL')->fetchColumn(), 'switching tenant clears the links');
+        Assert::same(1, (int) $ctx->db->query("SELECT password_login FROM users WHERE username = 'setuptech'")->fetchColumn(), 'and turns password sign-in back on (no lock-out)');
+        // A code whose admin was disabled meanwhile is refused.
+        $ctx->createUser('setupadmin2', 'admin', 'Setupadmin2-Pass-1!');
+        $a2 = $ctx->login('setupadmin2', 'Setupadmin2-Pass-1!');
+        $a2->submit('/admin/integrations', '/admin/integrations/sso/setup-code', ['my_password' => 'Setupadmin2-Pass-1!']);
+        preg_match('/data-testid="sso-setup-code">(SSO(?:-[A-Z2-9]{5}){4})</', $a2->get('/admin/integrations')->body, $m);
+        $ctx->db->exec("UPDATE users SET is_active = 0 WHERE username = 'setupadmin2'");
+        Assert::same(403, $receive($ctx, $body($m[1] ?? 'x', ['tenant_id' => 'ffffffff-ffff-4fff-8fff-ffffffffffff']))[0], 'the code\'s admin is gone');
+        // Expiry dates that make no sense are stored as unknown (no wrong reminders).
+        foreach (['garbage', gmdate('Y-m-d\TH:i:s\Z', time() - 86400), gmdate('Y-m-d\TH:i:s\Z', time() + 900 * 86400)] as $bad) {
+            $code = $newCode($ctx);
+            Assert::same(200, $receive($ctx, $body($code, ['tenant_id' => 'ffffffff-ffff-4fff-8fff-ffffffffffff', 'secret_expires' => $bad]))[0]);
+            Assert::same('', $s->fresh('sso_entra_secret_expires'), 'unknown expiry for ' . $bad);
+        }
         // An expired code is refused.
         $code = $newCode($ctx);
         $s->set('sso_setup_expires', (string) (time() - 1));
@@ -130,6 +165,8 @@ return [
     'SSO setup (1.46): admins are reminded 30 and 7 days before the secret expires, and when it has' => function (TestContext $ctx): void {
         $s = App::settings();
         $enabled = $s->fresh('sso_entra_enabled');
+        $secretBefore = $s->getSecret('sso_entra_secret');
+        $s->setSecret('sso_entra_secret', 'reminder-test-secret-0123');
         $count = static fn (): int => (int) $ctx->db->query("SELECT COUNT(*) FROM notifications WHERE kind = 'sso_secret'")->fetchColumn();
         $s->set('sso_entra_enabled', '1');
         $s->set('sso_secret_warned', '');
@@ -152,7 +189,14 @@ return [
         App::alerts()->ssoSecretExpiring($s);
         Assert::true($count() > $second, 'told when it expired');
         Assert::contains('stopped working', (string) $ctx->db->query("SELECT title FROM notifications WHERE kind = 'sso_secret' ORDER BY id DESC LIMIT 1")->fetchColumn());
+        // Reminders come while the switch is off too (a secret saved but not yet in use).
+        $s->set('sso_entra_enabled', '0');
+        $s->set('sso_secret_warned', '');
+        $before = $count();
+        App::alerts()->ssoSecretExpiring($s);
+        Assert::true($count() > $before, 'reminded while sign-in is off');
         $s->set('sso_entra_enabled', $enabled);
+        $s->setSecret('sso_entra_secret', $secretBefore);
         $s->set('sso_entra_secret_expires', '');
         $s->set('sso_secret_warned', '');
     },

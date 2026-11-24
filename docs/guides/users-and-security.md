@@ -79,7 +79,8 @@ sign-in provider, so Sentinel signs in against the same Microsoft tenant your te
 3. On any Windows PC, run the command in PowerShell (no admin rights on the PC needed). It installs the Microsoft
    Graph PowerShell authentication module for you if it is missing, and opens a Microsoft sign-in: use an Entra admin
    who can register apps and grant consent (Application Administrator, Cloud Application Administrator or Global
-   Administrator). Then enter the setup code.
+   Administrator). It shows which tenant you signed in to and asks before changing anything. Then enter the setup
+   code.
 4. The script creates the app registration **MSP Sentinel (your address)** in your tenant: single tenant,
    Sentinel's redirect address, sign-in permissions only (openid, profile, email, granted for the organisation), the
    optional claim **auth_time**, and a client secret valid for 12 months. It sends the IDs and the secret straight to
@@ -87,8 +88,13 @@ sign-in provider, so Sentinel signs in against the same Microsoft tenant your te
 5. Back in Sentinel, tick **Show "Sign in with Microsoft"** and save. Recommended: in Entra Conditional Access,
    require MFA for this app.
 
+**Another tenant.** Once a tenant is saved, the script's details must come from that same tenant, so a run signed
+in to the wrong one (common for an MSP with several) changes nothing. To really switch tenants, tick **Switch to
+another Microsoft tenant** when creating the code: every user's Microsoft link is cleared, and password sign-in is
+turned back on for anyone who had it off, so nobody is locked out.
+
 **Renewing the secret.** The card shows when the secret expires, and Sentinel reminds admins 30 days and 7 days
-before (in-app and by email) and when it has expired. Create a new setup code and run the same command: it finds the
+before (in-app and by email) and when it has expired, also while sign-in is switched off. Create a new setup code and run the same command: it finds the
 app it made before, adds a new secret, sends it to Sentinel, and then removes its older secrets. Password sign-in
 keeps working throughout.
 

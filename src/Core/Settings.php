@@ -126,6 +126,7 @@ final class Settings
         'sso_setup_code' => '',
         'sso_setup_expires' => '',
         'sso_setup_by' => '',
+        'sso_setup_new_tenant' => '0',
         'sso_secret_warned' => '',
         'breach_last_run' => '',
         'breach_last_ok_run' => '',
