@@ -52,7 +52,7 @@ $n = $ninja;
                 <label class="form-check-label" for="itflow-tag-filter"><?= e(__('Only sync ITFlow clients with this tag:')) ?></label>
                 <label class="visually-hidden" for="itflow-tag-name"><?= e(__('ITFlow tag name')) ?></label>
                 <input class="form-control form-control-sm d-inline-block sn-w-20 ms-1" id="itflow-tag-name" name="tag_name" value="<?= e($it['tag_name']) ?>" maxlength="100">
-                <div class="form-text"><?= e(__('Uses ITFlow\'s client tags (any case). Clients without the tag are not added, and ones already here are archived (restored when the tag is added back). If the tag can\'t be read, or no client tag has this name, the sync stops and nothing changes.')) ?>
+                <div class="form-text"><?= e(__('Uses ITFlow\'s client tags (any case). Tag the clients in ITFlow first: clients without the tag are not added, and ones already here are archived (restored when the tag is added back). If the tag can\'t be read, no client tag has this name, or no client has it, the sync stops and nothing changes.')) ?>
                     <?php if ($it['sync_off'] > 0): ?><?= e(__('{n} client(s) are set to "Don\'t sync with ITFlow" on their Edit page.', ['n' => $it['sync_off']])) ?><?php endif; ?></div></div>
             <div class="form-check"><input class="form-check-input" type="checkbox" id="itflow-tickets" name="tickets" value="1" <?= $it['tickets'] ? 'checked' : '' ?>>
                 <label class="form-check-label" for="itflow-tickets"><?= e(__('Open ITFlow tickets for findings')) ?></label>
