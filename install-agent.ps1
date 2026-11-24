@@ -156,7 +156,7 @@ function Install-Php {
     # Only what the agent needs; no php.ini is read from anywhere else (the service and the task pass -c).
     @(
         '; MSP Sentinel agent (written by install-agent.ps1)'
-        "extension_dir = `"$PhpDir\ext`"
+        "extension_dir = `"$PhpDir\ext`""
         'extension = curl'
         'extension = mbstring'
         'extension = openssl'

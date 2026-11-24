@@ -362,6 +362,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.45.2',
+            'date' => '2026-11-24',
+            'items' => [
+                'Windows agent: the PowerShell installer stopped with a parse error ("Unexpected token \'PHP\'") before doing anything, because of an unclosed string. Fixed; the test suite now checks every PowerShell script\'s quoting.',
+            ],
+        ],
+        [
             'version' => '1.45.1',
             'date' => '2026-11-24',
             'items' => [
