@@ -19,7 +19,7 @@ server that already runs Docker). It does the same internal scans as the applian
      publishes images. Check its signature if you like (see "Good to know").
    - **Build it yourself** from an unpacked release: `docker build -f docker/agent/Dockerfile -t msp-sentinel-agent:1.36.0 .`
      then put `SENTINEL_AGENT_IMAGE=msp-sentinel-agent` in a `.env` file next to the compose file.
-4. Enrol once. Paste the enrolment code when it waits for input, then press Enter:
+4. Enrol once. Paste the enrolment code when it asks (it isn't shown on screen), then press Enter:
 
    ```sh
    SENTINEL_SERVER=https://sentinel.msp.example docker compose --profile enrol run --rm enrol
@@ -45,6 +45,7 @@ you. **Update all agents** in Sentinel skips Docker agents and says how many nee
 
 - **Host network is required** for internal scans: the agent sees the LAN like a normal machine (device discovery, MAC
   addresses, LLMNR name requests). The compose file sets it.
+- **`SENTINEL_SERVER` is only for enrolling.** The other commands (`up`, `pull`, `logs`) don't need it.
 - **Unprivileged and read-only:** the container runs as user `sentinel-agent` (uid 10001) with every Linux capability
   dropped, a read-only file system and no way to gain privileges. Its config volume is mounted read-only; only the
   state volume is writable. No update helper and nothing as root.
@@ -55,6 +56,18 @@ you. **Update all agents** in Sentinel skips Docker agents and says how many nee
 - **Status:** `docker compose run --rm agent status` checks the connection and prints the agent's key fingerprint.
   Logs: `docker compose logs -f agent`.
 - **Signed images** (when published from GitHub): `cosign verify ghcr.io/msp-align/msp-sentinel-agent:VERSION
-  --certificate-identity-regexp 'https://github.com/MSP-ALIGN/MSP-Sentinel/.github/workflows/agent-image.yml@refs/tags/v.*'
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com`.
+  --certificate-identity-regexp '^https://github\.com/MSP-ALIGN/MSP-Sentinel/\.github/workflows/agent-image\.yml@refs/tags/v[0-9.]+$'
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com`. (For the maintainer: a newly published
+  package on GitHub's registry starts private; make it public so sites can pull it.)
+- **Sentinel with a private certificate authority:** copy its CA certificate into the config volume, then add `--ca`
+  when enrolling:
+
+  ```sh
+  docker compose --profile enrol run --rm -v "$PWD/ca.pem:/ca-in.pem:ro" --entrypoint cp enrol /ca-in.pem /etc/sentinel-agent/ca.pem
+  SENTINEL_SERVER=https://sentinel.msp.example docker compose --profile enrol run --rm enrol \
+    enrol --server https://sentinel.msp.example --code-stdin --config /etc/sentinel-agent/agent.json \
+    --state-dir /var/lib/sentinel-agent --ca /etc/sentinel-agent/ca.pem
+  ```
+- **Revoking:** when Sentinel revokes the agent, the container stops and stays stopped. Remove it with
+  `docker compose down -v` (`-v` also deletes its volumes).
 - Active Directory checks, engagements and everything else on the Agents page work as with the appliance agent.

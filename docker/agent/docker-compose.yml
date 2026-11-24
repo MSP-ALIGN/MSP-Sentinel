@@ -1,7 +1,8 @@
 # MSP Sentinel agent in Docker (1.36). See docs/guides/docker-agent.md.
 #
-# 1. Enrol once (paste the enrolment code from the client's Agents page, then press Enter):
+# 1. Enrol once (paste the enrolment code from the client's Agents page when asked; it isn't shown):
 #      SENTINEL_SERVER=https://sentinel.msp.example docker compose --profile enrol run --rm enrol
+#    (SENTINEL_SERVER is only needed for this step; it may also go in a .env file next to this one.)
 # 2. Start it:   docker compose up -d
 # 3. Update it:  set SENTINEL_AGENT_VERSION to the new version, then  docker compose pull && docker compose up -d
 #
@@ -10,7 +11,7 @@
 name: sentinel-agent
 
 x-agent: &agent
-  image: ${SENTINEL_AGENT_IMAGE:-ghcr.io/msp-align/msp-sentinel-agent}:${SENTINEL_AGENT_VERSION:-1.36.0}
+  image: ${SENTINEL_AGENT_IMAGE:-ghcr.io/msp-align/msp-sentinel-agent}:${SENTINEL_AGENT_VERSION:-1.36.1}
   network_mode: host
   read_only: true
   cap_drop: [ALL]
@@ -20,7 +21,7 @@ x-agent: &agent
 services:
   agent:
     <<: *agent
-    restart: unless-stopped
+    restart: on-failure   # a revoked agent exits 0 and stays stopped; a restart Sentinel asks for exits 75 and comes back
     volumes:
       - config:/etc/sentinel-agent:ro   # the agent reads its config but never changes it
       - state:/var/lib/sentinel-agent
@@ -30,7 +31,7 @@ services:
     profiles: ["enrol"]
     restart: "no"
     stdin_open: true
-    command: ["enrol", "--server", "${SENTINEL_SERVER:?Set SENTINEL_SERVER to your Sentinel address}", "--code-stdin",
+    command: ["enrol", "--server", "${SENTINEL_SERVER:-}", "--code-stdin",
               "--config", "/etc/sentinel-agent/agent.json", "--state-dir", "/var/lib/sentinel-agent"]
     volumes:
       - config:/etc/sentinel-agent

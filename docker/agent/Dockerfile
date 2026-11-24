@@ -19,7 +19,9 @@ RUN apt-get update \
  && docker-php-ext-install sockets \
  && groupadd --system --gid 10001 sentinel-agent \
  && useradd --system --uid 10001 --gid 10001 --home-dir /var/lib/sentinel-agent --shell /usr/sbin/nologin sentinel-agent \
- && install -d -o sentinel-agent -g sentinel-agent -m 0700 /etc/sentinel-agent /var/lib/sentinel-agent
+ && install -d -o sentinel-agent -g sentinel-agent -m 0700 /etc/sentinel-agent /var/lib/sentinel-agent \
+ && echo 'memory_limit=-1' > "$PHP_INI_DIR/conf.d/sentinel-agent.ini"
+# (No memory limit, as Debian's PHP command line has on the appliance: large scans parse nmap's output in memory.)
 
 COPY --chown=root:root VERSION /opt/sentinel-agent/VERSION
 COPY --chown=root:root bin/sentinel-agent.php /opt/sentinel-agent/bin/sentinel-agent.php

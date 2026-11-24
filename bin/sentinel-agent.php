@@ -94,7 +94,22 @@ switch ($command) {
         exit(0);
     case 'enrol':
         $server = is_string($opts['server'] ?? null) ? rtrim($opts['server'], '/') : '';
-        $code = is_string($opts['code'] ?? null) ? $opts['code'] : (isset($opts['code-stdin']) ? trim((string) fgets(STDIN, 200)) : '');
+        // --code-stdin: piped by the installers, or typed (docker compose run): then it is asked for without echo, so the
+        // one-time code doesn't stay on the screen or in the scrollback (1.36.1). stty is a fixed command, no input.
+        $readCode = static function (): string {
+            $tty = function_exists('posix_isatty') && posix_isatty(STDIN);
+            if ($tty) {
+                fwrite(STDERR, 'Enrolment code (not shown): ');
+                @shell_exec('stty -echo 2>/dev/null');
+            }
+            $line = trim((string) fgets(STDIN, 200));
+            if ($tty) {
+                @shell_exec('stty echo 2>/dev/null');
+                fwrite(STDERR, "\n");
+            }
+            return $line;
+        };
+        $code = is_string($opts['code'] ?? null) ? $opts['code'] : (isset($opts['code-stdin']) ? $readCode() : '');
         if ($server === '' || $code === '') {
             fwrite(STDERR, "Usage: sentinel-agent.php enrol --server https://sentinel.example --code SNE-XXXXX-XXXXX-XXXXX-XXXXX\n");
             exit(2);
@@ -203,7 +218,9 @@ switch ($command) {
                 exit(75); // a restart Sentinel asked for: systemd (Restart=on-failure) starts the agent again
             }
             if ($wait < 0) {
-                exit(3);
+                // Revoked by Sentinel: systemd doesn't restart exit code 3 (RestartPreventExitStatus); Docker's
+                // restart: on-failure doesn't restart exit code 0, so the container stops for good (1.36.1).
+                exit($platform->container() === 'docker' ? 0 : 3);
             }
             if (isset($opts['once'])) {
                 break;

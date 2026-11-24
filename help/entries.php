@@ -354,6 +354,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.36.1',
+            'date' => '2026-11-24',
+            'items' => [
+                'Docker agents: up, pull and logs no longer need SENTINEL_SERVER; a revoked agent stops for good; the enrolment code is hidden while typed. Proxmox LXC without nesting: the agent now starts with the relaxed settings, and the installer checks it started. Smaller fixes to the Proxmox helper and the image workflow.',
+            ],
+        ],
+        [
             'version' => '1.36.0',
             'date' => '2026-11-24',
             'items' => [

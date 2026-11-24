@@ -144,14 +144,19 @@ release_key_and_helper() {
 container_compat() {
   local virt dropin_agent=/etc/systemd/system/sentinel-agent.service.d/container.conf dropin_update=/etc/systemd/system/sentinel-agent-update.service.d/container.conf
   if [ "$dry" -eq 1 ] && [ -n "${SENTINEL_FORCE_VIRT:-}" ]; then virt="$SENTINEL_FORCE_VIRT"; else virt="$(systemd-detect-virt --container 2>/dev/null || true)"; fi
-  case "$virt" in lxc|lxc-libvirt) ;; *) return 0 ;; esac
+  case "$virt" in
+    lxc|lxc-libvirt) ;;
+    *) [ "$dry" -eq 1 ] || rm -f "$dropin_agent" "$dropin_update"; return 0 ;;  # e.g. a container restored as a VM
+  esac
   say "LXC container detected (for example Proxmox)"
   if [ "$dry" -eq 1 ]; then
     echo "  [dry-run] probe systemd sandboxing; if it can't start, write $dropin_agent and $dropin_update"
     return 0
   fi
-  if systemd-run --quiet --wait --collect -p ProtectSystem=strict -p PrivateTmp=yes -p PrivateDevices=yes -p ProtectKernelTunables=yes \
-       -p ProtectControlGroups=yes -p ProtectHome=yes /bin/true >/dev/null 2>&1; then
+  # The probe uses the same namespace-based options as the agent's unit (see install/templates/sentinel-agent.service).
+  if systemd-run --quiet --wait --collect -p ProtectSystem=strict -p ProtectHome=yes -p PrivateTmp=yes -p PrivateDevices=yes \
+       -p ProtectKernelTunables=yes -p ProtectKernelModules=yes -p ProtectKernelLogs=yes -p ProtectControlGroups=yes \
+       -p ProtectProc=invisible -p ProtectHostname=yes -p ProtectClock=yes /bin/true >/dev/null 2>&1; then
     rm -f "$dropin_agent" "$dropin_update"
     echo "  Full service hardening works in this container."
     return 0
@@ -163,7 +168,7 @@ container_compat() {
     install -d -m 0755 "$(dirname "$f")"
     printf '%s\n' '# Written by agent-install.sh: this LXC container has no mount namespaces (nesting off).' '[Service]' \
       'ProtectSystem=no' 'ProtectHome=no' 'PrivateTmp=no' 'PrivateDevices=no' 'ProtectKernelTunables=no' 'ProtectKernelModules=no' \
-      'ProtectControlGroups=no' 'ReadWritePaths=' | write_file "$f" 0644
+      'ProtectKernelLogs=no' 'ProtectControlGroups=no' 'ProtectProc=default' 'ProtectHostname=no' 'ProtectClock=no' 'ReadWritePaths=' | write_file "$f" 0644
   done
 }
 
@@ -174,6 +179,7 @@ if [ "$mode" = uninstall ]; then
   say "Removing the agent"
   run systemctl disable --now sentinel-agent sentinel-agent-update.path || true
   run rm -f /etc/systemd/system/sentinel-agent.service /etc/systemd/system/sentinel-agent-update.service /etc/systemd/system/sentinel-agent-update.path
+  run rm -rf /etc/systemd/system/sentinel-agent.service.d /etc/systemd/system/sentinel-agent-update.service.d
   run systemctl daemon-reload
   run rm -rf "$APP_DIR" "$APP_DIR.old" "$APP_DIR.new" "$APP_DIR.failed" "$CONF_DIR" "$STATE_DIR" /var/lib/sentinel-agent-update /usr/local/lib/sentinel-agent-update
   run userdel sentinel-agent || true
@@ -209,6 +215,10 @@ if [ "$mode" = upgrade ]; then
   container_compat
   release_key_and_helper
   run systemctl start sentinel-agent
+  if [ "$dry" -eq 0 ]; then
+    sleep 3
+    systemctl is-active --quiet sentinel-agent || die "The agent service did not start. See: journalctl -u sentinel-agent -n 50"
+  fi
   say "Done"
   exit 0
 fi
@@ -270,4 +280,8 @@ unit | write_file /etc/systemd/system/sentinel-agent.service 0644
 container_compat
 release_key_and_helper
 run systemctl enable --now sentinel-agent
+if [ "$dry" -eq 0 ]; then
+  sleep 3
+  systemctl is-active --quiet sentinel-agent || die "The agent service did not start. See: journalctl -u sentinel-agent -n 50"
+fi
 say "Done. The agent checks in within a minute; see the client page in Sentinel. Logs: journalctl -u sentinel-agent"

@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.36.0](https://img.shields.io/badge/version-1.36.0-ff5a1f?style=flat-square)
+![Version 1.36.1](https://img.shields.io/badge/version-1.36.1-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,19 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.36.1 (2026-11-24): Docker and Proxmox agents, fixes from review
+
+- **Docker:** `docker compose up`, `pull` and `logs` no longer need `SENTINEL_SERVER` (only enrolling does). A revoked
+  agent's container stops for good instead of restarting. No PHP memory limit (as on the appliance). The enrolment
+  code isn't shown while typed. Diagnostics say NetBIOS isn't heard in Docker. The guide covers a private CA and
+  revoking.
+- **Proxmox / LXC:** without nesting, the relaxed service settings now cover every option that needs a mount namespace
+  (the agent would otherwise not start); the installer checks the service really started; a drop-in left from a
+  container is removed on a VM and on uninstall.
+- **Smaller fixes:** the Proxmox helper checks addresses strictly and refuses `--gw` with DHCP; the image workflow tags
+  `latest` only for full releases and signs once by digest; an update request ended for a Docker agent is audited;
+  `.dockerignore` leaves out `.env` files and bundles.
+
 ### 1.36.0 (2026-11-24): agents in Docker and on Proxmox
 
 - **Docker agent.** `docker/agent/Dockerfile` and `docker/agent/docker-compose.yml` run the on-premises agent as a
@@ -150,23 +163,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
   - `release-sign.php hash --ref` reads files without line-ending conversion and refuses an empty `--ref`;
   - `SHA256SUMS` now covers `AGENT-MANIFEST-SHA256`;
   - the docs say signing off the server is the strongest option.
-
-### 1.35.0 (2026-11-24): agent updates can't run new code as root; signing checks the release hash
-
-- **The agent update helper is frozen.** Linux agents run the root update helper from a root-owned copy in
-  `/usr/local/lib/sentinel-agent-update`, and Windows agents run the SYSTEM update task from `updater\`, both outside
-  the code folder that updates replace. A remote update no longer rewrites the systemd units either. So code from a new
-  release only ever runs as the agent's unprivileged account, even if a release were signed through a compromised
-  Sentinel.
-  - Nothing to do: an agent makes its frozen copy at its next update, from the version it already runs. The installers
-    refresh it on install and on a manual upgrade. On Windows, if the old launcher can't be swapped while it runs,
-    `install-agent.ps1 -Upgrade` once finishes the change.
-  - From now on, changes to the helper or the services arrive only with a manual upgrade; release notes will say so.
-- **Signing a version checks its hash.** On **Administration → System → Sign this version**, paste the expected
-  manifest SHA-256 from the release notes, or compute it on your own computer with
-  `php bin/release-sign.php hash --ref vX.Y.Z` (no key needed). Your browser signs only if the files it is about to
-  sign match; Sentinel checks again and records the hash in the audit log. Each release build now publishes
-  `AGENT-MANIFEST-SHA256` next to `SHA256SUMS`.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

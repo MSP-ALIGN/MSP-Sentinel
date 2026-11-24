@@ -2,6 +2,23 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.35.0 (2026-11-24): agent updates can't run new code as root; signing checks the release hash
+
+- **The agent update helper is frozen.** Linux agents run the root update helper from a root-owned copy in
+  `/usr/local/lib/sentinel-agent-update`, and Windows agents run the SYSTEM update task from `updater\`, both outside
+  the code folder that updates replace. A remote update no longer rewrites the systemd units either. So code from a new
+  release only ever runs as the agent's unprivileged account, even if a release were signed through a compromised
+  Sentinel.
+  - Nothing to do: an agent makes its frozen copy at its next update, from the version it already runs. The installers
+    refresh it on install and on a manual upgrade. On Windows, if the old launcher can't be swapped while it runs,
+    `install-agent.ps1 -Upgrade` once finishes the change.
+  - From now on, changes to the helper or the services arrive only with a manual upgrade; release notes will say so.
+- **Signing a version checks its hash.** On **Administration → System → Sign this version**, paste the expected
+  manifest SHA-256 from the release notes, or compute it on your own computer with
+  `php bin/release-sign.php hash --ref vX.Y.Z` (no key needed). Your browser signs only if the files it is about to
+  sign match; Sentinel checks again and records the hash in the audit log. Each release build now publishes
+  `AGENT-MANIFEST-SHA256` next to `SHA256SUMS`.
+
 ### 1.34.0 (2026-11-24): security audit, search, confirmations, easier workflows and docs
 
 - **Search.** A search box in the top bar finds clients, findings (title, target or CVE), external hosts, internal

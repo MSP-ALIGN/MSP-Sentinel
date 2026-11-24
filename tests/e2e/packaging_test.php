@@ -116,6 +116,15 @@ return [
         Assert::contains('LXC container detected', $lxcOut);
         Assert::contains('probe systemd sandboxing', $lxcOut);
         Assert::true(strpos($lxcOut, 'probe systemd sandboxing') < strpos($lxcOut, 'systemctl enable --now sentinel-agent'), 'probed before the service starts');
+        // Every option of the agent's unit that needs a mount namespace is probed and relaxed together (1.36.1).
+        $installer = (string) file_get_contents($root . '/install/agent-install.sh');
+        $unitText = (string) file_get_contents($root . '/install/templates/sentinel-agent.service');
+        foreach (['ProtectSystem', 'ProtectHome', 'PrivateTmp', 'PrivateDevices', 'ProtectKernelTunables', 'ProtectKernelModules', 'ProtectKernelLogs', 'ProtectControlGroups', 'ProtectProc', 'ProtectHostname', 'ProtectClock'] as $opt) {
+            if (preg_match('/^' . $opt . '=/m', $unitText) === 1) {
+                Assert::contains('-p ' . $opt . '=', $installer, 'probed: ' . $opt);
+                Assert::true(preg_match("/'" . $opt . "=(no|default)'/", $installer) === 1, 'relaxed: ' . $opt);
+            }
+        }
         foreach ([['--server http://sentinel.example --code ' . $code, 'plain http refused'], ['--server "https://x.example/;rm" --code ' . $code, 'odd server value refused'],
                   ['--server https://sentinel.example --code bad', 'bad code refused']] as [$args, $why]) {
             exec('bash ' . escapeshellarg($root . '/install/agent-install.sh') . ' --dry-run --skip-os-check ' . $args . ' 2>&1', $l, $c);
@@ -298,7 +307,7 @@ return [
             Assert::contains($needle, $out);
         }
         Assert::notContains('--code', $out, 'the enrolment code is never passed on the host');
-        foreach (["--bridge 'vmbr0;rm'", '--bridge vmbr0 --vlan 5000', '--bridge vmbr0 --ctid 12', '--bridge vmbr0 --ip 10.0.0.5', "--bridge vmbr0 --hostname 'a b'", '--bridge vmbr0 --memory 64', ''] as $bad) {
+        foreach (["--bridge 'vmbr0;rm'", '--bridge vmbr0 --vlan 5000', '--bridge vmbr0 --ctid 12', '--bridge vmbr0 --ip 10.0.0.5', "--bridge vmbr0 --hostname 'a b'", '--bridge vmbr0 --memory 64', "--bridge vmbr0 --gw '1.2.3.4,bridge=vmbr9'", '--bridge vmbr0 --ip 999.1.1.1/24 --gw 10.0.0.1', ''] as $bad) {
             exec('bash ' . $script . ' --dry-run ' . $bad . ' 2>&1', $o, $c);
             Assert::true($c !== 0, 'refused: ' . ($bad === '' ? '(no bridge)' : $bad));
             $o = [];

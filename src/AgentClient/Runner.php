@@ -255,7 +255,8 @@ final class Runner
                 'disk_free_mb' => $free === false ? null : (int) ($free / 1048576), 'uptime_seconds' => $uptime, 'memory_mb' => $mem, 'load' => $load,
                 'pending_results' => count($this->state->pending()), 'time' => gmdate('Y-m-d\TH:i:s\Z'),
                 'key_fingerprint' => $this->key !== null ? AgentKey::fingerprint($this->key->publicKey()) : '', 'holds_directory' => $this->credentials?->holds() ?? false,
-                'name_listening' => $this->listener === null ? (($this->platform ?? Platform::detect())->namesListener() ? 'off' : 'not on Windows (the system owns those ports)') : 'on (LLMNR UDP 5355, NetBIOS UDP 137)',
+                'name_listening' => $this->listener === null ? (($this->platform ?? Platform::detect())->namesListener() ? 'off' : 'not on Windows (the system owns those ports)')
+                    : ($this->platform?->container() === 'docker' ? 'LLMNR UDP 5355 only (Docker: no permission for NetBIOS UDP 137)' : 'on (LLMNR UDP 5355, NetBIOS UDP 137)'),
             ]);
             ($this->log)('Diagnostics sent.');
         } catch (\Throwable $ex) {

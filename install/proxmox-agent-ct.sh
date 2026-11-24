@@ -51,9 +51,18 @@ done
 [[ "$memory" =~ ^[0-9]{3,6}$ && "$memory" -ge 512 ]] || die "--memory must be at least 512 (MB)."
 [[ "$cores" =~ ^[0-9]{1,2}$ && "$cores" -ge 1 ]] || die "--cores must be 1 or more."
 [[ "$disk" =~ ^[0-9]{1,4}$ && "$disk" -ge 4 ]] || die "--disk must be at least 4 (GB)."
+# ipv4 ADDR: four parts 0-255, no leading zeros.
+ipv4() {
+  local IFS=. o; local -a p
+  read -r -a p <<<"$1"
+  [ "${#p[@]}" -eq 4 ] || return 1
+  for o in "${p[@]}"; do [[ "$o" =~ ^(0|[1-9][0-9]{0,2})$ ]] && [ "$o" -le 255 ] || return 1; done
+}
 if [ "$ip" != "dhcp" ]; then
-  [[ "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/([0-9]|[12][0-9]|3[0-2])$ ]] || die "--ip must be dhcp or an address with prefix, e.g. 10.0.20.50/24."
-  [[ "$gw" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || die "--gw is required with a fixed --ip, e.g. 10.0.20.1."
+  [[ "$ip" =~ ^([0-9.]+)/([0-9]|[12][0-9]|3[0-2])$ ]] && ipv4 "${BASH_REMATCH[1]}" || die "--ip must be dhcp or an address with prefix, e.g. 10.0.20.50/24."
+  ipv4 "$gw" || die "--gw is required with a fixed --ip, e.g. 10.0.20.1."
+else
+  [ -z "$gw" ] || die "--gw only goes with a fixed --ip (DHCP gives the gateway)."
 fi
 
 if [ "$dry" -eq 0 ]; then
@@ -72,7 +81,7 @@ else
   pveam update >/dev/null
   tmpl="$(pveam available --section system | awk '$2 ~ /^debian-13-standard_/ {print $2}' | sort -V | tail -1)"
   [ -n "$tmpl" ] || die "No Debian 13 template offered by pveam."
-  if ! pveam list "$tstorage" | grep -q "$tmpl"; then
+  if ! pveam list "$tstorage" | grep -qF "$tmpl"; then
     pveam download "$tstorage" "$tmpl"
   fi
 fi

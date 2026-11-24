@@ -51,6 +51,7 @@ return [
         $row = $ctx->db->query("SELECT install_type, update_to, release_key_fp FROM agents WHERE id = {$agentId}")->fetch();
         Assert::same(['docker', ''], [$row['install_type'], $row['update_to']], 'reported as Docker; the update request ended');
         Assert::same('', (string) $row['release_key_fp'], 'no update helper, so no release key is offered or pinned');
+        Assert::same(1, (int) $ctx->db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'agent.update_skipped' AND target_id = {$agentId}")->fetchColumn(), 'the ended request is audited');
         // "Update all" skips it and says why; the per-agent update is refused.
         $n = App::agents()->requestUpdates($cid, '99.0.0', 1);
         Assert::same(1, $n['image'], 'counted as an image update');
@@ -75,6 +76,15 @@ return [
             Assert::contains($needle, $compose);
         }
         Assert::notContains('privileged: true', $compose);
+        Assert::notContains(':?', $compose, 'no variable is required for up/pull/logs (compose expands every service)');
+        Assert::contains('restart: on-failure', $compose, 'a revoked agent (exit 0) stays stopped');
+        Assert::contains('memory_limit=-1', $df, 'no PHP memory limit, as on the appliance');
+        // With Docker Compose installed: the file resolves without SENTINEL_SERVER (only enrol uses it).
+        exec('docker compose version 2>/dev/null', $v, $haveCompose);
+        if ($haveCompose === 0) {
+            exec('cd ' . escapeshellarg($ctx->root . '/docker/agent') . ' && env -u SENTINEL_SERVER docker compose config -q 2>&1', $cfgOut, $cfgRc);
+            Assert::same(0, $cfgRc, 'compose config without SENTINEL_SERVER: ' . implode(' ', $cfgOut));
+        }
         $ignore = (string) file_get_contents($ctx->root . '/.dockerignore');
         foreach (['config', 'storage', 'tests', '.git'] as $p) {
             Assert::true(preg_match('/^' . preg_quote($p, '/') . '$/m', $ignore) === 1, 'not in the image: ' . $p);
