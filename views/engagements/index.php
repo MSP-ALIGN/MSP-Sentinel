@@ -28,7 +28,7 @@ $isAdmin = can('engagements.approve');
     </ul>
 </div>
 <?php endif; ?>
-<?php if ($isAdmin && $approverCount < 2): ?>
+<?php if ($isAdmin && $approverCount < 2 && \Sentinel\Controllers\EngagementController::twoPerson()): ?>
 <div class="alert alert-info"><?= e(__('Engagements need a second person to approve them, and you are the only one who may.')) ?> <?php if (can('users.manage')): ?><a href="<?= e(url('/users')) ?>"><?= e(__('Give another user a role that can approve engagements')) ?></a><?php endif; ?></div>
 <?php endif; ?>
 <div class="card">

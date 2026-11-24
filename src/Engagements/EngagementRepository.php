@@ -159,9 +159,10 @@ final class EngagementRepository
         // With two-person approval off (1.47), their own single-approval engagements are listed too.
         $stmt = $this->db->prepare('SELECT e.id, e.name, e.window_start, e.window_end, e.created_by, e.single_approval, c.name AS client_name, uc.display_name AS created_by_name
             FROM engagements e JOIN clients c ON c.id = e.client_id LEFT JOIN users uc ON uc.id = e.created_by
-            WHERE e.approved_at IS NULL AND e.stopped_at IS NULL AND e.cancelled_at IS NULL AND e.window_end > UTC_TIMESTAMP()'
+            WHERE e.approved_at IS NULL AND e.stopped_at IS NULL AND e.cancelled_at IS NULL AND e.window_end > UTC_TIMESTAMP()
+              AND (e.created_by <> :u OR (e.single_approval = 1 AND :off = 1))'
             . \Sentinel\Auth\ClientAccess::sql('e.client_id', $clientIds) . ' ORDER BY e.window_start LIMIT 50'); // only their clients (1.41)
-        $stmt->execute();
+        $stmt->execute(['u' => $userId, 'off' => $twoPersonNow ? 0 : 1]);
         // Only those this admin may really approve (not linked to the creator; see linkedAccounts()), unless self-approval applies.
         $linked = $this->linkedAccounts($userId);
         return array_slice(array_values(array_filter($stmt->fetchAll(), static fn (array $e): bool =>
@@ -175,11 +176,17 @@ final class EngagementRepository
      */
     public function approve(int $id, int $userId, bool $selfAllowed = false): bool
     {
+        // The setting is read again in the same statement (1.47.1): an Admin turning two-person approval back on while
+        // this request checked the password wins. A missing settings row means "on" (the default).
         $stmt = $this->db->prepare('UPDATE engagements SET approved_by = :u, approved_at = UTC_TIMESTAMP() WHERE id = :id AND approved_at IS NULL
-            AND stopped_at IS NULL AND cancelled_at IS NULL AND (created_by <> :u2 OR (single_approval = 1 AND :self = 1)) AND window_end > UTC_TIMESTAMP()');
+            AND stopped_at IS NULL AND cancelled_at IS NULL AND window_end > UTC_TIMESTAMP()
+            AND (created_by <> :u2 OR (single_approval = 1 AND :self = 1 AND ' . self::TWO_PERSON_OFF_SQL . '))');
         $stmt->execute(['u' => $userId, 'u2' => $userId, 'self' => $selfAllowed ? 1 : 0, 'id' => $id]);
         return $stmt->rowCount() === 1;
     }
+
+    /** SQL true only while two-person approval is turned off in Settings (no row: the default, on). */
+    private const TWO_PERSON_OFF_SQL = "EXISTS (SELECT 1 FROM settings s WHERE s.name = 'engagement_two_person' AND s.value = '0')";
 
     /** May the creator approve this engagement themselves (1.47)? Only if created while two-person was off, and still off. */
     public static function selfApprovalAllowed(array $engagement, bool $twoPersonNow): bool

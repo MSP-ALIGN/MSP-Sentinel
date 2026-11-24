@@ -108,7 +108,14 @@ final class AdminController extends Controller
             Session::flash('danger', $why);
             return $back;
         }
-        $twoPerson = $request->input('two_person') === '1';
+        // Explicit values only (1.47.1): the form sends a hidden "0" before the box's "1", so a request without the field
+        // never turns the rule off.
+        $choice = $request->input('two_person');
+        if (!in_array($choice, ['0', '1'], true)) {
+            Session::flash('danger', __('Nothing changed.'));
+            return $back;
+        }
+        $twoPerson = $choice === '1';
         if ($twoPerson === EngagementController::twoPerson()) {
             Session::flash('info', __('Nothing changed.'));
             return $back;
@@ -116,11 +123,11 @@ final class AdminController extends Controller
         App::settings()->set('engagement_two_person', $twoPerson ? '1' : '0');
         $this->audit($request, 'settings.engagement_approval', null, null, ['two_person' => $twoPerson]);
         $who = (string) ($this->user()['display_name'] ?: $this->user()['username']);
-        App::alerts()->notifyUsers('security', $twoPerson ? 'info' : 'warn',
+        App::alerts()->notifyAllWith('engagements.approve', 'security', $twoPerson ? 'info' : 'warn',
             $twoPerson ? __('Pen-test engagements need two people to approve again') : __('Pen-test engagements no longer need a second person to approve'),
             $twoPerson ? __('{who} turned two-person approval back on. Every engagement now needs someone other than its creator to approve it.', ['who' => $who])
                 : __('{who} turned two-person approval off. From now on, whoever creates an engagement may approve it themselves if they may approve engagements. Engagements created before still need a second person.', ['who' => $who]),
-            '/admin/settings#engagements', 'engagements.approve');
+            '/engagements');
         Session::flash('success', $twoPerson ? __('Two-person approval is on.') : __('Two-person approval is off for new engagements.'));
         return $back;
     }

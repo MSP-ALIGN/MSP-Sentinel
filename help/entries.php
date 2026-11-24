@@ -363,6 +363,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.47.1',
+            'date' => '2026-11-24',
+            'items' => [
+                'Engagement approval fixes: turning two-person approval back on wins over a self-approval in progress; every approver is told when it changes, also those limited to some clients; it is only turned off by an explicit choice; the dashboard and Engagements page wording follow the setting; the awaiting list no longer hides engagements you may approve.',
+            ],
+        ],
+        [
             'version' => '1.47.0',
             'date' => '2026-11-24',
             'items' => [

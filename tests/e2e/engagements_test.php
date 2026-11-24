@@ -369,15 +369,34 @@ return [
         }
         $lim = $ctx->login('englimited', 'Englimited-Pass-001!');
         Assert::status(403, $lim->post('/admin/settings/engagements', ['_csrf' => $lim->get('/')->csrf(), 'my_password' => 'Englimited-Pass-001!']));
-        $admin->submit('/admin/settings', '/admin/settings/engagements', ['my_password' => 'not-my-password-1']);
+        $admin->submit('/admin/settings', '/admin/settings/engagements', ['two_person' => '0', 'my_password' => 'not-my-password-1']);
         Assert::same('1', $s->fresh('engagement_two_person'), 'needs the right password');
         $ctx->clearThrottle();
+        // A request without the field never turns it off.
+        $admin->submit('/admin/settings', '/admin/settings/engagements', ['my_password' => 'Admin-Pass-0001!']);
+        Assert::same('1', $s->fresh('engagement_two_person'), 'no field: nothing changed');
+        // A role with Manage settings and every client, but not every permission, can't change it.
+        $admin->submit('/admin/roles/new', '/admin/roles', ['name' => 'Settings keeper', 'my_password' => 'Admin-Pass-0001!', 'permissions[0]' => 'settings.manage']);
+        if ((int) $ctx->db->query("SELECT COUNT(*) FROM users WHERE username = 'engsettings'")->fetchColumn() === 0) {
+            $ctx->createUser('engsettings', 'Settings keeper', 'Engsettings-Pass-01!');
+        }
+        $keeper = $ctx->login('engsettings', 'Engsettings-Pass-01!');
+        Assert::status(403, $keeper->post('/admin/settings/engagements', ['_csrf' => $keeper->get('/admin/settings')->csrf(), 'two_person' => '0', 'my_password' => 'Engsettings-Pass-01!']));
+        Assert::contains('Only an Admin who holds every permission', $keeper->get('/admin/settings')->body, 'shown read-only');
+        // An approver limited to some clients is told too.
+        $admin->submit('/admin/roles/new', '/admin/roles', ['name' => 'Client approver', 'my_password' => 'Admin-Pass-0001!', 'permissions[0]' => 'engagements.approve']);
+        if ((int) $ctx->db->query("SELECT COUNT(*) FROM users WHERE username = 'engclientapp'")->fetchColumn() === 0) {
+            $cu = $ctx->createUser('engclientapp', 'Client approver', 'Engclientapp-Pass-1!');
+            $ctx->db->exec("UPDATE users SET all_clients = 0 WHERE id = {$cu}");
+            $ctx->db->exec("INSERT INTO user_clients (user_id, client_id) VALUES ({$cu}, {$cid})");
+        }
         Assert::contains('Pen-test engagement approval', $admin->get('/admin/settings')->body);
-        $admin->submit('/admin/settings', '/admin/settings/engagements', ['my_password' => 'Admin-Pass-0001!']); // box unticked: off
+        $admin->submit('/admin/settings', '/admin/settings/engagements', ['two_person' => '0', 'my_password' => 'Admin-Pass-0001!']); // box unticked: the hidden 0
         Assert::same('0', $s->fresh('engagement_two_person'), 'turned off');
         Assert::true((int) $ctx->db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'settings.engagement_approval' AND username = 'admin'")->fetchColumn() >= 1, 'audited');
         $a2 = (int) $ctx->db->query("SELECT id FROM users WHERE username = 'engadmin2'")->fetchColumn();
         Assert::true((int) $ctx->db->query("SELECT COUNT(*) FROM notifications WHERE user_id = {$a2} AND title LIKE 'Pen-test engagements no longer need%'")->fetchColumn() === 1, 'approvers told');
+        Assert::same(1, (int) $ctx->db->query("SELECT COUNT(*) FROM notifications n JOIN users u ON u.id = n.user_id WHERE u.username = 'engclientapp' AND n.title LIKE 'Pen-test engagements no longer need%'")->fetchColumn(), 'a client-limited approver too');
         // An engagement made while it was on still needs a second person.
         $approve($admin, $before, 'Admin-Pass-0001!');
         Assert::true(!$approved($before), 'made under the two-person rule: still not by its creator');
@@ -387,6 +406,13 @@ return [
         Assert::contains('you may approve your own engagement', $admin->get('/engagements/' . $mine)->body);
         $adminId = (int) $ctx->db->query("SELECT id FROM users WHERE username = 'admin'")->fetchColumn();
         Assert::true(in_array($mine, array_map(static fn (array $a): int => (int) $a['id'], App::engagements()->awaitingApprovalBy($adminId, null, false)), true), 'listed for its creator');
+        Assert::true(!in_array($before, array_map(static fn (array $a): int => (int) $a['id'], App::engagements()->awaitingApprovalBy($adminId, null, false)), true), 'not their two-person one');
+        Assert::contains('Single-person approval', $admin->get('/engagements')->body, 'on the Engagements page');
+        Assert::contains('awaiting approval: nothing runs until it is approved', $admin->get('/')->body, 'dashboard wording while off');
+        // The rule is read again when approving: turned back on meanwhile, the creator's approval fails.
+        $s->set('engagement_two_person', '1');
+        Assert::true(!App::engagements()->approve($mine, $adminId, true), 'turned back on: refused even if the request thought it was off');
+        $s->set('engagement_two_person', '0');
         $approve($admin, $mine, 'wrong-password-1');
         Assert::true(!$approved($mine), 'still needs the password');
         $ctx->clearThrottle();

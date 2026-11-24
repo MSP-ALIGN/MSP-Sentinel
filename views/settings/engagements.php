@@ -14,6 +14,7 @@ use Sentinel\Core\Csrf;
         <?= Csrf::field() ?>
         <p class="small text-body-secondary"><?= e(__('Nothing in an engagement runs before it is approved by someone who may approve engagements, after checking the client\'s signed authorisation against the scope.')) ?></p>
         <div class="form-check mb-2">
+            <input type="hidden" name="two_person" value="0">
             <input class="form-check-input" type="checkbox" id="two_person" name="two_person" value="1" <?= $twoPerson ? 'checked' : '' ?><?= $mayChangeTwoPerson ? '' : ' disabled' ?>>
             <label class="form-check-label" for="two_person"><?= e(__('Require a second person to approve (recommended)')) ?></label>
             <div class="form-text"><?= e(__('On: the creator can never approve their own engagement, nor can an account they made or reset recently. Off: whoever creates an engagement may approve it themselves if their role may approve engagements; the engagement page, audit log and pen-test report then say "single-person approval". Engagements created while it was on still need a second person.')) ?></div>

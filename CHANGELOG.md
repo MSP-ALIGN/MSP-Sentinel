@@ -2,6 +2,16 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.47.1 (2026-11-24): Engagement approval fixes from review
+
+- **Back on means back on.** Approving checks the setting again in the same database statement, so turning
+  two-person approval back on wins over a self-approval that was already in progress.
+- **Everyone is told.** Approvers limited to some clients are now notified when the rule changes too.
+- **Only on purpose.** The setting is turned off only by an explicit choice in the form, never by a request that
+  leaves the field out.
+- The dashboard and Engagements page wording follow the setting, and the "awaiting your approval" list no longer
+  hides engagements you may approve behind ones you may not.
+
 ### 1.47.0 (2026-11-24): Choose one- or two-person approval for pen tests
 
 - **Your choice.** Under **Administration → Settings → Pen-test engagements**, an Admin who holds every permission and
