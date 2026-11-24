@@ -5,8 +5,8 @@ declare(strict_types=1);
 /**
  * Migration 0049 (1.43): "Sign in with Microsoft".
  *
- * - users.sso_subject: the Microsoft account a user is linked to ("tenant ID:object ID"), set on the first SSO
- *   sign-in; unique, so one Microsoft account is one Sentinel user.
+ * - users.sso_subject: the Microsoft account a user is linked to ("tenant ID:object ID"), set when the user links it
+ *   from My profile (1.43.1); unique, so one Microsoft account is one Sentinel user.
  * - users.password_login: 1 = the password (with Sentinel's two-factor) still works (the default, kept as a fallback),
  *   0 = an admin turned it off for this user: SSO only.
  *

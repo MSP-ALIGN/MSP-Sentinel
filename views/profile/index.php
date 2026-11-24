@@ -40,13 +40,16 @@ use Sentinel\Core\Csrf;
             <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Microsoft account')) ?></h2></div>
             <div class="card-body small">
                 <?php if (($currentUser['sso_subject'] ?? null) !== null): ?>
-                <p class="mb-2"><?= e(__('Linked: you can use "Sign in with Microsoft".')) ?></p>
+                <p class="mb-2"><?= e(__('Linked to {who}: you can use "Sign in with Microsoft".', ['who' => ($currentUser['sso_name'] ?? '') !== '' ? $currentUser['sso_name'] : __('a Microsoft account')])) ?></p>
                 <form method="post" action="<?= e(url('/profile/sso-unlink')) ?>" data-confirm="<?= e(__('Unlink your Microsoft account? You then sign in with your password and Sentinel\'s code.')) ?>"><?= \Sentinel\Core\Csrf::field() ?>
                     <button class="btn btn-outline-danger btn-sm" type="submit"><?= e(__('Unlink')) ?></button></form>
                 <?php else: ?>
                 <p class="mb-2"><?= e(__('Not linked. Link your Microsoft 365 work account once, and then use "Sign in with Microsoft" on the sign-in page. Microsoft asks you to sign in to prove it is yours.')) ?></p>
-                <form method="post" action="<?= e(url('/profile/sso-link')) ?>"><?= \Sentinel\Core\Csrf::field() ?>
+                <form method="post" action="<?= e(url('/profile/sso-link')) ?>" class="d-flex flex-wrap align-items-end gap-2"><?= \Sentinel\Core\Csrf::field() ?>
+                    <div><label class="form-label small mb-0" for="sso-link-pw"><?= e(__('Your password')) ?></label>
+                        <input class="form-control form-control-sm" type="password" id="sso-link-pw" name="my_password" required autocomplete="current-password"></div>
                     <button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-microsoft me-1" aria-hidden="true"></i><?= e(__('Link my Microsoft account')) ?></button></form>
+                <p class="form-text mb-0"><?= e(__('Pick your own account at Microsoft: whoever owns the linked account can sign in as you.')) ?></p>
                 <?php endif; ?>
             </div>
         </div>

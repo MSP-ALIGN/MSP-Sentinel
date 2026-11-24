@@ -129,11 +129,13 @@ final class EntraSso
             'account' => is_string($claims['oid'] ?? null) && self::validGuid(strtolower($claims['oid'])),
             // A guest (B2B) account gets this tenant's iss and tid; only idp shows its home directory. Guests are
             // refused: only the tenant's own members may sign in (1.43.1).
-            'member account' => !isset($claims['idp']) || $claims['idp'] === $claims['iss'],
+            // Members have no idp, or this tenant (in the v2 or the older v1 address form).
+            'member account' => !isset($claims['idp']) || in_array($claims['idp'], [$expectIss, 'https://sts.windows.net/' . $this->tenantId . '/'], true),
         ];
         foreach ($checks as $what => $ok) {
             if (!$ok) {
-                throw new SsoException('The ID token failed the ' . $what . ' check.');
+                $detail = $what === 'member account' && is_string($claims['idp'] ?? null) ? ' (' . mb_substr((string) preg_replace('/[^\x21-\x7E]/', '', $claims['idp']), 0, 100) . ')' : '';
+                throw new SsoException('The ID token failed the ' . $what . ' check' . $detail . '.');
             }
         }
         // Shown in the audit log only; never used to decide who signs in (1.43.1: accounts are linked from My profile).
@@ -141,6 +143,10 @@ final class EntraSso
         $amr = is_array($claims['amr'] ?? null) ? $claims['amr'] : [];
         // MFA counts only for a fresh sign-in: auth_time within MFA_MAX_AGE (an old Entra session's MFA doesn't).
         $fresh = is_int($claims['auth_time'] ?? null) && $claims['auth_time'] > $now - self::MFA_MAX_AGE - self::SKEW && $claims['auth_time'] <= $now + self::SKEW;
+        if (in_array('mfa', $amr, true) && !isset($claims['auth_time'])) {
+            // Without auth_time the MFA can't be dated: Sentinel asks its own code. Say why, for the admin.
+            error_log('[msp-sentinel] Sign in with Microsoft: the ID token has no auth_time claim, so Sentinel asks its own code; add the auth_time optional claim to the app registration to skip it after MFA');
+        }
         return ['oid' => strtolower((string) $claims['oid']), 'tid' => $this->tenantId, 'email' => $email,
                 'name' => is_string($claims['name'] ?? null) ? mb_substr((string) preg_replace('/[\p{Cc}\p{Cf}]/u', '', $claims['name']), 0, 100) : '',
                 // Microsoft says MFA was done when amr lists "mfa" (some flows don't send amr: then Sentinel asks its own code).

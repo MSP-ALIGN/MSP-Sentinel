@@ -205,7 +205,7 @@ final class UserRepository
         try {
             $stmt = $this->db->prepare(
                 'UPDATE users SET totp_secret_enc = NULL, totp_enabled_at = NULL, totp_last_step = NULL,
-                        password_hash = :p, must_change_password = 1,
+                        password_hash = :p, must_change_password = 1, sso_subject = NULL, sso_name = \'\',
                         session_version = session_version + 1, updated_at = UTC_TIMESTAMP()
                  WHERE id = :id'
             );

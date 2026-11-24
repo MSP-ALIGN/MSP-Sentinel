@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.43.1](https://img.shields.io/badge/version-1.43.1-ff5a1f?style=flat-square)
+![Version 1.43.2](https://img.shields.io/badge/version-1.43.2-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,17 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.43.2 (2026-11-24): Sign in with Microsoft linking fixes from review
+
+- **Linking needs your password** (a stolen session alone can't plant a lasting Microsoft sign-in) and **no existing
+  link** (unlink first; a link is never replaced quietly). The linked account's name is shown on My profile and the
+  user's page, and the user gets a notification when one is linked (migration 0050).
+- **Resets remove the link:** an admin's password reset or two-factor reset clears the Microsoft link, as the account
+  may be compromised. Unlinking a user whose password sign-in was off turns it back on, so they aren't locked out.
+- Members whose tokens name the tenant in the older v1 form aren't refused as guests; a refused guest's directory is
+  logged. Without the `auth_time` claim Sentinel always asks its own code and the server log says how to add it.
+  Only a real duplicate counts as "already linked".
+
 ### 1.43.1 (2026-11-24): Sign in with Microsoft fixes from review
 
 - **Accounts are linked by their owner, never by email address.** Each user signs in with their password and
@@ -145,18 +156,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 - **Passwords stay as a fallback** and can be turned off per user; one active Admin who sees every client always
   keeps password sign-in. Accounts can be unlinked on the user's page. Sign-ins, links and failures are audited
   (migration 0049).
-
-### 1.42.2 (2026-11-24): permissions and client lists fixes from review
-
-- **Breached addresses stay masked** for anyone without **See breached addresses**: in reports (view, download and
-  CSV, and the API's report HTML and CSV, where every email address is masked because reports are frozen copies), in
-  alerts and emails, and in API notes. A masked API finding key keeps a short hash so two addresses that mask alike
-  stay apart.
-- **One MSP Align or ITFlow client per Sentinel client**, now also for the ITFlow sync and in the database (migration
-  0048 adds the keys when there are no duplicates). The check runs only when the link changes, so an old duplicate no
-  longer blocks other edits, and its message names no other client.
-- Backup and feed notices go only to people who see every client; notifications are cleared only when someone's
-  clients shrink. The user form's client choice is laid out properly; 1.40.0's notes now say 27 permissions.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

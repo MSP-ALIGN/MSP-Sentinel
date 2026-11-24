@@ -2,6 +2,18 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.42.2 (2026-11-24): permissions and client lists fixes from review
+
+- **Breached addresses stay masked** for anyone without **See breached addresses**: in reports (view, download and
+  CSV, and the API's report HTML and CSV, where every email address is masked because reports are frozen copies), in
+  alerts and emails, and in API notes. A masked API finding key keeps a short hash so two addresses that mask alike
+  stay apart.
+- **One MSP Align or ITFlow client per Sentinel client**, now also for the ITFlow sync and in the database (migration
+  0048 adds the keys when there are no duplicates). The check runs only when the link changes, so an old duplicate no
+  longer blocks other edits, and its message names no other client.
+- Backup and feed notices go only to people who see every client; notifications are cleared only when someone's
+  clients shrink. The user form's client choice is laid out properly; 1.40.0's notes now say 27 permissions.
+
 ### 1.42.1 (2026-11-24): client lists fixes from review
 
 - **Org-wide pages and actions need every client:** the kill switch for all scanning (pause and resume), settings,

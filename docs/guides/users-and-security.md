@@ -81,19 +81,24 @@ sign-in provider, so Sentinel signs in against the same Microsoft tenant your te
    **Directory (tenant) ID** and **Application (client) ID**.
 4. In Sentinel, go to **Administration → Integrations → Sign in with Microsoft**, enter the three values and tick
    **Show "Sign in with Microsoft"**.
-5. Recommended: in Entra Conditional Access, require MFA for this app.
+5. Recommended: in Entra Conditional Access, require MFA for this app, and under the app registration's **Token
+   configuration** add the optional claim **auth_time** (ID token). Sentinel skips its own code only when it can
+   see that MFA happened in the last hour; without auth_time it always asks for its code (the server log says so).
 
 **How it works:**
 
-- **Each user links their own account once.** Sign in with your password and Sentinel's code, open **My profile**
-  and click **Link my Microsoft account**; Microsoft asks you to sign in to prove it is yours. Only linked accounts
+- **Each user links their own account once.** Sign in with your password and Sentinel's code, open **My profile**,
+  enter your password and click **Link my Microsoft account**; Microsoft asks you to sign in to prove it is yours.
+  Pick your own account: whoever owns the linked account can sign in as you. The linked account's name shows on My
+  profile, and you get a notification when one is linked. An existing link must be unlinked before linking another. Only linked accounts
   can use Microsoft sign-in: an email address alone is never enough, guests from other directories never can, and no
   account is ever created. Roles and clients stay managed in Sentinel.
 - **Two-factor.** Sentinel skips its own 6-digit code only when Microsoft confirms MFA within the last hour;
   otherwise it asks for it, as after a password.
 - **Passwords stay as a fallback.** An admin can turn **Password sign-in allowed** off for a user (SSO only).
   At least one active Admin who sees every client always keeps it, so a Microsoft outage can't lock you out.
-- **Unlink** a Microsoft account on the user's page or under My profile; link it again from My profile.
+- **Unlink** a Microsoft account on the user's page (this also turns password sign-in back on) or under My profile;
+  link it again from My profile. An admin's password or two-factor reset also removes the link.
 - Changing the tenant clears every link.
 - Every sign-in, link and failure is in the audit log.
 

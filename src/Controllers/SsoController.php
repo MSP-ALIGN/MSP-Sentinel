@@ -44,10 +44,23 @@ final class SsoController extends Controller
         return $this->toMicrosoft('signin', null, '/login');
     }
 
-    /** POST /profile/sso-link: link a Microsoft account to the signed-in user (they prove it at Microsoft next). */
+    /**
+     * POST /profile/sso-link: link a Microsoft account to the signed-in user (they prove it at Microsoft next).
+     * Needs their own password now (1.43.2: a stolen session alone can't plant a lasting Microsoft sign-in), and no
+     * existing link (unlink first, so a link is never replaced quietly).
+     */
     public function link(Request $request): Response
     {
-        return $this->toMicrosoft('link', (int) $this->user()['id'], '/profile');
+        $me = $this->user();
+        if (($me['sso_subject'] ?? null) !== null) {
+            Session::flash('warning', __('A Microsoft account is already linked. Unlink it first.'));
+            return Response::redirect('/profile');
+        }
+        if (($why = $this->confirmWithOwnPassword($request)) !== null) {
+            Session::flash('danger', $why);
+            return Response::redirect('/profile');
+        }
+        return $this->toMicrosoft('link', (int) $me['id'], '/profile');
     }
 
     /** POST /profile/sso-unlink: forget your own Microsoft link (not while password sign-in is off: you'd be locked out). */
@@ -58,7 +71,7 @@ final class SsoController extends Controller
             Session::flash('warning', __('Password sign-in is turned off for your account, so your Microsoft link must stay. Ask an admin.'));
             return Response::redirect('/profile');
         }
-        App::db()->prepare('UPDATE users SET sso_subject = NULL, updated_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['id' => (int) $me['id']]);
+        App::db()->prepare("UPDATE users SET sso_subject = NULL, sso_name = '', updated_at = UTC_TIMESTAMP() WHERE id = :id")->execute(['id' => (int) $me['id']]);
         $this->audit($request, 'user.sso_unlinked', 'user', (int) $me['id']);
         Session::flash('success', __('Your Microsoft account is no longer linked.'));
         return Response::redirect('/profile');
@@ -114,13 +127,25 @@ final class SsoController extends Controller
             if ($owner !== false && (int) $owner !== (int) $me['id']) {
                 return $fail('link_taken', __('This Microsoft account is already linked to another Sentinel user.'));
             }
-            $set = $db->prepare('UPDATE users SET sso_subject = :s, updated_at = UTC_TIMESTAMP() WHERE id = :id');
+            // Which account it is, shown on My profile and the user's page (display only).
+            $label = mb_substr(trim($who['name'] . ($who['email'] !== '' ? ' <' . $who['email'] . '>' : '')), 0, 300);
+            $set = $db->prepare('UPDATE users SET sso_subject = :s, sso_name = :n, updated_at = UTC_TIMESTAMP() WHERE id = :id AND sso_subject IS NULL');
             try {
-                $set->execute(['s' => $subject, 'id' => (int) $me['id']]);
-            } catch (\PDOException) {
-                return $fail('link_taken', __('This Microsoft account is already linked to another Sentinel user.')); // unique key: a race lost
+                $set->execute(['s' => $subject, 'n' => $label, 'id' => (int) $me['id']]);
+            } catch (\PDOException $ex) {
+                if ((string) $ex->getCode() !== '23000') {
+                    throw $ex; // only the unique key (a race lost) means "taken"
+                }
+                return $fail('link_taken', __('This Microsoft account is already linked to another Sentinel user.'));
+            }
+            if ($set->rowCount() !== 1) {
+                return $fail('link_exists', __('A Microsoft account is already linked. Unlink it first.'));
             }
             App::audit()->log('user.sso_linked', (int) $me['id'], (string) $me['username'], 'user', (int) $me['id'], ['email' => $who['email']], $request->ip());
+            // Tell the user in-app too, so a link they didn't make is noticed.
+            $db->prepare("INSERT INTO notifications (user_id, kind, severity, title, body, link, created_at) VALUES (:u, 'security', 'warn', :t, :b, '/profile', UTC_TIMESTAMP())")
+                ->execute(['u' => (int) $me['id'], 't' => mb_substr(__('A Microsoft account was linked to your Sentinel user'), 0, 300),
+                           'b' => mb_substr(__('{who} can now sign in as you. If this wasn\'t you, unlink it under My profile and tell an admin.', ['who' => $label]), 0, 2000)]);
             $limiter->clear($bucket);
             Session::flash('success', __('Your Microsoft account is linked. You can now use "Sign in with Microsoft".'));
             return Response::redirect('/profile');

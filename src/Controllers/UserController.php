@@ -241,8 +241,9 @@ final class UserController extends Controller
         if ($id !== (int) $this->user()['id'] && !$this->mayManage($target)) {
             throw new HttpException(403, __('This user\'s role has permissions you don\'t hold, so you can\'t change their account.'));
         }
-        App::db()->prepare('UPDATE users SET sso_subject = NULL, session_version = session_version + 1, updated_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['id' => $id]);
-        $this->audit($request, 'user.sso_unlinked', 'user', $id);
+        // Unlinking an SSO-only user turns password sign-in back on, so they aren't locked out (1.43.2).
+        App::db()->prepare("UPDATE users SET sso_subject = NULL, sso_name = '', password_login = 1, session_version = session_version + 1, updated_at = UTC_TIMESTAMP() WHERE id = :id")->execute(['id' => $id]);
+        $this->audit($request, 'user.sso_unlinked', 'user', $id, ['password_login_restored' => (int) ($target['password_login'] ?? 1) === 0]);
         if ($id === (int) $this->user()['id']) {
             App::auth()->refreshSessionVersion();
         }
@@ -272,6 +273,8 @@ final class UserController extends Controller
             return Response::redirect('/users/' . $id);
         }
         App::users()->setPassword($id, Passwords::hash($password), true);
+        // An admin reset means the account may be compromised: a Microsoft link goes too (1.43.2); the user links again.
+        App::db()->prepare("UPDATE users SET sso_subject = NULL, sso_name = '' WHERE id = :id")->execute(['id' => $id]);
         $this->audit($request, 'user.password_reset', 'user', $id);
         Session::flash('success', __('Temporary password set for {name}. They must change it at next sign-in.', ['name' => $target['username']]));
         return Response::redirect('/users/' . $id);

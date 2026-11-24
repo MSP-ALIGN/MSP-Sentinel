@@ -351,7 +351,7 @@ return [
             'section' => 'reference',
             'title' => 'Signing in and 2FA details',
             'paragraphs' => [
-                'Sign in with Microsoft: when an admin has set it up (Administration → Integrations), the sign-in page shows "Sign in with Microsoft" for your Microsoft 365 work account. Link your account once: sign in with your password and code, then My profile → Link my Microsoft account. Only linked accounts can use it (an email address alone is never enough; guests from other directories never can). Sentinel skips its own code only when Microsoft confirms MFA within the last hour. Your password keeps working too unless an admin turned password sign-in off for you.',
+                'Sign in with Microsoft: when an admin has set it up (Administration → Integrations), the sign-in page shows "Sign in with Microsoft" for your Microsoft 365 work account. Link your account once: sign in with your password and code, then My profile → enter your password → Link my Microsoft account (pick your own account: whoever owns it can sign in as you). Only linked accounts can use it (an email address alone is never enough; guests from other directories never can). Sentinel skips its own code only when Microsoft confirms MFA within the last hour. Your password keeps working too unless an admin turned password sign-in off for you.',
                 'Every account must use two-factor authentication (2FA). At first sign-in, scan the QR code with an authenticator app and enter the 6-digit code it shows.',
                 'You then get 10 recovery codes: keep them in your password manager. Each signs you in once if you lose your phone. My profile creates new codes, which makes the old ones stop working. If you lose both your phone and your codes, ask an admin to reset your 2FA.',
                 'You are signed out after 30 minutes without activity, and after 12 hours in any case.',
@@ -360,6 +360,13 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.43.2',
+            'date' => '2026-11-24',
+            'items' => [
+                'Linking a Microsoft account needs your password and no existing link; the linked account is named on My profile and you are notified. An admin\'s password or two-factor reset removes the link; unlinking an SSO-only user turns password sign-in back on. Tip: add the auth_time optional claim so Sentinel can skip its code after MFA.',
+            ],
+        ],
         [
             'version' => '1.43.1',
             'date' => '2026-11-24',

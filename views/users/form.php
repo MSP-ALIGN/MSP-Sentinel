@@ -121,7 +121,7 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
     <div class="card mb-3">
         <div class="card-header"><h2 class="card-title h6 mb-0"><?= e(__('Microsoft account')) ?></h2></div>
         <form method="post" action="<?= e(url('/users/' . (int) $target['id'] . '/sso-unlink')) ?>" data-confirm="<?= e(__('Unlink the Microsoft account? The user is signed out and must link it again under My profile to use Microsoft sign-in.')) ?>">
-        <div class="card-body small"><?= Csrf::field() ?><?= e(__('Linked: this user can use "Sign in with Microsoft".')) ?></div>
+        <div class="card-body small"><?= Csrf::field() ?><?= e(__('Linked to {who}: this user can use "Sign in with Microsoft". Unlinking also turns password sign-in back on.', ['who' => ($target['sso_name'] ?? '') !== '' ? $target['sso_name'] : __('a Microsoft account')])) ?></div>
         <div class="card-footer"><button type="submit" class="btn btn-outline-danger btn-sm"><?= e(__('Unlink Microsoft account')) ?></button></div>
         </form>
     </div>

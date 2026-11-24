@@ -59,7 +59,7 @@ $signIn = static fn (HttpClient $c, ?string $state = null): HttpResult => $follo
 $link = static function (TestContext $ctx, string $username = 'ssouser', string $password = 'Ssouser-Pass-0001!') use ($follow): HttpResult {
     $ctx->clearThrottle();
     $u = $ctx->login($username, $password);
-    return $follow($u, $u->post('/profile/sso-link', ['_csrf' => $u->get('/profile')->csrf()]));
+    return $follow($u, $u->post('/profile/sso-link', ['_csrf' => $u->get('/profile')->csrf(), 'my_password' => $password]));
 };
 $subject = static function (TestContext $ctx, string $username = 'ssouser'): ?string {
     $v = $ctx->db->query('SELECT sso_subject FROM users WHERE username = ' . $ctx->db->quote($username))->fetchColumn();
@@ -105,10 +105,21 @@ return [
         Assert::redirect('/login', $signIn($c), 'the same email address is not enough');
         Assert::redirect('/login', $c->get('/'), 'not signed in');
         Assert::same(null, $subject($ctx), 'nothing linked');
+        // Linking needs your password now, even in a signed-in session (1.43.2).
+        $u = $ctx->login('ssouser', 'Ssouser-Pass-0001!');
+        Assert::redirect('/profile', $u->post('/profile/sso-link', ['_csrf' => $u->get('/profile')->csrf(), 'my_password' => 'Wrong-Pass-0001!']));
+        Assert::same(null, $subject($ctx), 'a wrong password links nothing');
         // Linking: signed in with password and code, then proven at Microsoft.
         Assert::redirect('/profile', $link($ctx));
         Assert::same(SSO_TENANT . ':0d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6', $subject($ctx), 'linked to tenant and account');
         Assert::true((int) $ctx->db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'user.sso_linked'")->fetchColumn() >= 1, 'link audited');
+        Assert::contains('Example User', $ctx->login('ssouser', 'Ssouser-Pass-0001!')->get('/profile')->body, 'the linked account is named on My profile');
+        Assert::true((int) $ctx->db->query("SELECT COUNT(*) FROM notifications n JOIN users u ON u.id = n.user_id WHERE u.username = 'ssouser' AND n.kind = 'security'")->fetchColumn() >= 1, 'the user is told');
+        // An existing link is never replaced quietly.
+        $ctx->clearThrottle();
+        $u = $ctx->login('ssouser', 'Ssouser-Pass-0001!');
+        $res = $u->post('/profile/sso-link', ['_csrf' => $u->get('/profile')->csrf(), 'my_password' => 'Ssouser-Pass-0001!']);
+        Assert::redirect('/profile', $res, 'no second link while one exists');
         // Now Microsoft sign-in works: straight in with a recent MFA, Sentinel's code otherwise.
         $c = $ctx->client();
         Assert::redirect('/', $signIn($c), 'straight in with MFA');
@@ -187,6 +198,12 @@ return [
         $admin->post('/users/' . $uid . '/sso-unlink', ['_csrf' => $admin->get('/users/' . $uid)->csrf()]);
         Assert::same(null, $subject($ctx), 'unlinked');
         $ctx->db->exec("UPDATE users SET password_login = 1 WHERE id = {$uid}");
+        Assert::redirect('/profile', $link($ctx));
+        Assert::true($subject($ctx) !== null, 'linked again');
+        // An admin password reset (or 2FA reset) clears the link: the account may be compromised.
+        $admin->post('/users/' . $uid . '/password', ['_csrf' => $admin->get('/users/' . $uid)->csrf(), 'password' => 'Ssouser-Pass-0001!', 'my_password' => 'Admin-Pass-0001!']);
+        Assert::same(null, $subject($ctx), 'a password reset clears the link');
+        $ctx->db->exec("UPDATE users SET must_change_password = 0 WHERE id = {$uid}");
         Assert::redirect('/profile', $link($ctx));
         Assert::true($subject($ctx) !== null, 'linked again');
         // A new tenant: every link is cleared.
