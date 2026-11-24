@@ -1,0 +1,49 @@
+# MSP Sentinel on-premises agent (written by install/agent-install.sh).
+[Unit]
+Description=MSP Sentinel on-premises agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sentinel-agent
+Group=sentinel-agent
+# Repair an update stopped half-way (power cut between the two renames): the code folder missing and the previous
+# version kept beside it. Runs as root ("+") before anything else, outside the code folder (which may be missing).
+# Fixed root-owned paths only; a symlink is never followed.
+ExecStartPre=+/bin/sh -c 'if [ ! -e __ROOT__ ] && [ ! -L __ROOT__ ] && [ -d __ROOT__.old ] && [ ! -L __ROOT__.old ]; then mv -T __ROOT__.old __ROOT__; fi'
+ExecStart=__PHP__ __ROOT__/bin/sentinel-agent.php run --config __CONF__/agent.json
+Restart=on-failure
+RestartSec=60
+# Exit code 3: Sentinel revoked this agent. Don't restart; uninstall it.
+RestartPreventExitStatus=3
+# Hardening: unprivileged scans only, read-only system (config included), only the state folder writable.
+NoNewPrivileges=yes
+# One capability only: listening on UDP 137 (NetBIOS name requests; it only listens, never answers). No raw sockets.
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+ProtectSystem=strict
+ProtectHome=yes
+StateDirectory=sentinel-agent
+StateDirectoryMode=0700
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallFilter=@system-service
+SystemCallArchitectures=native
+RestrictNamespaces=yes
+RestrictRealtime=yes
+ProtectProc=invisible
+ProtectClock=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+# MemoryDenyWriteExecute is left off: PHP's PCRE JIT needs executable memory.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

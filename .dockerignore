@@ -1,0 +1,12 @@
+# Only the agent's code goes into the image (see docker/agent/Dockerfile): nothing private or server-only.
+.git
+.github
+config
+storage
+dist
+tests
+release
+docs
+.env
+.env.*
+*.bundle

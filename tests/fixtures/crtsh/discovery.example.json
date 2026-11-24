@@ -1,0 +1,8 @@
+[
+  {"issuer_name": "C=XX, O=Example CA", "common_name": "discovery.example", "name_value": "discovery.example\nwww.discovery.example"},
+  {"issuer_name": "C=XX, O=Example CA", "common_name": "shop.discovery.example", "name_value": "shop.discovery.example\n*.shop.discovery.example"},
+  {"issuer_name": "C=XX, O=Example CA", "common_name": "old.discovery.example", "name_value": "old.discovery.example\nbilling.discovery.example"},
+  {"issuer_name": "C=XX, O=Example CA", "common_name": "unrelated.other.example", "name_value": "unrelated.other.example\n<script>x</script>.discovery.example\n10.0.0.1"},
+  {"not_a_name_value": 123},
+  "garbage"
+]

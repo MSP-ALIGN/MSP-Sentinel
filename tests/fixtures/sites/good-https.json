@@ -1,0 +1,17 @@
+{
+ "/": {
+  "status": 200,
+  "headers": {
+   "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+   "Content-Security-Policy": "default-src 'self'; frame-ancestors 'none'",
+   "X-Content-Type-Options": "nosniff",
+   "Referrer-Policy": "same-origin",
+   "Set-Cookie": "sid=xyz; path=/; Secure; HttpOnly; SameSite=Lax"
+  },
+  "body": "<!doctype html><html><head><title>Example Good Site</title></head><body>Hello<script src=\"https://code.jquery.com/jquery-3.7.1.min.js\"></script></body></html>"
+ },
+ "*": {
+  "status": 200,
+  "body": "<!doctype html><html><head><title>Page not found</title></head><body>Sorry. APP_KEY=not-a-file and ref: refs/heads/main appear in this text but it is HTML.</body></html>"
+ }
+}

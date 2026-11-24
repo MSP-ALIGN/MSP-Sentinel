@@ -1,0 +1,467 @@
+{
+  "203.0.113.160": {
+    "open": [
+      {
+        "port": 22,
+        "name": "ssh",
+        "product": "OpenSSH",
+        "version": "8.9p1",
+        "cpe": "cpe:/a:openbsd:openssh:8.9p1"
+      },
+      {
+        "port": 443,
+        "name": "https",
+        "product": "Example httpd",
+        "version": "2.4.57",
+        "extra": "<script>alert(1)</script>"
+      },
+      {
+        "port": 3389,
+        "name": "ms-wbt-server",
+        "product": "Microsoft Terminal Services"
+      },
+      {
+        "port": 31337,
+        "name": "elite",
+        "product": "Not asked for"
+      }
+    ]
+  },
+  "203.0.113.161": {
+    "open": [
+      {
+        "port": 80,
+        "name": "http",
+        "product": "Example web",
+        "cpe": "cpe:/a:example:webserver"
+      }
+    ]
+  },
+  "203.0.113.162": {
+    "behaviour": "badxml"
+  },
+  "203.0.113.163": {
+    "behaviour": "exit1"
+  },
+  "203.0.113.170": {
+    "behaviour": "slow"
+  },
+  "2001:db8:10::30": {
+    "open": [
+      {
+        "port": 443,
+        "name": "https",
+        "product": "Example v6 httpd"
+      }
+    ]
+  },
+  "203.0.113.166": {
+    "behaviour": "hosttimeout"
+  },
+  "203.0.113.180": {
+    "open": [
+      {
+        "port": 80,
+        "name": "http",
+        "product": "ExampleServer"
+      },
+      {
+        "port": 443,
+        "name": "https",
+        "product": "ExampleServer"
+      }
+    ]
+  },
+  "203.0.113.181": {
+    "open": [
+      {
+        "port": 443,
+        "name": "https",
+        "product": "ExampleServer"
+      }
+    ]
+  },
+  "203.0.113.182": {
+    "open": [
+      {
+        "port": 8443,
+        "name": "https-alt",
+        "product": "ExampleServer"
+      }
+    ]
+  },
+  "203.0.113.190": {
+    "open": [
+      {
+        "port": 80,
+        "name": "http",
+        "product": "Example web"
+      },
+      {
+        "port": 443,
+        "name": "https",
+        "product": "Example web"
+      }
+    ]
+  },
+  "203.0.113.191": {
+    "open": [
+      {
+        "port": 80,
+        "name": "http",
+        "product": "Example web"
+      },
+      {
+        "port": 443,
+        "name": "https",
+        "product": "Example web"
+      }
+    ]
+  },
+  "203.0.113.192": {
+    "open": [
+      {
+        "port": 3389,
+        "name": "ms-wbt-server",
+        "product": "Example remote desktop"
+      }
+    ]
+  },
+  "10.90.0.10": {
+    "mac": "02:00:00:00:00:10",
+    "open": [
+      {
+        "port": 22,
+        "name": "ssh",
+        "product": "OpenSSH",
+        "version": "8.9p1 Ubuntu 3ubuntu0.6",
+        "extra": "Ubuntu Linux; protocol 2.0",
+        "cpe": "cpe:/a:openbsd:openssh:8.9p1"
+      },
+      {
+        "port": 443,
+        "name": "https",
+        "product": "Example NAS web"
+      }
+    ]
+  },
+  "10.90.0.20": {
+    "mac": "02:00:00:00:00:20",
+    "open": [
+      {
+        "port": 80,
+        "name": "http",
+        "product": "Example printer web"
+      }
+    ]
+  },
+  "10.90.0.30": {
+    "open": [
+      {
+        "port": 8080,
+        "name": "http",
+        "product": "Example webserver",
+        "version": "2.4.1",
+        "cpe": "cpe:/a:example:webserver:2.4.1"
+      }
+    ]
+  },
+  "10.91.0.5": {
+    "open": [
+      {
+        "port": 22,
+        "name": "ssh",
+        "product": "OpenSSH",
+        "version": "9.6"
+      }
+    ]
+  },
+  "10.92.0.40": {
+    "mac": "02:00:00:00:00:40",
+    "open": [
+      {
+        "port": 21,
+        "name": "ftp",
+        "product": "Example FTP"
+      },
+      {
+        "port": 23,
+        "name": "telnet",
+        "product": "Example telnetd"
+      },
+      {
+        "port": 80,
+        "name": "http",
+        "product": "Example camera web"
+      },
+      {
+        "port": 445,
+        "name": "microsoft-ds",
+        "product": "Example SMB"
+      },
+      {
+        "port": 3389,
+        "name": "ms-wbt-server",
+        "product": "Example RDP"
+      }
+    ]
+  },
+  "10.92.0.41": {
+    "mac": "02:00:00:00:00:41",
+    "open": [
+      {
+        "port": 445,
+        "name": "microsoft-ds",
+        "product": "Example SMB"
+      },
+      {
+        "port": 3389,
+        "name": "ms-wbt-server",
+        "product": "Example RDP"
+      }
+    ]
+  },
+  "203.0.113.3": {
+    "open": [
+      {
+        "port": 21,
+        "name": "ftp",
+        "product": "ExampleFTPd",
+        "version": "3.0",
+        "scripts": [
+          {
+            "id": "ftp-anon",
+            "output": "Anonymous FTP login allowed (FTP code 230)\n-rw-r--r--   1 ftp ftp   1024 Jan 01 2026 backup-made-up.zip"
+          }
+        ]
+      },
+      {
+        "port": 22,
+        "name": "ssh",
+        "product": "OpenSSH",
+        "version": "9.6p1",
+        "scripts": [
+          {
+            "id": "ssh-hostkey",
+            "output": "256 SHA256:made-up (ED25519)"
+          }
+        ]
+      },
+      {
+        "port": 50080,
+        "name": "http",
+        "product": "ExampleAdmin",
+        "version": "1.0",
+        "scripts": [
+          {
+            "id": "http-title",
+            "output": "Example Admin Console"
+          }
+        ]
+      }
+    ],
+    "hostscripts": [
+      {
+        "id": "smb2-security-mode",
+        "output": "3:1:1:\n  Message signing enabled but not required"
+      }
+    ]
+  },
+  "10.97.0.20": {
+    "mac": "02:00:00:00:97:20",
+    "open": [
+      {
+        "port": 445,
+        "name": "microsoft-ds",
+        "product": "Samba smbd",
+        "version": "4.19",
+        "scripts": []
+      },
+      {
+        "port": 2049,
+        "name": "nfs",
+        "product": "NFS",
+        "version": "3",
+        "scripts": []
+      },
+      {
+        "port": 40000,
+        "name": "http",
+        "product": "ExampleCamera",
+        "version": "2.1",
+        "scripts": [
+          {
+            "id": "http-title",
+            "output": "Example Camera Login"
+          }
+        ]
+      }
+    ],
+    "hostscripts": [
+      {
+        "id": "smb-protocols",
+        "output": "dialects:\n  NT LM 0.12 (SMBv1) [dangerous, but default]\n  2:1:0"
+      }
+    ]
+  },
+  "10.97.0.9": {
+    "mac": "02:00:00:00:97:09",
+    "open": [
+      {
+        "port": 80,
+        "name": "http",
+        "product": "FragileDevice"
+      }
+    ]
+  },
+  "203.0.113.72": {
+    "open": [
+      {
+        "port": 21,
+        "name": "ftp",
+        "product": "Example FTPd"
+      },
+      {
+        "port": 80,
+        "name": "http",
+        "product": "Example Camera httpd"
+      },
+      {
+        "port": 6379,
+        "name": "redis",
+        "product": "Redis key-value store"
+      },
+      {
+        "port": 9200,
+        "name": "http",
+        "product": "Elasticsearch REST API"
+      },
+      {
+        "port": 22,
+        "name": "ssh",
+        "product": "OpenSSH"
+      }
+    ]
+  },
+  "10.89.0.30": {
+    "mac": "02:00:00:00:89:30",
+    "open": [
+      {
+        "port": 21,
+        "name": "ftp",
+        "product": "Example NAS FTP"
+      },
+      {
+        "port": 5432,
+        "name": "postgresql",
+        "product": "PostgreSQL DB"
+      },
+      {
+        "port": 6379,
+        "name": "redis",
+        "product": "Redis key-value store"
+      },
+      {
+        "port": 11211,
+        "name": "memcached",
+        "product": "Memcached"
+      },
+      {
+        "port": 27017,
+        "name": "mongodb",
+        "product": "MongoDB"
+      }
+    ],
+    "hostscripts": []
+  },
+  "203.0.113.73": {
+    "open": [
+      {
+        "port": 3306,
+        "name": "mysql",
+        "product": "MySQL",
+        "version": "8.0.0"
+      },
+      {
+        "port": 5432,
+        "name": "postgresql",
+        "product": "PostgreSQL DB"
+      }
+    ]
+  },
+  "203.0.113.74": {
+    "open": [
+      {
+        "port": 3307,
+        "name": "mysql",
+        "product": "MySQL",
+        "version": "8.0.0"
+      },
+      {
+        "port": 8080,
+        "name": "http",
+        "product": "Example httpd"
+      },
+      {
+        "port": 5985,
+        "name": "http",
+        "product": "Microsoft HTTPAPI httpd",
+        "version": "2.0"
+      }
+    ]
+  },
+  "203.0.113.76": {
+    "open": [
+      {
+        "port": 445,
+        "name": "microsoft-ds",
+        "product": "Samba smbd",
+        "version": "4.19"
+      }
+    ]
+  },
+  "10.88.0.40": {
+    "mac": "02:00:00:00:88:40",
+    "open": [
+      {
+        "port": 445,
+        "name": "microsoft-ds",
+        "product": "Example NAS smbd"
+      }
+    ],
+    "hostscripts": []
+  },
+  "10.88.0.41": {
+    "mac": "02:00:00:00:88:41",
+    "open": [
+      {
+        "port": 445,
+        "name": "microsoft-ds",
+        "product": "Windows Server"
+      }
+    ],
+    "hostscripts": []
+  },
+  "10.88.0.42": {
+    "mac": "02:00:00:00:88:42",
+    "open": [
+      {
+        "port": 445,
+        "name": "microsoft-ds",
+        "product": "Windows Server"
+      }
+    ],
+    "hostscripts": []
+  },
+  "10.88.0.43": {
+    "mac": "02:00:00:00:88:43",
+    "open": [
+      {
+        "port": 445,
+        "name": "microsoft-ds",
+        "product": "Samba smbd"
+      }
+    ],
+    "hostscripts": []
+  }
+}

@@ -1,0 +1,414 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * End-to-end test runner.
+ *
+ * What it does:
+ *  1. Creates a throwaway database and database user with a random password.
+ *  2. Writes a temporary config (random app key) under tests/output/.
+ *  3. Runs migrations through the real CLI, twice (idempotency check).
+ *  4. Creates the first admin through the real CLI (bin/create-admin.php).
+ *  5. Starts PHP's built-in web server on 127.0.0.1 and runs every test in
+ *     tests/e2e/ and tests/unit/ against it.
+ *  6. Drops the database and the user again.
+ *
+ * Usage:
+ *   php tests/run.php [filter]       run tests whose name contains [filter]
+ *   php tests/run.php --serve        set up, seed demo users, keep the server running (for screenshots)
+ *
+ * Environment (database admin used only to create and drop the throwaway database):
+ *   SENTINEL_TEST_DB_ADMIN_DSN   default "mysql:unix_socket=/run/mysqld/mysqld.sock"
+ *   SENTINEL_TEST_DB_ADMIN_USER  default "root"
+ *   SENTINEL_TEST_DB_ADMIN_PASS  default ""
+ *
+ * Security assumptions: only 127.0.0.1 is contacted. All data is made up.
+ * No real client data and no real hosts are used.
+ */
+
+if (PHP_SAPI !== 'cli') {
+    exit(1);
+}
+
+require dirname(__DIR__) . '/src/bootstrap.php';
+require __DIR__ . '/lib/TestKit.php';
+require __DIR__ . '/lib/TlsFixtures.php';
+
+use Sentinel\Tests\AssertionFailed;
+use Sentinel\Tests\TestContext;
+
+$args = array_slice($argv, 1);
+$serve = in_array('--serve', $args, true);
+// Lets webhooks go to the fake receiver on http://127.0.0.1 (see App::webhookTestMode()). Never set this in production.
+putenv('SENTINEL_TEST_MODE=1');
+$filter = '';
+foreach ($args as $arg) {
+    if (!str_starts_with($arg, '--')) {
+        $filter = $arg;
+    }
+}
+
+$root = dirname(__DIR__);
+$runId = bin2hex(random_bytes(4));
+$outDir = $root . '/tests/output/run-' . $runId;
+mkdir($outDir, 0700, true);
+
+$dbName = 'sentinel_test_' . $runId;
+$dbUser = 'st_' . $runId;
+$dbPass = bin2hex(random_bytes(16));
+
+$server = null;
+$mocks = [];
+$admin = new PDO(
+    getenv('SENTINEL_TEST_DB_ADMIN_DSN') ?: 'mysql:unix_socket=/run/mysqld/mysqld.sock',
+    getenv('SENTINEL_TEST_DB_ADMIN_USER') ?: 'root',
+    getenv('SENTINEL_TEST_DB_ADMIN_PASS') ?: '',
+    [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+);
+$configPath = $outDir . '/config.php';
+$keepOutput = true;
+// Defined before anything is created, so every exit path drops the database and user again.
+$cleanup = static function () use (&$server, &$mocks, &$keepOutput, $admin, $dbName, $dbUser, $outDir): void {
+    foreach (array_merge([$server], $mocks) as $proc) {
+        if (is_resource($proc)) {
+            proc_terminate($proc);
+            proc_close($proc);
+        }
+    }
+    $admin->exec("DROP DATABASE IF EXISTS `{$dbName}`");
+    $admin->exec("DROP USER IF EXISTS '{$dbUser}'@'127.0.0.1'");
+    @unlink($outDir . '/config.php');
+    // Keep the server log of a failed run for debugging; remove the folder after a clean run.
+    if (!$keepOutput) {
+        array_map('unlink', glob($outDir . '/mail/*') ?: []);
+        @rmdir($outDir . '/mail');
+        array_map('unlink', array_filter(glob($outDir . '/*') ?: [], 'is_file'));
+        @rmdir($outDir);
+    }
+};
+
+/** Run a CLI script with the test config. Returns [exit code, output]. */
+$cli = static function (string $script, array $scriptArgs = [], string $stdin = '') use ($root, $configPath): array {
+    $cmd = array_merge([PHP_BINARY, $root . '/' . $script], $scriptArgs);
+    $proc = proc_open($cmd, [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $root, ['SENTINEL_CONFIG' => $configPath, 'PATH' => getenv('PATH'), 'SENTINEL_TEST_MODE' => '1']);
+    fwrite($pipes[0], $stdin);
+    fclose($pipes[0]);
+    $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
+    $code = proc_close($proc);
+    return [$code, $out];
+};
+
+$exitCode = 0;
+try {
+    $admin->exec("CREATE DATABASE `{$dbName}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+    $admin->exec("CREATE USER '{$dbUser}'@'127.0.0.1' IDENTIFIED BY '{$dbPass}'");
+    $admin->exec("GRANT ALL ON `{$dbName}`.* TO '{$dbUser}'@'127.0.0.1'");
+    file_put_contents($configPath, '<?php return ' . var_export([
+        'app_key' => base64_encode(random_bytes(32)),
+        'db' => ['host' => '127.0.0.1', 'port' => 3306, 'name' => $dbName, 'user' => $dbUser, 'pass' => $dbPass],
+        'app' => ['base_path' => '', 'force_secure_cookies' => false, 'trusted_proxies' => [], 'locale' => 'en'],
+        // Tests may only use documentation addresses and *.example names, never real ones.
+        'testing' => ['allow_documentation_ranges' => true],
+    ], true) . ";\n");
+    chmod($configPath, 0600);
+
+    // Migrations through the CLI, twice: the second run must change nothing.
+    [$code, $out] = $cli('bin/migrate.php');
+    if ($code !== 0) {
+        throw new RuntimeException("First migration run failed:\n" . $out);
+    }
+    [$code, $out] = $cli('bin/migrate.php');
+    if ($code !== 0 || !str_contains($out, 'up to date')) {
+        throw new RuntimeException("Second migration run was not a no-op:\n" . $out);
+    }
+
+    // First admin through the CLI, password on stdin.
+    [$code, $out] = $cli('bin/create-admin.php', ['--username=admin', '--name=Alex Admin', '--email=admin@msp.example'], "Admin-Pass-0001!\n");
+    if ($code !== 0) {
+        throw new RuntimeException("create-admin failed:\n" . $out);
+    }
+
+    // A free local port. Mocks bind a moment after they start, so the OS may offer the same number twice: never hand out
+    // a port twice in one run.
+    $usedPorts = [];
+    $freePort = static function () use (&$usedPorts): int {
+        for ($i = 0; $i < 50; $i++) {
+            $sock = stream_socket_server('tcp://127.0.0.1:0');
+            $port = (int) substr(strrchr(stream_socket_get_name($sock, false), ':'), 1);
+            fclose($sock);
+            if (!isset($usedPorts[$port])) {
+                $usedPorts[$port] = true;
+                return $port;
+            }
+        }
+        throw new RuntimeException('no free local port');
+    };
+    // Mock outside services, all on 127.0.0.1: DNS (UDP+TCP) and crt.sh (HTTP).
+    $dnsPort = $freePort();
+    $dnsLog = $outDir . '/dns-queries.log';
+    $mocks[] = proc_open([PHP_BINARY, __DIR__ . '/mocks/dns_server.php', (string) $dnsPort, __DIR__ . '/fixtures/dns_zone.json', $dnsLog],
+        [0 => ['file', '/dev/null', 'r'], 1 => ['file', $outDir . '/mock-dns.log', 'a'], 2 => ['file', $outDir . '/mock-dns.log', 'a']], $pipes);
+    $crtshPort = $freePort();
+    $mocks[] = proc_open([PHP_BINARY, '-S', "127.0.0.1:{$crtshPort}", __DIR__ . '/mocks/crtsh_router.php'],
+        [0 => ['file', '/dev/null', 'r'], 1 => ['file', $outDir . '/mock-crtsh.log', 'a'], 2 => ['file', $outDir . '/mock-crtsh.log', 'a']], $pipes);
+    $cfg = require $configPath;
+    $cfg['dns'] = ['resolver' => '127.0.0.1', 'port' => $dnsPort, 'timeout' => 0.3];
+    $cfg['crtsh'] = ['enabled' => true, 'base_url' => "http://127.0.0.1:{$crtshPort}", 'timeout' => 5];
+    $cfg['discovery'] = ['crtsh_delay' => 0, 'manual_budget' => 25];
+    // Fake nmap: a wrapper script so the fake can record its arguments for this run. It never sends packets.
+    $nmapWrapper = $outDir . '/fake-nmap.sh';
+    file_put_contents($nmapWrapper, "#!/bin/sh\nexec " . escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/mocks/fake_nmap.php') . ' '
+        . escapeshellarg($outDir . '/nmap-args.log') . " \"\$@\"\n");
+    chmod($nmapWrapper, 0700);
+    $cfg['scanner'] = ['nmap_path' => $nmapWrapper, 'host_timeout' => 60];
+    // The agents' fake nmap: the same, but it also accepts the agents' other timing profiles. The external scanner
+    // keeps the strict wrapper above, so the scanning tests prove it always sends the default.
+    $agentNmap = $outDir . '/fake-nmap-agent.sh';
+    file_put_contents($agentNmap, "#!/bin/sh\nFAKE_NMAP_AGENT_PROFILES=1 exec " . escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/mocks/fake_nmap.php') . ' '
+        . escapeshellarg($outDir . '/nmap-args.log') . " \"\$@\"\n");
+    chmod($agentNmap, 0700);
+    $cfg['testing']['agent_nmap_path'] = $agentNmap;
+
+    // Mock TLS/HTTP servers on 127.0.0.1 with throwaway certificates. The TLS and HTTP checks reach them
+    // through testing.redirect_connections (honoured only together with allow_documentation_ranges).
+    $certs = \Sentinel\Tests\TlsFixtures::create($outDir);
+    $page = static function (string $name, string $html) use ($outDir): string {
+        file_put_contents($outDir . '/page-' . $name . '.html', $html);
+        return $outDir . '/page-' . $name . '.html';
+    };
+    $tlsMocks = [
+        '203.0.113.180:443' => ['modern', $certs['good'], $page('vpn', '<html><head><title>SSL VPN Portal - Sign in</title></head><body><form><input type="password" name="p"></form></body></html>')],
+        '203.0.113.180:80' => ['plain', '-', $page('plain', '<html><head><title>Welcome to Example Co</title></head><body>We sell routers and switches.</body></html>')],
+        '203.0.113.181:443' => ['legacy', $certs['weak'], $page('fw', '<html><head><title>Firewall Administration</title></head><body><form><input type="password"></form></body></html>')],
+        '203.0.113.182:8443' => ['modern', $certs['wrongname'], $page('router', '<html><head><title>Router Management</title></head><body><script>var x="</title>";</script><input type=password></body></html>')],
+        // Website checks: a badly configured site (190) and a well configured one (191) that answers 200 to every path.
+        '203.0.113.190:80' => ['plain', '-', __DIR__ . '/fixtures/sites/bad-http.json'],
+        '203.0.113.190:443' => ['modern', $certs['good'], __DIR__ . '/fixtures/sites/bad-https.json'],
+        '203.0.113.191:80' => ['plain', '-', __DIR__ . '/fixtures/sites/good-http.json'],
+        '203.0.113.191:443' => ['modern', $certs['good'], __DIR__ . '/fixtures/sites/good-https.json'],
+        // Internal devices for the on-premises agent tests (reached only through these redirects; nothing real is contacted).
+        '10.90.0.10:443' => ['legacy', $certs['weak'], $page('nas', '<html><head><title>Example NAS Login</title></head><body><form><input type="password"></form></body></html>')],
+        '10.90.0.20:80' => ['plain', '-', $page('printer', '<html><head><title>Example Printer Status</title></head><body>Toner OK</body></html>')],
+        '10.90.0.30:8080' => ['plain', '-', $page('intranet', '<html><head><title>Intranet</title></head><body>Welcome</body></html>')],
+        '10.92.0.40:80' => ['plain', '-', $page('camera', '<html><head><title>Example Camera Login</title></head><body><form><input type="password" name="pw"></form></body></html>')],
+        // Subdomain takeover: a cloud storage name nobody owns any more (its "no such bucket" page), and a live site.
+        '203.0.113.77:443' => ['modern', $certs['good'], $page('nobucket', '<?xml version="1.0"?><Error><Code>NoSuchBucket</Code><Message>The specified bucket does not exist</Message></Error>')],
+        '203.0.113.78:443' => ['modern', $certs['good'], $page('livesite', '<html><head><title>Example Docs</title></head><body>Welcome to the docs.</body></html>')],
+    ];
+    $redirects = [];
+    foreach ($tlsMocks as $target => [$mode, $pem, $htmlFile]) {
+        $localPort = $freePort();
+        $redirects[$target] = $localPort;
+        $mocks[] = proc_open([PHP_BINARY, __DIR__ . '/mocks/tls_server.php', (string) $localPort, $mode, $pem, $htmlFile],
+            [0 => ['file', '/dev/null', 'r'], 1 => ['file', $outDir . '/mock-tls.log', 'a'], 2 => ['file', $outDir . '/mock-tls.log', 'a']], $pipes);
+    }
+    // Mock SMB, RDP and SNMP servers for the risky-protocol checks (10.92.0.x: a "risky" and a "well configured" device).
+    foreach (['10.92.0.40:445' => ['smb', 'on', 'optional'], '10.92.0.40:3389' => ['rdp', 'off'], '10.92.0.40:161' => ['snmp', 'public,private'],
+              '10.92.0.41:445' => ['smb', 'off', 'required'], '10.92.0.41:3389' => ['rdp', 'required'], '10.92.0.41:161' => ['snmp', '']] as $target => $protoArgs) {
+        $p = $freePort();
+        $mocks[] = proc_open(array_merge([PHP_BINARY, __DIR__ . '/mocks/proto_server.php', (string) $p], $protoArgs),
+            [0 => ['file', '/dev/null', 'r'], 1 => ['file', $outDir . '/mock-proto.log', 'a'], 2 => ['file', $outDir . '/mock-proto.log', 'a']], $pipes);
+        $redirects[$target] = $p;
+    }
+    // Mock Active Directory domain controller (10.90.0.5): LDAPS with the throwaway certificate, and the plain LDAP port
+    // for the signing probe. Binds are logged (with a hash of the password, never the password) to ldap-binds.log.
+    foreach (['10.90.0.5:636' => ['ldaps', $certs['good']], '10.90.0.5:389' => ['plain', '-']] as $target => [$ldapMode, $ldapPem]) {
+        $p = $freePort();
+        $mocks[] = proc_open([PHP_BINARY, __DIR__ . '/mocks/ldap_server.php', (string) $p, $ldapMode, $ldapPem, __DIR__ . '/fixtures/ldap_directory.json', $outDir . '/ldap-binds.log'],
+            [0 => ['file', '/dev/null', 'r'], 1 => ['file', $outDir . '/mock-ldap.log', 'a'], 2 => ['file', $outDir . '/mock-ldap.log', 'a']], $pipes);
+        $redirects[$target] = $p;
+    }
+    // Zone transfers: the made-up zones' nameservers are the mock DNS server (TCP), one open and one refusing.
+    $redirects['203.0.113.53:53'] = $dnsPort;
+    $redirects['203.0.113.54:53'] = $dnsPort;
+    // A private nameserver address: would answer (open) if ever contacted; Sentinel must skip it.
+    $redirects['10.0.0.53:53'] = $dnsPort;
+    // Default-credential tests (engagements): fake login servers, one account each; attempts logged (never passwords).
+    foreach (['203.0.113.72:21' => ['ftp', 'root', 'root'], '203.0.113.72:80' => ['http-basic', 'admin', 'admin'],
+              '203.0.113.72:6379' => ['redis-open', '-', '-'], '203.0.113.72:9200' => ['es-open', '-', '-'],
+              '203.0.113.73:3306' => ['mysql-native', 'root', ''], '203.0.113.73:5432' => ['pg-md5', 'postgres', 'postgres'],
+              '203.0.113.74:3307' => ['mysql-sha2', 'nobody', 'Not-A-Default-1'], '203.0.113.74:8080' => ['http-ntlm', 'admin', 'admin'],
+              '10.89.0.30:21' => ['ftp-locked', 'nobody', 'Not-A-Default-1'], '10.89.0.30:5432' => ['pg-scram', 'postgres', 'postgres'],
+              '10.89.0.30:6379' => ['redis-auth', '-', '-'], '10.89.0.30:11211' => ['memcached-open', '-', '-'], '10.89.0.30:27017' => ['mongo-open', '-', '-']] as $target => $credArgs) {
+        $p = $freePort();
+        $mocks[] = proc_open(array_merge([PHP_BINARY, __DIR__ . '/mocks/creds_server.php', (string) $p], $credArgs, [$outDir . '/creds-attempts.log']),
+            [0 => ['file', '/dev/null', 'r'], 1 => ['file', $outDir . '/mock-creds.log', 'a'], 2 => ['file', $outDir . '/mock-creds.log', 'a']], $pipes);
+        $redirects[$target] = $p;
+    }
+    $cfg['testing']['creds_spacing'] = 0.3;
+    // Safe SMB share check (engagements): fake SMB2 servers; every request is logged so tests can prove nothing is written.
+    foreach (['203.0.113.76:445' => 'open', '10.88.0.40:445' => 'open', '10.88.0.41:445' => 'noanon', '10.88.0.42:445' => 'restricted', '10.88.0.43:445' => 'enumdenied'] as $target => $smbMode) {
+        $p = $freePort();
+        $mocks[] = proc_open([PHP_BINARY, __DIR__ . '/mocks/smb_server.php', (string) $p, $smbMode, $outDir . '/smb-requests.log'],
+            [0 => ['file', '/dev/null', 'r'], 1 => ['file', $outDir . '/mock-smb.log', 'a'], 2 => ['file', $outDir . '/mock-smb.log', 'a']], $pipes);
+        $redirects[$target] = $p;
+    }
+    $cfg['testing']['redirect_connections'] = $redirects;
+    // Agent updates: a tiny made-up agent release (version 9.9.9), signed with a release key made for this run only.
+    // Sentinel hands it out (testing.release_root); agents check it against the public key (testing.release_key in
+    // the agent's own test config). The secret key stays in the run folder for tests that sign a bad release.
+    $releaseRoot = $outDir . '/release-src';
+    foreach (['bin', 'install', 'release', 'src'] as $d) {
+        @mkdir($releaseRoot . '/' . $d, 0755, true);
+    }
+    file_put_contents($releaseRoot . '/VERSION', "9.9.9\n");
+    file_put_contents($releaseRoot . '/bin/sentinel-agent.php', "<?php\n// Made-up agent release 9.9.9 for the test suite: it only answers the update helper's self-check.\n"
+        . "if ((\$argv[1] ?? '') === 'selfcheck') { echo \"selfcheck ok 9.9.9\\n\"; exit(0); }\nexit(1);\n");
+    file_put_contents($releaseRoot . '/install/agent-install.sh', "#!/bin/sh\necho made-up\n");
+    file_put_contents($releaseRoot . '/src/marker.txt', "release 9.9.9\n");
+    $releasePair = sodium_crypto_sign_keypair();
+    file_put_contents($outDir . '/test-release.key', base64_encode(sodium_crypto_sign_secretkey($releasePair)));
+    file_put_contents($releaseRoot . '/install/release-key.pub', base64_encode(sodium_crypto_sign_publickey($releasePair)) . "\n");
+    $releaseManifest = \Sentinel\System\ReleaseManifest::canonical(\Sentinel\System\ReleaseManifest::build($releaseRoot, '9.9.9',
+        ['VERSION', 'bin/sentinel-agent.php', 'install/agent-install.sh', 'install/release-key.pub', 'src/marker.txt']));
+    file_put_contents($releaseRoot . '/release/agent-manifest.json', $releaseManifest);
+    file_put_contents($releaseRoot . '/release/agent-manifest.sig', \Sentinel\System\ReleaseManifest::sign($releaseManifest, base64_encode(sodium_crypto_sign_secretkey($releasePair))));
+    $cfg['testing']['release_root'] = $releaseRoot;
+    // Releases signed on the System page (in the browser) are kept here in the test suite (storage/agent-release live).
+    $cfg['testing']['release_ui_dir'] = $outDir . '/agent-release-ui';
+    // Agent full scans listen for LLMNR/NetBIOS name requests for 2 seconds here (120 in production).
+    $cfg['testing']['agent_listen_seconds'] = 2;
+    // Inventory source (NinjaOne stand-in): tests write this file with dates relative to now.
+    file_put_contents($outDir . '/inventory.json', json_encode(['organisations' => [], 'snapshots' => new stdClass()]));
+    $cfg['testing']['inventory_fixture'] = $outDir . '/inventory.json';
+    $cfg['tls'] = ['ca_file' => $certs['ca']];
+
+    // Mock threat feeds (NVD, CISA KEV, FIRST EPSS) on 127.0.0.1, with made-up CVE IDs (CVE-2099-...).
+    $feedsPort = $freePort();
+    $feedsLog = $outDir . '/feeds-requests.log';
+    $mocks[] = proc_open([PHP_BINARY, '-S', "127.0.0.1:{$feedsPort}", __DIR__ . '/mocks/feeds_router.php'],
+        [0 => ['file', '/dev/null', 'r'], 1 => ['file', $outDir . '/mock-feeds.log', 'a'], 2 => ['file', $outDir . '/mock-feeds.log', 'a']], $pipes, null,
+        ['FEEDS_LOG' => $feedsLog, 'PATH' => (string) getenv('PATH')]);
+    $cfg['nvd'] = ['base_url' => "http://127.0.0.1:{$feedsPort}", 'api_key' => 'test-' . bin2hex(random_bytes(12)), 'delay' => 0];
+    $cfg['kev'] = ['url' => "http://127.0.0.1:{$feedsPort}/kev.json"];
+    $cfg['epss'] = ['base_url' => "http://127.0.0.1:{$feedsPort}"];
+    $cfg['updates'] = ['url' => "http://127.0.0.1:{$feedsPort}/releases/latest", // never the real releases feed in tests
+                       'compare_url' => "http://127.0.0.1:{$feedsPort}/compare/{repo}/{base}...{head}"];
+    $cfg['web_update'] = ['state_dir' => $outDir . '/web-update']; // never /var/lib in tests
+    $cfg['testing']['ninjaone_base_url'] = "http://127.0.0.1:{$feedsPort}/ninja"; // mock NinjaOne API, never the real one
+    $cfg['testing']['xon_base_url'] = "http://127.0.0.1:{$feedsPort}/xon"; // mock XposedOrNot API, never the real one
+    $cfg['testing']['entra_authority'] = "http://127.0.0.1:{$feedsPort}/entra"; // mock Microsoft sign-in, never the real one
+    $cfg['app']['public_url'] = 'https://sentinel.example';
+
+    // Fake mail servers on 127.0.0.1: plain (local relay style) and STARTTLS with a test certificate for "localhost".
+    $spool = $outDir . '/mail';
+    mkdir($spool, 0700);
+    $smtpPlain = $freePort();
+    $smtpTls = $freePort();
+    $mocks[] = proc_open([PHP_BINARY, __DIR__ . '/mocks/smtp_server.php', (string) $smtpPlain, 'plain', $spool],
+        [0 => ['file', '/dev/null', 'r'], 1 => ['file', $outDir . '/mock-smtp.log', 'a'], 2 => ['file', $outDir . '/mock-smtp.log', 'a']], $pipes);
+    $mocks[] = proc_open([PHP_BINARY, __DIR__ . '/mocks/smtp_server.php', (string) $smtpTls, 'starttls', $spool, $certs['smtp']],
+        [0 => ['file', '/dev/null', 'r'], 1 => ['file', $outDir . '/mock-smtp.log', 'a'], 2 => ['file', $outDir . '/mock-smtp.log', 'a']], $pipes);
+    for ($i = 0; $i < 50 && @fsockopen('127.0.0.1', $feedsPort) === false; $i++) {
+        usleep(100000);
+    }
+    file_put_contents($configPath, '<?php return ' . var_export($cfg, true) . ";\n");
+    for ($i = 0; $i < 50 && @fsockopen('127.0.0.1', $crtshPort) === false; $i++) {
+        usleep(100000);
+    }
+
+    // Built-in web server on a free local port.
+    $port = $freePort();
+    $logFile = $outDir . '/server.log';
+    $server = proc_open(
+        [PHP_BINARY, '-S', "127.0.0.1:{$port}", '-t', $root . '/public', $root . '/public/index.php'],
+        [0 => ['file', '/dev/null', 'r'], 1 => ['file', $logFile, 'a'], 2 => ['file', $logFile, 'a']],
+        $pipes,
+        $root,
+        ['SENTINEL_CONFIG' => $configPath, 'PATH' => getenv('PATH'), 'SENTINEL_TEST_MODE' => '1']
+    );
+    $baseUrl = "http://127.0.0.1:{$port}";
+    for ($i = 0; $i < 50; $i++) {
+        if (@fsockopen('127.0.0.1', $port) !== false) {
+            break;
+        }
+        usleep(100000);
+    }
+
+    $appConfig = require $configPath;
+    $db = new PDO("mysql:host=127.0.0.1;port=3306;dbname={$dbName};charset=utf8mb4", $dbUser, $dbPass, [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+    ]);
+    $db->exec("SET time_zone = '+00:00'");
+    $ctx = new TestContext($baseUrl, $db, $root, $configPath);
+    $ctx->dnsPort = $dnsPort;
+    $ctx->dnsLog = $dnsLog;
+    $ctx->crtshUrl = "http://127.0.0.1:{$crtshPort}";
+    $ctx->nmapLog = $outDir . '/nmap-args.log';
+    $ctx->feedsUrl = "http://127.0.0.1:{$feedsPort}";
+    $ctx->feedsLog = $feedsLog;
+    $ctx->mailSpool = $spool;
+    $ctx->smtpPlainPort = $smtpPlain;
+    $ctx->smtpTlsPort = $smtpTls;
+    $ctx->webhookLog = $outDir . '/webhook-posts.log';
+    $ctx->eventLog = $outDir . '/event-posts.log';
+    \Sentinel\Core\App::boot(\Sentinel\Core\Config::fromArray($appConfig));
+
+    if ($serve) {
+        // Demo users for screenshots: made-up names only.
+        $ctx->createUser('tina', 'technician', 'Tech-Pass-0001!');
+        $ctx->createUser('victor', 'viewer', 'View-Pass-0001!');
+        file_put_contents($outDir . '/serve.json', json_encode(['url' => $baseUrl, 'dir' => $outDir, 'smtp_port' => $smtpPlain, 'feeds_url' => "http://127.0.0.1:{$feedsPort}"], JSON_PRETTY_PRINT));
+        fwrite(STDOUT, "Serving {$baseUrl} (output in {$outDir}). Press Ctrl+C to stop.\n");
+        pcntl_async_signals(true);
+        $stop = false;
+        pcntl_signal(SIGTERM, static function () use (&$stop): void { $stop = true; });
+        pcntl_signal(SIGINT, static function () use (&$stop): void { $stop = true; });
+        while (!$stop) {
+            sleep(1);
+        }
+        $cleanup();
+        exit(0);
+    }
+
+    // Collect tests: each file returns ['name' => fn(TestContext $ctx)].
+    $tests = [];
+    // TEST_ONLY=name1,name2 runs only those test files (while working on one feature); the full run is the default.
+    $only = array_filter(explode(',', (string) getenv('TEST_ONLY')));
+    foreach (array_merge(glob(__DIR__ . '/unit/*_test.php') ?: [], glob(__DIR__ . '/e2e/*_test.php') ?: []) as $file) {
+        if ($only !== [] && !in_array(basename($file, '_test.php'), $only, true)) {
+            continue;
+        }
+        foreach (require $file as $name => $fn) {
+            $tests[basename($file, '_test.php') . ': ' . $name] = $fn;
+        }
+    }
+
+    $passed = 0;
+    $failed = [];
+    foreach ($tests as $name => $fn) {
+        if ($filter !== '' && !str_contains($name, $filter)) {
+            continue;
+        }
+        $ctx->clearThrottle();
+        try {
+            $fn($ctx);
+            $passed++;
+            fwrite(STDOUT, "  \033[32m✔\033[0m {$name}\n");
+        } catch (AssertionFailed $ex) {
+            $failed[$name] = $ex->getMessage();
+            fwrite(STDOUT, "  \033[31m✘\033[0m {$name}\n      " . $ex->getMessage() . "\n");
+        } catch (\Throwable $ex) {
+            $failed[$name] = get_class($ex) . ': ' . $ex->getMessage();
+            fwrite(STDOUT, "  \033[31m✘\033[0m {$name}\n      " . get_class($ex) . ': ' . $ex->getMessage() . ' @ ' . $ex->getFile() . ':' . $ex->getLine() . "\n");
+        }
+    }
+
+    // Server-side PHP warnings or errors fail the run, even if every assertion passed.
+    $log = (string) @file_get_contents($logFile);
+    if (preg_match_all('/(PHP (Warning|Notice|Deprecated|Fatal error|Parse error)|\[msp-sentinel\]).*$/m', $log, $m)) {
+        $failed['server log'] = implode("\n      ", array_unique($m[0]));
+        fwrite(STDOUT, "  \033[31m✘\033[0m server log has PHP warnings/errors:\n      " . $failed['server log'] . "\n");
+    }
+
+    fwrite(STDOUT, sprintf("\n%d passed, %d failed\n", $passed, count($failed)));
+    $exitCode = $failed === [] ? 0 : 1;
+    $keepOutput = $exitCode !== 0;
+} catch (\Throwable $ex) {
+    fwrite(STDERR, 'Test setup failed: ' . $ex->getMessage() . "\n");
+    $exitCode = 1;
+} finally {
+    $cleanup();
+}
+exit($exitCode);

@@ -1,0 +1,192 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Fake nmap for tests. It NEVER sends a packet. It checks that it was called
+ * with exactly the gentle, unprivileged arguments NmapRunner promises, records
+ * each call, and prints canned nmap XML from tests/fixtures/nmap_hosts.json.
+ *
+ * Usage (through the wrapper script run.php writes): fake_nmap.php <args-log> <nmap arguments...>
+ *
+ * Fixture behaviours per IP: "slow" (sleeps 30 s, for cancel and kill-switch tests),
+ * "badxml", "exit1", "hosttimeout" (nmap's own host timeout). Unknown IPs have no open ports.
+ * A test can "close" ports (as if the client fixed them) by listing "ip:port" strings in
+ * nmap-closed.json next to the args log, and take hosts off the network (discovery) with
+ * nmap-down.json. Discovery sweeps (-sn) report the fixture hosts inside the given networks.
+ */
+
+$log = $argv[1];
+$args = array_slice($argv, 2);
+file_put_contents($log, json_encode($args) . "\n", FILE_APPEND);
+// The agent's other per-site timing profiles (exact argument sequences only) are checked like the default -T2/50,
+// but only when the agent's test config says so (FAKE_NMAP_AGENT_PROFILES=1): the external scanner must always send
+// the default, and the scanning tests prove it.
+if (getenv('FAKE_NMAP_AGENT_PROFILES') === '1') {
+    foreach ([['-T2', '--max-rate', '10', '--max-parallelism', '1'], ['-T3', '--max-rate', '200']] as $profile) {
+        $n = count($profile);
+        for ($i = 0; $i + $n <= count($args); $i++) {
+            if (array_slice($args, $i, $n) === $profile) {
+                array_splice($args, $i, $n, ['-T2', '--max-rate', '50']);
+                break 2;
+            }
+        }
+    }
+}
+
+// Discovery sweep (on-premises agent): exact gentle arguments, then the fixture hosts inside the given networks.
+if (in_array('-sn', $args, true)) {
+    $want = ['-sn', '--unprivileged', '-n', '-T2', '--max-rate', '50', '--max-retries', '1', '--host-timeout', '2m', '-oX', '-'];
+    if (array_slice($args, 0, count($want)) !== $want) {
+        fwrite(STDERR, "fake nmap: discovery arguments not as promised\n");
+        exit(2);
+    }
+    foreach ($args as $a) {
+        if (in_array($a, ['-sS', '-sU', '-O', '-A', '--script', '-T4', '-T5', '--privileged', '-PE', '-PP'], true)) {
+            fwrite(STDERR, "fake nmap: forbidden argument {$a}\n");
+            exit(2);
+        }
+    }
+    $rest = array_slice($args, count($want));
+    $excluded = [];
+    $xi = array_search('--exclude', $rest, true);
+    if ($xi !== false) {
+        $excluded = explode(',', (string) ($rest[$xi + 1] ?? ''));
+        array_splice($rest, $xi, 2);
+        file_put_contents(dirname($log) . '/nmap-excluded.log', implode(',', $excluded) . "\n", FILE_APPEND);
+    }
+    $cidrs = array_values(array_filter($rest, static fn (string $a): bool => $a !== '-6'));
+    $inside = static function (string $ip, string $cidr): bool {
+        [$net, $bits] = explode('/', $cidr);
+        $a = inet_pton($ip); $b = inet_pton($net);
+        if ($a === false || $b === false || strlen($a) !== strlen($b)) { return false; }
+        for ($i = 0, $n = (int) $bits; $n > 0; $i++, $n -= 8) {
+            $m = $n >= 8 ? 0xFF : (0xFF << (8 - $n)) & 0xFF;
+            if ((ord($a[$i]) & $m) !== (ord($b[$i]) & $m)) { return false; }
+        }
+        return true;
+    };
+    $hosts = json_decode((string) file_get_contents(__DIR__ . '/../fixtures/nmap_hosts.json'), true);
+    $gone = is_file(dirname($log) . '/nmap-down.json') ? (array) json_decode((string) file_get_contents(dirname($log) . '/nmap-down.json'), true) : [];
+    echo "<?xml version=\"1.0\"?>\n<nmaprun scanner=\"nmap\" args=\"fake\">\n";
+    foreach ($hosts as $ip => $h) {
+        $in = false;
+        foreach ($cidrs as $c) { $in = $in || $inside((string) $ip, $c); }
+        $isExcluded = false;
+        foreach ($excluded as $x) { $isExcluded = $isExcluded || $inside((string) $ip, str_contains($x, '/') ? $x : $x . '/32'); }
+        if (!$in || in_array($ip, $gone, true) || $isExcluded) { continue; }
+        echo '<host><status state="up" reason="syn-ack"/><address addr="' . htmlspecialchars((string) $ip) . '" addrtype="' . (str_contains((string) $ip, ':') ? 'ipv6' : 'ipv4') . '"/>'
+            . (isset($h['mac']) ? '<address addr="' . htmlspecialchars($h['mac']) . '" addrtype="mac"/>' : '') . "</host>\n";
+    }
+    echo "<runstats><finished exit=\"success\"/></runstats></nmaprun>\n";
+    exit(0);
+}
+
+// Engagement scans (NmapRunner::engagementArguments): the same base arguments, but "normal" timing may be used, the
+// host timeout is 180m, and exactly the fixed script selections are allowed (nothing else). Normalised here, then
+// checked like any scan; the fixture's script results are printed.
+$engagement = false;
+$si = array_search('--script', $args, true);
+$ti = array_search('--host-timeout', $args, true);
+if ($si !== false || ($ti !== false && ($args[$ti + 1] ?? '') === '180m')) {
+    $safe = 'safe and not (vuln or broadcast or external or brute or dos or exploit or intrusive or fuzzer or malware)';
+    $anon = 'ftp-anon or nfs-showmount';
+    if ($si !== false) {
+        if (!in_array($args[$si + 1] ?? '', ['(' . $safe . ')', '(' . $anon . ')', '(' . $safe . ') or (' . $anon . ')'], true)
+            || ($args[$si + 2] ?? '') !== '--script-timeout' || ($args[$si + 3] ?? '') !== '3m') {
+            fwrite(STDERR, "fake nmap: script selection not as promised\n");
+            exit(2);
+        }
+        array_splice($args, $si, 4);
+    }
+    if ($ti === false || ($args[array_search('--host-timeout', $args, true) + 1] ?? '') !== '180m') {
+        fwrite(STDERR, "fake nmap: engagement host timeout not as promised\n");
+        exit(2);
+    }
+    $args[array_search('--host-timeout', $args, true) + 1] = '20m';
+    for ($i = 0; $i + 3 <= count($args); $i++) {
+        if (array_slice($args, $i, 3) === ['-T3', '--max-rate', '200']) {
+            array_splice($args, $i, 3, ['-T2', '--max-rate', '50']);
+            break;
+        }
+    }
+    $engagement = true;
+}
+$required = ['-sT', '--unprivileged', '-Pn', '-n', '-T2', '--max-rate', '50', '--max-retries', '2', '--host-timeout', '20m', '-sV', '--version-light', '--noninteractive', '-oX', '-'];
+$pos = 0;
+foreach ($required as $want) {
+    $found = array_search($want, array_slice($args, $pos), true);
+    if ($found === false) {
+        fwrite(STDERR, "fake nmap: missing or misplaced argument {$want}\n");
+        exit(2);
+    }
+    $pos += $found + 1;
+}
+foreach ($args as $a) {
+    if (in_array($a, ['-sS', '-sU', '-O', '-A', '--script', '-T4', '-T5', '--privileged'], true)) {
+        fwrite(STDERR, "fake nmap: forbidden argument {$a}\n");
+        exit(2);
+    }
+}
+$pIndex = array_search('-p', $args, true);
+$ports = [];
+foreach (explode(',', $args[$pIndex + 1]) as $part) {
+    [$a, $b] = array_pad(explode('-', $part), 2, null);
+    for ($p = (int) $a; $p <= (int) ($b ?? $a); $p++) {
+        $ports[$p] = true;
+    }
+}
+$ip = end($args);
+$hosts = json_decode((string) file_get_contents(__DIR__ . '/../fixtures/nmap_hosts.json'), true);
+$host = $hosts[$ip] ?? ['open' => []];
+$closed = is_file(dirname($log) . '/nmap-closed.json') ? (array) json_decode((string) file_get_contents(dirname($log) . '/nmap-closed.json'), true) : [];
+$host['open'] = array_values(array_filter($host['open'] ?? [], static fn (array $s): bool => !in_array($ip . ':' . $s['port'], $closed, true)));
+
+switch ($host['behaviour'] ?? '') {
+    case 'slow':
+        sleep(30);
+        break;
+    case 'badxml':
+        echo "<?xml version=\"1.0\"?><nmaprun><host><unclosed>";
+        exit(0);
+    case 'exit1':
+        fwrite(STDERR, "Failed to resolve something\n");
+        exit(1);
+    case 'hosttimeout':
+        // What real nmap prints when --host-timeout fires: the host has no <ports>, but the run "succeeds".
+        echo "<?xml version=\"1.0\"?><nmaprun><host starttime=\"1\" endtime=\"2\" timedout=\"true\"><status state=\"up\"/><address addr=\"{$ip}\" addrtype=\"ipv4\"/></host>"
+            . "<runstats><finished time=\"2\" exit=\"success\"/></runstats></nmaprun>\n";
+        exit(0);
+}
+
+// Like real nmap, line breaks inside attribute values are written as &#xa; (XML would otherwise turn them into spaces).
+$e = static fn (string $s): string => str_replace("\n", '&#xa;', htmlspecialchars($s, ENT_XML1 | ENT_QUOTES, 'UTF-8'));
+$addrType = str_contains($ip, ':') ? 'ipv6' : 'ipv4';
+echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE nmaprun>\n<nmaprun scanner=\"nmap\" args=\"fake\" version=\"7.94SVN\" xmloutputversion=\"1.05\">\n";
+echo "<host><status state=\"up\" reason=\"user-set\"/><address addr=\"{$e($ip)}\" addrtype=\"{$addrType}\"/><ports>\n";
+foreach ($host['open'] as $svc) {
+    if (!isset($ports[$svc['port']])) {
+        continue; // only report ports that were asked for
+    }
+    echo "<port protocol=\"tcp\" portid=\"{$svc['port']}\"><state state=\"open\" reason=\"syn-ack\"/>";
+    echo "<service name=\"{$e($svc['name'] ?? '')}\" product=\"{$e($svc['product'] ?? '')}\" version=\"{$e($svc['version'] ?? '')}\" extrainfo=\"{$e($svc['extra'] ?? '')}\" method=\"probed\" conf=\"10\">";
+    if (isset($svc['cpe'])) {
+        echo "<cpe>{$e($svc['cpe'])}</cpe>";
+    }
+    echo "</service>";
+    foreach ($engagement ? ($svc['scripts'] ?? []) : [] as $sc) {
+        echo "<script id=\"{$e($sc['id'])}\" output=\"{$e($sc['output'])}\"/>";
+    }
+    echo "</port>\n";
+}
+// A host with a different address must be ignored by the parser.
+echo "</ports>";
+if ($engagement && ($host['hostscripts'] ?? []) !== []) {
+    echo "<hostscript>";
+    foreach ($host['hostscripts'] as $sc) {
+        echo "<script id=\"{$e($sc['id'])}\" output=\"{$e($sc['output'])}\"/>";
+    }
+    echo "</hostscript>";
+}
+echo "</host>\n<host><address addr=\"192.0.2.250\" addrtype=\"ipv4\"/><ports><port protocol=\"tcp\" portid=\"1\"><state state=\"open\"/></port></ports></host>\n";
+echo "<runstats><finished time=\"0\" exit=\"success\"/></runstats></nmaprun>\n";

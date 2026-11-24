@@ -1,0 +1,306 @@
+{
+  "records": {
+    "discovery.example": {
+      "A": [
+        "203.0.113.10"
+      ],
+      "MX": [
+        "mail.discovery.example",
+        "mx1.mailhost.example"
+      ],
+      "NS": [
+        "ns1.dnshost.example",
+        "ns2.dnshost.example"
+      ]
+    },
+    "mail.discovery.example": {
+      "A": [
+        "203.0.113.20"
+      ]
+    },
+    "www.discovery.example": {
+      "CNAME": [
+        "discovery-site.cdnhost.example"
+      ]
+    },
+    "discovery-site.cdnhost.example": {
+      "A": [
+        "198.51.100.50"
+      ]
+    },
+    "vpn.discovery.example": {
+      "A": [
+        "203.0.113.30"
+      ],
+      "AAAA": [
+        "2001:db8:10::30"
+      ]
+    },
+    "intranet.discovery.example": {
+      "A": [
+        "10.0.0.5"
+      ]
+    },
+    "shop.discovery.example": {
+      "A": [
+        "203.0.113.40"
+      ]
+    },
+    "10.113.0.203.in-addr.arpa": {
+      "PTR": [
+        "gw.discovery.example"
+      ]
+    },
+    "quiet.example": {
+      "A": [
+        "203.0.113.60"
+      ]
+    },
+    "www.quiet.example": {
+      "A": [
+        "203.0.113.60"
+      ]
+    },
+    "big.quiet.example": {
+      "A": [
+        "203.0.113.61"
+      ]
+    },
+    "billing.discovery.example": {
+      "A": [
+        "203.0.113.45"
+      ]
+    },
+    "gw.discovery.example": {
+      "A": [
+        "203.0.113.10"
+      ]
+    },
+    "portal.discovery.example": {
+      "CNAME": [
+        "evil\u00ff.cdnhost.example"
+      ]
+    },
+    "files.discovery.example": {
+      "A": [
+        "203.0.113.70"
+      ]
+    },
+    "wrongid.quiet.example": {
+      "A": [
+        "203.0.113.62"
+      ]
+    },
+    "portal.tlscheck.example": {
+      "A": [
+        "203.0.113.182"
+      ]
+    },
+    "mail-good.example": {
+      "MX": [
+        "mx1.mailhost.example"
+      ],
+      "TXT": [
+        "v=spf1 include:spf.mailhost.example -all",
+        "some-site-verification=abc"
+      ]
+    },
+    "_dmarc.mail-good.example": {
+      "TXT": [
+        "v=DMARC1; p=reject; rua=mailto:dmarc@mail-good.example"
+      ]
+    },
+    "selector1._domainkey.mail-good.example": {
+      "TXT": [
+        "v=DKIM1; k=rsa; p=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      ]
+    },
+    "mail-weak.example": {
+      "MX": [
+        "mx1.mailhost.example"
+      ],
+      "TXT": [
+        "v=spf1 +all"
+      ]
+    },
+    "mail-none.example": {
+      "MX": [
+        "mx1.mailhost.example"
+      ]
+    },
+    "_dmarc.mail-none.example": {
+      "TXT": [
+        "v=DMARC1; p=none"
+      ]
+    },
+    "nomail.example": {
+      "A": [
+        "203.0.113.191"
+      ]
+    },
+    "nullmx.example": {
+      "MX": [
+        "."
+      ],
+      "A": [
+        "203.0.113.191"
+      ]
+    },
+    "spf-redirect.example": {
+      "MX": [
+        "mx1.mailhost.example"
+      ],
+      "TXT": [
+        "v=spf1 redirect=_spf.mailhost.example"
+      ]
+    },
+    "_dmarc.spf-redirect.example": {
+      "TXT": [
+        "v=DMARC1; p=quarantine"
+      ]
+    },
+    "shop.mail-good.example": {
+      "MX": [
+        "mx1.mailhost.example"
+      ],
+      "TXT": [
+        "v=spf1 include:spf.mailhost.example -all"
+      ]
+    },
+    "wild.example": {
+      "MX": [
+        "mx1.mailhost.example"
+      ]
+    },
+    "www.wild.example": {
+      "A": [
+        "203.0.113.191"
+      ]
+    },
+    "axfr-open.example": {
+      "NS": [
+        "ns1.axfr-open.example"
+      ],
+      "A": [
+        "203.0.113.50"
+      ],
+      "MX": [
+        "mx1.mailhost.example"
+      ]
+    },
+    "ns1.axfr-open.example": {
+      "A": [
+        "203.0.113.53"
+      ]
+    },
+    "www.axfr-open.example": {
+      "A": [
+        "203.0.113.50"
+      ]
+    },
+    "secret-backup.axfr-open.example": {
+      "A": [
+        "10.20.30.40"
+      ]
+    },
+    "axfr-closed.example": {
+      "NS": [
+        "ns1.axfr-closed.example"
+      ],
+      "A": [
+        "203.0.113.51"
+      ]
+    },
+    "ns1.axfr-closed.example": {
+      "A": [
+        "203.0.113.54"
+      ]
+    },
+    "shop.takeover.example": {
+      "CNAME": [
+        "gone-bucket.s3.amazonaws.com"
+      ]
+    },
+    "gone-bucket.s3.amazonaws.com": {
+      "A": [
+        "203.0.113.77"
+      ]
+    },
+    "old.takeover.example": {
+      "CNAME": [
+        "oldapp.azurewebsites.net"
+      ]
+    },
+    "live.takeover.example": {
+      "CNAME": [
+        "liveapp.github.io"
+      ]
+    },
+    "liveapp.github.io": {
+      "A": [
+        "203.0.113.78"
+      ]
+    },
+    "*.axfr-open.example": {
+      "A": [
+        "203.0.113.50"
+      ]
+    },
+    "axfr-private.example": {
+      "NS": [
+        "ns1.axfr-private.example"
+      ],
+      "A": [
+        "203.0.113.52"
+      ]
+    },
+    "ns1.axfr-private.example": {
+      "A": [
+        "10.0.0.53"
+      ]
+    },
+    "wildzone.example": {
+      "NS": [
+        "ns1.axfr-open.example"
+      ],
+      "A": [
+        "203.0.113.55"
+      ]
+    },
+    "flaky.takeover.example": {
+      "CNAME": [
+        "flaky.herokuapp.com"
+      ]
+    },
+    "intra.takeover.example": {
+      "CNAME": [
+        "intra.github.io"
+      ]
+    },
+    "intra.github.io": {
+      "A": [
+        "10.1.2.3"
+      ]
+    },
+    "gone-lb.takeover.example": {
+      "CNAME": [
+        "gone-lb-123.us-east-1.elb.amazonaws.com"
+      ]
+    }
+  },
+  "behaviours": {
+    "remote.discovery.example": "timeout",
+    "ftp.discovery.example": "garbage",
+    ".deadzone.example": "timeout",
+    "deadzone.example": "timeout",
+    "big.quiet.example": "truncate",
+    "files.discovery.example": "extra-answer",
+    "wrongid.quiet.example": "wrong-id",
+    "flaky.herokuapp.com": "servfail"
+  },
+  "axfr_open": [
+    "axfr-open.example",
+    "axfr-private.example",
+    "wildzone.example"
+  ]
+}

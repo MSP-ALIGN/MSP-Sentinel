@@ -1,0 +1,30 @@
+{
+ "/": {
+  "status": 200,
+  "headers": {
+   "Set-Cookie": [
+    "PHPSESSID=abc123; path=/",
+    "theme=dark; path=/; Secure"
+   ]
+  },
+  "body": "<!doctype html><html><head><title>Example Shop</title><meta name=\"generator\" content=\"WordPress 5.0.3\"><link rel=\"stylesheet\" href=\"/wp-content/themes/x/style.css\"></head><body><script src=\"/wp-includes/js/jquery/jquery-1.12.4.min.js\"></script></body></html>"
+ },
+ "/.env": {
+  "status": 200,
+  "headers": {
+   "Content-Type": "text/plain"
+  },
+  "body": "APP_ENV=production\nAPP_KEY=base64:made-up-test-key\nDB_PASSWORD=made-up-test-password\n"
+ },
+ "/backup.zip": {
+  "status": 200,
+  "headers": {
+   "Content-Type": "application/zip"
+  },
+  "body_b64": "UEsDBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+ },
+ "/phpinfo.php": {
+  "status": 200,
+  "body": "<html><title>Not here</title>phpinfo is mentioned but this is not the page</html>"
+ }
+}
