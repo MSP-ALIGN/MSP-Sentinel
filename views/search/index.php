@@ -5,7 +5,6 @@
  * their masked title and target.
  */
 require __DIR__ . '/../partials/finding_badges.php';
-$searchQuery = $raw;
 $r = $results;
 $section = static function (string $title, string $icon, int $n): string {
     return '<h2 class="h6 mt-3"><i class="bi ' . e($icon) . ' me-1" aria-hidden="true"></i>' . e($title) . ' <span class="badge text-bg-secondary">' . e($n) . '</span></h2>';

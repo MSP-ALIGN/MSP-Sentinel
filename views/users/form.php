@@ -70,6 +70,11 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
             <div class="form-text"><?= e(__('At least {n} characters. The user must change it, and set up two-factor authentication, at first sign-in.', ['n' => Passwords::MIN_LENGTH])) ?></div>
             <?php $field = 'password'; require __DIR__ . '/../partials/field_error.php'; ?>
         </div>
+        <div class="mb-3">
+            <label for="my_password_new" class="form-label"><?= e(__('Your own password (to confirm)')) ?></label>
+            <input type="password" class="form-control<?= $invalid('my_password') ?>" id="my_password_new" name="my_password" required autocomplete="current-password">
+            <?php $field = 'my_password'; require __DIR__ . '/../partials/field_error.php'; ?>
+        </div>
         <?php endif; ?>
     </div>
     <div class="card-footer">

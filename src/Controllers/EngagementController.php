@@ -50,7 +50,7 @@ final class EngagementController extends Controller
     public function create(Request $request, array $params): Response
     {
         $client = $this->clientOr404($params);
-        return $this->form($client, ['intensity' => 'normal', 'tests' => ['tcp_full', 'nse_safe']], []);
+        return $this->form($client, ['intensity' => 'gentle', 'tests' => ['nse_safe', 'anon_access']], []);
     }
 
     /** POST /clients/{id}/engagements (multipart: the signed document) */
@@ -289,14 +289,12 @@ final class EngagementController extends Controller
             Session::flash('danger', __('You created this engagement: a different admin must approve it.'));
             return $back;
         }
-        // The second person must really be someone else: not an account the creator made, or whose password or 2FA the
-        // creator reset, in the last 30 days (otherwise one admin could approve their own engagement through it).
-        $link = App::db()->prepare("SELECT COUNT(*) FROM audit_log WHERE user_id = :creator AND target_type = 'user' AND target_id = :me
-            AND action IN ('user.created', 'user.password_reset', 'user.2fa_reset') AND created_at >= UTC_TIMESTAMP() - INTERVAL 30 DAY");
-        $link->execute(['creator' => (int) $e['created_by'], 'me' => $me]);
-        if ((int) $link->fetchColumn() > 0) {
-            $this->audit($request, 'engagement.approval_refused', 'engagement', (int) $e['id'], ['reason' => 'account created or reset by the creator']);
-            Session::flash('danger', __('The engagement\'s creator created your account or reset its password or two-factor authentication in the last 30 days: another admin must approve it.'));
+        // The second person must really be someone else: not linked to the creator in the last 30 days (either one
+        // created the other or reset its password or 2FA, directly or through a chain of such accounts), otherwise one
+        // admin could approve their own engagement through an account they control.
+        if (in_array((int) $e['created_by'], App::engagements()->linkedAccounts($me), true)) {
+            $this->audit($request, 'engagement.approval_refused', 'engagement', (int) $e['id'], ['reason' => 'account linked to the creator']);
+            Session::flash('danger', __('Your account and the creator\'s are linked: one created the other, or reset its password or two-factor authentication, in the last 30 days (directly or through another account). Another admin must approve it.'));
             return $back;
         }
         $user = App::db()->query('SELECT id, password_hash FROM users WHERE id = ' . $me)->fetch() ?: [];

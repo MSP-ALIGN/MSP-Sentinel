@@ -78,7 +78,7 @@ final class PageController extends Controller
         $entries = require SENTINEL_ROOT . '/help/entries.php';
         $topics = is_array($entries) && is_array($entries['topics'] ?? null) ? $entries['topics'] : [];
         $results = (new \Sentinel\Search\SearchService(App::db()))->search($q, $topics);
-        return $this->page('search/index', $q === '' ? __('Search') : __('Search: {q}', ['q' => $q]), ['q' => $q, 'raw' => mb_substr($request->query('q'), 0, 100), 'results' => $results]);
+        return $this->page('search/index', $q === '' ? __('Search') : __('Search: {q}', ['q' => $q]), ['q' => $q, 'raw' => mb_substr($request->query('q'), 0, 100), 'searchQuery' => mb_substr($request->query('q'), 0, 100), 'results' => $results]);
     }
 
     /** GET /help */

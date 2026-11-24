@@ -116,18 +116,52 @@ final class EngagementRepository
     }
 
     /**
+     * Accounts linked to $userId in the last 30 days, in either direction and through chains: one created the other, or
+     * reset its password or two-factor authentication (from the audit log). The two-person rule refuses an approver in
+     * the creator's group, so one admin can't approve their own engagement through an account they made or reset, or
+     * one made by such an account (1.34 audit). Includes $userId itself.
+     *
+     * @return list<int>
+     */
+    public function linkedAccounts(int $userId): array
+    {
+        $edges = $this->db->query("SELECT user_id, target_id FROM audit_log WHERE target_type = 'user' AND user_id IS NOT NULL AND target_id IS NOT NULL
+            AND action IN ('user.created', 'user.password_reset', 'user.2fa_reset') AND created_at >= UTC_TIMESTAMP() - INTERVAL 30 DAY LIMIT 10000")->fetchAll();
+        $adj = [];
+        foreach ($edges as $e) {
+            $a = (int) $e['user_id'];
+            $b = (int) $e['target_id'];
+            $adj[$a][$b] = true;
+            $adj[$b][$a] = true;
+        }
+        $seen = [$userId => true];
+        $queue = [$userId];
+        while ($queue !== []) {
+            foreach (array_keys($adj[array_shift($queue)] ?? []) as $next) {
+                if (!isset($seen[$next])) {
+                    $seen[$next] = true;
+                    $queue[] = $next;
+                }
+            }
+        }
+        return array_keys($seen);
+    }
+
+    /**
      * Engagements waiting for a second admin, that $userId may approve (not their own), window not over (1.34).
      *
      * @return list<array<string,mixed>>
      */
     public function awaitingApprovalBy(int $userId): array
     {
-        $stmt = $this->db->prepare('SELECT e.id, e.name, e.window_start, e.window_end, c.name AS client_name, uc.display_name AS created_by_name
+        $stmt = $this->db->prepare('SELECT e.id, e.name, e.window_start, e.window_end, e.created_by, c.name AS client_name, uc.display_name AS created_by_name
             FROM engagements e JOIN clients c ON c.id = e.client_id LEFT JOIN users uc ON uc.id = e.created_by
             WHERE e.approved_at IS NULL AND e.stopped_at IS NULL AND e.cancelled_at IS NULL AND e.window_end > UTC_TIMESTAMP() AND e.created_by <> :u
             ORDER BY e.window_start LIMIT 20');
         $stmt->execute(['u' => $userId]);
-        return $stmt->fetchAll();
+        // Only those this admin may really approve (not linked to the creator; see linkedAccounts()).
+        $linked = $this->linkedAccounts($userId);
+        return array_values(array_filter($stmt->fetchAll(), static fn (array $e): bool => !in_array((int) $e['created_by'], $linked, true)));
     }
 
     /**

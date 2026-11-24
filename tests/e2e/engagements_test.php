@@ -317,15 +317,33 @@ return [
             'external' => '203.0.113.2', 'internal_' . $site => '', 'exclusions' => '']), 'document', $pdf, 'application/pdf');
         $id = $lastId($ctx, $cid);
         // The creator makes a second admin account (audited as theirs) and tries to approve through it.
-        $admin->submit('/users/new', '/users', ['username' => 'shadow.admin', 'display_name' => 'Shadow', 'email' => '', 'role' => 'admin', 'password' => 'Shadow-Temp-Pass-01!']);
+        $admin->submit('/users/new', '/users', ['username' => 'shadow.admin', 'display_name' => 'Shadow', 'email' => '', 'role' => 'admin', 'password' => 'Shadow-Temp-Pass-01!', 'my_password' => 'Admin-Pass-0001!']);
         $ctx->db->exec("UPDATE users SET must_change_password = 0 WHERE username = 'shadow.admin'");
         $shadow = $ctx->login('shadow.admin', 'Shadow-Temp-Pass-01!');
         $shadow->post('/engagements/' . $id . '/approve', ['_csrf' => $shadow->get('/engagements/' . $id)->csrf(), 'password' => 'Shadow-Temp-Pass-01!']);
         Assert::same(null, $ctx->db->query("SELECT approved_at FROM engagements WHERE id = {$id}")->fetchColumn(), 'not approved by an account its creator made');
-        Assert::contains('another admin must approve it', $shadow->get('/engagements/' . $id)->body);
+        Assert::contains('Another admin must approve it', $shadow->get('/engagements/' . $id)->body);
         // A long-standing second admin can.
         $admin2 = $ctx->login('engadmin2', 'Engadmin2-Pass-0001!');
         $admin2->post('/engagements/' . $id . '/approve', ['_csrf' => $admin2->get('/engagements/' . $id)->csrf(), 'password' => 'Engadmin2-Pass-0001!']);
         Assert::true($ctx->db->query("SELECT approved_at FROM engagements WHERE id = {$id}")->fetchColumn() !== null, 'approved by a real second admin');
+
+        // The other direction: the account the admin made creates an engagement; the admin can't approve it.
+        $shadow->upload('/clients/' . $cid . '/engagements/new', '/clients/' . $cid . '/engagements', $fields($site, ['name' => 'Reverse attempt',
+            'external' => '203.0.113.2', 'internal_' . $site => '', 'exclusions' => '']), 'document', $pdf, 'application/pdf');
+        $rev = $lastId($ctx, $cid);
+        $admin->post('/engagements/' . $rev . '/approve', ['_csrf' => $admin->get('/engagements/' . $rev)->csrf(), 'password' => 'Admin-Pass-0001!']);
+        Assert::same(null, $ctx->db->query("SELECT approved_at FROM engagements WHERE id = {$rev}")->fetchColumn(), 'not approved by the account that made its creator');
+        // Through a chain: the shadow admin makes another admin, who tries to approve the first admin's engagement.
+        $shadow->submit('/users/new', '/users', ['username' => 'shadow.two', 'display_name' => 'Shadow Two', 'email' => '', 'role' => 'admin', 'password' => 'Shadow-Temp-Pass-02!', 'my_password' => 'Shadow-Temp-Pass-01!']);
+        $ctx->db->exec("UPDATE users SET must_change_password = 0 WHERE username = 'shadow.two'");
+        $admin->upload('/clients/' . $cid . '/engagements/new', '/clients/' . $cid . '/engagements', $fields($site, ['name' => 'Chain attempt',
+            'external' => '203.0.113.2', 'internal_' . $site => '', 'exclusions' => '']), 'document', $pdf, 'application/pdf');
+        $chain = $lastId($ctx, $cid);
+        $two = $ctx->login('shadow.two', 'Shadow-Temp-Pass-02!');
+        Assert::notContains('Chain attempt', $two->get('/engagements')->body === '' ? '' : implode(' ', array_column(App::engagements()->awaitingApprovalBy((int) $ctx->db->query("SELECT id FROM users WHERE username = 'shadow.two'")->fetchColumn()), 'name')), 'not offered for approval');
+        $two->post('/engagements/' . $chain . '/approve', ['_csrf' => $two->get('/engagements/' . $chain)->csrf(), 'password' => 'Shadow-Temp-Pass-02!']);
+        Assert::same(null, $ctx->db->query("SELECT approved_at FROM engagements WHERE id = {$chain}")->fetchColumn(), 'not approved through a chain of made accounts');
+        Assert::true((int) $ctx->db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'engagement.approval_refused'")->fetchColumn() >= 3, 'refusals audited');
     },
 ];

@@ -84,6 +84,13 @@ return [
     },
     'enrolment: one-time code, token stored hashed, server key pinned' => function (TestContext $ctx) use ($setup, $agentDir): void {
         [$cid, $site] = $setup($ctx);
+        // A site without an internal authorisation gets no enrolment code (the agent could never scan).
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $admin->submit('/clients/' . $cid, '/clients/' . $cid . '/sites', ['name' => 'Unauthorised Annex', 'itflow_location_id' => '']);
+        $bare = (int) $ctx->db->query("SELECT id FROM sites WHERE client_id = {$cid} AND name = 'Unauthorised Annex'")->fetchColumn();
+        $before = (int) $ctx->db->query('SELECT COUNT(*) FROM agent_enrolments')->fetchColumn();
+        Assert::redirect('/clients/' . $cid . '/agents', $admin->submit('/clients/' . $cid, '/clients/' . $cid . '/sites/' . $bare . '/enrol', []));
+        Assert::same($before, (int) $ctx->db->query('SELECT COUNT(*) FROM agent_enrolments')->fetchColumn(), 'no code created');
         $agent = $ctx->db->query("SELECT * FROM agents WHERE site_id = {$site}")->fetch();
         $config = json_decode((string) file_get_contents($agentDir($ctx) . '/agent.json'), true);
         Assert::same('active', $agent['status']);
@@ -111,12 +118,12 @@ return [
         Assert::contains('Check it worked', $page);
         Assert::notContains('--code ' . ($m[0] ?? 'missing'), $page, 'the code is never put on a command line');
         Assert::notContains('no internal authorisation valid today', $page, 'this site has one');
-        // A site without an authorisation: the page says the agent won't scan yet.
+        // A site without an authorisation: no code at all (1.34; earlier the page only warned).
         $res = $admin->submit('/clients/new', '/clients', ['name' => 'Unapproved Example', 'itflow_client_id' => '', 'timezone' => 'UTC', 'scan_window_start' => '00:00',
             'scan_window_end' => '23:59', 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);
         $other = (int) basename((string) $res->location());
         $otherSite = (int) $ctx->db->query("SELECT id FROM sites WHERE client_id = {$other} AND is_default = 1")->fetchColumn();
-        Assert::contains('no internal authorisation valid today', $admin->submit('/clients/' . $other, '/clients/' . $other . '/sites/' . $otherSite . '/enrol', [])->body);
+        Assert::redirect('/clients/' . $other . '/agents', $admin->submit('/clients/' . $other, '/clients/' . $other . '/sites/' . $otherSite . '/enrol', []));
         $ctx->db->exec("UPDATE clients SET is_archived = 1 WHERE id = {$other}");
     },
     'a full scan by the real agent: devices, services, certificates, CVEs; baseline without alerts' => function (TestContext $ctx) use ($setup, $runAgent, $scanNow, $agentDir): void {

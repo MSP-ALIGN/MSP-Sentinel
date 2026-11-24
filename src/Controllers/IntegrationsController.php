@@ -220,6 +220,13 @@ final class IntegrationsController extends Controller
             Session::flash('danger', __('The MSP Align address must be an https:// address, for example https://align.msp.example.'));
             return $back;
         }
+        // Everything is checked before anything is saved (1.34 audit: a bad key must not leave a new address saved
+        // with the old key).
+        $apiKey = trim($request->raw('api_key'));
+        if ($apiKey !== '' && $request->input('clear_key') !== '1' && !AlignClient::validKey($apiKey)) {
+            Session::flash('danger', __('That is not an MSP Align API key (they look like msa_xxxxxxxx_...). Create one in MSP Align under Settings, API.'));
+            return $back;
+        }
         $changed = [];
         // A saved key never follows a new address (see saveItflow).
         $alignDropped = $s->get('mspalign_url') !== $url && $s->getSecret('mspalign_api_key') !== '' && trim($request->raw('api_key')) === '';
@@ -234,15 +241,10 @@ final class IntegrationsController extends Controller
                 $changed[$key] = $key === 'mspalign_enabled' ? $enabled : $value;
             }
         }
-        $apiKey = trim($request->raw('api_key'));
         if ($request->input('clear_key') === '1') {
             $s->setSecret('mspalign_api_key', '');
             $changed['mspalign_api_key'] = 'cleared';
         } elseif ($apiKey !== '') {
-            if (!AlignClient::validKey($apiKey)) {
-                Session::flash('danger', __('That is not an MSP Align API key (they look like msa_xxxxxxxx_...). Create one in MSP Align under Settings, API.'));
-                return $back;
-            }
             $s->setSecret('mspalign_api_key', $apiKey);
             $changed['mspalign_api_key'] = 'changed';
         }
@@ -299,6 +301,12 @@ final class IntegrationsController extends Controller
             Session::flash('danger', __('The ITFlow address must be an https:// address, for example https://itflow.msp.example.'));
             return $back;
         }
+        // Everything is checked before anything is saved (1.34 audit, see saveAlign).
+        $apiKey = trim($request->raw('api_key'));
+        if ($apiKey !== '' && $request->input('clear_key') !== '1' && !\Sentinel\Itflow\ItflowClient::validKey($apiKey)) {
+            Session::flash('danger', __('That does not look like an ITFlow API key. Copy it again from ITFlow (Admin, API Keys).'));
+            return $back;
+        }
         $changed = [];
         // A saved key never follows a new address: a changed address needs the key entered again (so a typo, a hijacked
         // session or a rogue admin can't send the stored key to another server).
@@ -318,15 +326,10 @@ final class IntegrationsController extends Controller
                 $changed[$key] = in_array($key, ['itflow_enabled', 'itflow_tickets_enabled'], true) ? $value === '1' : $value;
             }
         }
-        $apiKey = trim($request->raw('api_key'));
         if ($request->input('clear_key') === '1') {
             $s->setSecret('itflow_api_key', '');
             $changed['itflow_api_key'] = 'cleared';
         } elseif ($apiKey !== '') {
-            if (!\Sentinel\Itflow\ItflowClient::validKey($apiKey)) {
-                Session::flash('danger', __('That does not look like an ITFlow API key. Copy it again from ITFlow (Admin, API Keys).'));
-                return $back;
-            }
             $s->setSecret('itflow_api_key', $apiKey);
             $changed['itflow_api_key'] = 'changed';
         }

@@ -61,7 +61,8 @@ final class DashboardData
                        COALESCE(SUM(f.status = 'open' AND f.severity = 'fail'), 0) AS fail,
                        COALESCE(SUM(f.status = 'open' AND f.severity = 'warn'), 0) AS warn,
                        COALESCE(SUM(f.status = 'open' AND f.severity = 'fail' AND k.cve_id IS NOT NULL), 0) AS kev,
-                       (SELECT MAX(j.finished_at) FROM scan_jobs j WHERE j.client_id = c.id AND j.finished_at IS NOT NULL AND j.job_type <> 'verify') AS last_scan
+                       GREATEST(COALESCE((SELECT MAX(j.finished_at) FROM scan_jobs j WHERE j.client_id = c.id AND j.finished_at IS NOT NULL AND j.job_type <> 'verify'), '1000-01-01'),
+                                COALESCE((SELECT MAX(aj.finished_at) FROM agent_jobs aj WHERE aj.client_id = c.id AND aj.status IN ('done', 'partial')), '1000-01-01')) AS last_scan
                 FROM clients c
                 LEFT JOIN findings f ON f.client_id = c.id AND f.status = 'open'
                 LEFT JOIN kev_catalog k ON k.cve_id = f.cve_id
@@ -74,7 +75,7 @@ final class DashboardData
             $kev = (int) $r['kev'];
             $rows[] = ['id' => (int) $r['id'], 'name' => (string) $r['name'], 'fail' => $fail, 'warn' => $warn, 'kev' => $kev,
                        'score' => self::score($kev, $fail, $warn), 'level' => self::level($fail, $warn),
-                       'paused' => (int) $r['scanning_paused'] === 1, 'last_scan' => $r['last_scan']];
+                       'paused' => (int) $r['scanning_paused'] === 1, 'last_scan' => str_starts_with((string) $r['last_scan'], '1000-01-01') ? null : $r['last_scan']];  // '1000-01-01': never scanned (the GREATEST above)
         }
         $rank = ['risk' => 2, 'attention' => 1, 'good' => 0];
         usort($rows, static fn (array $a, array $b): int => [$rank[$b['level']], $b['score'], $b['fail'], $b['warn'], $a['name']] <=> [$rank[$a['level']], $a['score'], $a['fail'], $a['warn'], $b['name']]);

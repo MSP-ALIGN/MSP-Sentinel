@@ -85,6 +85,10 @@ return [
         $f = tempnam(sys_get_temp_dir(), 'dump');
         file_put_contents($f, "/*M!999999\\- enable the sandbox mode */\n/*!40101 SET NAMES utf8mb4 */;\nINSERT INTO t VALUES ('a\\\\b','\\! not a command');\n");
         $refuse->invoke($b, $f);
+        // A long row (a report's HTML over the 1 MB read size) is never mistaken for a command, wherever chunks split.
+        $row = str_repeat('<p class=\\"x\\">use source system \\n\\! more</p>', 60000);
+        file_put_contents($f, "INSERT INTO reports VALUES ('" . $row . "');\nINSERT INTO t VALUES (1);\n");
+        $refuse->invoke($b, $f);
         // Even past the check, the client runs with --binary-mode (client commands off).
         $import = new ReflectionMethod($b, 'import');
         file_put_contents($f, "SELECT 1; \\! touch {$marker}\n");

@@ -175,17 +175,18 @@ final class WebhookSender
         };
     }
 
-    /** Escape Slack mrkdwn control characters in untrusted text. */
     /**
      * Text for a Teams adaptive card TextBlock, which renders a subset of Markdown: the Markdown characters are
      * backslash-escaped so a device name or title (untrusted, from scans or integrations) shows literally and can't
-     * add links or formatting (1.34 audit).
+     * add links or formatting (1.34 audit). Only the characters that make links, emphasis or code are escaped, so
+     * addresses and versions (192.168.1.10, 2.4-1) read normally.
      */
     private static function teamsEscape(string $text): string
     {
-        return (string) preg_replace('/([\\\\`*_{}\[\]()#+\-.!>|~])/', '\\\\$1', $text);
+        return (string) preg_replace('/([\\\\`*_\[\]()~])/', '\\\\$1', $text);
     }
 
+    /** Escape Slack mrkdwn control characters in untrusted text. */
     private static function slackEscape(string $text): string
     {
         return str_replace(['&', '<', '>'], ['&amp;', '&lt;', '&gt;'], $text);

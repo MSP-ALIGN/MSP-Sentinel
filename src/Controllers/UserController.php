@@ -65,6 +65,11 @@ final class UserController extends Controller
         if (($policy = Passwords::policyError($password, $values['username'])) !== null) {
             $errors['password'] = $policy;
         }
+        // A new account is as powerful as its role: your own password confirms it (1.34 audit: a stolen session must
+        // not be able to make itself a permanent account). Checked last, so a typo elsewhere doesn't count as a failure.
+        if ($errors === [] && ($why = $this->confirmWithOwnPassword($request)) !== null) {
+            $errors['my_password'] = $why;
+        }
         if ($errors !== []) {
             return $this->page('users/form', __('Add user'), ['mode' => 'create', 'values' => $values, 'errors' => $errors], 422);
         }

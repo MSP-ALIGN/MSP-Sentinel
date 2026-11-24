@@ -34,7 +34,6 @@ final class ApiAdminController extends Controller
 {
     private const EXPIRY_CHOICES = [30, 90, 180, 365];
 
-    /** GET /admin/api */
     /**
      * The API reference as a page (1.34): the same OpenAPI description the API serves at /api/v1/openapi.json (which
      * needs a token), shown to admins in the browser, with a download of the JSON. Static text only; all escaped.
@@ -49,6 +48,7 @@ final class ApiAdminController extends Controller
         return $this->page('api/docs', __('API reference'), ['spec' => $spec]);
     }
 
+    /** GET /admin/api */
     public function index(Request $request): Response
     {
         $newToken = Session::get('show_api_token');

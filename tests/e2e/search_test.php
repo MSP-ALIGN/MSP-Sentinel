@@ -70,4 +70,20 @@ return [
             Assert::contains('id="' . $id . '"', $admin->get($url)->body, 'filter box on ' . $url);
         }
     },
+    'help page: contents, four sections, topic anchors, release history folded away; search finds new topics' => function (TestContext $ctx): void {
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $h = $admin->get('/help')->body;
+        Assert::contains('id="help-toc"', $h, 'a table of contents');
+        foreach (['start-here' => 'Start here', 'everyday-tasks' => 'Everyday tasks', 'setting-up' => 'Setting up and running Sentinel (admins)', 'reference' => 'Reference'] as $id => $title) {
+            Assert::contains('href="#' . $id . '"', $h, 'contents links to ' . $title);
+            Assert::contains('<section data-filter-group id="' . $id . '"', $h, 'section ' . $title);
+            Assert::contains($title . '</h2>', $h, 'heading ' . $title);
+        }
+        Assert::contains('href="#release-history"', $h);
+        Assert::contains('<details class="card mb-3" id="release-history">', $h, 'release history folded away');
+        Assert::contains('data-filter-item id="searching-and-filtering"', $h, 'topic anchor from its title');
+        Assert::contains('data-filter-item id="your-first-day"', $h);
+        Assert::contains('&quot;Are you sure?&quot; prompts', $h, 'titles are escaped');
+        Assert::contains('Your first day', $admin->get('/search?q=' . rawurlencode('second admin'))->body, 'top-bar search reads the new topics');
+    },
 ];

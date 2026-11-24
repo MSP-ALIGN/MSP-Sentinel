@@ -10,8 +10,9 @@ declare(strict_types=1);
  * "totp:7"). After this, a value copied into another setting or another user's row, or an old value of a different
  * setting put back by someone with database access, no longer decrypts.
  *
- * Untrusted: nothing new (values come from Sentinel's own database). Security assumptions: needs the app key (config);
- * a value that can't be decrypted (another key) is left untouched, as it was already unreadable.
+ * Untrusted: nothing new (values come from Sentinel's own database). Security assumptions: needs the app key (config)
+ * when old values exist, and fails (to be retried) without it; a value that can't be decrypted (another key) is left
+ * untouched, as it was already unreadable.
  *
  * Idempotent: only values still starting with "v1:" are rewritten; v2 values are skipped. Safe to run twice.
  */
@@ -23,12 +24,18 @@ use Sentinel\Migrations\Migrator;
 return [
     'description' => 'Bind encrypted secrets to their setting or user',
     'up' => static function (PDO $db, Migrator $m): void {
+        $names = implode(',', array_map(static fn (string $n): string => $db->quote($n), Settings::SECRETS));
+        $pending = (int) $db->query("SELECT COUNT(*) FROM settings WHERE name IN ({$names}) AND value LIKE 'v1:%'")->fetchColumn()
+            + (int) $db->query("SELECT COUNT(*) FROM users WHERE totp_secret_enc LIKE 'v1:%'")->fetchColumn();
+        if ($pending === 0) {
+            return; // nothing stored the old way (a new install)
+        }
         try {
             $crypto = App::crypto();
-        } catch (\Throwable) {
-            return; // no app key in this context: nothing can be decrypted, so nothing to upgrade
+        } catch (\Throwable $ex) {
+            // Fail, so the migration is retried: marking it done would leave every old secret and 2FA seed unreadable.
+            throw new \RuntimeException('Migration 0042 needs the app key (config app_key) to upgrade stored secrets: ' . $ex->getMessage(), 0, $ex);
         }
-        $names = implode(',', array_map(static fn (string $n): string => $db->quote($n), Settings::SECRETS));
         $upd = $db->prepare('UPDATE settings SET value = :v WHERE name = :n AND value = :old');
         foreach ($db->query("SELECT name, value FROM settings WHERE name IN ({$names}) AND value LIKE 'v1:%'")->fetchAll() as $row) {
             try {

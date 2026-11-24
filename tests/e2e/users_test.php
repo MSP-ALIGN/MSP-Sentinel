@@ -41,6 +41,9 @@ return [
         Assert::contains('already taken', $dup->body, 'usernames are case-insensitive unique');
 
         $ok = $admin->submit('/users/new', '/users', ['username' => 'nina.new', 'display_name' => 'Nina New', 'email' => 'nina@msp.example', 'role' => 'technician', 'password' => 'Temp-Pass-0001!']);
+        Assert::status(422, $ok, 'creating a user needs your own password');
+        Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM users WHERE username = 'nina.new'")->fetchColumn());
+        $ok = $admin->submit('/users/new', '/users', ['username' => 'nina.new', 'display_name' => 'Nina New', 'email' => 'nina@msp.example', 'role' => 'technician', 'password' => 'Temp-Pass-0001!', 'my_password' => 'Admin-Pass-0001!']);
         Assert::redirect('/users', $ok);
         Assert::contains('nina.new', $admin->get('/users')->body);
 
@@ -125,7 +128,7 @@ return [
     'user-supplied text is escaped everywhere (no stored XSS)' => function (TestContext $ctx): void {
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $payload = '<script>alert("x")</script><img src=x onerror=alert(1)>';
-        $admin->submit('/users/new', '/users', ['username' => 'xss.test', 'display_name' => $payload, 'email' => '', 'role' => 'viewer', 'password' => 'Xss-Test-Pass-01!']);
+        $admin->submit('/users/new', '/users', ['username' => 'xss.test', 'display_name' => $payload, 'email' => '', 'role' => 'viewer', 'password' => 'Xss-Test-Pass-01!', 'my_password' => 'Admin-Pass-0001!']);
         $list = $admin->get('/users')->body;
         Assert::notContains('<script>alert("x")</script>', $list);
         Assert::notContains('<img src=x', $list);

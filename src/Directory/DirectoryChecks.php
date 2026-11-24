@@ -18,8 +18,8 @@ namespace Sentinel\Directory;
  *
  * Untrusted: every directory value (names are cleaned and shortened; numbers parsed defensively); the job's
  * dc_ip and cert_trusted are signed by Sentinel, but a compromised Sentinel could sign other ones (1.34 audit).
- * So the agent also remembers, per domain, the address of the domain controller it first signed in to (pinFile in its
- * own state folder). A later job naming another address for that domain gets no password: someone at the agent
+ * So the agent also remembers the domain and the domain controller address it first signed in to (pinFile in its
+ * own state folder). A later job naming another domain or address gets no password: someone at the agent
  * deletes the pin file (dc-pins.json) when a domain controller really moves. Certificate renewals on the same
  * address keep working through "Trust this certificate" in Sentinel.
  */
@@ -42,27 +42,30 @@ final class DirectoryChecks
     {
     }
 
-    /** The pinned domain controller address for a domain, or '' (none yet, or no pin file). */
-    private function pinned(string $domain): string
+    /**
+     * The pinned domain and domain controller address ({domain, dc_ip}), or null (none yet, or no pin file). One pair
+     * per agent: the directory password belongs to one domain, so a job naming another domain is refused too (1.34
+     * review: a pin per domain could be sidestepped by naming a new domain).
+     *
+     * @return array{domain:string, dc_ip:string}|null
+     */
+    private function pinned(): ?array
     {
         if ($this->pinFile === null || !is_file($this->pinFile)) {
-            return '';
+            return null;
         }
-        $pins = json_decode((string) @file_get_contents($this->pinFile), true);
-        return is_array($pins) && is_string($pins[$domain] ?? null) ? $pins[$domain] : '';
+        $pin = json_decode((string) @file_get_contents($this->pinFile), true);
+        return is_array($pin) && is_string($pin['domain'] ?? null) && is_string($pin['dc_ip'] ?? null) ? ['domain' => $pin['domain'], 'dc_ip' => $pin['dc_ip']] : null;
     }
 
-    /** Remember the address after the first successful sign-in for a domain (written atomically, owner-only). */
+    /** Remember the domain and address after the first successful sign-in (written atomically, owner-only). */
     private function pin(string $domain, string $ip): void
     {
-        if ($this->pinFile === null || $this->pinned($domain) !== '') {
+        if ($this->pinFile === null || $this->pinned() !== null) {
             return;
         }
-        $pins = is_file($this->pinFile) ? json_decode((string) @file_get_contents($this->pinFile), true) : [];
-        $pins = is_array($pins) ? $pins : [];
-        $pins[$domain] = $ip;
         $tmp = $this->pinFile . '.tmp';
-        if (@file_put_contents($tmp, json_encode($pins, JSON_PRETTY_PRINT) . "\n", LOCK_EX) !== false) {
+        if (@file_put_contents($tmp, json_encode(['domain' => $domain, 'dc_ip' => $ip], JSON_PRETTY_PRINT) . "\n", LOCK_EX) !== false) {
             @chmod($tmp, 0600);
             @rename($tmp, $this->pinFile);
         }
@@ -81,11 +84,11 @@ final class DirectoryChecks
         $out = ['cert' => [], 'signing_required' => null, 'bind' => 'failed', 'error' => '', 'checks' => null];
         [$ip389, $port389] = ($this->endpoint)($job['dc_ip'], 389);
         $out['signing_required'] = LdapClient::signingRequired($ip389, $port389);
-        $pinned = $this->pinned($job['domain']);
-        if ($pinned !== '' && $pinned !== $job['dc_ip']) {
-            $out['bind'] = 'failed'; // reported as an error; no certificate is read from the new address
-            $out['error'] = 'This agent signed in to ' . $job['domain'] . ' at ' . $pinned . ' before, not ' . $job['dc_ip']
-                . ': the password was not sent. If the domain controller really moved, delete dc-pins.json in the agent\'s state folder on the agent itself.';
+        $pinned = $this->pinned();
+        if ($pinned !== null && ($pinned['domain'] !== $job['domain'] || $pinned['dc_ip'] !== $job['dc_ip'])) {
+            $out['bind'] = 'failed'; // reported as an error; nothing is read from or sent to the new address
+            $out['error'] = 'This agent signed in to ' . $pinned['domain'] . ' at ' . $pinned['dc_ip'] . ' before, not ' . $job['domain'] . ' at ' . $job['dc_ip']
+                . ': the password was not sent. If the domain or domain controller really changed, delete dc-pins.json in the agent\'s state folder on the agent itself.';
             return $out;
         }
         [$ip, $port] = ($this->endpoint)($job['dc_ip'], 636);

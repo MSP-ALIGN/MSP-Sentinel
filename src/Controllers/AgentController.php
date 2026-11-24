@@ -136,6 +136,12 @@ final class AgentController extends Controller
         if ((int) $client['is_archived'] === 1) {
             throw new HttpException(400, __('This client is archived.'));
         }
+        // An agent without an internal authorisation could never scan: record the authorisation first (1.34; the page
+        // shows the button only then, and this keeps the server consistent with it).
+        if (App::agents()->activeAuthorisation((int) $site['id'], \Sentinel\Scope\ScopeService::today((string) $client['timezone'])) === null) {
+            Session::flash('warning', __('Record an internal authorisation for {site} first; then create the enrolment code.', ['site' => $site['name']]));
+            return Response::redirect('/clients/' . (int) $client['id'] . '/agents');
+        }
         $code = App::agents()->createEnrolment((int) $client['id'], (int) $site['id'], (int) $this->user()['id']);
         $this->audit($request, 'agent.enrolment_created', 'site', (int) $site['id'], ['client_id' => (int) $client['id']]);
         $url = rtrim((string) App::config()->get('app.public_url', ''), '/');

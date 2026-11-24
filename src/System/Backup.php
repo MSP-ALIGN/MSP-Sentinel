@@ -434,8 +434,13 @@ final class Backup
             throw new \RuntimeException('Could not read the database dump.');
         }
         try {
+            // Long rows (a report's HTML) are read in chunks: only a chunk that starts a new line is checked, since a
+            // chunk from the middle of a row can begin with anything (1.34 review).
+            $atLineStart = true;
             while (($line = fgets($fh, 1048576)) !== false) {
-                if (preg_match('/^\s*(\\\\[^\s]|(system|source|connect|pager|tee|use)\b)/i', $line) === 1) {
+                $startsLine = $atLineStart;
+                $atLineStart = str_ends_with($line, "\n");
+                if ($startsLine && preg_match('/^\s*(\\\\[^\s]|(system|source|connect|pager|tee|use)\b)/i', $line) === 1) {
                     throw new \RuntimeException('The database dump contains client commands, which a Sentinel backup never has. It was not restored.');
                 }
             }

@@ -147,6 +147,8 @@
     // Instant list filters (1.34): <input data-filter-list="#container" [data-filter-count="#el"]> hides the
     // container's items (elements with data-filter-item, else its table body rows) whose text doesn't contain what was
     // typed. Text comparison only; nothing is sent anywhere. A ?q= in the address pre-fills it (search results link here).
+    // Optional: elements inside the container marked data-filter-group (e.g. a section with its heading) are hidden
+    // while filtering when none of their own data-filter-item elements match (the help page's sections).
     document.querySelectorAll('input[data-filter-list]').forEach(function (input) {
         var container = document.querySelector(input.getAttribute('data-filter-list'));
         if (!container) { return; }
@@ -162,6 +164,9 @@
                 var match = q === '' || it.textContent.toLowerCase().indexOf(q) !== -1;
                 it.hidden = !match;
                 if (match) { shown++; }
+            });
+            container.querySelectorAll('[data-filter-group]').forEach(function (group) {
+                group.hidden = q !== '' && group.querySelector('[data-filter-item]:not([hidden])') === null;
             });
             if (countEl) { countEl.textContent = q === '' ? '' : shown + ' / ' + items.length; }
         }

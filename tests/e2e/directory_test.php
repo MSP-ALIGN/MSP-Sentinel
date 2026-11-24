@@ -261,11 +261,15 @@ return [
         // (Simulated as the agent having first signed in at another address; the test network only maps .5.)
         $pins = $dirAgent($ctx) . '/dc-pins.json';
         $pinned = (string) file_get_contents($pins);
-        file_put_contents($pins, json_encode(['corp.example' => '10.90.0.9']));
-        $before = count($binds($ctx));
-        $scan($ctx, $cid, $site);
-        Assert::same([], array_values(array_filter(array_slice($binds($ctx), $before), static fn (array $b): bool => $b['mode'] === 'ldaps')), 'no sign-in at another address');
-        Assert::contains('at 10.90.0.9 before, not 10.90.0.5', App::directory()->find($site)['last_error']);
+        Assert::same(['domain' => 'corp.example', 'dc_ip' => '10.90.0.5'], json_decode($pinned, true), 'one domain and address per agent');
+        foreach ([['corp.example', '10.90.0.9'], ['other.example', '10.90.0.5']] as [$pd, $pip]) {
+            // Another address for the domain, or another domain (a compromised Sentinel could sign either).
+            file_put_contents($pins, json_encode(['domain' => $pd, 'dc_ip' => $pip]));
+            $before = count($binds($ctx));
+            $scan($ctx, $cid, $site);
+            Assert::same([], array_values(array_filter(array_slice($binds($ctx), $before), static fn (array $b): bool => $b['mode'] === 'ldaps')), 'no sign-in: ' . $pd . ' ' . $pip);
+            Assert::contains('signed in to ' . $pd . ' at ' . $pip . ' before, not corp.example at 10.90.0.5', App::directory()->find($site)['last_error']);
+        }
         file_put_contents($pins, $pinned);
         // A changed certificate: the agent doesn't sign in, and says why.
         $ctx->db->exec("UPDATE site_directory SET cert_trusted = '" . str_repeat('ab', 32) . "' WHERE site_id = {$site}");

@@ -416,15 +416,17 @@ if [ -n "$backup_pass" ]; then
     # does not understand bash's $'...' quoting. Readable by root and the backup job (user sentinel) only: not by the
     # PHP-FPM pool, which shares the sentinel group (1.34 audit). Never printed.
     q="'$(printf '%s' "$backup_pass" | sed "s/'/'\\\\''/g")'"
-    { echo '# Written by the MSP Sentinel installer: nightly backups are encrypted with this passphrase. Keep a copy in your vault.'
-      echo 'export SENTINEL_BACKUP_ENCRYPT=1'
-      printf 'export SENTINEL_BACKUP_PASSPHRASE=%s\n' "$q"; } > /etc/msp-sentinel/backup.env.tmp
+    ( umask 077  # owner-only from the moment it exists
+      { echo '# Written by the MSP Sentinel installer: nightly backups are encrypted with this passphrase. Keep a copy in your vault.'
+        echo 'export SENTINEL_BACKUP_ENCRYPT=1'
+        printf 'export SENTINEL_BACKUP_PASSPHRASE=%s\n' "$q"; } > /etc/msp-sentinel/backup.env.tmp )
     unset q
-    chown sentinel:sentinel /etc/msp-sentinel/backup.env.tmp
     chmod 0600 /etc/msp-sentinel/backup.env.tmp
-    # Self-test: the file must give back exactly this passphrase under sh (through the environment, not argv).
+    # Self-test: the file must give back exactly this passphrase under sh (through the environment, not argv). Run
+    # while root still owns the file: root never sources a file the sentinel user could have changed (1.34 review).
     SENTINEL_PP_EXPECT="$backup_pass" sh -c '. /etc/msp-sentinel/backup.env.tmp; [ "$SENTINEL_BACKUP_PASSPHRASE" = "$SENTINEL_PP_EXPECT" ]' \
       || { rm -f /etc/msp-sentinel/backup.env.tmp; die "Could not store the backup passphrase safely; backups were left unencrypted."; }
+    chown sentinel:sentinel /etc/msp-sentinel/backup.env.tmp
     mv -f /etc/msp-sentinel/backup.env.tmp /etc/msp-sentinel/backup.env
     echo "  Nightly backups will be encrypted. Keep the passphrase in your password vault: without it they can't be restored."
   fi

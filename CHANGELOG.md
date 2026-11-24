@@ -11,18 +11,23 @@ All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` 
   (deleting or revoking, sending tests, starting scans or rechecks, approving engagements, bulk triage).
 - **Security audit fixes:**
   - Two-person approval of engagements can't be bypassed with an account the creator made or reset (30 days).
-  - Resetting a password or 2FA, changing a role or access, and creating API tokens ask for your own password.
+  - Creating a user, resetting a password or 2FA, changing a role or access, and creating API tokens ask for your own
+    password. Engagement approval also refuses accounts linked to the creator the other way round or through a chain.
   - Changing the ITFlow or MSP Align address, or the SMTP host, clears the saved key or password.
   - Technicians' verify-fix rechecks wait for the scan window (admins' run straight away).
   - Encrypted settings and 2FA seeds are bound to their place; migration 0042 upgrades stored values.
-  - Agents send the Active Directory password only to the domain controller address they first signed in to.
+  - Agents send the Active Directory password only to the domain and domain controller address they first signed in
+    to (`dc-pins.json` on the agent; delete it there if the domain controller really moves).
   - Restoring a backup can't run client commands from a tampered dump, and keeps this server's program and folder
     settings; the backup passphrase file is owner-only.
-  - Wildcards under shared platforms (`*.s3.amazonaws.com` and similar) are refused in the scan register.
+  - Wildcards under shared platforms (`*.s3.amazonaws.com` and similar) are refused in the scan register. Entries
+    saved before are not re-checked: look through your registers for such wildcards.
+  - An enrolment code needs the site's internal authorisation first.
   - MSP Align links must be web addresses; Teams alert text can't add links or formatting.
   - Alerts are sent while a long scan runs; API lockouts are audited; notifications are marked read only on request.
   - The Update now card shows the installed and newest commit (branch code is unsigned).
 - **Easier workflows:**
+  - New engagements start with the gentle pace and without the all-ports test (the least risky choice).
   - Engagement approvals: other admins are notified, the dashboard shows what awaits you, and a new Engagements page
     lists every engagement. A lone admin is told to add a second one.
   - Finding pages show "Why it matters / How to fix".

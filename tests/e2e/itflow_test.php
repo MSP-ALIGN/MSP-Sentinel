@@ -531,5 +531,9 @@ return [
         Assert::contains('saved API key was removed', $admin->get('/admin/integrations')->body);
         $admin->submit('/admin/integrations', '/admin/integrations/itflow', ['url' => $base($ctx), 'api_key' => $key, 'enabled' => '0']);
         Assert::true(App::settings()->getSecret('itflow_api_key') !== '', 'entered again with the new address: kept');
+        // A new address with an invalid key changes nothing at all (the old key never pairs with the new address).
+        $admin->submit('/admin/integrations', '/admin/integrations/itflow', ['url' => 'https://itflow-elsewhere.example', 'api_key' => 'x', 'enabled' => '0']);
+        Assert::same($base($ctx), App::settings()->get('itflow_url'), 'address unchanged after an invalid key');
+        Assert::true(App::settings()->getSecret('itflow_api_key') !== '', 'key unchanged');
     },
 ];
