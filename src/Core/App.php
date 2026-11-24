@@ -214,7 +214,8 @@ final class App
             self::inventorySources() === [] ? null : self::inventorySync(), self::agentService(), new \Sentinel\Scanning\ProtocolProbes($connector),
             $dns === null ? null : new \Sentinel\Web\DomainChecker($dns, $connector, new HttpProbe($connector), self::scopeParser()),
             // Vendor default passwords (engagements only): 5 seconds between attempts; the test suite may shorten it.
-            new \Sentinel\Scanning\DefaultCredentials($connector, self::webhookTestMode() ? (float) $config->get('testing.creds_spacing', 5.0) : 5.0));
+            new \Sentinel\Scanning\DefaultCredentials($connector, self::webhookTestMode() ? (float) $config->get('testing.creds_spacing', 5.0) : 5.0),
+            new \Sentinel\Scanning\SmbShares($connector));
     }
 
     /** Vulnerability data and match store. */

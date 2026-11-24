@@ -41,7 +41,7 @@ final class EngagementController extends Controller
             'tcp_full' => __('All 65,535 TCP ports (instead of the usual list)'),
             'udp_common' => __('Common UDP services: one read-only request each to SNMP (default communities), NTP and SSDP/UPnP'),
             'nse_safe' => __('nmap\'s "safe" service scripts (details of each service; no vulnerability or intrusive checks)'),
-            'anon_access' => __('Anonymous access checks (anonymous FTP login, NFS exports; read only)'),
+            'anon_access' => __('Anonymous access checks (anonymous FTP login, NFS exports, SMB file shares through an anonymous session: share list and top-folder item counts; read only)'),
             'default_creds' => __('Vendor default passwords: at most 3 per service (FTP, web admin pages with Basic login, MySQL/MariaDB, PostgreSQL), each a different account, 5 seconds apart, stopping at any lockout; and databases open without a password (Redis, MongoDB, Elasticsearch, Memcached)'),
         ];
     }

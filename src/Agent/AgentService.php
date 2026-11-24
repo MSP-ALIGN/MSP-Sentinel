@@ -537,6 +537,10 @@ final class AgentService
             if (is_array($h['udp'] ?? null)) {
                 $checks['udp'] = array_slice(array_map(static fn ($v): string => is_scalar($v) ? mb_substr((string) $v, 0, 500) : '', $h['udp']), 0, 20, true);
             }
+            // Open file shares (only with the anonymous access test): fixed values, share names, counts.
+            if (is_array($h['smb_shares'] ?? null) && in_array('anon_access', $e['tests_list'], true)) {
+                $checks['smb_shares'] = \Sentinel\Scanning\SmbShares::cleanResults($h['smb_shares']);
+            }
             // Default-credential results (only when the engagement has that test): fixed values only; the username and the
             // masked password as text, never anything longer (the agent never sends the password itself).
             if (in_array('default_creds', $e['tests_list'], true)) {

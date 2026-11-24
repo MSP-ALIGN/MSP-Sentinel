@@ -93,7 +93,9 @@ It only covers systems already in the authorised scope above.
   "private"), NTP and SSDP/UPnP.
 - [ ] Service detail scripts (nmap's "safe" category, excluding vulnerability checks and anything that broadcasts,
   contacts third parties, guesses passwords, may crash a service or exploits).
-- [ ] Anonymous access: anonymous FTP login (the top folder is listed) and NFS exports. Read only.
+- [ ] Anonymous access: anonymous FTP login (the top folder is listed), NFS exports, and Windows/NAS file shares
+  through an anonymous session (no username): the share list, and the number of items in each share's top folder.
+  Read only; no file is opened and no file names are kept.
 - [ ] Vendor default passwords: the Client explicitly allows trying published vendor default passwords on FTP, web
   admin pages with Basic login, MySQL/MariaDB and PostgreSQL: at most three attempts per service, and no username
   is tried twice on one device (so no account sees more than one failed attempt), five seconds apart, stopping at any

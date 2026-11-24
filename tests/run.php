@@ -129,11 +129,20 @@ try {
         throw new RuntimeException("create-admin failed:\n" . $out);
     }
 
-    $freePort = static function (): int {
-        $sock = stream_socket_server('tcp://127.0.0.1:0');
-        $port = (int) substr(strrchr(stream_socket_get_name($sock, false), ':'), 1);
-        fclose($sock);
-        return $port;
+    // A free local port. Mocks bind a moment after they start, so the OS may offer the same number twice: never hand out
+    // a port twice in one run.
+    $usedPorts = [];
+    $freePort = static function () use (&$usedPorts): int {
+        for ($i = 0; $i < 50; $i++) {
+            $sock = stream_socket_server('tcp://127.0.0.1:0');
+            $port = (int) substr(strrchr(stream_socket_get_name($sock, false), ':'), 1);
+            fclose($sock);
+            if (!isset($usedPorts[$port])) {
+                $usedPorts[$port] = true;
+                return $port;
+            }
+        }
+        throw new RuntimeException('no free local port');
     };
     // Mock outside services, all on 127.0.0.1: DNS (UDP+TCP) and crt.sh (HTTP).
     $dnsPort = $freePort();
@@ -228,6 +237,13 @@ try {
         $redirects[$target] = $p;
     }
     $cfg['testing']['creds_spacing'] = 0.3;
+    // Safe SMB share check (engagements): fake SMB2 servers; every request is logged so tests can prove nothing is written.
+    foreach (['203.0.113.76:445' => 'open', '10.88.0.40:445' => 'open', '10.88.0.41:445' => 'noanon', '10.88.0.42:445' => 'restricted'] as $target => $smbMode) {
+        $p = $freePort();
+        $mocks[] = proc_open([PHP_BINARY, __DIR__ . '/mocks/smb_server.php', (string) $p, $smbMode, $outDir . '/smb-requests.log'],
+            [0 => ['file', '/dev/null', 'r'], 1 => ['file', $outDir . '/mock-smb.log', 'a'], 2 => ['file', $outDir . '/mock-smb.log', 'a']], $pipes);
+        $redirects[$target] = $p;
+    }
     $cfg['testing']['redirect_connections'] = $redirects;
     // Agent updates: a tiny made-up agent release (version 9.9.9), signed with a release key made for this run only.
     // Sentinel hands it out (testing.release_root); agents check it against the public key (testing.release_key in

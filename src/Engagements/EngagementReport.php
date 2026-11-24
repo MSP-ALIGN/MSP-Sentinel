@@ -119,9 +119,9 @@ final class EngagementReport
             }
             return false;
         };
-        $externalDoor = $has(['ftp_anon', 'snmp_public', 'snmp_private', 'telnet', 'nfs_exports', 'default_login', 'no_auth'], 'external')
+        $externalDoor = $has(['ftp_anon', 'snmp_public', 'snmp_private', 'telnet', 'nfs_exports', 'default_login', 'no_auth', 'smb_share_open'], 'external')
             || array_filter($findings, static fn (array $f): bool => $f['origin'] === 'external' && str_starts_with($f['key'], 'exposed_')) !== [];
-        $internalSpread = $has(['smb1', 'nfs_exports'], 'internal');
+        $internalSpread = $has(['smb1', 'nfs_exports', 'smb_share_open'], 'internal');
         $paths = [];
         if ($externalDoor && $internalSpread) {
             $paths[] = __('From the internet an attacker can reach services that should not be reachable; once inside, old protocols and exports open to anyone would let them read data and spread to other machines.');
@@ -137,6 +137,9 @@ final class EngagementReport
         }
         if ($has(['default_login'])) {
             $paths[] = __('A vendor default password still works: anyone who can reach the service can sign in as that account, with no hacking skill needed (these passwords are published in manuals).');
+        }
+        if ($has(['smb_share_open'])) {
+            $paths[] = __('A file share can be read without any password: anyone on the network can copy what is in it, and ransomware spreads through shares like this.');
         }
         if ($has(['no_auth'])) {
             $paths[] = __('A database answers without any password: anyone who can reach it can read, change or delete its data.');

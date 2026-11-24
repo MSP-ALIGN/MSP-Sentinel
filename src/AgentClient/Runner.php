@@ -70,6 +70,7 @@ final class Runner
         private readonly ?Updater $updater = null,
         private readonly ?Mover $mover = null,
         private readonly ?\Sentinel\Scanning\DefaultCredentials $creds = null,
+        private readonly ?\Sentinel\Scanning\SmbShares $smb = null,
     ) {
         $this->log = $log;
     }
@@ -454,6 +455,10 @@ final class Runner
             }
             if ($this->probes !== null && in_array('udp_common', $tests, true) && in_array(161, $job['udp_ports'] ?? [], true) && !$shouldStop()) {
                 $h['udp'] = $this->probes->udpChecks((string) $ip); // SNMP, NTP, SSDP: signed in the job
+            }
+            // Open file shares (anonymous access test, 1.30): anonymous session, read-only, top folders only.
+            if ($this->smb !== null && in_array('anon_access', $tests, true) && in_array(445, array_column($h['ports'], 'port'), true) && !$shouldStop()) {
+                $h['smb_shares'] = $this->smb->check((string) $ip, $shouldStop);
             }
             // Vendor default passwords: only when signed in the job's tests, on the services found on this host.
             if ($this->creds !== null && in_array('default_creds', $tests, true) && $h['ports'] !== [] && !$shouldStop()

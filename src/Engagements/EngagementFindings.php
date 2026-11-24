@@ -13,7 +13,8 @@ use Sentinel\Scanning\PortProfile;
  * evidence, so the report always matches what was recorded, and a retest is the same analysis on newer evidence.
  *
  * Severities: 'fail' (fix soon: SMBv1, NFS exports open to everyone, default SNMP write community, high-risk services
- * on the internet, Telnet, anonymous FTP, a vendor default password that works, a database open without a password), 'warn' (should be fixed: SMB signing not required, NFS exports listed,
+ * on the internet, Telnet, anonymous FTP, a vendor default password that works, a database open without a password, a
+ * file share readable without a password), 'warn' (should be fixed: SMB signing not required, NFS exports listed,
  * SNMP "public", plain FTP, UPnP on the internet), 'info' (worth knowing: services reachable).
  *
  * Untrusted: all evidence came from the tested hosts. Only fixed phrases are matched; evidence is cut to 600
@@ -98,6 +99,22 @@ final class EngagementFindings
                 $add($external ? 'warn' : 'info', 'ssdp', $external ? __('UPnP discovery (SSDP) answers from the internet (amplification attacks)') : __('UPnP discovery (SSDP) answers'),
                     $ip . ':1900/udp', $origin, (string) ($ssdp['server'] ?? ''), __('Turn UPnP off on this device, or block UDP 1900 at the firewall.'));
             }
+            // Open file shares (1.30): an anonymous session listed shares and/or opened their top folders (read only).
+            $smb = (array) ($r['checks_list']['smb_shares'] ?? []);
+            if (($smb['listed'] ?? false) === true) {
+                $names = array_map(static fn (array $s): string => (string) ($s['name'] ?? ''), array_filter((array) ($smb['shares'] ?? []), 'is_array'));
+                $add($external ? 'fail' : 'warn', 'smb_shares_listed', __('Anyone can list this server\'s file shares without a password'), $ip . ':445', $origin,
+                    __('Shares handed out to an anonymous session: {list}', ['list' => implode(', ', array_slice($names, 0, 30))]),
+                    __('Turn off anonymous access to the share list (Windows: "Network access: Restrict anonymous access to Named Pipes and Shares"; Samba: "restrict anonymous = 2").'));
+            }
+            foreach ((array) ($smb['shares'] ?? []) as $sh) {
+                if (is_array($sh) && ($sh['readable'] ?? null) === true) {
+                    $share = '\\\\' . $ip . '\\' . (string) ($sh['name'] ?? '');
+                    $add('fail', 'smb_share_open', __('File share {s} can be read without a password', ['s' => $share]), $share, $origin,
+                        __('{n} item(s) in its top folder, listed by an anonymous session; nothing was opened.', ['n' => (int) ($sh['items'] ?? 0)]),
+                        __('Remove "Everyone", "Anonymous" and "Guest" from the share and folder permissions (Samba: "guest ok = no"); give access only to the groups that need it.'));
+                }
+            }
             // Vendor default passwords (1.29): evidence is the username and the MASKED password only.
             foreach ((array) ($r['checks_list']['creds'] ?? []) as $c) {
                 $name = DefaultCredentials::NAMES[(string) ($c['service'] ?? '')] ?? null;
@@ -132,7 +149,7 @@ final class EngagementFindings
     public static function testFor(string $key): string
     {
         return match ($key) {
-            'ftp_anon', 'nfs_exports' => 'anon_access',
+            'ftp_anon', 'nfs_exports', 'smb_shares_listed', 'smb_share_open' => 'anon_access',
             'smb1', 'smb_signing' => 'nse_safe',
             'snmp_public', 'snmp_private', 'ssdp', 'ntp' => 'udp_common',
             'default_login', 'no_auth', 'creds_locked' => 'default_creds',

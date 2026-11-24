@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.29.1](https://img.shields.io/badge/version-1.29.1-ff5a1f?style=flat-square)
+![Version 1.30.0](https://img.shields.io/badge/version-1.30.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -150,6 +150,25 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
 
 ## What's new
 
+### 1.30.0 (2026-11-24): safe SMB share check
+
+- **The engagement's anonymous access test now checks Windows and NAS file shares.** It uses Sentinel's own SMB2
+  client:
+  - it signs in **anonymously**, with no username at all, so no account can ever be locked;
+  - it reads the share list;
+  - it opens each disk share's top folder for listing only and counts the items in it.
+
+  It never opens a file, never goes into a subfolder and never writes. nmap's share script is still not used, because
+  it writes a test file.
+- **Evidence:** share names and item counts only, never file names.
+- **Findings:**
+  - a share readable without a password is a Fail;
+  - a share list handed out to anyone is a Warning (a Fail from the internet).
+
+  The report explains why open shares matter (ransomware spreads through them).
+- **External and internal.** Internal runs need agents 1.30.0 for the share check; older agents still run the rest
+  of the test.
+
 ### 1.29.1 (2026-11-23): default passwords, fixes from review
 
 - **No username is ever tried twice on one host.** A device often serves the same login on several ports (80, 443,
@@ -253,7 +272,7 @@ The same help is built into the app (**Help** in the menu), with a "What's new" 
   - all 65,535 TCP ports;
   - common UDP services (SNMP, NTP, SSDP; one read-only request each);
   - nmap's safe scripts;
-  - anonymous-access checks (FTP, NFS; read only).
+  - anonymous-access checks (FTP, NFS, SMB file shares; read only).
 
   The pace is gentle or normal (never faster). No password guessing, no exploits, nothing that changes the systems.
 - **External tests run from Sentinel.** They run in 20-minute slices, and every host is checked against the

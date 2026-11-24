@@ -18,7 +18,7 @@ Time-boxed, deeper tests the client authorises in writing and a second admin app
 - all TCP ports;
 - common UDP services;
 - nmap's safe scripts;
-- anonymous-access checks.
+- anonymous-access checks (FTP, NFS and, from 1.30, SMB file shares through an anonymous session).
 
 They run externally from Sentinel and internally through the agents. Each engagement ends with a penetration test
 report (summary, how the findings chain together, evidence) and, after fixes, a retest letter. Day-to-day scanning

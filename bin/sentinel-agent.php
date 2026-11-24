@@ -188,7 +188,8 @@ switch ($command) {
             $mover,
             // Vendor default passwords (signed engagement test only): 5 seconds between attempts (test suite: shorter).
             new \Sentinel\Scanning\DefaultCredentials($connector, $testMode && ($c['testing']['allow_documentation_ranges'] ?? false) === true
-                && is_numeric($c['testing']['creds_spacing'] ?? null) ? (float) $c['testing']['creds_spacing'] : 5.0));
+                && is_numeric($c['testing']['creds_spacing'] ?? null) ? (float) $c['testing']['creds_spacing'] : 5.0),
+            new \Sentinel\Scanning\SmbShares($connector));
         $say('Agent #' . $c['agent_id'] . ' started (version ' . Runner::version() . ').');
         do {
             try {

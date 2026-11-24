@@ -2,6 +2,25 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.30.0 (2026-11-24): safe SMB share check
+
+- **The engagement's anonymous access test now checks Windows and NAS file shares.** It uses Sentinel's own SMB2
+  client:
+  - it signs in **anonymously**, with no username at all, so no account can ever be locked;
+  - it reads the share list;
+  - it opens each disk share's top folder for listing only and counts the items in it.
+
+  It never opens a file, never goes into a subfolder and never writes. nmap's share script is still not used, because
+  it writes a test file.
+- **Evidence:** share names and item counts only, never file names.
+- **Findings:**
+  - a share readable without a password is a Fail;
+  - a share list handed out to anyone is a Warning (a Fail from the internet).
+
+  The report explains why open shares matter (ransomware spreads through them).
+- **External and internal.** Internal runs need agents 1.30.0 for the share check; older agents still run the rest
+  of the test.
+
 ### 1.29.1 (2026-11-23): default passwords, fixes from review
 
 - **No username is ever tried twice on one host.** A device often serves the same login on several ports (80, 443,

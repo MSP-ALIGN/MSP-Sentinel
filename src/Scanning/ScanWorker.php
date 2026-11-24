@@ -83,6 +83,7 @@ final class ScanWorker
         private readonly ?ProtocolProbes $probes = null,
         private readonly ?\Sentinel\Web\DomainChecker $domains = null,
         private readonly ?DefaultCredentials $creds = null,
+        private readonly ?SmbShares $smb = null,
     ) {
         $this->log ??= static function (string $line): void {
         };
@@ -662,6 +663,10 @@ final class ScanWorker
             $checks = ['hostscripts' => $parsed['hostscripts']];
             if (in_array('udp_common', $tests, true) && $this->probes !== null && !$shouldStop($ip)) {
                 $checks['udp'] = $this->probes->udpChecks($ip);
+            }
+            // Open file shares (anonymous access test, 1.30): an anonymous session only, read-only, top folders only.
+            if (in_array('anon_access', $tests, true) && $this->smb !== null && in_array(445, array_column($parsed['open'], 'port'), true) && !$shouldStop($ip)) {
+                $checks['smb_shares'] = $this->smb->check($ip, fn (): bool => $shouldStop($ip) || !$allowed($ip, $names));
             }
             // Vendor default passwords (signed test, explicit authorisation): the open services nmap identified; the stop
             // callback re-checks the engagement and this host's scope before every attempt.
