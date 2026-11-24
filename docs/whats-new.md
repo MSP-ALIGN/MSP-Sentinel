@@ -2,6 +2,25 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.33.1 (2026-11-24): breach monitoring, fixes from review
+
+- **No mass removal from an incomplete answer.** An answer that would remove more than half of the known breached
+  addresses, or covers no domain at all, removes nothing and says so on the settings card. Only addresses of domains
+  the answer covers (or that left the client's register) are ever removed.
+- **An expired authorisation is not a fix:** that client's addresses and findings stay as they are.
+- **A failed check is retried after 6 hours** (not a week), and a new API key can be checked at once.
+- **Addresses are masked** in finding titles and targets, so in alerts, Teams/Slack messages and lists
+  (`j***@client.example`). Viewers see them masked on the client page; the full address is in the finding's details
+  for technicians and admins.
+- **Archived clients' breach data is removed.**
+- **Smaller fixes:**
+  - each client's results are stored in one transaction;
+  - breach evidence no longer changes with the provider's ordering;
+  - future-dated breaches are treated as undated;
+  - stricter domain checks;
+  - a broader API key format;
+  - a smaller answer size limit.
+
 ### 1.33.0 (2026-11-24): breach monitoring
 
 - **Breached accounts.** Once a week, Sentinel asks XposedOrNot which addresses of your verified domains appear in

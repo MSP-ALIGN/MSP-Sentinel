@@ -100,7 +100,7 @@ enrolment_key_pinned() {
   "$PHP_BIN" -r '$c = json_decode((string) @file_get_contents($argv[1]), true); exit(!is_array($c) || (is_string($c["release_public_key"] ?? null) && $c["release_public_key"] !== "") ? 0 : 1);' "$CONF_DIR/agent.json"
 }
 
-release_key_and_helper() {
+pin_release_key() {
   # The release key normally comes from Sentinel (at enrolment, or offered later); a key given with --release-key
   # replaces the pinned one (after a lost key was replaced on the System page). A key file in the release folder is
   # only used when none is pinned yet. An existing pin is never changed silently.
@@ -114,6 +114,10 @@ release_key_and_helper() {
     # (Not when a key was pinned at enrolment: it is in agent.json, and a key file here would take its place.)
     run install -o root -g root -m 0644 "$SRC/install/release-key.pub" "$CONF_DIR/release-key.pub"
   fi
+}
+
+release_key_and_helper() {
+  pin_release_key
   # The helper's results: root-owned, readable by the agent, not changeable by it.
   run install -d -o root -g sentinel-agent -m 0750 /var/lib/sentinel-agent-update
   # The helper itself runs from a root-owned copy outside the code folder (1.35): remote updates never change it, so
@@ -156,6 +160,16 @@ fi
 
 if [ "$mode" = upgrade ]; then
   [ -f "$CONF_DIR/agent.json" ] || [ "$dry" -eq 1 ] || die "No enrolled agent found ($CONF_DIR/agent.json)."
+  # Run from the installed copy (/opt/sentinel-agent/install/agent-install.sh), this script is code a remote update
+  # delivered: it must not install code, units or the frozen update helper as root from there (1.35 review). Only
+  # pinning a new release key is allowed (no code involved); anything else needs a freshly downloaded release.
+  if [ -d "$APP_DIR" ] && [ "$(cd "$SRC" && pwd -P)" = "$(cd "$APP_DIR" && pwd -P)" ]; then
+    [ -n "$release_key" ] || die "Run --upgrade from a freshly downloaded and checked release (see docs/agent.md), not from the installed copy in $APP_DIR. To only pin a new release key, add --release-key BASE64KEY."
+    say "Pinning the new release key (no code is changed)"
+    pin_release_key
+    say "Done"
+    exit 0
+  fi
   say "Upgrading the agent to $(tr -d '[:space:]' < "$SRC/VERSION")"
   run systemctl stop sentinel-agent || true
   copy_code

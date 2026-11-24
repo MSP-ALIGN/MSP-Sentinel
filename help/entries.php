@@ -353,6 +353,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.35.1',
+            'date' => '2026-11-24',
+            'items' => [
+                'Windows agents no longer run any of a new release\'s code as SYSTEM during an update (the pre-flight check is the task\'s own). A replaced release key is given to a Linux agent with echo NEWKEY | sudo tee /etc/sentinel-agent/release-key.pub; the installed copy of agent-install.sh refuses --upgrade (use a downloaded release). The protection starts with the update after 1.35: upgrade agents to 1.35 by hand once where that matters. Smaller fixes to logging, clean-up and release hashes.',
+            ],
+        ],
+        [
             'version' => '1.35.0',
             'date' => '2026-11-24',
             'items' => [

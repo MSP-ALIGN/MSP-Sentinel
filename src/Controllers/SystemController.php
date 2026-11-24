@@ -113,7 +113,7 @@ final class SystemController extends Controller
      * browser. Only the PUBLIC key arrives here; the private key stays in the file the browser downloaded.
      * - create: when there is no key yet;
      * - rotate: a new key, with a statement naming it signed by the current key (agents accept it on their own);
-     * - replace: the old key file was lost (agents must be given the new key by hand: agent-install.sh --release-key).
+     * - replace: the old key file was lost (agents must be given the new key by hand: /etc/sentinel-agent/release-key.pub, see docs/agent.md).
      */
     public function releaseKey(Request $request): Response
     {

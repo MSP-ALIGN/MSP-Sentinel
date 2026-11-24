@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.35.0](https://img.shields.io/badge/version-1.35.0-ff5a1f?style=flat-square)
+![Version 1.35.1](https://img.shields.io/badge/version-1.35.1-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -118,6 +118,22 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.35.1 (2026-11-24): update hardening, fixes from review
+
+- **Windows: no new code as SYSTEM during an update either.** The update task's pre-flight used to run the new
+  release's self-check as SYSTEM; it now asks PHP for its version and extensions with its own fixed code.
+- **Giving agents a replaced release key needs no installed code:** `echo NEWKEY | sudo tee
+  /etc/sentinel-agent/release-key.pub`. The installed copy of `agent-install.sh` refuses `--upgrade` (it is code a
+  remote update delivered); upgrade from a downloaded, checked release.
+- **The change-over to the frozen helper has a limit:** the update from 1.34 or older is still installed by the old
+  helper, so the protection starts with the next update. Upgrade agents to 1.35 by hand once where that matters.
+- **Smaller fixes:**
+  - a Windows launcher that can't be swapped, or an update folder that can't be prepared, is logged in `update\task.log`;
+  - half-made frozen copies are cleaned up;
+  - `release-sign.php hash --ref` reads files without line-ending conversion and refuses an empty `--ref`;
+  - `SHA256SUMS` now covers `AGENT-MANIFEST-SHA256`;
+  - the docs say signing off the server is the strongest option.
+
 ### 1.35.0 (2026-11-24): agent updates can't run new code as root; signing checks the release hash
 
 - **The agent update helper is frozen.** Linux agents run the root update helper from a root-owned copy in
@@ -172,25 +188,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
   - Opening a form's address as a page goes to the page that holds the form.
   - Phones: tables scroll inside their cards and the findings filters fold away.
 - **Documentation:** task-based guides with a "Start here" page on GitHub, and in-app help reorganised the same way.
-
-### 1.33.1 (2026-11-24): breach monitoring, fixes from review
-
-- **No mass removal from an incomplete answer.** An answer that would remove more than half of the known breached
-  addresses, or covers no domain at all, removes nothing and says so on the settings card. Only addresses of domains
-  the answer covers (or that left the client's register) are ever removed.
-- **An expired authorisation is not a fix:** that client's addresses and findings stay as they are.
-- **A failed check is retried after 6 hours** (not a week), and a new API key can be checked at once.
-- **Addresses are masked** in finding titles and targets, so in alerts, Teams/Slack messages and lists
-  (`j***@client.example`). Viewers see them masked on the client page; the full address is in the finding's details
-  for technicians and admins.
-- **Archived clients' breach data is removed.**
-- **Smaller fixes:**
-  - each client's results are stored in one transaction;
-  - breach evidence no longer changes with the provider's ordering;
-  - future-dated breaches are treated as undated;
-  - stricter domain checks;
-  - a broader API key format;
-  - a smaller answer size limit.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

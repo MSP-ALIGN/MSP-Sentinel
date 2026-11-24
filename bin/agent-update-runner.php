@@ -87,16 +87,19 @@ if (in_array('--freeze', $argv, true)) {
     $from = dirname(__DIR__);
     $tmp = $frozen . '.tmp-' . bin2hex(random_bytes(4));
     $old = umask(0022);
+    $abort = static function (string $why) use ($tmp): never {
+        exec('rm -rf -- ' . escapeshellarg($tmp)); // never leave a half-made copy behind
+        fwrite(STDERR, $why . "\n");
+        exit(1);
+    };
     foreach (FROZEN_FILES as $rel) {
         $src = $from . '/' . $rel;
         if (!is_file($src) || is_link($src)) {
-            fwrite(STDERR, "Missing helper file: {$rel}\n");
-            exit(1);
+            $abort("Missing helper file: {$rel}");
         }
         @mkdir(dirname($tmp . '/' . $rel), 0755, true);
         if (!copy($src, $tmp . '/' . $rel)) {
-            fwrite(STDERR, "Could not copy {$rel}\n");
-            exit(1);
+            $abort("Could not copy {$rel}");
         }
         chmod($tmp . '/' . $rel, 0644);
     }
@@ -285,7 +288,7 @@ if (($req['kind'] ?? null) === 'pin' && is_array($c)) {
     $requestId = is_string($req['request'] ?? null) && preg_match('/^[0-9TZ:. -]{1,30}$/', $req['request']) === 1 ? $req['request'] : '';
     $cfg = json_decode((string) @file_get_contents($configFile), true); // root-owned: the pinned server key and identity
     [$pinState, $pinned] = $pinnedKey();
-    $decision = \Sentinel\System\ReleaseKeyOffer::decide((string) ($c['offer'] ?? ''), is_array($cfg) ? $cfg : [], $pinState, $pinned, 'agent-install.sh --upgrade --release-key');
+    $decision = \Sentinel\System\ReleaseKeyOffer::decide((string) ($c['offer'] ?? ''), is_array($cfg) ? $cfg : [], $pinState, $pinned, 'echo NEWKEY | sudo tee /etc/sentinel-agent/release-key.pub');
     if (!$decision['ok'] || $decision['pin'] === null) {
         $result('release-key', $decision['ok'], $decision['message']);
     }
@@ -306,7 +309,7 @@ if (!is_array($c) || $wanted === '') {
 [$pinState, $pinned] = $pinnedKey();
 if ($pinState !== 'ok') {
     $result($wanted, false, $pinState === 'absent' ? 'No release key is pinned on this appliance yet.'
-        : 'The pinned release key (' . $keyFile . ' or agent.json) is damaged or not root-owned; fix it by hand (agent-install.sh --upgrade --release-key).');
+        : 'The pinned release key (' . $keyFile . ' or agent.json) is damaged or not root-owned; fix it by hand (write the key to /etc/sentinel-agent/release-key.pub, root-owned; see docs/agent.md).');
 }
 $m = ReleaseManifest::verify((string) ($c['manifest'] ?? ''), (string) ($c['signature'] ?? ''), $pinned);
 if (is_string($m)) {

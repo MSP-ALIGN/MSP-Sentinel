@@ -176,6 +176,9 @@ vouch for code. What that protects, and what it doesn't, is under "What the rele
    folder; 1.35). Remote updates never change it, so code from a new release never runs as root: a release only ever
    runs as the agent's unprivileged user. The installer writes the copy (install and `--upgrade`); an agent updated
    from an older version makes it once, from its installed (already checked) release.
+   **The limit of that change-over:** the update from 1.34 or older to 1.35 is still installed by the old helper,
+   which writes that release's systemd units, so the protection starts with the update after it. For sites that need
+   the guarantee from the start, upgrade agents to 1.35 by hand once (from a downloaded, checked release).
 3. **Root never touches the agent's folder** (its user could plant symlinks there). The helper has the staged release
    read by a collector running as the agent's user, and checks everything again in memory: the signature with the
    pinned key, the version (x.y.z, newer than the installed one; an unreadable installed version is refused) and every
@@ -227,8 +230,13 @@ holds the private key.
    own, also when they were offline for several rotations (each step is signed by the key before; the last 20 are
    kept). A new key file downloads; sign the version again with it.
 5. **Replace the key** (the key file or its password is lost): a new key without the old one's signature. Agents that
-   pinned the old key keep refusing updates until given the new key by hand (shown on the System page):
-   `sudo /opt/sentinel-agent/install/agent-install.sh --upgrade --release-key BASE64KEY`.
+   pinned the old key keep refusing updates until given the new key by hand (shown on the System page). On each Linux
+   agent: `echo BASE64KEY | sudo tee /etc/sentinel-agent/release-key.pub` (root-owned, 0644; the helper reads it at
+   the next update). **Don't run the installed copy of `agent-install.sh`** (in `/opt/sentinel-agent`) for this or an
+   upgrade: it is code a remote update delivered, and after a suspected compromise it could be anything. It refuses to
+   upgrade from there anyway (1.35). For an upgrade, download the release, check it against the published
+   `SHA256SUMS` (and its signature), and run `install/agent-install.sh --upgrade` from that folder. Windows:
+   `install-agent.ps1 -Upgrade -ReleaseKey BASE64KEY` from a fresh download.
 
 **If the key file leaks**, rotate at once (the leaked key signs the change, which is still you if you rotate first),
 or replace it and give agents the new key by hand.
@@ -252,7 +260,9 @@ with no key yet would take it.
   Only sign and rotate on a Sentinel you just updated yourself, take the expected manifest hash from the release
   notes or your own computer (never from the page),
   and if you think the server was compromised, don't use the key there: rebuild the server, then replace the key
-  and give agents the new one by hand. The command line remains for maintainers who sign from their git repository instead:
+  and give agents the new one by hand. The expected-hash check protects against changed files on an honest server;
+  it can't protect against a server whose page itself was changed. **The strongest option is signing off the
+  server:** the maintainer signs from the git repository on their own computer (below), and the server only relays. The command line remains for maintainers who sign from their git repository instead:
 `php bin/release-sign.php keygen --out ~/sentinel-release.key`, then `sign --key …` for each release
 (release/agent-manifest.*); a Sentinel with a key created on the System page uses that key.
 

@@ -19,7 +19,9 @@ declare(strict_types=1);
  *       Prints the agent manifest SHA-256 of a release, with no key (1.35): from a git tag or commit of this repository
  *       (default HEAD, read with `git archive`, so uncommitted files never count), or from an unpacked release folder.
  *       Before signing on Sentinel's System page, compare it with the hash the page signs: the page refuses to sign
- *       unless you paste a matching one. Run it on your own computer, not on the Sentinel server.
+ *       unless you paste a matching one. Run it on your own computer, not on the Sentinel server. It uses THIS
+ *       checkout's file rules: check out the release tag first (git checkout vX.Y.Z) for an exact match with an older
+ *       release.
  *
  * Why: agents install new code only when it is signed with this key. Sentinel can tell an agent to update, but can't
  * vouch for code, so a compromised Sentinel server can't push code to client networks.
@@ -141,13 +143,17 @@ switch ($command) {
         $dir = $expand($opt('dir'));
         $tmp = '';
         if ($dir === '') {
+            if (in_array('--ref', $argv, true) && $opt('ref') === '') {
+                $fail('--ref needs a value, e.g. --ref v1.35.0.');
+            }
             $ref = $opt('ref') !== '' ? $opt('ref') : 'HEAD';
             if (preg_match('/^[A-Za-z0-9._\/~^-]{1,100}$/', $ref) !== 1 || str_starts_with($ref, '-')) {
                 $fail('--ref must be a tag, branch or commit, e.g. v1.35.0.');
             }
             $tmp = sys_get_temp_dir() . '/sentinel-hash-' . bin2hex(random_bytes(6));
             mkdir($tmp, 0700);
-            exec('git -C ' . escapeshellarg($root) . ' archive --format=tar ' . escapeshellarg($ref) . ' | tar -xf - -C ' . escapeshellarg($tmp), $o, $code);
+            // Files exactly as committed: no line-ending conversion (a Windows checkout with core.autocrlf would differ).
+            exec('git -C ' . escapeshellarg($root) . ' -c core.autocrlf=false -c core.eol=lf archive --format=tar ' . escapeshellarg($ref) . ' | tar -xf - -C ' . escapeshellarg($tmp), $o, $code);
             if ($code !== 0) {
                 exec('rm -rf -- ' . escapeshellarg($tmp));
                 $fail('git archive ' . $ref . ' failed: run this inside the repository, with that tag or commit fetched.');

@@ -41,10 +41,26 @@ if (!is_file($updater . '\\bin\\agent-update-task.php')) {
         }
         return true;
     };
+    /** Remove a folder tree (links are removed, never followed). */
+    $remove = static function (string $dir) use (&$remove): void {
+        foreach (is_dir($dir) && !is_link($dir) ? (scandir($dir) ?: []) : [] as $name) {
+            if ($name !== '.' && $name !== '..') {
+                $p = $dir . '\\' . $name;
+                is_dir($p) && !is_link($p) ? $remove($p) : @unlink($p);
+            }
+        }
+        @rmdir($dir);
+    };
     $tmp = $updater . '.tmp';
+    // A copy left half-made earlier (stopped run) or an incomplete updater\ (no task file): start again cleanly.
+    $remove($tmp);
+    $remove($updater);
     if (!is_dir($app . '\\src') || !$copy($app . '\\src', $tmp . '\\src') || !is_dir($tmp . '\\bin') && !mkdir($tmp . '\\bin', 0755, true)
         || !copy($app . '\\bin\\agent-update-task.php', $tmp . '\\bin\\agent-update-task.php') || !rename($tmp, $updater)) {
-        fwrite(STDERR, "Could not prepare the update code folder (updater): run install-agent.ps1 -Upgrade.\n");
+        $msg = '[' . gmdate('Y-m-d H:i:s') . "] Could not prepare the update code folder (updater): run install-agent.ps1 -Upgrade.\n";
+        fwrite(STDERR, $msg);
+        // Task Scheduler keeps no output: also in update\\task.log, where the task logs (fixed ProgramData path).
+        @file_put_contents((getenv('ProgramData') ?: 'C:\\ProgramData') . '\\MSP Sentinel Agent\\update\\task.log', $msg, FILE_APPEND);
         exit(1);
     }
 }

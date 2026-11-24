@@ -112,7 +112,9 @@ folder and the files resolve to themselves (no junction, link or pipe).
 - **Updates use the address the agent was enrolled with.** The update task doesn't follow a move to a new Sentinel
   address, because it never reads the agent's own folder. Keep the old address working, or upgrade by hand after a
   move.
-- **The update task runs the new release's self-check as SYSTEM.** On Linux the helper runs it as the agent's user.
+- **The update task's pre-flight is its own fixed check** (1.35.1): it asks this machine's PHP for its version and
+  extensions without running any of the new release's code as SYSTEM (on Linux the new release's self-check runs as
+  the agent's user). Anything else wrong shows up in the health check after the swap, which rolls back.
 - **The update task's own code runs from a frozen copy** (1.35): `C:\Program Files\MSP Sentinel Agent\updater`,
   outside `app\`, which remote updates never change, so the task code never comes from a new release.
   `install-agent.ps1` refreshes it on install and `-Upgrade`; an agent updated from an older version makes it once

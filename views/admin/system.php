@@ -160,7 +160,7 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
                 <div class="col-12"><button class="btn btn-sm btn-outline-primary" type="submit"><?= e(__('Rotate key')) ?></button></div>
             </form></details>
         <details class="mb-3"><summary class="text-danger"><?= e(__('Replace the key (the key file or its password is lost)')) ?></summary>
-            <form method="post" action="<?= e(url('/admin/system/release-key')) ?>" class="row g-2 mt-1" data-release-key="replace" <?= $keyAttrs ?> data-confirm="<?= e(__('Replace the release key? Agents that pinned the old key will need the new one given by hand (agent-install.sh --release-key).')) ?>"><?= \Sentinel\Core\Csrf::field() ?>
+            <form method="post" action="<?= e(url('/admin/system/release-key')) ?>" class="row g-2 mt-1" data-release-key="replace" <?= $keyAttrs ?> data-confirm="<?= e(__('Replace the release key? Agents that pinned the old key will need the new one given by hand: on each Linux agent, echo NEWKEY | sudo tee /etc/sentinel-agent/release-key.pub (no installed code is run).')) ?>"><?= \Sentinel\Core\Csrf::field() ?>
                 <input type="hidden" name="mode" value="replace"><input type="hidden" name="public_key" value="">
                 <?= $newPw . $sentinelPw . $note ?>
                 <div class="col-12"><button class="btn btn-sm btn-outline-danger" type="submit"><?= e(__('Replace key')) ?></button></div>
@@ -175,7 +175,7 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
                 <?php if ($agFp === '' && preg_match('/^\d+\.\d+\.\d+$/', (string) $ag['version']) === 1 && version_compare((string) $ag['version'], '1.24.0', '<')): ?><span class="text-warning"><?= e(__('needs agent 1.24.0 or later (upgrade it once by hand)')) ?></span>
                 <?php elseif ($agFp === ''): ?><span class="text-warning"><?= e(__('has no release key yet: it will trust the key Sentinel offers at its next check-in')) ?></span>
                 <?php elseif (in_array($agFp, $rk['followable'], true)): ?><span class="text-body-secondary"><?= e(__('follows the rotation at its next check-in')) ?></span>
-                <?php else: ?><span class="text-danger"><?= e(__('pinned another key ({fp}): give it the new key by hand: agent-install.sh --release-key', ['fp' => $agFp])) ?></span><?php endif; ?></li>
+                <?php else: ?><span class="text-danger"><?= e(__('pinned another key ({fp}): give it the new key by hand (Linux: echo NEWKEY | sudo tee /etc/sentinel-agent/release-key.pub; Windows: install-agent.ps1 -Upgrade -ReleaseKey NEWKEY from a fresh download)', ['fp' => $agFp])) ?></span><?php endif; ?></li>
             <?php endforeach; ?>
         </ul>
         <?php endif; ?>

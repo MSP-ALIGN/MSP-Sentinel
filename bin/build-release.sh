@@ -9,7 +9,8 @@
 # exactly what is in git, minus the paths marked export-ignore in
 # .gitattributes (tests, dev files). File times come from the commit and gzip
 # stores no name or time, so the same commit always gives the same bytes
-# (reproducible). Sign SHA256SUMS yourself, e.g.: gpg --armor --detach-sign dist/SHA256SUMS
+# (reproducible). Sign SHA256SUMS (it lists the archive and AGENT-MANIFEST-SHA256) yourself, e.g.:
+# gpg --armor --detach-sign dist/SHA256SUMS
 #
 # Security: refuses to build from a working tree with uncommitted changes
 # (unless --allow-dirty), so a release never contains unreviewed files.
@@ -42,13 +43,14 @@ fi
 mkdir -p "$out"
 name="msp-sentinel-$version"
 git -c tar.umask=0022 archive --worktree-attributes --format=tar --prefix="$name/" HEAD | gzip -n -9 > "$out/$name.tar.gz"
-( cd "$out" && sha256sum "$name.tar.gz" > SHA256SUMS )
 # The agent manifest hash of exactly this archive (unpacked to a temporary folder): what Sentinel's System page signs.
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 tar -xzf "$out/$name.tar.gz" -C "$tmp"
 php "$root/bin/release-sign.php" hash --dir "$tmp/$name" | sed -n 's/^Manifest SHA-256: //p' > "$out/AGENT-MANIFEST-SHA256"
 [ -s "$out/AGENT-MANIFEST-SHA256" ] || { echo "Could not compute the agent manifest hash." >&2; exit 1; }
+# SHA256SUMS covers the archive and the manifest hash file, so signing SHA256SUMS vouches for both.
+( cd "$out" && sha256sum "$name.tar.gz" AGENT-MANIFEST-SHA256 > SHA256SUMS )
 echo "Built $out/$name.tar.gz"
 cat "$out/SHA256SUMS"
 echo "Agent manifest SHA-256 (publish with the release notes): $(cat "$out/AGENT-MANIFEST-SHA256")"

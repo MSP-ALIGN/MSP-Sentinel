@@ -68,17 +68,6 @@ $keyFile = $opt('key') ?? $win->releaseKeyFile();
 // swapped while this runs).
 $app = rtrim($opt('app') ?? (defined('SENTINEL_UPDATE_APP') ? (string) SENTINEL_UPDATE_APP : dirname(__DIR__)), '\\/');
 $php = $opt('php') ?? PHP_BINARY;
-// Moving to the frozen update code (1.35): an agent installed before 1.35 has a launcher that runs this task straight
-// from app\. When this code runs from app\ (so it IS the installed, already verified release, not a staged one),
-// it puts this release's launcher in place once; from then on the task runs from updater\ (see
-// install/windows/agent-update-launcher.php) and this block never runs again. Never in the test suite.
-if (!$test && defined('SENTINEL_UPDATE_APP') && str_starts_with(strtolower((string) realpath(__FILE__)), strtolower((string) realpath($app)) . '\\')) {
-    $launcher = dirname($app) . '\\agent-update-launcher.php';
-    $newLauncher = $app . '\\install\\windows\\agent-update-launcher.php';
-    if (is_file($newLauncher) && !str_contains((string) @file_get_contents($launcher), "'\\\\updater'")) {
-        @copy($newLauncher, $launcher . '.new') && @rename($launcher . '.new', $launcher);
-    }
-}
 $phpIni = dirname($php) . DIRECTORY_SEPARATOR . 'php.ini';
 $service = !($test && in_array('--no-service', $argv, true));
 $system32 = (getenv('SystemRoot') ?: 'C:\\Windows') . '\\System32';
@@ -93,6 +82,22 @@ $say = static function (string $line) use ($resultDir): void {
     }
     @file_put_contents($log, $line, FILE_APPEND);
 };
+// Moving to the frozen update code (1.35): an agent installed before 1.35 has a launcher that runs this task straight
+// from app\. When this code runs from app\ (so it IS the installed, already verified release, not a staged one),
+// it puts this release's launcher in place once; from then on the task runs from updater\ (see
+// install/windows/agent-update-launcher.php) and this block never runs again. Never in the test suite.
+if (!$test && defined('SENTINEL_UPDATE_APP') && str_starts_with(strtolower((string) realpath(__FILE__)), strtolower((string) realpath($app)) . '\\')) {
+    $launcher = dirname($app) . '\\agent-update-launcher.php';
+    $newLauncher = $app . '\\install\\windows\\agent-update-launcher.php';
+    if (is_file($newLauncher) && !str_contains((string) @file_get_contents($launcher), "'\\\\updater'")) {
+        if (!(@copy($newLauncher, $launcher . '.new') && @rename($launcher . '.new', $launcher))) {
+            // Logged (task.log) so it can be seen; run install-agent.ps1 -Upgrade to finish the change.
+            $say('Could not replace the update launcher (the old one keeps running the task from app\\): run install-agent.ps1 -Upgrade once.');
+        } else {
+            $say('Update launcher replaced: the update task now runs from its frozen copy (updater\\).');
+        }
+    }
+}
 $requestId = '';
 /** Write the result (own folder, atomically) and stop. */
 $result = static function (string $version, bool $ok, string $message) use ($resultDir, $say, &$requestId): never {
@@ -329,11 +334,14 @@ foreach ($m['files'] as $path => $hash) {
     file_put_contents($dest, $content);
 }
 
-// Pre-flight: the new release checks itself (PHP version and extensions) with this machine's PHP.
-[$code, $check] = $run(array_merge([$php], is_file($phpIni) ? ['-c', $phpIni] : [], [$new . '/bin/sentinel-agent.php', 'selfcheck']), 60);
-if ($code !== 0 || trim($check) !== 'selfcheck ok ' . $m['version']) {
+// Pre-flight: can this machine's PHP run an agent (PHP version and extensions)? Checked with THIS (frozen) task's own
+// fixed code, never the new release's (1.35 review: running the release's self-check here would run new code as
+// SYSTEM). Anything else wrong with the release shows up in the health check after the swap, which rolls back.
+$preflight = 'echo PHP_VERSION_ID >= 80300 && !array_diff(["curl","json","openssl","sodium","mbstring"], get_loaded_extensions()) ? "ok" : "PHP 8.3+ with curl, json, openssl, sodium and mbstring needed (found " . PHP_VERSION . ")";';
+[$code, $check] = $run(array_merge([$php], is_file($phpIni) ? ['-c', $phpIni] : [], ['-r', $preflight]), 60);
+if ($code !== 0 || trim($check) !== 'ok' || !is_file($new . '/bin/sentinel-agent.php')) {
     $rm($new);
-    $result($wanted, false, 'The new release did not pass its self-check on this machine (' . mb_substr(trim($check), 0, 150) . '); upgrade by hand if it needs a newer PHP.');
+    $result($wanted, false, 'This machine can\'t run the new release (' . mb_substr(trim($check), 0, 150) . '); upgrade by hand if it needs a newer PHP.');
 }
 
 // 4. Swap with the service stopped and disabled (so the service manager's restart-on-failure can't start it while the
