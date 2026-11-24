@@ -197,9 +197,12 @@ final class ItflowSync
         $byPsa = array_diff_key($byPsa, $dupes); // an ITFlow ID on two MSP Align clients: link neither
         $n = 0;
         $rows = $this->db->query('SELECT id, itflow_client_id FROM clients WHERE itflow_client_id IS NOT NULL AND align_client_id IS NULL AND is_demo = 0 AND is_archived = 0')->fetchAll();
+        // An MSP Align client already linked to a Sentinel client is never linked to a second one (1.42.2).
+        $used = array_flip(array_map('intval', $this->db->query('SELECT align_client_id FROM clients WHERE align_client_id IS NOT NULL')->fetchAll(\PDO::FETCH_COLUMN)));
         foreach ($rows as $r) {
             $a = $byPsa[(int) $r['itflow_client_id']] ?? null;
-            if ($a !== null) {
+            if ($a !== null && !isset($used[(int) $a['id']])) {
+                $used[(int) $a['id']] = true;
                 $this->db->prepare('UPDATE clients SET align_client_id = :a, align_client_name = :n, updated_at = UTC_TIMESTAMP() WHERE id = :id')
                     ->execute(['a' => $a['id'], 'n' => mb_substr(self::clean($a['name']), 0, 190), 'id' => $r['id']]);
                 $this->log('client.align_linked', (int) $r['id'], ['align_client_id' => $a['id'], 'matched_by' => 'ITFlow ID']);

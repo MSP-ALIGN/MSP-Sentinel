@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.42.1](https://img.shields.io/badge/version-1.42.1-ff5a1f?style=flat-square)
+![Version 1.42.2](https://img.shields.io/badge/version-1.42.2-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,18 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.42.2 (2026-11-24): permissions and client lists fixes from review
+
+- **Breached addresses stay masked** for anyone without **See breached addresses**: in reports (view, download and
+  CSV, and the API's report HTML and CSV, where every email address is masked because reports are frozen copies), in
+  alerts and emails, and in API notes. A masked API finding key keeps a short hash so two addresses that mask alike
+  stay apart.
+- **One MSP Align or ITFlow client per Sentinel client**, now also for the ITFlow sync and in the database (migration
+  0048 adds the keys when there are no duplicates). The check runs only when the link changes, so an old duplicate no
+  longer blocks other edits, and its message names no other client.
+- Backup and feed notices go only to people who see every client; notifications are cleared only when someone's
+  clients shrink. The user form's client choice is laid out properly; 1.40.0's notes now say 27 permissions.
+
 ### 1.42.1 (2026-11-24): client lists fixes from review
 
 - **Org-wide pages and actions need every client:** the kill switch for all scanning (pause and resume), settings,
@@ -139,18 +151,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 - **The API page:** you see and revoke only tokens whose clients you all see, the scopes name the permission they
   need, and outbound events (which carry every client's changes) can only be set up by someone who sees every client.
   Existing tokens keep what they have, within their creator's rights.
-
-### 1.41.0 (2026-11-24): limit users to their clients
-
-- **Per-user client lists.** Each user sees every client (the default, so nothing changes on upgrade) or only a
-  chosen list: **Administration → Users →** the user **→ Clients** (migration 0047).
-- **Nothing of other clients.** For a limited user, other clients' pages and records (findings, reports, scans,
-  engagements, authorisations, sites) answer "not found", checked once in the request kernel before any page code
-  runs, and lists, counts, search, the dashboard, reports, engagements, notifications and alert emails leave them out.
-  A test fails if any page with an ID lacks a client check.
-- **Never more than you see.** You can only give clients you see yourself, and only manage users whose clients you
-  all see. Findings can only be given to someone who sees the client; a client a limited user adds becomes theirs.
-  The last active Admin who sees every client can't be limited, demoted or disabled.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

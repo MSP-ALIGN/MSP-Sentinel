@@ -60,14 +60,16 @@ final class UserRepository
      */
     public function setClients(int $userId, ?array $clientIds): void
     {
+        $before = $this->clientIds(['id' => $userId, 'all_clients' => (int) $this->db->query('SELECT all_clients FROM users WHERE id = ' . $userId)->fetchColumn()]);
         $this->db->prepare('UPDATE users SET all_clients = :a, updated_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['a' => $clientIds === null ? 1 : 0, 'id' => $userId]);
         $this->db->prepare('DELETE FROM user_clients WHERE user_id = :u')->execute(['u' => $userId]);
         $ins = $this->db->prepare('INSERT INTO user_clients (user_id, client_id) VALUES (:u, :c)');
         foreach (array_unique($clientIds ?? []) as $c) {
             $ins->execute(['u' => $userId, 'c' => (int) $c]);
         }
-        // Earlier notifications may be about clients they no longer see (1.42.1): a limited list starts afresh.
-        if ($clientIds !== null) {
+        // Earlier notifications may be about clients they no longer see (1.42.1): when the list shrinks, it starts
+        // afresh (1.42.2: not when clients are only added).
+        if ($clientIds !== null && !\Sentinel\Auth\ClientAccess::within($before, $clientIds)) {
             $this->db->prepare('DELETE FROM notifications WHERE user_id = :u')->execute(['u' => $userId]);
         }
     }

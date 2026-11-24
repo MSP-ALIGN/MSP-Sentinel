@@ -51,7 +51,9 @@ given to someone who sees it. A client a limited user adds becomes one of theirs
   integrations, the System page and the audit log. A limited user can still manage users, roles and API tokens
   within their own clients.
 - One MSP Align client and one ITFlow client can each be linked to only one Sentinel client.
-- When someone's clients are narrowed to a list, their earlier notifications are cleared.
+- When someone's clients are narrowed, their earlier notifications are cleared.
+- Reports, alerts and emails show breached addresses masked to anyone without **See breached addresses** (in a
+  report every email address is then masked, as reports are frozen copies).
 - The last active Admin who sees every client can't be limited, demoted or disabled.
 
 ## Sign in and two-factor authentication
@@ -96,7 +98,9 @@ A token never does more than the person who made it:
   discovery**, and loses them when you do.
 - **Clients:** it can only cover clients you see ("All clients" only if you see every client). If you later see fewer
   clients, the token is cut down to yours straight away.
-- **Breached addresses:** they come back masked unless you may see them in full.
+- **Breached addresses:** they come back masked unless you may see them in full (findings, notes, and report HTML
+  and CSV, where every email address is masked). A masked finding's `key` keeps a short hash; use `id` to match
+  findings.
 - **The token list:** you see and revoke only tokens whose clients you all see.
 - **Outbound events:** they carry every client's changes, so only someone who sees every client can set them up.
 

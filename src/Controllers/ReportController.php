@@ -146,14 +146,14 @@ final class ReportController extends Controller
     public function view(Request $request, array $params): Response
     {
         $report = $this->report($params);
-        return Response::html((string) $report['html'])->header('Content-Security-Policy', self::REPORT_CSP);
+        return Response::html($this->readable((string) $report['html']))->header('Content-Security-Policy', self::REPORT_CSP);
     }
 
     /** GET /reports/{id}/download: the document as a self-contained HTML file. */
     public function download(Request $request, array $params): Response
     {
         $report = $this->report($params);
-        return Response::html((string) $report['html'])
+        return Response::html($this->readable((string) $report['html']))
             ->header('Content-Security-Policy', self::REPORT_CSP)
             ->header('Content-Disposition', 'attachment; filename="' . self::fileName($report, 'html') . '"');
     }
@@ -166,10 +166,16 @@ final class ReportController extends Controller
         if (!is_array($snapshot)) {
             throw new HttpException(404);
         }
-        return (new Response(CsvExport::build($snapshot)))
+        return (new Response($this->readable(CsvExport::build($snapshot))))
             ->header('Content-Type', 'text/csv; charset=UTF-8')
             ->header('Content-Security-Policy', "default-src 'none'; sandbox")
             ->header('Content-Disposition', 'attachment; filename="' . self::fileName($report, 'csv') . '"');
+    }
+
+    /** A report's text as this user may read it: email addresses masked without "See breached addresses" (1.42.2). */
+    private function readable(string $text): string
+    {
+        return App::auth()->can('breach.addresses') ? $text : \Sentinel\Breach\BreachMonitor::maskAll($text);
     }
 
     /** POST /reports/{id}/delete */

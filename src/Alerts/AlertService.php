@@ -289,6 +289,10 @@ final class AlertService
         if ($clientId !== null) {
             $seeing = array_flip($this->usersSeeing($clientId));
             $users = array_values(array_filter($users, static fn (int $u): bool => isset($seeing[$u])));
+        } elseif ($permission !== null) {
+            // An org-wide notice (backups, feeds) only for users who see every client: its page is org-wide (1.42.2).
+            $all = array_flip(array_map('intval', $this->db->query('SELECT id FROM users WHERE all_clients = 1')->fetchAll(PDO::FETCH_COLUMN)));
+            $users = array_values(array_filter($users, static fn (int $u): bool => isset($all[$u])));
         }
         $stmt = $this->db->prepare('INSERT INTO notifications (user_id, kind, severity, title, body, link, created_at) VALUES (:u, :k, :s, :t, :b, :l, UTC_TIMESTAMP())');
         foreach ($users as $uid) {
@@ -378,7 +382,10 @@ final class AlertService
         }
         $stmt = $this->db->prepare('SELECT * FROM findings WHERE id IN (' . implode(',', array_fill(0, count($ids), '?')) . ') ORDER BY severity = \'fail\' DESC, id');
         $stmt->execute($ids);
-        return $stmt->fetchAll();
+        // Alerts (in-app, email, chat) never carry a breached address in full (1.42.2): only the finding page does,
+        // for those allowed to see it.
+        return array_map(static fn (array $f): array => $f['finding_type'] === 'breach'
+            ? array_merge($f, ['detail' => \Sentinel\Breach\BreachMonitor::maskAll((string) $f['detail'])]) : $f, $stmt->fetchAll());
     }
 
     /** True if this finding sent an immediate alert in the last 24 hours. */

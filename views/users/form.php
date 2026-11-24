@@ -53,8 +53,8 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
             <div class="form-text"><?= e(__('Viewer reads everything and changes nothing; Technician does the day-to-day work; Admin can do everything. What each role allows is on the Roles page.')) ?> <a href="<?= e(url('/admin/roles')) ?>"><?= e(__('Roles')) ?></a></div>
             <?php $field = 'role_id'; require __DIR__ . '/../partials/field_error.php'; ?>
         </div>
-        <fieldset class="mb-3">
-            <legend class="form-label fs-6 mb-1"><?= e(__('Clients')) ?></legend>
+        <div class="mb-3" role="group" aria-labelledby="clients-label">
+            <div class="form-label" id="clients-label"><?= e(__('Clients')) ?></div>
             <input type="hidden" name="clients_field" value="1">
             <?php $allClients = $values['client_ids'] === null; ?>
             <div class="form-check">
@@ -69,7 +69,7 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
             </select>
             <?php $field = 'clients'; require __DIR__ . '/../partials/field_error.php'; ?>
             <?php if (($currentUser['client_ids'] ?? null) !== null): ?><div class="form-text"><?= e(__('You can only give clients you see yourself.')) ?></div><?php endif; ?>
-        </fieldset>
+        </div>
         <?php if ($isEdit): ?>
         <div class="form-check mb-3">
             <input type="checkbox" class="form-check-input" id="is_active" name="is_active" value="1" <?= (int) $values['is_active'] === 1 ? 'checked' : '' ?> <?= $isSelf ? 'disabled' : '' ?>>

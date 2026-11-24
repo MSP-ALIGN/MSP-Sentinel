@@ -211,8 +211,10 @@ final class ApiController
     public function finding(array $p): Response
     {
         $f = $this->findingRow((int) $p['id']);
-        $events = array_map(static fn (array $e): array => ['event' => $e['event'], 'note' => $e['note'], 'by' => $e['username'] ?? null, 'at' => self::iso($e['created_at'])],
-            App::findings()->events((int) $f['id']));
+        $maskNotes = $f['finding_type'] === 'breach' && !$this->mayReadBreaches();
+        $events = array_map(static fn (array $e): array => ['event' => $e['event'],
+            'note' => $maskNotes && $e['note'] !== null ? \Sentinel\Breach\BreachMonitor::maskAll((string) $e['note']) : $e['note'],
+            'by' => $e['username'] ?? null, 'at' => self::iso($e['created_at'])], App::findings()->events((int) $f['id']));
         return ApiKernel::json(['data' => $this->findingFor($f) + ['history' => $events]]);
     }
 
@@ -288,11 +290,12 @@ final class ApiController
     public function reportHtml(array $p): Response
     {
         $r = $this->reportRow((int) $p['id']);
-        return (new Response((string) $r['html']))
+        $res = (new Response($this->readable((string) $r['html'])))
             ->header('Content-Type', 'text/html; charset=UTF-8')
             ->header('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'none'; sandbox")
-            ->header('Content-Disposition', 'attachment; filename="report-' . (int) $r['id'] . '.html"')
-            ->header('X-Report-SHA256', (string) $r['html_sha256']);
+            ->header('Content-Disposition', 'attachment; filename="report-' . (int) $r['id'] . '.html"');
+        // The frozen copy's hash only when it is sent unchanged (masked copies differ).
+        return $this->mayReadBreaches() ? $res->header('X-Report-SHA256', (string) $r['html_sha256']) : $res;
     }
 
     /** GET /api/v1/reports/{id}/csv */
@@ -303,7 +306,7 @@ final class ApiController
         if (!is_array($snap)) {
             throw new ApiError(404, 'Not found.');
         }
-        return (new Response(CsvExport::build($snap)))
+        return (new Response($this->readable(CsvExport::build($snap))))
             ->header('Content-Type', 'text/csv; charset=UTF-8')
             ->header('Content-Security-Policy', "default-src 'none'; sandbox")
             ->header('Content-Disposition', 'attachment; filename="report-' . (int) $r['id'] . '.csv"');
@@ -456,13 +459,25 @@ final class ApiController
     private function findingFor(array $f): array
     {
         $out = self::findingOut($f);
-        if ($out['type'] === 'breach' && !in_array('breach.addresses', (array) ($this->token['creator_permissions'] ?? []), true)) {
-            $mask = static fn (string $s): string => (string) preg_replace_callback('/[^\s:;,]+@[^\s:;,]+/u',
-                static fn (array $m): string => \Sentinel\Breach\BreachMonitor::masked($m[0]), $s);
-            $out['key'] = $mask((string) $out['key']);
-            $out['detail'] = $mask((string) $out['detail']);
+        if ($out['type'] === 'breach' && !$this->mayReadBreaches()) {
+            // The key keeps a short hash so two addresses that mask alike stay apart (1.42.2); notes are masked too.
+            $out['key'] = 'breach:' . \Sentinel\Breach\BreachMonitor::masked(substr((string) $out['key'], 7)) . '#' . substr(hash('sha256', (string) $out['key']), 0, 12);
+            $out['detail'] = \Sentinel\Breach\BreachMonitor::maskAll((string) $out['detail']);
+            $out['triage_note'] = $out['triage_note'] === null ? null : \Sentinel\Breach\BreachMonitor::maskAll((string) $out['triage_note']);
         }
         return $out;
+    }
+
+    /** True when the token's creator may see breached addresses in full. */
+    private function mayReadBreaches(): bool
+    {
+        return in_array('breach.addresses', (array) ($this->token['creator_permissions'] ?? []), true);
+    }
+
+    /** A report's text as this token may read it (1.42.2): email addresses masked unless its creator may see them. */
+    private function readable(string $text): string
+    {
+        return $this->mayReadBreaches() ? $text : \Sentinel\Breach\BreachMonitor::maskAll($text);
     }
 
     public static function findingOut(array $f): array

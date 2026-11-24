@@ -57,7 +57,7 @@ final class ComplianceController extends Controller
         $taken = App::db()->prepare('SELECT COUNT(*) FROM clients WHERE align_client_id = :a AND id <> :id');
         $taken->execute(['a' => $match['id'], 'id' => (int) $client['id']]);
         if ((int) $taken->fetchColumn() > 0) {
-            Session::flash('danger', __('That MSP Align client is already linked to another client.'));
+            Session::flash('danger', __('That MSP Align client can\'t be linked here: it is already in use. Ask an admin who sees every client.'));
             return $back;
         }
         App::db()->prepare('UPDATE clients SET align_client_id = :a, align_client_name = :n, updated_at = UTC_TIMESTAMP() WHERE id = :id')

@@ -325,7 +325,8 @@ final class App
     /** Dashboard numbers (main dashboard and client overviews). */
     public static function dashboard(): \Sentinel\Dashboard\DashboardData
     {
-        // Limited to the signed-in user's clients (1.41); everything for background work.
+        // Limited to the signed-in user's clients (1.41); nothing when nobody is signed in (1.42.1). Background work
+        // builds DashboardData itself.
         return new \Sentinel\Dashboard\DashboardData(self::db(), self::settings(), self::auth()->clientIds());
     }
 

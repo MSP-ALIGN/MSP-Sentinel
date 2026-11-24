@@ -360,6 +360,15 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.42.2',
+            'date' => '2026-11-24',
+            'items' => [
+                'Breached addresses: reports (view, download, CSV, and through the API) and alerts show them masked unless you may see them; masked API keys stay unique.',
+                'One MSP Align or ITFlow client per Sentinel client, also for the ITFlow sync and in the database; an old duplicate no longer blocks editing a client.',
+                'Backup and feed notices go only to people who see every client; notifications are cleared only when your clients shrink. The user form\'s client choice is laid out properly.',
+            ],
+        ],
+        [
             'version' => '1.42.1',
             'date' => '2026-11-24',
             'items' => [
@@ -392,7 +401,7 @@ return [
             'version' => '1.40.0',
             'date' => '2026-11-24',
             'items' => [
-                'Roles and permissions: every action needs one of 29 permissions in 7 groups. Viewer, Technician and Admin stay as built-in roles with exactly the rights they had. Make your own roles under Administration → Roles (or copy a built-in one), and see who can do what in one table.',
+                'Roles and permissions: every action needs one of 27 permissions in 7 groups. Viewer, Technician and Admin stay as built-in roles with exactly the rights they had. Make your own roles under Administration → Roles (or copy a built-in one), and see who can do what in one table.',
                 'Never more than you hold: you can only give permissions and roles you hold yourself, and can\'t change, reset or disable a more powerful user. You can\'t change your own role, and someone always holds every permission.',
                 'Alerts, assignment and approvals follow permissions: system alerts go to those who manage the system, findings can be given to anyone who may triage, and any second person who may approve engagements can approve.',
             ],

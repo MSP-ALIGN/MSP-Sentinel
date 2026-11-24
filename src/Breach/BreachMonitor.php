@@ -203,6 +203,17 @@ final class BreachMonitor
     }
 
     /**
+     * Every email address in a text masked (1.42.2), for frozen reports read by someone without "See breached
+     * addresses": a report is a frozen copy, so the breached addresses in it are masked on the way out. Other
+     * addresses in it (e.g. a contact address) are masked too: the safe side.
+     */
+    public static function maskAll(string $text): string
+    {
+        return (string) preg_replace_callback('/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/',
+            static fn (array $m): string => self::masked($m[0]), $text);
+    }
+
+    /**
      * A client's breached addresses, newest breach first.
      *
      * @return list<array{email:string, domain:string, breaches:list<array{name:string, date:string, data:list<string>}>, first_seen:string, last_seen:string}>

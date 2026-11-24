@@ -201,7 +201,22 @@ return [
         $res = $admin->submit('/clients/' . $mine . '/edit', '/clients/' . $mine, ['name' => 'Visible Example', 'itflow_client_id' => '7701', 'timezone' => 'UTC',
             'scan_window_start' => '00:00', 'scan_window_end' => '23:59', 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);
         Assert::status(422, $res);
-        Assert::contains('already linked to this ITFlow client', $res->body);
+        Assert::contains('already in use', $res->body);
         $ctx->db->exec("UPDATE clients SET itflow_client_id = NULL WHERE id = {$hidden}");
+    },
+
+    'client access (1.42.2): reports show breached addresses only to those who may see them' => function (TestContext $ctx) use ($setup): void {
+        [$mine] = $setup($ctx);
+        $ctx->db->prepare("INSERT INTO reports (client_id, kind, source, title, period_start, period_end, html, snapshot, html_sha256, generated_at)
+                           VALUES (:c, 'technical', 'manual', 'Breach report', UTC_DATE(), UTC_DATE(), '<p>sam@visible.example: Example breach</p>', :s, :h, UTC_TIMESTAMP())")
+            ->execute(['c' => $mine, 's' => '{}', 'h' => hash('sha256', 'y')]);
+        $rid = (int) $ctx->db->lastInsertId();
+        $ctx->createUser('reportviewer', 'viewer', 'Reportviewer-Pass-0001!');
+        $v = $ctx->login('reportviewer', 'Reportviewer-Pass-0001!');
+        $body = $v->get('/reports/' . $rid . '/view')->body;
+        Assert::notContains('sam@visible.example', $body, 'masked for a viewer');
+        Assert::contains('s***@visible.example', $body);
+        Assert::notContains('sam@visible.example', $v->get('/reports/' . $rid . '/download')->body);
+        Assert::contains('sam@visible.example', $ctx->login('admin', 'Admin-Pass-0001!')->get('/reports/' . $rid . '/view')->body, 'in full for an Admin');
     },
 ];
