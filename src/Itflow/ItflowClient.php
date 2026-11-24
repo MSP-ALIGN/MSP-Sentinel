@@ -119,6 +119,44 @@ final class ItflowClient
     }
 
     /**
+     * The service boards of an ITFlow build with board support (1.44: the MountaineerIT build's
+     * GET /api/v1/mit_boards/read.php), or null when this ITFlow has none (stock ITFlow answers 404 there).
+     *
+     * @return list<array{id:int, name:string, is_default:bool}>|null
+     */
+    public function boards(): ?array
+    {
+        [$status, $body] = $this->request('/api/v1/mit_boards/read.php', ['limit' => 1000], null);
+        if ($status === 404 || $status === 503) {
+            return null; // no board support here (stock ITFlow), or switched off
+        }
+        if ($status === 401) {
+            throw new ItflowException('ITFlow refused the API key (wrong or expired).', ItflowException::KIND_AUTH);
+        }
+        $data = json_decode($body, true);
+        if ($status !== 200 || !is_array($data) || ($data['success'] ?? '') !== 'True') {
+            throw new ItflowException('ITFlow did not list its boards (HTTP ' . $status . ').', ItflowException::KIND_REFUSED);
+        }
+        $out = [];
+        foreach ((array) ($data['data'] ?? []) as $b) {
+            if (is_array($b) && is_numeric($b['board_id'] ?? null) && (int) $b['board_id'] > 0) {
+                $out[] = ['id' => (int) $b['board_id'], 'name' => mb_substr((string) preg_replace('/[^\P{C}]/u', '', (string) ($b['board_name'] ?? '')), 0, 100),
+                          'is_default' => in_array($b['board_is_default'] ?? 0, [1, '1', true], true)];
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Move a ticket to a service board (1.44: POST /api/v1/mit_boards/move.php), left unassigned so the board's own
+     * rules (auto-assign, member notifications) pick it up.
+     */
+    public function moveTicket(int $clientId, int $ticketId, int $boardId): void
+    {
+        $this->post('/api/v1/mit_boards/move.php', ['client_id' => $clientId, 'ticket_id' => $ticketId, 'board_id' => $boardId, 'unassign' => 1]);
+    }
+
+    /**
      * The ticket of a client whose vendor ticket number is $marker, or null when there is none.
      *
      * ITFlow lists a client's tickets oldest first (ORDER BY ticket_id) with limit/offset and no total, and the ticket

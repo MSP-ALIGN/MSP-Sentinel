@@ -192,7 +192,7 @@ return [
             'title' => 'Integrations',
             'paragraphs' => [
                 'Connect other systems under Administration → Integrations. Sentinel only reads from them, except ITFlow tickets. Changing an integration\'s address clears its saved key: enter the key again for the new address.',
-                'ITFlow: every 15 minutes Sentinel adds new ITFlow clients, applies renames, and archives or restores clients archived or unarchived in ITFlow (a client you archived in Sentinel stays archived; changes show in the audit log as itflow-sync). With ticketing on, Sentinel opens, updates and closes ITFlow tickets for findings: see "ITFlow tickets in detail".',
+                'ITFlow: every 15 minutes Sentinel adds new ITFlow clients, applies renames, and archives or restores clients archived or unarchived in ITFlow (a client you archived in Sentinel stays archived; changes show in the audit log as itflow-sync). With ticketing on, Sentinel opens, updates and closes ITFlow tickets for findings: see "ITFlow tickets in detail". On ITFlow builds with service boards, new tickets are moved to the board chosen under Integrations (by default the one named Alerts), unassigned so the board\'s own rules pick them up; on stock ITFlow they stay where ITFlow puts them.',
                 'MSP Align: connect it, then link each client on its Compliance page (see "Compliance").',
                 'NinjaOne: create an API app with the Monitoring scope and the Client credentials grant, connect it, then link each client to its NinjaOne organisation on the client\'s Devices page. Sentinel reads devices, operating systems, antivirus, BitLocker, missing Windows updates and installed software every 6 hours, and changes nothing in NinjaOne. Network devices, phones and devices waiting for approval are left out.',
                 'Breach monitoring (XposedOrNot): verify each client domain in your XposedOrNot account (verified domains are domains you have proved you own there, by a DNS record or email), then paste the API key and tick Check weekly. The free key is meant for low-volume use; paid xonAPI+ keys work the same way. Check now runs at most once an hour. See "Breach monitoring details".',
@@ -360,6 +360,13 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.44.0',
+            'date' => '2026-11-24',
+            'items' => [
+                'ITFlow service boards: on ITFlow builds with boards, Sentinel moves each new ticket to the board chosen under Administration → Integrations (by default the one named Alerts), unassigned so the board picks it up. Stock ITFlow is unaffected; a refused move keeps the ticket on the default board and the run says so.',
+            ],
+        ],
         [
             'version' => '1.43.2',
             'date' => '2026-11-24',

@@ -158,6 +158,11 @@ return [
         Assert::contains('No DMARC record', $t[1]['ticket_details']);
         Assert::true(!str_contains(json_encode($t), 'Telnet'), 'findings from before tickets were turned on: none');
         Assert::contains('TCK-5001', $admin->get('/findings/' . $rdp)->body, 'ticket shown on the finding');
+        // Service boards (1.44): by default each new ticket is moved to the board named Alerts, unassigned.
+        $moves = $sent()['moves'] ?? [];
+        Assert::same(2, count($moves), 'both new tickets moved');
+        Assert::same([3, 1], [(int) $moves[0]['board_id'], (int) $moves[0]['unassign']], 'to the Alerts board, unassigned');
+        Assert::same(810, (int) $moves[0]['client_id']);
 
         // Never twice; no weekly ticket again within a week.
         App::itflowTickets()->run();
@@ -535,5 +540,61 @@ return [
         $admin->submit('/admin/integrations', '/admin/integrations/itflow', ['url' => 'https://itflow-elsewhere.example', 'api_key' => 'x', 'enabled' => '0']);
         Assert::same($base($ctx), App::settings()->get('itflow_url'), 'address unchanged after an invalid key');
         Assert::true(App::settings()->getSecret('itflow_api_key') !== '', 'key unchanged');
+    },
+
+    'ITFlow boards (1.44): the board is chosen on the Integrations page; stock ITFlow and refused moves never lose a ticket' => function (TestContext $ctx) use ($base, $setItflow, $key): void {
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $setItflow($ctx, [[820, 'Board Example Ltd']]);
+        $store = dirname($ctx->feedsLog) . '/itflow-tickets.json';
+        $failFile = dirname($ctx->feedsLog) . '/itflow-fail.json';
+        @unlink($store);
+        @unlink($failFile);
+        $form = ['url' => $base($ctx), 'api_key' => $key, 'enabled' => '1', 'tickets' => '1'];
+        $admin->submit('/admin/integrations', '/admin/integrations/itflow', $form);
+        App::itflowSync()->sync();
+        $cid = (int) $ctx->db->query('SELECT id FROM clients WHERE itflow_client_id = 820')->fetchColumn();
+        $n = 0;
+        $fail = static function () use ($ctx, $cid, &$n): void {
+            $n++;
+            $ctx->db->prepare("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, detail, target, evidence, status, first_seen, last_seen, opened_at, due_at)
+                               VALUES (:c, :k, 'port', 'fail', :t, 'Open.', :tg, 'x', 'open', UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP() + INTERVAL 14 DAY)")
+                ->execute(['c' => $cid, 'k' => 'port:203.0.113.95:' . (3000 + $n), 't' => 'Board test service ' . $n, 'tg' => '203.0.113.95:' . (3000 + $n)]);
+        };
+        $sent = static fn (): array => json_decode((string) @file_get_contents($store), true) ?: ['tickets' => [], 'moves' => []];
+        // The drop-down lists the boards, Alerts first by default.
+        $page = $admin->get('/admin/integrations')->body;
+        Assert::contains('Board for new tickets', $page);
+        Assert::contains('Alerts (the board named &quot;Alerts&quot;)', $page);
+        Assert::contains('Projects', $page);
+        // A chosen board.
+        $admin->submit('/admin/integrations', '/admin/integrations/itflow', $form + ['board' => '5']);
+        Assert::same('5', App::settings()->fresh('itflow_board'));
+        $fail();
+        App::itflowTickets()->run();
+        Assert::same(5, (int) (end($sent()['moves'])['board_id'] ?? 0), 'moved to the chosen board');
+        // Leave on ITFlow's default board: no move.
+        $admin->submit('/admin/integrations', '/admin/integrations/itflow', $form + ['board' => '0']);
+        $moves = count($sent()['moves'] ?? []);
+        $fail();
+        App::itflowTickets()->run();
+        Assert::same($moves, count($sent()['moves'] ?? []), 'no move when left on the default board');
+        // Stock ITFlow (no boards): the ticket is opened as before, nothing else.
+        $admin->submit('/admin/integrations', '/admin/integrations/itflow', $form + ['board' => '']);
+        file_put_contents($failFile, json_encode(['no_boards' => true]));
+        $tickets = count($sent()['tickets']);
+        $fail();
+        $summary = App::itflowTickets()->run();
+        Assert::same($tickets + 1, count($sent()['tickets']), 'ticket opened on stock ITFlow');
+        Assert::same($moves, count($sent()['moves'] ?? []), 'no move without boards');
+        Assert::notContains('Board:', $summary, 'nothing to report without boards');
+        Assert::contains('stay where ITFlow puts them', $admin->get('/admin/integrations')->body);
+        // A refused move: the ticket stays (on the default board) and the run says so.
+        file_put_contents($failFile, json_encode(['move_refused' => true]));
+        $fail();
+        $summary = App::itflowTickets()->run();
+        Assert::same($tickets + 2, count($sent()['tickets']), 'ticket kept when the move is refused');
+        Assert::contains('stayed on the default board', $summary);
+        Assert::same('0', App::settings()->fresh('itflow_tickets_last_ok') ?: '0', 'the run is flagged');
+        @unlink($failFile);
     },
 ];

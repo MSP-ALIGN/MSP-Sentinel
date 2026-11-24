@@ -107,6 +107,9 @@ final class Settings
         // client's register. The API key is in xon_api_key (SECRETS).
         'breach_enabled' => '0',
         'xon_api_key' => '',
+        // ITFlow service board for new tickets (1.44, ITFlow builds with boards): '' = the board named "Alerts",
+        // '0' = ITFlow's default board, else a board ID.
+        'itflow_board' => '',
         // Sign in with Microsoft (1.43): on/off, the Entra tenant and app (client) IDs; the client secret is a secret.
         'sso_entra_enabled' => '0',
         'sso_entra_tenant' => '',

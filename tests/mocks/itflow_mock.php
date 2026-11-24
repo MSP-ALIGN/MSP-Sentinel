@@ -49,6 +49,40 @@ $find = static function (int $id) use (&$state): ?int {
     }
     return null;
 };
+// Service boards of the MountaineerIT build (1.44: mit_boards/read.php and move.php). {"no_boards": true} in
+// itflow-fail.json answers 404 like stock ITFlow; {"move_refused": true} refuses moves (409). Moves are recorded in
+// itflow-tickets.json ("moves").
+if (str_starts_with($sub, '/api/v1/mit_boards/')) {
+    if (($fail['no_boards'] ?? false) === true) {
+        http_response_code(404);
+        echo '<html>Not Found</html>';
+        exit;
+    }
+    $boards = [['board_id' => 1, 'board_name' => 'General', 'board_is_default' => 1], ['board_id' => 3, 'board_name' => 'Alerts', 'board_is_default' => 0],
+               ['board_id' => 5, 'board_name' => 'Projects', 'board_is_default' => 0]];
+    if ($sub === '/api/v1/mit_boards/read.php') {
+        echo json_encode(['success' => 'True', 'count' => count($boards), 'total' => count($boards), 'data' => $boards]);
+        exit;
+    }
+    if ($sub === '/api/v1/mit_boards/move.php' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        if (($fail['move_refused'] ?? false) === true) {
+            http_response_code(409);
+            echo json_encode(['success' => 'False', 'message' => 'Ticket is not open']);
+            exit;
+        }
+        $i = $find((int) ($body['ticket_id'] ?? 0));
+        if ($i === null || !in_array((int) ($body['board_id'] ?? 0), array_column($boards, 'board_id'), true)) {
+            http_response_code(404);
+            echo json_encode(['success' => 'False', 'message' => 'Ticket or board not found']);
+            exit;
+        }
+        $state['tickets'][$i]['board_id'] = (int) $body['board_id'];
+        $state['moves'][] = $body;
+        $save();
+        echo json_encode(['success' => 'True', 'message' => 'Moved', 'count' => 1, 'data' => [['board_id' => (int) $body['board_id'], 'board_name' => 'x', 'ticket_assigned_to' => 0]]]);
+        exit;
+    }
+}
 if ($sub === '/api/v1/tickets/create.php' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $clients = array_column(json_decode((string) @file_get_contents(dirname((string) getenv('FEEDS_LOG')) . '/itflow-clients.json'), true) ?: [], 'client_id');
     if (!in_array((int) ($body['client_id'] ?? 0), array_map('intval', $clients), true) || ($body['ticket_subject'] ?? '') === ''

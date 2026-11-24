@@ -19,6 +19,12 @@ Keeps Sentinel's clients in step with ITFlow and puts security work on the ITFlo
    click **Test connection** and **Sync now**.
 3. To open tickets, tick **Open ITFlow tickets for findings** and save. **Also open tickets for existing Fail
    findings** catches up on findings from before (20 at a time).
+4. **Service boards** (ITFlow builds with board support, such as the MountaineerIT build): choose the **Board for new
+   tickets**. By default it is the board named **Alerts**. Sentinel moves each new ticket there right after opening
+   it, unassigned, so the board's auto-assign and notifications pick it up. Choose **Leave on ITFlow's default board**
+   to skip the move. On stock ITFlow (no boards), tickets stay where ITFlow puts them. If a move is refused, the
+   ticket stays on ITFlow's default board and the last ticket run says so. The ITFlow agent needs the Support role at
+   edit level to move tickets.
 
 What happens next:
 

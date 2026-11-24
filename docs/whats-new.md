@@ -2,6 +2,20 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.43.0 (2026-11-24): Sign in with Microsoft
+
+- **Sign in with Microsoft (Entra ID).** Your team signs in with their Microsoft 365 work account, the same tenant
+  you use with ITFlow (ITFlow can't act as a sign-in provider itself). Set it up under **Administration →
+  Integrations** with the app registration's tenant ID, client ID and secret (stored encrypted); it needs
+  `app.public_url`. OpenID Connect with PKCE; the ID token's signature, issuer, audience, tenant, expiry and nonce
+  are all checked.
+- **Only existing users.** No account is created: the first sign-in links the Microsoft account to the one active
+  user with the same email address, after that the link alone counts. Roles and clients stay managed in Sentinel.
+- **Two-factor:** Sentinel's own code is skipped only when Microsoft confirms MFA; otherwise it is asked as usual.
+- **Passwords stay as a fallback** and can be turned off per user; one active Admin who sees every client always
+  keeps password sign-in. Accounts can be unlinked on the user's page. Sign-ins, links and failures are audited
+  (migration 0049).
+
 ### 1.42.2 (2026-11-24): permissions and client lists fixes from review
 
 - **Breached addresses stay masked** for anyone without **See breached addresses**: in reports (view, download and

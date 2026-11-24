@@ -52,6 +52,15 @@ final class IntegrationsController extends Controller
                 'last_ok' => $s->get('itflow_last_ok') !== '0',
                 'linked' => (int) App::db()->query('SELECT COUNT(*) FROM clients WHERE itflow_client_id IS NOT NULL AND is_demo = 0')->fetchColumn(),
                 'tickets' => $s->get('itflow_tickets_enabled') === '1',
+                // Service boards (1.44, ITFlow builds with boards); null: this ITFlow has none, or isn't reachable now.
+                'board' => $s->get('itflow_board'),
+                'boards' => (static function (): ?array {
+                    try {
+                        return App::itflow()?->boards();
+                    } catch (\Throwable) {
+                        return null;
+                    }
+                })(),
                 'tickets_last_run' => $s->get('itflow_tickets_last_run'),
                 'tickets_last_result' => $s->get('itflow_tickets_last_result'),
                 'tickets_last_ok' => $s->get('itflow_tickets_last_ok') !== '0',
@@ -392,6 +401,15 @@ final class IntegrationsController extends Controller
         if ($tickets && $s->get('itflow_tickets_enabled') !== '1') {
             $s->set('itflow_tickets_since', gmdate('Y-m-d H:i:s')); // only findings from now on (no flood when turning it on)
             $s->set('itflow_tickets_weekly_since', gmdate('Y-m-d H:i:s'));
+        }
+        // The board for new tickets (1.44): '' = the one named Alerts, '0' = ITFlow's default, else a board ID. Untrusted.
+        $board = $request->input('board');
+        if (!preg_match('/^(|0|[1-9][0-9]{0,9})$/', $board)) {
+            $board = $s->get('itflow_board');
+        }
+        if ($board !== $s->get('itflow_board')) {
+            $s->set('itflow_board', $board);
+            $changed['itflow_board'] = $board;
         }
         foreach (['itflow_url' => $url, 'itflow_enabled' => $enabled ? '1' : '0', 'itflow_tickets_enabled' => $tickets ? '1' : '0'] as $key => $value) {
             if ($s->get($key) !== $value) {

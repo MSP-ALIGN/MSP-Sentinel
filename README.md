@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.43.2](https://img.shields.io/badge/version-1.43.2-ff5a1f?style=flat-square)
+![Version 1.44.0](https://img.shields.io/badge/version-1.44.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,15 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.44.0 (2026-11-24): ITFlow tickets on your Alerts board
+
+- **Service boards.** On ITFlow builds with board support (the MountaineerIT build's `mit_boards` API), Sentinel moves
+  each new ticket to a chosen board right after opening it, by default the board named **Alerts**, unassigned so the
+  board's auto-assign and member notifications pick it up. Choose another board, or **Leave on ITFlow's default
+  board**, under **Administration → Integrations → ITFlow**.
+- **Never loses a ticket.** On stock ITFlow (no boards) nothing changes. If a move is refused, the ticket stays on
+  ITFlow's default board and the last ticket run says so. A ticket found again after an unclear answer is moved too.
+
 ### 1.43.2 (2026-11-24): Sign in with Microsoft linking fixes from review
 
 - **Linking needs your password** (a stolen session alone can't plant a lasting Microsoft sign-in) and **no existing
@@ -142,20 +151,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 - **Guests** from other directories are refused, and Sentinel's code is skipped only for MFA within the last hour
   (`max_age` and `auth_time`).
 - Linking can't race to two accounts; network errors are no longer shown on the sign-in page.
-
-### 1.43.0 (2026-11-24): Sign in with Microsoft
-
-- **Sign in with Microsoft (Entra ID).** Your team signs in with their Microsoft 365 work account, the same tenant
-  you use with ITFlow (ITFlow can't act as a sign-in provider itself). Set it up under **Administration →
-  Integrations** with the app registration's tenant ID, client ID and secret (stored encrypted); it needs
-  `app.public_url`. OpenID Connect with PKCE; the ID token's signature, issuer, audience, tenant, expiry and nonce
-  are all checked.
-- **Only existing users.** No account is created: the first sign-in links the Microsoft account to the one active
-  user with the same email address, after that the link alone counts. Roles and clients stay managed in Sentinel.
-- **Two-factor:** Sentinel's own code is skipped only when Microsoft confirms MFA; otherwise it is asked as usual.
-- **Passwords stay as a fallback** and can be turned off per user; one active Admin who sees every client always
-  keeps password sign-in. Accounts can be unlinked on the user's page. Sign-ins, links and failures are audited
-  (migration 0049).
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

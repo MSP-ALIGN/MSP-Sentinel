@@ -107,6 +107,8 @@ final class ItflowTickets
             $this->settings->set('itflow_tickets_last_run', gmdate('Y-m-d H:i:s'));
             $this->n = ['tickets' => 0, 'weekly' => 0, 'notes' => 0, 'resolved' => 0, 'reopened' => 0, 'replaced' => 0, 'rechecks' => 0, 'confirmed' => 0, 'skipped' => 0];
             $this->lastSkip = '';
+            $this->boardId = false;
+            $this->boardNote = '';
             $this->budget = self::MAX_PER_RUN;
             $error = '';
             try {
@@ -126,9 +128,10 @@ final class ItflowTickets
             $summary = sprintf('%d finding ticket(s), %d weekly Warnings ticket(s), %d note(s); %d resolved as fixed, %d recheck(s) after closing in ITFlow, %d confirmed fixed, %d reopened, %d replaced.',
                     $n['tickets'], $n['weekly'], $n['notes'], $n['resolved'], $n['rechecks'], $n['confirmed'], $n['reopened'], $n['replaced'])
                 . ($n['skipped'] > 0 ? sprintf(' %d refused by ITFlow (retried later), last: %s', $n['skipped'], $this->lastSkip) : '')
+                . ($this->boardNote !== '' ? ' Board: ' . $this->boardNote . '.' : '')
                 . ($error !== '' ? ' Stopped: ' . $error : '');
             $this->settings->set('itflow_tickets_last_result', mb_substr($summary, 0, 500));
-            $this->settings->set('itflow_tickets_last_ok', $error === '' && $n['skipped'] === 0 ? '1' : '0');
+            $this->settings->set('itflow_tickets_last_ok', $error === '' && $n['skipped'] === 0 && $this->boardNote === '' ? '1' : '0');
             return $summary;
         } finally {
             $this->db->query("SELECT RELEASE_LOCK({$lock})");
@@ -174,9 +177,52 @@ final class ItflowTickets
         }
         $this->setRow($rowId, ['state' => 'open', 'itflow_ticket_id' => $ticket['id'], 'reference' => $ticket['reference'], 'attempts' => 0, 'retry_at' => null, 'last_error' => '']);
         $this->syncMembers($rowId, (int) $ticket['id'], (string) $ticket['reference']);
+        $this->placeOnBoard($itflowClient, (int) $ticket['id']);
         $this->budget--;
         return $ticket;
     }
+
+    /**
+     * Put a new ticket on the chosen service board (1.44; ITFlow builds with boards only). Setting itflow_board: ''
+     * (the default) = the board named "Alerts" when there is one, '0' = leave it on ITFlow's default board, else a
+     * board ID. A move that fails never undoes the ticket: it stays on ITFlow's default board and the run says so.
+     */
+    private function placeOnBoard(int $itflowClient, int $ticketId): void
+    {
+        if ($this->boardId === false) {
+            $this->boardId = null;
+            $choice = $this->settings->get('itflow_board');
+            if ($choice !== '0') {
+                try {
+                    $boards = $this->itflow->boards();
+                } catch (ItflowException $ex) {
+                    $boards = null;
+                    $this->boardNote = 'boards could not be read: ' . mb_substr($ex->getMessage(), 0, 120);
+                }
+                foreach ($boards ?? [] as $b) {
+                    if ($choice === '' ? strcasecmp($b['name'], 'Alerts') === 0 : $b['id'] === (int) $choice) {
+                        $this->boardId = $b['id'];
+                    }
+                }
+                if ($boards !== null && $this->boardId === null && $choice !== '') {
+                    $this->boardNote = 'the chosen board no longer exists';
+                }
+            }
+        }
+        if ($this->boardId === null) {
+            return;
+        }
+        try {
+            $this->itflow->moveTicket($itflowClient, $ticketId, $this->boardId);
+        } catch (ItflowException $ex) {
+            $this->boardNote = 'ticket #' . $ticketId . ' stayed on the default board: ' . mb_substr($ex->getMessage(), 0, 120);
+        }
+    }
+
+    /** The board for this run's new tickets: false = not looked up yet, null = none. */
+    private int|false|null $boardId = false;
+    /** Why tickets didn't reach the chosen board this run ('' = fine). */
+    private string $boardNote = '';
 
     /** Mark a row's ticket as refused by ITFlow; retried after 1, 2, 4 ... hours (at most a day). */
     private function failRow(int $rowId, ItflowException $ex): void
@@ -225,6 +271,7 @@ final class ItflowTickets
             }
             $this->setRow($rowId, ['state' => 'open', 'itflow_ticket_id' => $found['id'], 'reference' => $found['reference'], 'attempts' => 0, 'retry_at' => null, 'last_error' => '']);
             $this->syncMembers($rowId, (int) $found['id'], (string) $found['reference']);
+            $this->placeOnBoard((int) $r['itflow_client_id'], (int) $found['id']); // the move may not have happened before
             if ($r['finding_id'] !== null) {
                 $this->event((int) $r['finding_id'], 'ITFlow ticket ' . ($found['reference'] !== '' ? $found['reference'] : '#' . $found['id']) . ' opened.');
             }

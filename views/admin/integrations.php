@@ -51,6 +51,23 @@ $n = $ninja;
             <div class="form-check"><input class="form-check-input" type="checkbox" id="itflow-tickets" name="tickets" value="1" <?= $it['tickets'] ? 'checked' : '' ?>>
                 <label class="form-check-label" for="itflow-tickets"><?= e(__('Open ITFlow tickets for findings')) ?></label>
                 <div class="form-text"><?= e(__('Each Fail, and anything known to be exploited, gets its own ticket (High; Urgent when exploited) with how to fix it. Warnings get one ticket per client a week when there are new ones. Tickets are internal: ITFlow does not email the client. Status goes both ways: fixed in Sentinel resolves the ticket; resolved or closed in ITFlow makes Sentinel check again, and the ticket is reopened (or replaced, if closed) when the problem is still there. Only findings that appear after this is turned on get tickets, unless you open them for the existing ones below.')) ?></div></div>
+            <div class="mt-3">
+                <label class="form-label" for="itflow-board"><?= e(__('Board for new tickets')) ?></label>
+                <?php $alerts = null; foreach ($it['boards'] ?? [] as $b) { if (strcasecmp($b['name'], 'Alerts') === 0) { $alerts = $b; } } ?>
+                <select class="form-select form-select-sm sn-w-20" id="itflow-board" name="board">
+                    <option value="" <?= $it['board'] === '' ? 'selected' : '' ?>><?= e($alerts !== null ? __('Alerts (the board named "Alerts")') : __('The board named "Alerts", when there is one')) ?></option>
+                    <option value="0" <?= $it['board'] === '0' ? 'selected' : '' ?>><?= e(__('Leave on ITFlow\'s default board')) ?></option>
+                    <?php foreach ($it['boards'] ?? [] as $b): ?>
+                    <option value="<?= e($b['id']) ?>" <?= $it['board'] === (string) $b['id'] ? 'selected' : '' ?>><?= e($b['name']) ?><?= $b['is_default'] ? ' ' . e(__('(ITFlow\'s default)')) : '' ?></option>
+                    <?php endforeach; ?>
+                    <?php if (!in_array($it['board'], ['', '0'], true) && !in_array((int) $it['board'], array_column($it['boards'] ?? [], 'id'), true)): ?>
+                    <option value="<?= e($it['board']) ?>" selected><?= e(__('Board #{id} (not listed now)', ['id' => $it['board']])) ?></option>
+                    <?php endif; ?>
+                </select>
+                <div class="form-text"><?= e($it['boards'] === null
+                    ? __('For ITFlow builds with service boards: Sentinel moves each new ticket to this board, unassigned, so the board\'s own rules pick it up. This ITFlow lists no boards (stock ITFlow, or not reachable now), so tickets stay where ITFlow puts them.')
+                    : __('Sentinel moves each new ticket to this board right after opening it, unassigned, so the board\'s auto-assign and notifications pick it up. If a move fails, the ticket stays on ITFlow\'s default board and the last run says so.')) ?></div>
+            </div>
             <button type="submit" class="btn btn-primary btn-sm mt-3"><?= e(__('Save')) ?></button>
         </form>
         <hr>
