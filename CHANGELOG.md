@@ -2,6 +2,23 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.31.0 (2026-11-24): grouped findings
+
+- **Repeated findings are one row.** The same CVE, or the same problem, on several targets of one client is grouped
+  in the Findings list ("on 3 targets"). Open the row to see each target. **One row per target** switches back.
+- **Act on a whole group at once** (technicians and admins):
+  - assign;
+  - accept risk, false positive or reopen, with one note;
+  - verify fix on each target;
+  - one due date (admins).
+
+  Each finding is checked exactly as a single click would check it: resolved and archived findings are skipped, and
+  the verify limits apply. Each one is audited on its own, and the assignee gets one email for the group.
+- **Reports list each problem once** with every target it was found on. Per-target evidence is in a small table,
+  and the executive summary's top risks count issues, not targets.
+- **Each target is still its own finding.** It is fixed, rechecked and resolved on its own.
+- Grouped ITFlow tickets (one ticket per issue) follow in the next release.
+
 ### 1.30.1 (2026-11-24): share check, fixes from review
 
 - **No false "anyone can list the shares" finding.** A server that refuses the list answers an empty list with

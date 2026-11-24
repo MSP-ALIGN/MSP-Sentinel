@@ -15,15 +15,17 @@ use Sentinel\Findings\VerifyTarget;
 use Sentinel\Scanning\PortProfile;
 
 /**
- * Findings: the all-clients list, one finding with its history, triage and
- * the fix workflow (owner, due date, verify fix).
+ * Findings: the all-clients list (grouped by issue by default, 1.31: the same problem on several targets is one row),
+ * one finding with its history, triage and the fix workflow (owner, due date, verify fix), and the same actions for a
+ * whole group at once (bulk).
  *
  * Access (enforced by the routes): everyone signed in can view; technicians
  * and admins can triage, assign (to active technicians and admins) and
  * request a "verify fix" recheck; only admins set a finding's own due date.
  *
  * Untrusted: filter query parameters (checked against fixed lists), {id},
- * the triage status and note, the assignee, the due date and its note.
+ * the triage status and note, the assignee, the due date and its note, the bulk list of finding IDs (each checked
+ * exactly as a single action would be: a bulk action can't do anything one click at a time couldn't).
  *
  * Security assumptions: every change is recorded in the finding's history
  * and the audit log, and never deletes anything. A verify recheck touches
@@ -51,19 +53,24 @@ final class FindingController extends Controller
             },
             'due' => in_array($request->query('due'), ['overdue', 'soon'], true) ? $request->query('due') : '',
             'source' => in_array($request->query('source'), FindingRepository::SOURCES, true) ? $request->query('source') : '',
+            'group' => preg_match('/^[0-9a-f]{40}$/', $request->query('group')) === 1 ? $request->query('group') : '',
         ];
+        // Grouped by issue unless asked for one row per target (or showing one whole group).
+        $grouped = $request->query('view') !== 'flat' && $filters['group'] === '';
         if ($filters['due'] !== '' && $request->query('status') === '') {
             $filters['status'] = 'open'; // only open findings are ever due
         }
         $page = max(1, min(10000, (int) $request->query('page')));
         $repo = App::findings();
-        $result = $repo->search($filters, $page);
+        $result = $grouped ? $repo->searchGrouped($filters, $page) : $repo->search($filters, $page);
         return $this->page('findings/index', __('Findings'), [
             'filters' => $filters,
-            'rows' => $result['rows'],
+            'grouped' => $grouped,
+            'rows' => $result['rows'] ?? [],
+            'groups' => $result['groups'] ?? [],
             'total' => $result['total'],
             'page' => $page,
-            'pages' => max(1, (int) ceil($result['total'] / FindingRepository::PAGE_SIZE)),
+            'pages' => max(1, (int) ceil($result['total'] / ($grouped ? FindingRepository::GROUPS_PER_PAGE : FindingRepository::PAGE_SIZE))),
             'clients' => $repo->clientsWithFindings(),
             'counts' => $repo->counts(),
             'fixCounts' => App::fixWorkflow()->counts((int) $this->user()['id']),
@@ -291,5 +298,139 @@ final class FindingController extends Controller
             default => __('Finding reopened.'),
         });
         return Response::redirect('/findings/' . $id);
+    }
+
+    /** Most findings one bulk action may touch. */
+    private const BULK_MAX = 500;
+
+    /**
+     * POST /findings/bulk: the same action on several findings (a group in the list). action: assign | due (admins) |
+     * triage | verify, with the same fields as the single actions. Each finding is checked exactly as a single action
+     * would check it (archived client, resolved, limits), changed in its own transaction, and audited on its own (with
+     * bulk: true); findings that can't be changed are skipped and counted.
+     */
+    public function bulk(Request $request, array $params): Response
+    {
+        $back = self::safeReturn($request->input('return'));
+        $ids = array_values(array_unique(array_filter(array_map(static fn ($v): int => is_string($v) && ctype_digit($v) && strlen($v) < 10 ? (int) $v : 0,
+            $request->postList('ids')), static fn (int $i): bool => $i > 0)));
+        $action = $request->input('action');
+        if ($ids === [] || count($ids) > self::BULK_MAX || !in_array($action, ['assign', 'due', 'triage', 'verify'], true)) {
+            Session::flash('danger', __('Choose findings and an action (at most {n} findings at once).', ['n' => self::BULK_MAX]));
+            return Response::redirect($back);
+        }
+        if ($action === 'due' && (string) ($this->user()['role'] ?? '') !== \Sentinel\Auth\Role::ADMIN) {
+            throw new HttpException(403, __('Only admins can set due dates.'));
+        }
+        $me = (int) $this->user()['id'];
+        $note = $request->input('note');
+        $done = 0;
+        $skipped = 0;
+        $reasons = [];
+        // Validate the action's own fields once.
+        if ($action === 'assign') {
+            $raw = $request->input('assignee');
+            $assignee = $raw === 'me' ? $me : ($raw === '' ? null : (ctype_digit($raw) && strlen($raw) < 10 ? (int) $raw : -1));
+            if (($assignee !== null && ($assignee < 1 || !App::fixWorkflow()->isAssignable($assignee))) || mb_strlen($note) > 500) {
+                Session::flash('danger', __('Choose an active technician or admin (and a note of up to 500 characters).'));
+                return Response::redirect($back);
+            }
+        } elseif ($action === 'due') {
+            $reset = $request->input('reset') === '1';
+            $date = $request->input('due_date');
+            if ((!$reset && !FixWorkflow::validDate($date)) || $note === '' || mb_strlen($note) > 500) {
+                Session::flash('danger', __('Enter a date (YYYY-MM-DD) within the next two years, or reset it, and a reason (up to 500 characters).'));
+                return Response::redirect($back);
+            }
+        } elseif ($action === 'triage') {
+            $status = $request->input('status');
+            if (!in_array($status, ['accepted', 'false_positive', 'open'], true) || $note === '' || mb_strlen($note) > 2000) {
+                Session::flash('danger', __('Choose what to do and write a note (up to 2000 characters): explain why.'));
+                return Response::redirect($back);
+            }
+        }
+        $assignedFirst = null;
+        $clientsTouched = [];
+        foreach ($ids as $id) {
+            $finding = App::findings()->find($id);
+            if ($finding === null || (int) $finding['client_archived'] === 1) {
+                $skipped++;
+                continue;
+            }
+            $cid = (int) $finding['client_id'];
+            if ($action === 'verify') {
+                $db = App::db();
+                $db->beginTransaction();
+                try {
+                    $lock = $db->prepare('SELECT id FROM clients WHERE id = :c FOR UPDATE');
+                    $lock->execute(['c' => $cid]);
+                    $fresh = App::findings()->find($id) ?? throw new HttpException(404);
+                    $why = $this->queueVerify($request, $fresh);
+                    $db->commit();
+                } catch (\Throwable $ex) {
+                    $db->rollBack();
+                    throw $ex;
+                }
+                if ($why === null) {
+                    $done++;
+                } else {
+                    $skipped++;
+                    $reasons[$why] = ($reasons[$why] ?? 0) + 1;
+                }
+                continue;
+            }
+            if ($finding['status'] === 'resolved') {
+                $skipped++;
+                continue;
+            }
+            if ($action === 'assign') {
+                $change = App::fixWorkflow()->assign($id, $assignee, $me, $note);
+                if ($change === null) {
+                    $skipped++;
+                    continue;
+                }
+                $this->audit($request, 'finding.assigned', 'finding', $id, ['client_id' => $cid, 'from' => $change['from'], 'to' => $change['to'], 'bulk' => true]);
+                $assignedFirst ??= $id;
+            } elseif ($action === 'due') {
+                App::fixWorkflow()->setDue($id, $reset ? null : $date, $me, $note);
+                $this->audit($request, 'finding.due_changed', 'finding', $id, ['client_id' => $cid, 'from' => $finding['due_at'], 'to' => $reset ? 'policy' : $date,
+                    'note' => mb_substr($note, 0, 300), 'bulk' => true]);
+            } else {
+                $previous = App::findings()->triage($id, $status, $note, $me);
+                if ($previous === null) {
+                    $skipped++;
+                    continue;
+                }
+                $clientsTouched[$cid] = true;
+                $this->audit($request, 'finding.triaged', 'finding', $id, ['client_id' => $cid, 'from' => $previous, 'to' => $status, 'note' => mb_substr($note, 0, 300), 'bulk' => true]);
+                App::events()->publish('finding.triaged', (App::events()->finding($id) ?? []) + ['previous_status' => $previous]);
+            }
+            $done++;
+        }
+        if ($action === 'triage' && $status === 'open') {
+            foreach (array_keys($clientsTouched) as $cid) {
+                App::fixWorkflow()->recomputeDue($cid); // reopened findings are due again
+            }
+        }
+        // One email for the whole group, not one per finding.
+        if ($action === 'assign' && $assignee !== null && $assignedFirst !== null) {
+            try {
+                App::alerts()->findingAssigned($assignedFirst, $assignee, $me);
+            } catch (\Throwable $ex) {
+                error_log('[msp-sentinel] assignment alert failed: ' . $ex->getMessage());
+            }
+        }
+        $msg = __('{n} finding(s) updated.', ['n' => $done]) . ($skipped > 0 ? ' ' . __('{n} skipped (resolved, archived, unchanged or not possible).', ['n' => $skipped]) : '');
+        foreach (array_slice($reasons, 0, 3, true) as $why => $n) {
+            $msg .= ' ' . $why . ' (' . $n . ')';
+        }
+        Session::flash($done > 0 ? 'success' : 'warning', $msg);
+        return Response::redirect($back);
+    }
+
+    /** Where to go back after a bulk action: only the findings list, with its own query string. */
+    private static function safeReturn(string $raw): string
+    {
+        return preg_match('#^/findings(\?[A-Za-z0-9_=&%.\-]*)?$#D', $raw) === 1 ? $raw : '/findings';
     }
 }

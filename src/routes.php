@@ -139,6 +139,7 @@ $router->add('POST', '/findings/{id}/triage', [FindingController::class, 'triage
 $router->add('POST', '/findings/{id}/assign', [FindingController::class, 'assign'], $technician);
 $router->add('POST', '/findings/{id}/verify', [FindingController::class, 'verify'], $technician);
 $router->add('POST', '/findings/{id}/due', [FindingController::class, 'due'], $admin);
+$router->add('POST', '/findings/bulk', [FindingController::class, 'bulk'], $technician);
 
 // Reports: everyone views and downloads saved reports; technicians and admins create; admins delete and set schedules and branding
 $router->add('GET', '/reports', [ReportController::class, 'index']);

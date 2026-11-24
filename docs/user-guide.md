@@ -32,6 +32,16 @@ back. The client's forms (edit, new authorisation, agent enrolment, a device) ke
 
    Findings resolve by themselves when a check no longer sees the problem.
 
+   The same problem on several targets (one CVE on three servers, a missing header on two sites) is **one row** in
+   the Findings list (1.31). Open it to see each target. Technicians and admins can act on all of them at once:
+   - assign them;
+   - accept the risk or mark them false positive (with one note);
+   - verify the fix on each.
+
+   Admins can also set one due date for all. Each target is still its own finding: it is fixed, rechecked and audited
+   on its own. **One row per target** switches back to the old list. Reports list each problem once, with all its
+   targets.
+
    **Fix them on time:** assign each finding to a technician (or "Assign to me"). Every open finding has a due date
    (known-exploited 7 days, Fail 14, Warning 30; admins can change these). Owners get a daily reminder of overdue and
    due-soon findings. After fixing something, press **Verify fix** to recheck just that finding straight away.

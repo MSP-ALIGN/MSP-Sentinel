@@ -91,8 +91,11 @@ final class ReportBuilder
                 'false_positive' => count(array_filter($decided, static fn (array $f): bool => $f['status'] === 'false_positive')),
                 'certs_expiring' => count($certs),
             ],
-            'top' => array_slice($open, 0, 5),
+            // The same issue on several targets is listed once, with all its targets (1.31).
+            'top' => array_slice(self::byIssue($open), 0, 5),
             'open' => $open,
+            'open_issues' => self::byIssue($open),
+            'fixed_issues' => self::byIssue($fixed),
             'decided' => $decided,
             'fixed' => $fixed,
             'scope' => $scope,
@@ -100,6 +103,28 @@ final class ReportBuilder
             'last_checked' => $scanRows[0]['finished_at'] ?? null,
             'trend' => $this->trend($cid, count($fails), count($warns)),
         ];
+    }
+
+    /**
+     * Findings grouped by issue (same type and CVE, or the same title), in the order of their first finding. Each
+     * group is its first finding plus 'targets' (every target, in order) and 'items' (every finding).
+     *
+     * @param list<array<string,mixed>> $findings
+     * @return list<array<string,mixed>>
+     */
+    public static function byIssue(array $findings): array
+    {
+        $groups = [];
+        foreach ($findings as $f) {
+            $cve = (string) ($f['cve_id'] ?? '');
+            $key = (string) $f['finding_type'] . '|' . (string) $f['severity'] . '|' . ($cve !== '' ? $cve : (string) $f['title']);
+            if (!isset($groups[$key])) {
+                $groups[$key] = $f + ['targets' => [], 'items' => []];
+            }
+            $groups[$key]['targets'][] = (string) $f['target'];
+            $groups[$key]['items'][] = $f;
+        }
+        return array_values($groups);
     }
 
     /** A short title for lists and file names. */

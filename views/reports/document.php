@@ -110,44 +110,43 @@ footer.doc-footer .right { margin-left: auto; }
 <?php foreach ($r['top'] as $f): ?>
 <div class="risk <?= e($f['severity']) ?>">
     <h3><?= $sev((string) $f['severity']) ?> <?= e($f['title']) ?></h3>
-    <p class="small muted"><?= e(__('Where: {target}', ['target' => $f['target']])) ?></p>
+    <p class="small muted"><?= e(__('Where: {target}', ['target' => implode(', ', array_slice($f['targets'] ?? [$f['target']], 0, 5)) . (count($f['targets'] ?? []) > 5 ? ' ' . __('and {n} more', ['n' => count($f['targets']) - 5]) : '')])) ?></p>
     <p><span class="label"><?= e(__('What it means for you:')) ?></span> <?= e($f['meaning']) ?></p>
     <p><span class="label"><?= e(__('What we\'re doing:')) ?></span> <?= e($f['fix']) ?></p>
 </div>
 <?php endforeach; ?>
-<?php if (count($r['open']) > count($r['top'])): ?>
-<p class="small muted"><?= e(__('{n} more open item(s) are listed in the Technical findings report.', ['n' => count($r['open']) - count($r['top'])])) ?></p>
+<?php $issues = $r['open_issues'] ?? $r['top']; if (count($issues) > count($r['top'])): ?>
+<p class="small muted"><?= e(__('{n} more open issue(s) are listed in the Technical findings report.', ['n' => count($issues) - count($r['top'])])) ?></p>
 <?php endif; ?>
 <?php else: ?>
 <h2><?= e(__('Open findings')) ?></h2>
 <?php if ($r['open'] === []): ?><p><?= e(__('No open findings.')) ?></p><?php endif; ?>
 <?php foreach (['fail' => __('Fail: fix now'), 'warn' => __('Warning: fix soon')] as $level => $heading):
-    $group = array_values(array_filter($r['open'], static fn (array $f): bool => $f['severity'] === $level));
-    if ($group === []) { continue; }
-    $byAsset = [];
-    foreach ($group as $f) { $byAsset[$f['asset']][] = $f; }
-    ksort($byAsset, SORT_NATURAL);
+    // Each issue once, with every target it was found on (1.31); per-target evidence in a small table.
+    $issues = array_values(array_filter($r['open_issues'] ?? \Sentinel\Reports\ReportBuilder::byIssue($r['open']), static fn (array $f): bool => $f['severity'] === $level));
+    if ($issues === []) { continue; }
+    $count = array_sum(array_map(static fn (array $f): int => count($f['items']), $issues));
 ?>
-<h3><?= $sev($level) ?> <?= e($heading) ?> (<?= count($group) ?>)</h3>
-<?php foreach ($byAsset as $asset => $items): ?>
-<div class="asset">
-    <p class="label"><?= e(__('Host {asset}', ['asset' => (string) $asset])) ?></p>
-    <?php foreach ($items as $f): ?>
-    <div class="risk <?= e($level) ?>">
-        <h3><?= $sev($level) ?> <?= e($f['title']) ?></h3>
-        <table class="data">
-            <tr><th style="width:28%"><?= e(__('Target')) ?></th><td><code><?= e($f['target']) ?></code></td></tr>
-            <tr><th><?= e(__('Details')) ?></th><td><?= e($f['detail']) ?></td></tr>
-            <tr><th><?= e(__('Evidence')) ?></th><td><code><?= e($f['evidence']) ?></code></td></tr>
-            <?php if ($f['finding_type'] === 'vuln'): ?>
-            <tr><th><?= e(__('Vulnerability')) ?></th><td><?= e($f['cve_id']) ?> · <?= e(__('Known exploited (CISA KEV): {v}', ['v' => (int) $f['in_kev'] === 1 ? __('yes') . ($f['kev_due'] ? ', ' . __('due {d}', ['d' => $f['kev_due']]) : '') : __('no')])) ?> · <?= e(__('EPSS: {p}', ['p' => $pct($f['epss'])])) ?> · <?= e(match ($f['confidence']) { 'confirmed' => __('Confirmed for the reported version'), 'distro' => __('Possible: distribution build, the fix may be backported'), default => __('Possible: version unknown') }) ?></td></tr>
-            <?php endif; ?>
-            <tr><th><?= e(__('Why it matters')) ?></th><td><?= e($f['meaning']) ?></td></tr>
-            <tr><th><?= e(__('How to fix')) ?></th><td><?= e($f['fix']) ?></td></tr>
-            <tr><th><?= e(__('First / last seen')) ?></th><td><?= e($date($f['first_seen'])) ?> / <?= e($date($f['last_seen'])) ?><?= (int) $f['reappeared'] === 1 ? ' · ' . e(__('reappeared after being fixed')) : '' ?></td></tr>
-        </table>
-    </div>
-    <?php endforeach; ?>
+<h3><?= $sev($level) ?> <?= e($heading) ?> (<?= e(__('{i} issue(s) on {n} target(s)', ['i' => count($issues), 'n' => $count])) ?>)</h3>
+<?php foreach ($issues as $f): ?>
+<div class="risk <?= e($level) ?>">
+    <h3><?= $sev($level) ?> <?= e($f['title']) ?><?= count($f['items']) > 1 ? ' · ' . e(__('{n} targets', ['n' => count($f['items'])])) : '' ?></h3>
+    <table class="data">
+        <?php if ($f['finding_type'] === 'vuln'): ?>
+        <tr><th style="width:28%"><?= e(__('Vulnerability')) ?></th><td><?= e($f['cve_id']) ?> · <?= e(__('Known exploited (CISA KEV): {v}', ['v' => (int) $f['in_kev'] === 1 ? __('yes') . ($f['kev_due'] ? ', ' . __('due {d}', ['d' => $f['kev_due']]) : '') : __('no')])) ?> · <?= e(__('EPSS: {p}', ['p' => $pct($f['epss'])])) ?></td></tr>
+        <?php endif; ?>
+        <tr><th style="width:28%"><?= e(__('Why it matters')) ?></th><td><?= e($f['meaning']) ?></td></tr>
+        <tr><th><?= e(__('How to fix')) ?></th><td><?= e($f['fix']) ?></td></tr>
+    </table>
+    <table class="data">
+        <tr><th><?= e(__('Target')) ?></th><th><?= e(__('Details and evidence')) ?></th><th><?= e(__('First / last seen')) ?></th></tr>
+        <?php foreach ($f['items'] as $it): ?>
+        <tr><td><code><?= e($it['target']) ?></code></td>
+            <td><?= e($it['detail']) ?><?php if ((string) $it['evidence'] !== ''): ?><br><code><?= e($it['evidence']) ?></code><?php endif; ?>
+                <?php if ($it['finding_type'] === 'vuln'): ?><br><span class="small muted"><?= e(match ($it['confidence']) { 'confirmed' => __('Confirmed for the reported version'), 'distro' => __('Possible: distribution build, the fix may be backported'), default => __('Possible: version unknown') }) ?></span><?php endif; ?></td>
+            <td><?= e($date($it['first_seen'])) ?> / <?= e($date($it['last_seen'])) ?><?= (int) $it['reappeared'] === 1 ? ' · ' . e(__('reappeared after being fixed')) : '' ?></td></tr>
+        <?php endforeach; ?>
+    </table>
 </div>
 <?php endforeach; ?>
 <?php endforeach; ?>
@@ -156,8 +155,8 @@ footer.doc-footer .right { margin-left: auto; }
 <h2><?= e(__('Fixed this period')) ?></h2>
 <table class="data">
     <tr><th><?= e(__('Finding')) ?></th><th><?= e(__('Target')) ?></th><th><?= e(__('Fixed on')) ?></th></tr>
-    <?php foreach ($r['fixed'] as $f): ?>
-    <tr><td>&#10004; <?= e($f['title']) ?></td><td><code><?= e($f['target']) ?></code></td><td><?= e($date($f['resolved_at'])) ?></td></tr>
+    <?php foreach ($r['fixed_issues'] ?? \Sentinel\Reports\ReportBuilder::byIssue($r['fixed']) as $f): ?>
+    <tr><td>&#10004; <?= e($f['title']) ?></td><td><code><?= e(implode(', ', $f['targets'])) ?></code></td><td><?= e($date((string) max(array_column($f['items'], 'resolved_at')))) ?></td></tr>
     <?php endforeach; ?>
 </table>
 <?php endif; ?>

@@ -18,9 +18,8 @@ $setup = static function (TestContext $ctx): int {
         return $cid;
     }
     $admin = $ctx->login('admin', 'Admin-Pass-0001!');
-    $now = (int) gmdate('G');
     $res = $admin->submit('/clients/new', '/clients', ['name' => 'DNS Checks Example', 'itflow_client_id' => '', 'timezone' => 'UTC',
-        'scan_window_start' => sprintf('%02d:00', ($now + 23) % 24), 'scan_window_end' => sprintf('%02d:00', ($now + 1) % 24), 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);
+        'scan_window_start' => '00:00', 'scan_window_end' => '23:59', 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);
     $cid = (int) basename((string) $res->location());
     $admin->submit('/clients/' . $cid . '/authorisations/new', '/clients/' . $cid . '/authorisations', [
         'approved_by_name' => 'Jo Example', 'approved_by_role' => 'Owner', 'approved_on' => gmdate('Y-m-d'), 'valid_from' => gmdate('Y-m-d', time() - 86400),

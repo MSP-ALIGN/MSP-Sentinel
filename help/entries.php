@@ -174,6 +174,7 @@ return [
                 'A finding resolves by itself when a check really sees the problem gone, for example a port that a complete scan finds closed. A host that simply wasn\'t scanned keeps its findings. If a resolved problem comes back, the same finding reopens and is marked "Reappeared", with its whole history. If it had been accepted or marked as a false positive and the evidence is the same, that decision is kept. While a service\'s new vulnerability data is still being fetched, its vulnerability findings are not resolved.',
                 'Technicians and admins can triage a finding, always with a note. "Accepted risk" means the client knows and accepts it; it stays accepted until the problem goes away. "False positive" means it isn\'t really a problem; it reopens automatically if the evidence changes, for example if a different version is reported. You can also reopen a finding to undo a decision. Resolving is never done by hand: only checks resolve findings.',
                 'The Findings page lists findings across all clients, with filters for client, status, grade and type. Each decision appears in the finding\'s history and in the audit log.',
+                'Repeated problems are grouped (1.31): the same CVE, or the same problem, on several targets of one client is one row ("on 3 targets"). Open the row to see each target and act on all of them at once: assign, accept risk / false positive / reopen with one note, verify fix on each, and (admins) one due date. Every target stays its own finding: checked, rechecked, resolved and audited on its own, exactly as if you had clicked each one. "One row per target" shows the old list. Reports list each problem once with all its targets.',
             ],
         ],
         [
@@ -237,6 +238,13 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.31.0',
+            'date' => '2026-11-24',
+            'items' => [
+                'Repeated findings are grouped: the same CVE or problem on several targets of a client is one row in the Findings list, with actions for all of them at once (assign, accept risk / false positive / reopen, verify fix, and due date for admins). Each target stays its own finding. Reports list each problem once with all its targets. Grouped ITFlow tickets follow in the next release.',
+            ],
+        ],
         [
             'version' => '1.30.1',
             'date' => '2026-11-24',

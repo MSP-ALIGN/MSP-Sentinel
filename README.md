@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.30.1](https://img.shields.io/badge/version-1.30.1-ff5a1f?style=flat-square)
+![Version 1.31.0](https://img.shields.io/badge/version-1.31.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -149,6 +149,23 @@ curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install
 The same help is built into the app (**Help** in the menu), with a "What's new" page for every release.
 
 ## What's new
+
+### 1.31.0 (2026-11-24): grouped findings
+
+- **Repeated findings are one row.** The same CVE, or the same problem, on several targets of one client is grouped
+  in the Findings list ("on 3 targets"). Open the row to see each target. **One row per target** switches back.
+- **Act on a whole group at once** (technicians and admins):
+  - assign;
+  - accept risk, false positive or reopen, with one note;
+  - verify fix on each target;
+  - one due date (admins).
+
+  Each finding is checked exactly as a single click would check it: resolved and archived findings are skipped, and
+  the verify limits apply. Each one is audited on its own, and the assignee gets one email for the group.
+- **Reports list each problem once** with every target it was found on. Per-target evidence is in a small table,
+  and the executive summary's top risks count issues, not targets.
+- **Each target is still its own finding.** It is fixed, rechecked and resolved on its own.
+- Grouped ITFlow tickets (one ticket per issue) follow in the next release.
 
 ### 1.30.1 (2026-11-24): share check, fixes from review
 

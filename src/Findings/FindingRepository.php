@@ -37,6 +37,106 @@ final class FindingRepository
      */
     public function search(array $f, int $page = 1): array
     {
+        [$sqlWhere, $params] = $this->filterSql($f);
+        $order = ($f['due'] ?? '') !== '' ? 'f.due_at, f.id' : "f.status = 'open' DESC, f.severity = 'fail' DESC, f.reappeared DESC, f.first_seen DESC, f.id DESC";
+        $count = $this->db->prepare("SELECT COUNT(*) FROM findings f JOIN clients c ON c.id = f.client_id WHERE {$sqlWhere}");
+        $count->execute($params);
+        $stmt = $this->db->prepare(
+            "SELECT f.*, c.name AS client_name, u.username AS triaged_by_username, au.username AS assignee_username, " . self::GROUP_KEY_SQL . " AS group_key FROM findings f
+             JOIN clients c ON c.id = f.client_id LEFT JOIN users u ON u.id = f.triaged_by LEFT JOIN users au ON au.id = f.assigned_to
+             WHERE {$sqlWhere} ORDER BY {$order}
+             LIMIT :lim OFFSET :off"
+        );
+        foreach ($params as $k => $v) {
+            $stmt->bindValue($k, $v);
+        }
+        $stmt->bindValue('lim', self::PAGE_SIZE, PDO::PARAM_INT);
+        $stmt->bindValue('off', (max(1, $page) - 1) * self::PAGE_SIZE, PDO::PARAM_INT);
+        $stmt->execute();
+        return ['rows' => $stmt->fetchAll(), 'total' => (int) $count->fetchColumn()];
+    }
+
+    /**
+     * The same issue on several targets of one client (1.31): same client, same type, and the same CVE (or, without a
+     * CVE, the same title). Titles never contain secrets; the key is a SHA-1 of those three, 40 hex characters.
+     */
+    public const GROUP_KEY_SQL = "SHA1(CONCAT(f.client_id, '|', f.finding_type, '|', COALESCE(NULLIF(f.cve_id, ''), f.title)))";
+    /** Groups per page in the grouped list, and members shown per group (the rest: "show all"). */
+    public const GROUPS_PER_PAGE = 50;
+    public const MEMBERS_SHOWN = 100;
+
+    /** The same key in PHP (reports and tests): client, type, CVE or title. */
+    public static function groupKey(array $f): string
+    {
+        $cve = (string) ($f['cve_id'] ?? '');
+        return sha1((int) $f['client_id'] . '|' . (string) $f['finding_type'] . '|' . ($cve !== '' ? $cve : (string) $f['title']));
+    }
+
+    /**
+     * Findings matching the filters, grouped by issue (one row per issue per client), most important first: any open,
+     * any Fail, most targets, newest. Each group carries up to MEMBERS_SHOWN of its findings (the filters apply to
+     * them too).
+     *
+     * @param array<string,mixed> $f validated filters, as search()
+     * @return array{groups:list<array<string,mixed>>, total:int} total: number of groups
+     */
+    public function searchGrouped(array $f, int $page = 1): array
+    {
+        [$sqlWhere, $params] = $this->filterSql($f);
+        $key = self::GROUP_KEY_SQL;
+        $count = $this->db->prepare("SELECT COUNT(DISTINCT {$key}) FROM findings f JOIN clients c ON c.id = f.client_id WHERE {$sqlWhere}");
+        $count->execute($params);
+        $stmt = $this->db->prepare(
+            "SELECT {$key} AS group_key, f.client_id, MIN(c.name) AS client_name, f.finding_type, MIN(f.title) AS title, MIN(NULLIF(f.cve_id, '')) AS cve_id,
+                    COUNT(*) AS n, SUM(f.status = 'open') AS open_n, MAX(f.severity = 'fail') AS any_fail, MIN(f.first_seen) AS first_seen,
+                    MIN(CASE WHEN f.status = 'open' THEN f.due_at END) AS due_at, COUNT(DISTINCT f.status) AS statuses,
+                    COUNT(DISTINCT COALESCE(f.assigned_to, 0)) AS owners, MAX(f.reappeared) AS reappeared
+             FROM findings f JOIN clients c ON c.id = f.client_id
+             WHERE {$sqlWhere}
+             GROUP BY group_key, f.client_id, f.finding_type
+             ORDER BY SUM(f.status = 'open') > 0 DESC, MAX(f.severity = 'fail') DESC, COUNT(*) DESC, MIN(f.first_seen) DESC, group_key
+             LIMIT :lim OFFSET :off"
+        );
+        foreach ($params as $k => $v) {
+            $stmt->bindValue($k, $v);
+        }
+        $stmt->bindValue('lim', self::GROUPS_PER_PAGE, PDO::PARAM_INT);
+        $stmt->bindValue('off', (max(1, $page) - 1) * self::GROUPS_PER_PAGE, PDO::PARAM_INT);
+        $stmt->execute();
+        $groups = $stmt->fetchAll();
+        if ($groups !== []) {
+            // The members of this page's groups, with the same filters.
+            $in = implode(',', array_map(fn (array $g): string => $this->db->quote((string) $g['group_key']), $groups));
+            $m = $this->db->prepare(
+                "SELECT f.*, {$key} AS group_key, au.username AS assignee_username FROM findings f JOIN clients c ON c.id = f.client_id
+                 LEFT JOIN users au ON au.id = f.assigned_to
+                 WHERE {$sqlWhere} AND {$key} IN ({$in})
+                 ORDER BY f.status = 'open' DESC, f.severity = 'fail' DESC, f.target, f.id"
+            );
+            $m->execute($params);
+            $members = [];
+            foreach ($m->fetchAll() as $row) {
+                if (count($members[$row['group_key']] ?? []) < self::MEMBERS_SHOWN) {
+                    $members[$row['group_key']][] = $row;
+                }
+            }
+            foreach ($groups as &$g) {
+                $g['members'] = $members[$g['group_key']] ?? [];
+                $g['severity'] = (int) $g['any_fail'] === 1 ? 'fail' : 'warn';
+            }
+            unset($g);
+        }
+        return ['groups' => $groups, 'total' => (int) $count->fetchColumn()];
+    }
+
+    /**
+     * The WHERE clause and parameters for the validated filters (shared by both lists).
+     *
+     * @param array<string,mixed> $f
+     * @return array{0:string, 1:array<string,int|string>}
+     */
+    private function filterSql(array $f): array
+    {
         $where = ['c.is_archived = 0'];
         $params = [];
         if (!empty($f['client'])) {
@@ -66,23 +166,12 @@ final class FindingRepository
         } elseif (($f['due'] ?? '') === 'soon') {
             $where[] = "f.status = 'open' AND f.due_at >= UTC_TIMESTAMP() AND f.due_at < UTC_TIMESTAMP() + INTERVAL " . FixWorkflow::DUE_SOON_DAYS . ' DAY';
         }
-        $order = ($f['due'] ?? '') !== '' ? 'f.due_at, f.id' : "f.status = 'open' DESC, f.severity = 'fail' DESC, f.reappeared DESC, f.first_seen DESC, f.id DESC";
-        $sqlWhere = implode(' AND ', $where);
-        $count = $this->db->prepare("SELECT COUNT(*) FROM findings f JOIN clients c ON c.id = f.client_id WHERE {$sqlWhere}");
-        $count->execute($params);
-        $stmt = $this->db->prepare(
-            "SELECT f.*, c.name AS client_name, u.username AS triaged_by_username, au.username AS assignee_username FROM findings f
-             JOIN clients c ON c.id = f.client_id LEFT JOIN users u ON u.id = f.triaged_by LEFT JOIN users au ON au.id = f.assigned_to
-             WHERE {$sqlWhere} ORDER BY {$order}
-             LIMIT :lim OFFSET :off"
-        );
-        foreach ($params as $k => $v) {
-            $stmt->bindValue($k, $v);
+        // One group (a "show all" link from the grouped list): 40 hex characters, compared as a bound value.
+        if (preg_match('/^[0-9a-f]{40}$/', (string) ($f['group'] ?? '')) === 1) {
+            $where[] = self::GROUP_KEY_SQL . ' = :group';
+            $params['group'] = (string) $f['group'];
         }
-        $stmt->bindValue('lim', self::PAGE_SIZE, PDO::PARAM_INT);
-        $stmt->bindValue('off', (max(1, $page) - 1) * self::PAGE_SIZE, PDO::PARAM_INT);
-        $stmt->execute();
-        return ['rows' => $stmt->fetchAll(), 'total' => (int) $count->fetchColumn()];
+        return [implode(' AND ', $where), $params];
     }
 
     /**
