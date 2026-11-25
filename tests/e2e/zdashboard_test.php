@@ -52,6 +52,19 @@ return [
         Assert::notContains('Sonar <b>Example</b>', $dash);
         Assert::true(preg_match_all('/class="sn-dot /', $dash) === min(\Sentinel\Dashboard\Svg::SONAR_MAX, (int) $ctx->db->query('SELECT COUNT(*) FROM clients WHERE is_archived = 0')->fetchColumn()), 'one dot per active client, up to the limit');
         Assert::notContains('style="', substr($dash, (int) strpos($dash, '<svg class="sonar"'), (int) strpos($dash, '</svg>', (int) strpos($dash, '<svg class="sonar"')) - (int) strpos($dash, '<svg class="sonar"')), 'no inline style (strict CSP)');
+        Assert::notContains('class="sn-dot sn-good">', $dash, 'dots are out of the tab order (1.57.1: tabindex -1)');
+        // 1.57.1: 60 clients with the same score (all Good) never overlap: every pair of dots at least 12px apart.
+        $many = array_map(static fn (int $i): array => ['id' => 1 + $i * 13, 'name' => 'Spread ' . $i . ' Example', 'score' => 0, 'level' => 'good'], range(0, 59));
+        $svg = \Sentinel\Dashboard\Svg::sonar($many, 0, 'good', 'test', []);
+        preg_match_all('/class="sn-blip" cx="([0-9.]+)" cy="([0-9.]+)"/', $svg, $mm, PREG_SET_ORDER);
+        Assert::same(60, count($mm), 'sixty dots');
+        $gap = INF;
+        foreach ($mm as $i => $p) {
+            foreach (array_slice($mm, $i + 1) as $q) {
+                $gap = min($gap, hypot((float) $p[1] - (float) $q[1], (float) $p[2] - (float) $q[2]));
+            }
+        }
+        Assert::true($gap >= 12, 'dots at least 12px apart (closest ' . round($gap, 1) . ')');
         $ctx->db->exec("DELETE FROM findings WHERE client_id = {$sonarId}");
         $ctx->db->exec("UPDATE clients SET is_archived = 1 WHERE id = {$sonarId}");
         $live = $admin->get('/dashboard/live');

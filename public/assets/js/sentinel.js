@@ -87,6 +87,11 @@
                     if (!busy() && !paused) {
                         box.innerHTML = html;
                         box.setAttribute('data-refreshed', '1');
+                        // 1.57.1: new panels restart their CSS animations (the dashboard sonar's sweep would jump back
+                        // to the top every minute): put them back in step with the page's own clock.
+                        if (typeof box.getAnimations === 'function') {
+                            box.getAnimations({ subtree: true }).forEach(function (a) { a.startTime = 0; });
+                        }
                     }
                     failures = 0;
                     nextAt = Date.now() + 55000;

@@ -386,7 +386,8 @@ a.kpi:hover { background: rgba(var(--st-ember-rgb), .07); }
 .sonar .sn-lbl { font: 600 7.5px var(--st-mono); letter-spacing: .12em; fill: var(--bs-secondary-color); opacity: .75; }
 .sonar .sn-sweep { transform-origin: 150px 150px; animation: sn-spin 6s linear infinite; }
 .sonar .sn-wedge { fill: color-mix(in srgb, var(--st-ember) 30%, transparent); }
-.sonar .sn-edge { stroke: #ffb347; stroke-width: 1.5; opacity: .9; }
+.sonar .sn-edge { stroke: var(--st-ember-hot); stroke-width: 1.5; opacity: .95; }
+[data-bs-theme="light"] .sonar .sn-edge { stroke: var(--st-ember-deep); }
 .sonar .sn-dot { cursor: pointer; }
 .sonar .sn-blip { stroke: var(--bs-body-bg); stroke-width: 1.5; }
 .sonar .sn-risk .sn-blip { fill: var(--st-fail); filter: drop-shadow(0 0 5px color-mix(in srgb, var(--st-fail) 85%, transparent)); }

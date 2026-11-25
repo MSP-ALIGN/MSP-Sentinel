@@ -2,6 +2,14 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.56.2 (2026-11-25): Silent nmap install on Windows where it can work
+
+- **The Windows agent installer tries a silent nmap install first.** nmap itself installs silently; only the free
+  edition's bundled Npcap waits for a click. So on a machine that already has Npcap (for example from Wireshark),
+  the whole install is unattended again. Where the silent install can't finish within 5 minutes, it is stopped and
+  the installer falls back to nmap's setup window as before (or, with no one at the screen, stops with a clear
+  message).
+
 ### 1.56.1 (2026-11-25): Fixes from review
 
 - Correcting the ITFlow ticket template retries tickets that failed on it at the next run, instead of up to a day
