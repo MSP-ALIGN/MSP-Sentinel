@@ -31,9 +31,13 @@ $feedOk = static fn (?int $age): bool => $age !== null && $age <= 2 * 86400;
             <?php if (can('clients.manage')): ?><a class="btn btn-primary btn-sm ms-1" href="<?= e(url('/clients/new')) ?>"><i class="bi bi-plus-lg me-1" aria-hidden="true"></i><?= e(__('Add your first client')) ?></a>
             <?php else: ?><?= e(__('Someone whose role can manage clients adds them.')) ?><?php endif; ?></p>
         <?php else: ?>
-        <?= Svg::gauge($worst['score'], $worst['level'], __('Highest client risk')) ?>
+        <?php // 1.57: a sonar of every client (dots in the band of their level), the highest score in the center. ?>
+        <?= Svg::sonar($d['clients'], $worst['score'], $worst['level'], __('Client risk sonar: highest {c}, {s} of 100; {n} of {t} clients at risk',
+            ['c' => $worst['name'], 's' => $worst['score'], 'n' => $atRisk, 't' => count($d['clients'])]),
+            ['risk' => $levelWord('risk'), 'attention' => $levelWord('attention'), 'good' => $levelWord('good')]) ?>
         <p class="gauge-level level-<?= e($worst['level']) ?>"><i class="bi <?= e($levelIcon($worst['level'])) ?>" aria-hidden="true"></i> <?= e($levelWord($worst['level'])) ?></p>
-        <p class="hud-sub"><?= e(__('Highest: {c}', ['c' => $worst['name']])) ?> · <?= e(__('{n} of {t} clients at risk', ['n' => $atRisk, 't' => count($d['clients'])])) ?></p>
+        <p class="hud-sub"><?= e(__('Highest: {c} · {s}%', ['c' => $worst['name'], 's' => $worst['score']])) ?> · <?= e(__('{n} of {t} clients at risk', ['n' => $atRisk, 't' => count($d['clients'])])) ?>
+            <?php if (count($d['clients']) > Svg::SONAR_MAX): ?> · <?= e(__('{n} more not drawn', ['n' => count($d['clients']) - Svg::SONAR_MAX])) ?><?php endif; ?></p>
         <?php endif; ?>
     </section>
 

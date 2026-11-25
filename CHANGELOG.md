@@ -2,6 +2,27 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.57.1 (2026-11-25): Fixes from review
+
+- **Sonar dots never overlap.** Clients are spaced evenly around the scope and staggered across their band, so many
+  clients with the same score (every Good client, or many at 100) no longer pile on top of each other. A dot only
+  moves when a client is added or removed.
+- **Smooth refresh.** The once-a-minute dashboard refresh no longer makes the sweep jump back to the top.
+- Dots ping as the sweep reaches them, not just before; the sweep line shows clearly in the light theme; band labels
+  no longer sit under a dot.
+- The dots are a mouse shortcut and stay out of the keyboard's tab order; the client risk grid beside the sonar
+  links every client.
+
+### 1.57.0 (2026-11-25): Threat level sonar
+
+- **The main dashboard's threat level is now a sonar.** Every client is a dot in the band of its level: a red core
+  for clients at risk, amber for needs attention and a green rim for good. Within its band, the higher a client's
+  score, the closer it sits to the center, and each client keeps its place between refreshes. The center shows the
+  highest client's score.
+- **Hover a dot** for the client's name, level and score; **click it** to open the client.
+- The sweep turns like the logo's radar and dots ping as it passes; nothing moves for people whose system asks for
+  reduced motion. Up to 60 clients are drawn (worst first). Client pages keep their own gauge.
+
 ### 1.56.3 (2026-11-25): Fixes from review
 
 - The Windows installer's check that the newly installed nmap runs never stops the install by mistake; it falls back
