@@ -95,7 +95,7 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
             <label class="form-check-label" for="confirm"><?= e(__('I confirm that this client has authorized us to scan exactly these systems for these dates, and that the authorization is documented.')) ?></label>
             <?php $field = 'confirm'; require __DIR__ . '/../partials/field_error.php'; ?>
         </div>
-        <p class="small text-body-secondary mt-2 mb-0"><?= e(__('Authorizations cannot be edited after saving. To change the scope later, revoke this one and record a new one.')) ?></p>
+        <p class="small text-body-secondary mt-2 mb-0"><?= e(__('Authorizations cannot be edited after saving. To change the scope or the dates later, use Change scope / renew on the Authorizations page: the new one replaces this one, and both stay in the register.')) ?></p>
     </div>
     <div class="card-footer">
         <button type="submit" class="btn btn-primary"><i class="bi bi-file-earmark-check me-1" aria-hidden="true"></i><?= e(__('Record authorization')) ?></button>

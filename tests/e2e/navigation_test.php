@@ -99,4 +99,39 @@ return [
         Assert::contains('Help', substr($slash, (int) strpos($slash, '<aside'), 4000), 'Help reachable from the admin menu');
         Assert::notContains('role="menu"', $slash, 'plain navigation lists, not ARIA menus');
     },
+    'workflows (1.51): Scan now on the overview, internal authorizations listed, a first-run checklist, Roles on the admin overview' => function (TestContext $ctx): void {
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $id = (int) $ctx->db->query("SELECT a.client_id FROM scan_authorisations a JOIN clients c ON c.id = a.client_id AND c.is_archived = 0 AND c.is_demo = 0 AND c.scanning_paused = 0
+                                     WHERE a.revoked_at IS NULL AND a.valid_from <= UTC_DATE() AND a.valid_until >= UTC_DATE() ORDER BY a.client_id LIMIT 1")->fetchColumn();
+        Assert::true($id > 0, 'a client with an active authorization');
+        Assert::contains('action="/clients/' . $id . '/scan"', $admin->get('/clients/' . $id)->body, 'Scan now on the overview');
+        Assert::contains('Internal networks (agents)', $admin->get('/clients/' . $id . '/authorisations')->body, 'internal authorizations listed with the external ones');
+        Assert::contains('Change scope / renew', $admin->get('/clients/' . $id . '/authorisations/new')->body, 'the form points to Change scope / renew');
+        // The checklist: shown to whoever manages settings while a step is open, ticked from real data, hidden for everyone.
+        \Sentinel\Core\App::settings()->set('setup_checklist_hidden', '0');
+        \Sentinel\Core\App::settings()->set('display_timezone', 'UTC');
+        $home = $admin->get('/')->body;
+        Assert::contains('Getting started', $home);
+        Assert::contains('data-step="timezone"', $home);
+        Assert::contains('<s>Add your first client</s>', $home, 'a step already done is ticked');
+        if ((int) $ctx->db->query("SELECT COUNT(*) FROM users WHERE username = 'wftech'")->fetchColumn() === 0) {
+            $ctx->createUser('wftech', 'technician', 'Wftech-Pass-00001!');
+        }
+        $tech = $ctx->login('wftech', 'Wftech-Pass-00001!');
+        Assert::notContains('Getting started', $tech->get('/')->body, 'not for technicians');
+        Assert::status(403, $tech->post('/dashboard/setup-checklist/hide', ['_csrf' => $tech->get('/')->csrf()]), 'technicians cannot hide it');
+        Assert::status(400, $admin->post('/dashboard/setup-checklist/hide', ['_csrf' => 'wrong']), 'CSRF-checked');
+        $admin->submit('/', '/dashboard/setup-checklist/hide', []);
+        Assert::same('1', \Sentinel\Core\App::settings()->fresh('setup_checklist_hidden'));
+        Assert::notContains('Getting started', $admin->get('/')->body, 'hidden');
+        Assert::true((int) $ctx->db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'settings.setup_checklist_hidden'")->fetchColumn() > 0, 'audited');
+        // Administration overview: Roles has its card; the engagements list starts a new one for a chosen client.
+        Assert::contains('href="/admin/roles"', $admin->get('/admin')->body);
+        Assert::redirect('/clients/' . $id . '/engagements/new', $admin->get('/engagements/new?client=' . $id));
+        Assert::redirect('/engagements', $admin->get('/engagements/new?client=abc'));
+        if ((int) $ctx->db->query("SELECT COUNT(*) FROM users WHERE username = 'wfview'")->fetchColumn() === 0) {
+            $ctx->createUser('wfview', 'viewer', 'Wfview-Pass-00001!');
+        }
+        Assert::status(403, $ctx->login('wfview', 'Wfview-Pass-00001!')->get('/engagements/new?client=' . $id), 'needs Run engagements');
+    },
 ];

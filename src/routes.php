@@ -57,6 +57,7 @@ $router->add('GET', '/recovery-codes', [AuthController::class, 'showRecoveryCode
 // Everyone signed in
 $router->add('GET', '/', [PageController::class, 'dashboard']);
 $router->add('GET', '/dashboard/live', [PageController::class, 'live'], ['passive' => true]);
+$router->add('POST', '/dashboard/setup-checklist/hide', [PageController::class, 'hideSetup'], ['perm' => 'settings.manage']);
 $router->add('GET', '/help', [PageController::class, 'help'], $duringPasswordChange);
 $router->add('GET', '/search', [PageController::class, 'search']);
 $router->add('GET', '/profile', [ProfileController::class, 'index']);
@@ -91,6 +92,7 @@ $router->add('POST', '/sites/{id}', [ClientController::class, 'updateSite'], ['p
 
 // Authorized-to-scan register: admins only (everyone sees it on the client page)
 // Pen-test engagements: technicians and admins create, stop and cancel; a DIFFERENT admin approves (two-person rule).
+$router->add('GET', '/engagements/new', [\Sentinel\Controllers\EngagementController::class, 'newFor'], ['perm' => 'engagements.run']);
 $router->add('GET', '/clients/{id}/engagements/new', [\Sentinel\Controllers\EngagementController::class, 'create'], ['perm' => 'engagements.run']);
 $router->add('POST', '/clients/{id}/engagements', [\Sentinel\Controllers\EngagementController::class, 'store'], ['perm' => 'engagements.run']);
 $router->add('GET', '/engagements', [\Sentinel\Controllers\EngagementController::class, 'index']);

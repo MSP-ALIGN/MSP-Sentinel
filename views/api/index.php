@@ -8,6 +8,7 @@ use Sentinel\Core\Csrf;
 
 $now = time();
 ?>
+<div class="d-flex justify-content-end mb-2"><a class="btn btn-sm btn-outline-primary" href="<?= e(url('/admin/api/docs')) ?>"><i class="bi bi-book me-1" aria-hidden="true"></i><?= e(__('API reference')) ?></a></div>
 <?php if ($newToken !== null): ?>
 <div class="alert alert-warning" role="alert">
     <h2 class="h5"><i class="bi bi-key me-1" aria-hidden="true"></i><?= e(__('Your new API token')) ?></h2>

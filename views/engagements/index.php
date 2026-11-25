@@ -1,7 +1,8 @@
 <?php
 /**
  * Every pen-test engagement across clients (1.34), with the ones waiting for this admin's approval first.
- * Expects: $engagements (EngagementRepository::all), $awaiting (awaitingApprovalBy, admins only), $adminCount,
+ * Expects: $engagements (EngagementRepository::all), $awaiting (awaitingApprovalBy, admins only), $approverCount, $newFor
+ * (clients a new engagement can be started for, 1.51),
  * $currentUser. Times are shown in the viewer's time zone (1.48; each client's page shows its own). Every value is escaped.
  */
 use Sentinel\Engagements\EngagementRepository;
@@ -38,7 +39,18 @@ $isAdmin = can('engagements.approve');
         <input type="search" id="engagements-filter" class="form-control form-control-sm ms-auto sn-w-16" data-filter-list="#engagements-table" placeholder="<?= e(__('Filter by name or client')) ?>">
     </div>
     <div class="card-body">
-        <p class="small text-body-secondary"><?= e(__('Create an engagement from the client\'s Pen-test engagements page. A different admin approves it before anything runs.')) ?></p>
+        <?php if (($newFor ?? []) !== []): ?>
+        <form method="get" action="<?= e(url('/engagements/new')) ?>" class="d-flex flex-wrap gap-2 align-items-center mb-3">
+            <label class="small" for="new-engagement-client"><?= e(__('New engagement for')) ?></label>
+            <select class="form-select form-select-sm w-auto" id="new-engagement-client" name="client" required>
+                <?php foreach ($newFor as $c): ?><option value="<?= (int) $c['id'] ?>"><?= e($c['name']) ?></option><?php endforeach; ?>
+            </select>
+            <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1" aria-hidden="true"></i><?= e(__('New engagement')) ?></button>
+        </form>
+        <?php endif; ?>
+        <p class="small text-body-secondary"><?= e(\Sentinel\Controllers\EngagementController::twoPerson()
+            ? __('A different admin approves each engagement before anything runs.')
+            : __('Each engagement is approved before anything runs.')) ?></p>
         <?php if ($engagements === []): ?>
         <p class="text-body-secondary mb-0"><?= e(__('No engagements yet.')) ?> <a href="<?= e(url('/clients')) ?>"><?= e(__('Open a client to create one')) ?></a></p>
         <?php else: ?>

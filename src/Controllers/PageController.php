@@ -24,7 +24,32 @@ final class PageController extends Controller
         $isAdmin = App::auth()->can('engagements.approve');
         return $this->page('dashboard', __('Dashboard'), ['d' => self::dashboardData(), 'globallyPaused' => App::scope()->globallyPaused(),
             // Engagements someone else created that this user can approve (1.34: approvals were easy to miss).
-            'awaitingApproval' => $isAdmin ? App::engagements()->awaitingApprovalBy((int) $this->user()['id'], App::auth()->clientIds(), \Sentinel\Controllers\EngagementController::twoPerson()) : []]);
+            'awaitingApproval' => $isAdmin ? App::engagements()->awaitingApprovalBy((int) $this->user()['id'], App::auth()->clientIds(), \Sentinel\Controllers\EngagementController::twoPerson()) : [],
+            // The first-run checklist (1.51), for whoever sets Sentinel up; it counts every client, so only for users who see all.
+            'setup' => self::setupSteps()]);
+    }
+
+    /**
+     * The first-run checklist's steps when this user should see it (can manage settings, sees every client, not
+     * hidden, not finished), else [].
+     *
+     * @return list<array<string,mixed>>
+     */
+    private static function setupSteps(): array
+    {
+        if (!App::auth()->can('settings.manage') || App::auth()->clientIds() !== null) {
+            return [];
+        }
+        $list = new \Sentinel\Dashboard\SetupChecklist(App::db(), App::settings());
+        return $list->visible() ? $list->steps() : [];
+    }
+
+    /** POST /dashboard/setup-checklist/hide: hide the first-run checklist for everyone (settings.manage; CSRF-checked by the router). */
+    public function hideSetup(Request $request): Response
+    {
+        App::settings()->set('setup_checklist_hidden', '1');
+        $this->audit($request, 'settings.setup_checklist_hidden', null, null, []);
+        return Response::redirect('/');
     }
 
     /** GET /dashboard/live: the dashboard panels alone, for the 60-second refresh (any signed-in role). */

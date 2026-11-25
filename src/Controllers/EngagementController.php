@@ -268,7 +268,24 @@ final class EngagementController extends Controller
             'engagements' => App::engagements()->all(200, App::auth()->clientIds()),
             'awaiting' => $canApprove ? App::engagements()->awaitingApprovalBy((int) $this->user()['id'], App::auth()->clientIds(), self::twoPerson()) : [],
             'approverCount' => count(App::roles()->usersWith('engagements.approve')),
+            // Clients an engagement can be started for from this list (1.51): the user's own, not archived, not demo.
+            'newFor' => App::auth()->can('engagements.run') ? array_values(array_filter(App::clients()->all(false, App::auth()->clientIds()),
+                static fn (array $c): bool => (int) ($c['is_demo'] ?? 0) === 0)) : [],
         ]);
+    }
+
+    /**
+     * GET /engagements/new?client=ID (1.51): the client picker on the list leads to that client's New engagement form.
+     * Untrusted: the client ID (digits only, and a client the user may see; anything else goes back to the list).
+     * engagements.run is checked by the route; the form's own action checks everything again.
+     */
+    public function newFor(Request $request): Response
+    {
+        $id = ctype_digit($request->query('client')) ? (int) $request->query('client') : 0;
+        if ($id <= 0 || !App::auth()->canSeeClient($id) || App::clients()->find($id) === null) {
+            return Response::redirect('/engagements');
+        }
+        return Response::redirect('/clients/' . $id . '/engagements/new');
     }
 
     /** GET /engagements/{id} */

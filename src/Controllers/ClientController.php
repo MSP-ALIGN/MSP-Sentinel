@@ -124,7 +124,8 @@ final class ClientController extends Controller
                           'devices' => fn () => App::inventory()->devicesForClient($cid, 500),
                           'deviceTotal' => fn () => (int) App::db()->query('SELECT COUNT(*) FROM devices d WHERE d.removed_at IS NULL AND ' . \Sentinel\Inventory\InventoryRepository::notMerged('d') . ' AND d.client_id = ' . $cid)->fetchColumn(),
                           'devicePatches' => fn () => App::inventory()->patchesByDevice($cid)],
-            'authorisations' => ['authorisations' => $authorisations],
+            // Internal authorizations are listed here too (1.51), per site; they are recorded on Agents.
+            'authorisations' => ['authorisations' => $authorisations, 'agentSites' => fn () => self::agentSites($client)],
             'engagements' => ['engagements' => fn () => App::engagements()->forClient($cid)],
             'discovery' => ['suggestions' => fn () => App::suggestions()->forClient($cid, 'pending'), 'dismissed' => fn () => App::suggestions()->forClient($cid, 'dismissed'),
                             'lastRun' => fn () => App::suggestions()->lastRun($cid)],

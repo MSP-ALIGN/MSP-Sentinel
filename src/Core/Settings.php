@@ -28,6 +28,8 @@ final class Settings
         'source_url' => 'https://github.com/msp-align/msp-sentinel',
         // Global kill switch: '1' stops all scanning straight away. Technicians and admins can pause; only admins resume.
         'scanning_paused' => '0',
+        // The dashboard's first-run checklist (1.51): '1' once someone who manages settings hides it.
+        'setup_checklist_hidden' => '0',
         // Alerts (step 8). Secrets (smtp_password, webhook_url) are stored encrypted: see setSecret().
         'email_enabled' => '0',
         'smtp_host' => '',

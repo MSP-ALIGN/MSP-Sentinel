@@ -67,7 +67,7 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
                     <?= Csrf::field() ?>
                     <button type="submit" class="btn btn-sm btn-success"><i class="bi bi-play-fill me-1" aria-hidden="true"></i><?= e(__('Resume scanning')) ?></button>
                 </form>
-                <?php else: ?><p class="small text-body-secondary mb-0"><?= e(__('Only an admin can resume scanning.')) ?></p><?php endif; ?>
+                <?php else: ?><p class="small text-body-secondary mb-0"><?= e(__('Your role can\'t resume scanning.')) ?></p><?php endif; ?>
                 <?php else: ?>
                 <p class="small"><?php
                     if ($archived) {
@@ -82,7 +82,15 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
                 <?php if ($activeCount === 0 && !$archived && can('authorisations.manage')): ?>
                 <p><a href="<?= e(url('/clients/' . $clientId . '/authorisations/new')) ?>" class="btn btn-primary btn-sm"><i class="bi bi-file-earmark-plus me-1" aria-hidden="true"></i><?= e(__('Record authorization')) ?></a></p>
                 <?php elseif ($activeCount === 0 && !$archived): ?>
-                <p class="small text-body-secondary"><?= e(__('An admin records the client\'s authorization first.')) ?></p>
+                <p class="small text-body-secondary"><?= e(__('Someone whose role can manage authorizations records the client\'s authorization first.')) ?></p>
+                <?php endif; ?>
+                <?php // 1.51: Scan now on the overview too (as the help says); the window override stays on Scans and ports. ?>
+                <?php if ($activeCount > 0 && !$archived && !$globallyPaused && can('scans.run')): ?>
+                <form method="post" class="mb-2 d-flex flex-wrap gap-2 align-items-center" action="<?= e(url('/clients/' . $clientId . '/scan')) ?>" data-confirm="<?= e(__('Start a scan of this client now? Only addresses and names in its active authorization are scanned.')) ?>" novalidate>
+                    <?= Csrf::field() ?>
+                    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-broadcast me-1" aria-hidden="true"></i><?= e(__('Scan now')) ?></button>
+                    <a class="small" href="<?= e(url('/clients/' . $clientId . '/scans')) ?>"><?= e(__('Scans and ports')) ?></a>
+                </form>
                 <?php endif; ?>
                 <?php if (can('scanning.pause')): ?>
                 <form method="post" action="<?= e(url('/clients/' . $clientId . '/pause')) ?>" data-confirm="<?= e(__('Pause all scanning for this client now?')) ?>">
@@ -184,6 +192,26 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
                 </div>
                 <?php endforeach; ?>
             </div>
+        </div>
+        <?php // 1.51: internal authorizations (per site, for the agents) are listed here too; they are recorded and revoked on Agents. ?>
+        <div class="card mt-3">
+            <div class="card-header d-flex align-items-center flex-wrap gap-2">
+                <h2 class="card-title h5 mb-0"><?= e(__('Internal networks (agents)')) ?></h2>
+                <a href="<?= e(url('/clients/' . $clientId . '/agents')) ?>" class="btn btn-outline-primary btn-sm ms-auto"><i class="bi bi-router me-1" aria-hidden="true"></i><?= e(__('Manage on Agents')) ?></a>
+            </div>
+            <ul class="list-group list-group-flush">
+                <?php foreach ($agentSites ?? [] as $s): ?>
+                <li class="list-group-item small">
+                    <strong><?= e($s['site']['name']) ?></strong>:
+                    <?php if ($s['active'] === null): ?>
+                    <span class="text-body-secondary"><?= e(__('no active internal authorization, so nothing at this site is scanned from inside.')) ?></span>
+                    <?php else: ?>
+                    <span class="font-monospace"><?= e(implode(', ', $s['active']['ranges_list'])) ?></span>
+                    <span class="text-body-secondary">· <?= e(__('approved by {name}, valid until {date}', ['name' => $s['active']['approved_by_name'], 'date' => $s['active']['valid_until']])) ?></span>
+                    <?php endif; ?>
+                </li>
+                <?php endforeach; ?>
+            </ul>
         </div>
 <?php else: ?>
 <?php require __DIR__ . '/' . ['findings' => 'findings', 'scans' => 'scans', 'vulnerabilities' => 'vulns', 'certificates' => 'exposure', 'website' => 'website',
