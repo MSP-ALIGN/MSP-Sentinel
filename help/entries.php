@@ -366,6 +366,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.53.1',
+            'date' => '2026-11-25',
+            'items' => [
+                'Fixes from review: a possible duplicate ticket (only with ticketing systems that can\'t look tickets up) is noted on the finding; the ITFlow connection is read once per run.',
+            ],
+        ],
+        [
             'version' => '1.53.0',
             'date' => '2026-11-25',
             'items' => [

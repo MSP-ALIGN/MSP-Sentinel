@@ -181,7 +181,7 @@ and `ClientTags`. `capabilities()` says whether closed tickets can be reopened (
 whether a ticket can be found again by its marker (otherwise an unclear create is opened again and may leave a
 duplicate). Errors are `PsaException` (refused one request, or stop the run). ITFlow is `Psa\ItflowProvider`, a thin
 adapter over `Itflow\ItflowClient`. One PSA is active at a time (`App::psa()`). Client links and ticket rows still use
-the ITFlow columns; they become provider-neutral in the next steps.
+the ITFlow columns (integer IDs); they become provider-neutral in the next steps, and a PSA with text IDs needs those first.
 
 ## 7. Default port profile
 

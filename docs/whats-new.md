@@ -2,6 +2,19 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.52.0 (2026-11-25): Ready for more RMMs
+
+The first step towards working with other RMMs and ticketing systems besides NinjaOne and ITFlow. Nothing changes in
+how NinjaOne works.
+
+- **One list of RMMs.** Each RMM Sentinel can connect to is described in one place: its settings, how they are
+  checked, its setup steps and how to connect. The Integrations page draws its card, and saves and tests it, from that
+  description, so adding another RMM later needs no new pages. NinjaOne keeps the same settings, address and audit
+  entries.
+- **One RMM per client.** A client is linked to one RMM at a time, so the same machines never come in twice with
+  duplicate findings. Linking a client already linked elsewhere is refused with the reason.
+- The Administration overview names the connected RMMs, and a client's Devices page no longer assumes NinjaOne.
+
 ### 1.51.1 (2026-11-25): Fixes from review
 
 - The Getting started checklist can only be hidden by someone who sees every client, like other organization-wide

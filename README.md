@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.53.0](https://img.shields.io/badge/version-1.53.0-ff5a1f?style=flat-square)
+![Version 1.53.1](https://img.shields.io/badge/version-1.53.1-ff5a1f?style=flat-square)
 ![License AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,12 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.53.1 (2026-11-25): Fixes from review
+
+- When a ticketing system can't look a ticket up after an unclear answer, the "check for a duplicate" warning is also
+  in the finding's history, where technicians see it. (ITFlow can look tickets up, so this doesn't affect it.)
+- The ITFlow connection is read once per run; tests of the ticketing layer no longer touch other clients.
+
 ### 1.53.0 (2026-11-25): Ready for more ticketing systems
 
 The next step towards working with ticketing systems besides ITFlow. Nothing changes in how ITFlow works.
@@ -137,19 +143,6 @@ The next step towards working with ticketing systems besides ITFlow. Nothing cha
   can be unlinked. Links to an RMM Sentinel no longer supports never block a client.
 - Two admins linking the same client to two RMMs at the same moment can't both succeed.
 - Small safeguards for adding RMMs later (setting names, removing saved secrets).
-
-### 1.52.0 (2026-11-25): Ready for more RMMs
-
-The first step towards working with other RMMs and ticketing systems besides NinjaOne and ITFlow. Nothing changes in
-how NinjaOne works.
-
-- **One list of RMMs.** Each RMM Sentinel can connect to is described in one place: its settings, how they are
-  checked, its setup steps and how to connect. The Integrations page draws its card, and saves and tests it, from that
-  description, so adding another RMM later needs no new pages. NinjaOne keeps the same settings, address and audit
-  entries.
-- **One RMM per client.** A client is linked to one RMM at a time, so the same machines never come in twice with
-  duplicate findings. Linking a client already linked elsewhere is refused with the reason.
-- The Administration overview names the connected RMMs, and a client's Devices page no longer assumes NinjaOne.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

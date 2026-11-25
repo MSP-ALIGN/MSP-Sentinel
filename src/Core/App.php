@@ -465,8 +465,11 @@ final class App
      */
     public static function psa(): ?\Sentinel\Psa\ItflowProvider
     {
-        $client = self::itflow();
-        return $client === null ? null : new \Sentinel\Psa\ItflowProvider($client, self::settings()->fresh('itflow_url'), self::webhookTestMode());
+        $s = self::settings();
+        $url = $s->fresh('itflow_url'); // read once, for the client and its ticket links
+        $key = $s->getSecret('itflow_api_key');
+        return $url === '' || $key === '' ? null
+            : new \Sentinel\Psa\ItflowProvider(new \Sentinel\Itflow\ItflowClient($url, $key, self::webhookTestMode()), $url, self::webhookTestMode());
     }
 
     /** PSA client sync (worker every 15 minutes, and "Sync now"). */

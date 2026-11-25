@@ -276,7 +276,11 @@ final class ItflowTickets
             }
             if (!$this->psa->capabilities()['markers']) {
                 // A PSA that can't find a ticket by its marker (1.53): open it again, and say a duplicate is possible.
-                $this->setRow($rowId, $giveUp('Could not confirm whether the ticket was opened (this ticketing system can\'t look it up); opening it again. Check for a duplicate.'));
+                $why = 'Could not confirm whether the ticket was opened (this ticketing system can\'t look it up); opening it again. Check for a duplicate.';
+                $this->setRow($rowId, $giveUp($why));
+                if ($r['finding_id'] !== null) {
+                    $this->event((int) $r['finding_id'], $why); // on the finding too, where a technician sees it (1.53.1)
+                }
                 continue;
             }
             try {

@@ -89,6 +89,12 @@ if (!class_exists('FakeTicketingProvider')) {
 return [
     'ticketing layer (1.53): the workflow runs on any ticketing system and adapts to what it can do' => function (TestContext $ctx): void {
         $s = App::settings();
+        // Only this test's client takes part (1.53.1): other tests' linked clients are set aside and put back after.
+        $saved = ['itflow_board' => $s->fresh('itflow_board'), 'itflow_tickets_since' => $s->fresh('itflow_tickets_since')];
+        $others = array_map('intval', $ctx->db->query('SELECT id FROM clients WHERE itflow_client_id IS NOT NULL AND itflow_sync_off = 0')->fetchAll(PDO::FETCH_COLUMN));
+        if ($others !== []) {
+            $ctx->db->exec('UPDATE clients SET itflow_sync_off = 1 WHERE id IN (' . implode(',', $others) . ')');
+        }
         $s->set('itflow_board', '0');
         $s->set('itflow_tickets_since', gmdate('Y-m-d H:i:s', time() - 3600));
         $ctx->db->exec("INSERT INTO clients (name, timezone, scan_window_start, scan_window_end, notes, ports_extra, ports_excluded, itflow_client_id, created_at, updated_at)
@@ -128,9 +134,42 @@ return [
             Assert::same([], $fake->calls['marker'], 'no lookup by marker');
             Assert::same(2, count($fake->calls['create']), 'opened again in the same run (the row was given up and retried at once)');
             Assert::same('open', (string) $ctx->db->query("SELECT state FROM itflow_tickets WHERE finding_id = {$g}")->fetchColumn());
+            Assert::contains('Check for a duplicate', (string) $ctx->db->query("SELECT GROUP_CONCAT(note) FROM finding_events WHERE finding_id = {$g}")->fetchColumn(), 'the possible duplicate is on the finding');
         } finally {
             $ctx->db->exec("DELETE FROM itflow_tickets WHERE client_id = {$cid}");
+            $ctx->db->exec("DELETE FROM finding_events WHERE finding_id IN (SELECT id FROM findings WHERE client_id = {$cid})");
+            $ctx->db->exec("DELETE FROM findings WHERE client_id = {$cid}");
             $ctx->db->exec("UPDATE clients SET is_archived = 1, itflow_client_id = NULL WHERE id = {$cid}");
+            if ($others !== []) {
+                $ctx->db->exec('UPDATE clients SET itflow_sync_off = 0 WHERE id IN (' . implode(',', $others) . ')');
+            }
+            foreach ($saved as $k => $v) {
+                $s->set($k, $v);
+            }
+        }
+    },
+    'ticketing layer (1.53.1): the client sync refuses the tag filter for a PSA without client tags, changing nothing' => function (TestContext $ctx): void {
+        $s = App::settings();
+        $saved = ['itflow_enabled' => $s->fresh('itflow_enabled'), 'itflow_tag_filter' => $s->fresh('itflow_tag_filter'), 'itflow_tag_name' => $s->fresh('itflow_tag_name')];
+        $directory = new class implements \Sentinel\Psa\ClientDirectory {
+            /** A client list only: no tags, no boards (test double). */
+            public function clients(): array
+            {
+                return [['id' => 991, 'name' => 'Untagged Directory Example', 'archived' => false]];
+            }
+        };
+        try {
+            $s->set('itflow_enabled', '1');
+            $s->set('itflow_tag_filter', '1');
+            $s->set('itflow_tag_name', 'Sentinel');
+            $before = (int) $ctx->db->query('SELECT COUNT(*) FROM clients')->fetchColumn();
+            $result = (new \Sentinel\Itflow\ItflowSync($ctx->db, $s, App::audit(), $directory))->sync();
+            Assert::contains('has no client tags', $result);
+            Assert::same($before, (int) $ctx->db->query('SELECT COUNT(*) FROM clients')->fetchColumn(), 'nothing added');
+        } finally {
+            foreach ($saved as $k => $v) {
+                $s->set($k, $v);
+            }
         }
     },
 ];

@@ -9,7 +9,8 @@ namespace Sentinel\Psa;
  * read its state, resolve and reopen it, and link to it. ITFlow is the first (ItflowProvider).
  *
  * IDs are the PSA's own (an integer or a string, depending on the PSA): the client ID from the client's link and the
- * ticket ID the PSA returned. Priorities are Sentinel's: Low, Medium, High, Urgent; the adapter maps them.
+ * ticket ID the PSA returned. Until client links and ticket rows are stored provider-neutrally (the next steps), the
+ * workflow stores integer IDs only, so a PSA with text IDs can't be added before then. Priorities are Sentinel's: Low, Medium, High, Urgent; the adapter maps them.
  *
  * Untrusted: everything the PSA returns. Callers escape HTML they send (notes and details are HTML the caller built
  * with every value escaped). Every method throws PsaException when the PSA can't be reached or refuses.
