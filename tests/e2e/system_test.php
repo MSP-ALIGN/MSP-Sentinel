@@ -154,6 +154,13 @@ return [
         Assert::same(null, $pre->check(true), 'pre-releases ignored');
         $https = new \Sentinel\System\UpdateChecker(App::settings(), (require $ctx->configPath)['updates']['url'], App::version(), false);
         Assert::same(null, $https->check(true), 'plain http refused outside the test suite');
+        // 1.55.2: a failed check records why: no published release (GitHub's 404) or no answer at all.
+        $none = new \Sentinel\System\UpdateChecker(App::settings(), str_replace('/latest', '/missing', (require $ctx->configPath)['updates']['url']), App::version(), true);
+        Assert::same(null, $none->check(true));
+        Assert::same('no_release', App::settings()->fresh('update_last_error'), '404: no release published yet');
+        $down = new \Sentinel\System\UpdateChecker(App::settings(), 'http://127.0.0.1:1/releases/latest', App::version(), true);
+        Assert::same(null, $down->check(true));
+        Assert::same('unreachable', App::settings()->fresh('update_last_error'), 'no answer: unreachable');
         $admin->submit('/admin/system', '/admin/system/updates', ['update_check_enabled' => '0']);
         App::settings()->set('update_check_enabled', App::settings()->fresh('update_check_enabled'));
         Assert::same(null, App::updates()->newer(), 'off: no update notice');

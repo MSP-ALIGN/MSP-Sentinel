@@ -366,6 +366,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.55.2',
+            'date' => '2026-11-25',
+            'items' => [
+                'Clearer update check: Check now says whether GitHub has no published release yet (or the repository is private), whether GitHub couldn\'t be reached, or that the check is off; branch installs see how far behind their branch they are.',
+            ],
+        ],
+        [
             'version' => '1.55.1',
             'date' => '2026-11-25',
             'items' => [

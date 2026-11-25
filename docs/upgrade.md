@@ -107,6 +107,10 @@ The restore puts the database back as it was before the upgrade's migrations. Se
 Once a day the worker asks the releases feed for the latest version (nothing else is sent). Admins see newer
 versions under **Administration → System** and in the health check. Turn the check off there if you prefer.
 
+The releases feed is GitHub's "latest release" for the repository. Until a release is published there (or while
+the repository is private), **Check now** says that GitHub has no published release to compare with: nothing is
+wrong with the server. Servers installed from a branch are compared with their branch instead (below).
+
 Servers installed with the one-line command also know the branch and commit they run. The same daily check asks
 GitHub how many commits that branch has moved on since, so a development server following `develop` (or production
 following `main`) shows **Update available: the develop branch has N new commit(s)**. **Check now** asks straight away.

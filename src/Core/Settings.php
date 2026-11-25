@@ -62,6 +62,8 @@ final class Settings
         'worker_last_tick' => '',
         'update_latest_version' => '',
         'update_checked_at' => '',
+        // Why the last release check found no version (1.55.2): '' (it did), 'no_release' or 'unreachable'.
+        'update_last_error' => '',
         // Vulnerability data refresh (FeedSchedule): last run start and end, and the last "Refresh now" (UTC).
         'feeds_run_started' => '',
         'feeds_run_finished' => '',
