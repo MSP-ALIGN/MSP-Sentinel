@@ -53,8 +53,9 @@ final class VulnRepository
         $stmt = $this->db->prepare(
             "SELECT query FROM cpe_queries
              WHERE last_needed > UTC_TIMESTAMP() - INTERVAL 30 DAY
-               AND (status = 'pending' OR (status = 'error' AND fail_count < 5) OR (status = 'ok' AND fetched_at < UTC_TIMESTAMP() - INTERVAL :ttl DAY))
-             ORDER BY status = 'pending' DESC, fetched_at LIMIT :lim"
+               AND (status = 'pending' OR (status = 'error' AND fail_count < 5) OR (status = 'ok' AND fetched_at < UTC_TIMESTAMP() - INTERVAL :ttl DAY)
+                    OR (status = 'ok' AND platforms_checked = 0))
+             ORDER BY status = 'pending' DESC, platforms_checked, fetched_at LIMIT :lim"
         );
         $stmt->bindValue('ttl', self::QUERY_TTL_DAYS, PDO::PARAM_INT);
         $stmt->bindValue('lim', $limit, PDO::PARAM_INT);
@@ -79,13 +80,13 @@ final class VulnRepository
                     cvss_version = VALUES(cvss_version), published = VALUES(published), last_modified = VALUES(last_modified), fetched_at = UTC_TIMESTAMP()'
             );
             $this->db->prepare('DELETE FROM cpe_query_cves WHERE query = :q')->execute(['q' => $query]);
-            $link = $this->db->prepare('INSERT IGNORE INTO cpe_query_cves (query, cve_id) VALUES (:q, :id)');
+            $link = $this->db->prepare('INSERT IGNORE INTO cpe_query_cves (query, cve_id, platforms) VALUES (:q, :id, :p)');
             foreach ($cves as $c) {
                 $upsert->execute(['id' => $c['cve_id'], 's' => $c['summary'], 'score' => $c['cvss_score'], 'sev' => $c['cvss_severity'],
                                   'ver' => $c['cvss_version'], 'pub' => $c['published'], 'mod' => $c['last_modified']]);
-                $link->execute(['q' => $query, 'id' => $c['cve_id']]);
+                $link->execute(['q' => $query, 'id' => $c['cve_id'], 'p' => mb_substr(implode(',', (array) ($c['platforms'] ?? [])), 0, 200)]);
             }
-            $this->db->prepare("UPDATE cpe_queries SET status = 'ok', result_count = :n, error = :note, fail_count = 0, fetched_at = UTC_TIMESTAMP() WHERE query = :q")
+            $this->db->prepare("UPDATE cpe_queries SET status = 'ok', result_count = :n, error = :note, fail_count = 0, fetched_at = UTC_TIMESTAMP(), platforms_checked = 1 WHERE query = :q")
                 ->execute(['n' => count($cves), 'note' => mb_substr($note, 0, 300), 'q' => $query]);
             $this->db->commit();
         } catch (\Throwable $ex) {
@@ -111,6 +112,23 @@ final class VulnRepository
         $stmt = $this->db->prepare('SELECT cve_id FROM cpe_query_cves WHERE query = :q');
         $stmt->execute(['q' => $query]);
         return $stmt->fetchAll(PDO::FETCH_COLUMN);
+    }
+
+    /**
+     * The platform limits of a query's CVEs (1.49): cve_id => list of OS families it is only vulnerable on.
+     * CVEs vulnerable on any platform are left out.
+     *
+     * @return array<string,list<string>>
+     */
+    public function platformsForQuery(string $query): array
+    {
+        $stmt = $this->db->prepare("SELECT cve_id, platforms FROM cpe_query_cves WHERE query = :q AND platforms <> ''");
+        $stmt->execute(['q' => $query]);
+        $out = [];
+        foreach ($stmt->fetchAll() as $r) {
+            $out[(string) $r['cve_id']] = array_values(array_filter(explode(',', (string) $r['platforms'])));
+        }
+        return $out;
     }
 
     /**

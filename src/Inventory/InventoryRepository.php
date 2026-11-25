@@ -71,9 +71,16 @@ final class InventoryRepository
                  VALUES (:c, :s, :sid, :n, :dns, :cls, :os, :b, :r, :ip, :lc, :avp, :avs, :avd, :enc, UTC_TIMESTAMP(), UTC_TIMESTAMP(), NULL)
                  ON DUPLICATE KEY UPDATE client_id = VALUES(client_id), name = VALUES(name), dns_name = VALUES(dns_name), device_class = VALUES(device_class),
                     os_name = VALUES(os_name), os_build = VALUES(os_build), os_release = VALUES(os_release), ip_addresses = VALUES(ip_addresses),
-                    last_contact = VALUES(last_contact), av_product = VALUES(av_product), av_state = VALUES(av_state), av_definitions = VALUES(av_definitions),
-                    encryption = VALUES(encryption), last_seen = UTC_TIMESTAMP(), removed_at = NULL'
+                    last_contact = VALUES(last_contact),
+                    av_product = IF(VALUES(av_state) = \'\', av_product, VALUES(av_product)), av_definitions = IF(VALUES(av_state) = \'\', av_definitions, VALUES(av_definitions)),
+                    av_state = IF(VALUES(av_state) = \'\', av_state, VALUES(av_state)),
+                    encryption = IF(VALUES(encryption) = \'\', encryption, VALUES(encryption)), last_seen = UTC_TIMESTAMP(), removed_at = NULL'
             );
+            // Unknown is not "fixed" (1.49): a device the antivirus or disk report says nothing about this time (offline,
+            // or the report came back empty) keeps its last known antivirus and encryption state above (av_state is
+            // updated after the columns that test it, so every IF() reads the old value: MariaDB applies SET from left to right), and a device with no
+            // programs in this snapshot keeps its previous list below. Otherwise its findings would resolve and then
+            // reopen, with a new due date, alert and ticket, when the data comes back.
             $find = $this->db->prepare('SELECT id FROM devices WHERE source = :s AND source_id = :sid');
             $seen = [];
             foreach ($devices as $d) {
@@ -109,9 +116,11 @@ final class InventoryRepository
                 if (count((array) ($d['software'] ?? [])) > count($sw) && $softwareLeft < self::MAX_SOFTWARE) {
                     $complete = false; // too much data in total: keep it partial rather than drop programs silently
                 }
-                $saved = $this->saveSoftware($deviceId, $sw);
-                $softwareLeft -= $saved;
-                $stats['software'] += $saved;
+                if ($sw !== []) {
+                    $saved = $this->saveSoftware($deviceId, $sw);
+                    $softwareLeft -= $saved;
+                    $stats['software'] += $saved;
+                }
                 $stats['patches'] += $this->savePatches($deviceId, (array) ($d['patches'] ?? []));
             }
             // Gone from a complete snapshot: removed (kept for history; their findings resolve).
@@ -469,20 +478,52 @@ final class InventoryRepository
      * Set the CVE matches of every installed copy of one CPE (for one client or all).
      *
      * @param array<string,string> $matches cve_id => confirmed|possible
+     * @param array<string,list<string>> $platforms cve_id => OS families it is only vulnerable on (1.49): a device on
+     *        another OS doesn't get that CVE; a device whose OS is unknown gets it as possible, never confirmed.
      */
-    public function setMatchesForCpe(?int $clientId, string $cpe, array $matches, string $query): void
+    public function setMatchesForCpe(?int $clientId, string $cpe, array $matches, string $query, array $platforms = []): void
     {
         $scope = $clientId !== null ? ' AND d.client_id = ' . (int) $clientId : '';
         $this->db->beginTransaction();
         try {
             $this->db->prepare("DELETE sv FROM software_vulns sv JOIN device_software s ON s.id = sv.software_id JOIN devices d ON d.id = s.device_id WHERE s.cpe = :cpe{$scope}")
                 ->execute(['cpe' => $cpe]);
-            $ins = $this->db->prepare("INSERT INTO software_vulns (software_id, cve_id, confidence, cpe, first_seen, last_seen)
-                                       SELECT s.id, :v, :conf, :q, UTC_TIMESTAMP(), UTC_TIMESTAMP() FROM device_software s JOIN devices d ON d.id = s.device_id
-                                       WHERE s.cpe = :cpe AND d.removed_at IS NULL{$scope}");
-            foreach ($matches as $cve => $conf) {
-                $ins->execute(['v' => $cve, 'conf' => $conf === 'confirmed' ? 'confirmed' : 'possible', 'q' => $query, 'cpe' => $cpe]);
+            $copies = $this->db->prepare("SELECT s.id, d.os_name FROM device_software s JOIN devices d ON d.id = s.device_id WHERE s.cpe = :cpe AND d.removed_at IS NULL{$scope}");
+            $copies->execute(['cpe' => $cpe]);
+            // Rows are written in batches of 500 (a browser on hundreds of devices with hundreds of CVEs).
+            $rows = [];
+            $flush = function () use (&$rows, $query): void {
+                if ($rows === []) {
+                    return;
+                }
+                $sql = 'INSERT INTO software_vulns (software_id, cve_id, confidence, cpe, first_seen, last_seen) VALUES '
+                    . implode(',', array_fill(0, count($rows), '(?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())'));
+                $args = [];
+                foreach ($rows as [$sid, $cve, $conf]) {
+                    array_push($args, $sid, $cve, $conf, $query);
+                }
+                $this->db->prepare($sql)->execute($args);
+                $rows = [];
+            };
+            foreach ($copies->fetchAll() as $copy) {
+                $family = \Sentinel\Vulns\FeedParser::osFamily((string) $copy['os_name']);
+                foreach ($matches as $cve => $conf) {
+                    $conf = $conf === 'confirmed' ? 'confirmed' : 'possible';
+                    if (isset($platforms[$cve])) {
+                        if ($family !== '' && !in_array($family, $platforms[$cve], true)) {
+                            continue; // only vulnerable on another platform
+                        }
+                        if ($family === '') {
+                            $conf = 'possible';
+                        }
+                    }
+                    $rows[] = [(int) $copy['id'], (string) $cve, $conf];
+                    if (count($rows) >= 500) {
+                        $flush();
+                    }
+                }
             }
+            $flush();
             // Distribution builds (agent-reported services) may carry backported fixes: never "confirmed".
             $this->db->prepare("UPDATE software_vulns sv JOIN device_software s ON s.id = sv.software_id JOIN devices d ON d.id = s.device_id
                                 SET sv.confidence = 'distro' WHERE s.cpe = :cpe AND s.distro = 1 AND sv.confidence = 'confirmed'{$scope}")->execute(['cpe' => $cpe]);
@@ -532,15 +573,21 @@ final class InventoryRepository
      */
     public function setLink(int $clientId, string $source, string $orgId, string $orgName, int $userId): void
     {
-        $other = $this->db->prepare('SELECT client_id FROM source_links WHERE source = :s AND org_id = :o AND client_id <> :c');
-        $other->execute(['s' => $source, 'o' => $orgId, 'c' => $clientId]);
-        if ($other->fetchColumn() !== false) {
+        if ($this->orgLinkedElsewhere($source, $orgId, $clientId)) {
             throw new \DomainException('This organisation is already linked to another client.');
         }
         $this->db->prepare('INSERT INTO source_links (client_id, source, org_id, org_name, linked_by, linked_at) VALUES (:c, :s, :o, :n, :u, UTC_TIMESTAMP())
                             ON DUPLICATE KEY UPDATE org_id = VALUES(org_id), org_name = VALUES(org_name), linked_by = VALUES(linked_by), linked_at = UTC_TIMESTAMP(),
                                last_sync_at = NULL, last_sync_status = \'\', last_sync_message = \'\'')
             ->execute(['c' => $clientId, 's' => $source, 'o' => self::clean($orgId, 64), 'n' => self::clean($orgName, 200), 'u' => $userId]);
+    }
+
+    /** True when this organisation is already linked to another client. */
+    public function orgLinkedElsewhere(string $source, string $orgId, int $clientId): bool
+    {
+        $other = $this->db->prepare('SELECT client_id FROM source_links WHERE source = :s AND org_id = :o AND client_id <> :c');
+        $other->execute(['s' => $source, 'o' => $orgId, 'c' => $clientId]);
+        return $other->fetchColumn() !== false;
     }
 
     /** Remove a client's link; its devices are marked removed (their findings resolve on the next refresh). */

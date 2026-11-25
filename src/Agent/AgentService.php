@@ -455,6 +455,10 @@ final class AgentService
      * Insert or update one device. The same MAC address at the same site is the same device even when its address
      * changed (DHCP), so it is not announced as new.
      *
+     * An address alone identifies a device only when the MACs don't contradict it (1.49): if the device last seen at
+     * this address has another known MAC, DHCP gave the address to a different machine, which gets its own record
+     * (keyed by its MAC). Before, the new machine took over the old one's record, name and findings.
+     *
      * @return array{0:int, 1:bool} device ID, and true if this device was never seen at this site before.
      */
     private function upsertDevice(int $clientId, int $siteId, string $ip, array $h, bool $scanned): array
@@ -468,9 +472,16 @@ final class AgentService
             $existing = $byMac->fetchColumn() ?: null;
         }
         if ($existing === null) {
-            $byId = $this->db->prepare("SELECT id FROM devices WHERE source = 'agent' AND source_id = :sid");
-            $byId->execute(['sid' => $siteId . ':' . $ip]);
-            $existing = $byId->fetchColumn() ?: null;
+            // The device now at this address (or first seen here), unless its MAC says it is another machine.
+            $byIp = $this->db->prepare("SELECT id, mac FROM devices WHERE source = 'agent' AND site_id = :s AND (ip_addresses = :ip OR source_id = :sid)
+                                        ORDER BY ip_addresses = :ip2 DESC, last_seen DESC");
+            $byIp->execute(['s' => $siteId, 'ip' => $ip, 'sid' => $siteId . ':' . $ip, 'ip2' => $ip]);
+            foreach ($byIp->fetchAll() as $row) {
+                if ($mac === '' || (string) $row['mac'] === '' || (string) $row['mac'] === $mac) {
+                    $existing = (int) $row['id'];
+                    break;
+                }
+            }
         }
         if ($existing !== null) {
             $this->db->prepare("UPDATE devices SET client_id = :c, site_id = :site, ip_addresses = :ip, name = IF(:dns <> '', :n, IF(name = '' OR name = ip_addresses, :ip2, name)),
@@ -480,10 +491,17 @@ final class AgentService
                            'mac' => $mac, 'mac2' => $mac, 'full' => $scanned ? 1 : 0, 'id' => (int) $existing]);
             return [(int) $existing, false];
         }
+        // A new machine: keyed by address, or by its MAC when another device was first seen at this address.
+        $sid = $siteId . ':' . $ip;
+        $taken = $this->db->prepare("SELECT COUNT(*) FROM devices WHERE source = 'agent' AND source_id = :sid");
+        $taken->execute(['sid' => $sid]);
+        if ((int) $taken->fetchColumn() > 0) {
+            $sid = $siteId . ':mac:' . ($mac !== '' ? $mac : bin2hex(random_bytes(6)));
+        }
         $this->db->prepare(
             "INSERT INTO devices (client_id, site_id, source, source_id, name, dns_name, device_class, ip_addresses, mac, last_contact, first_seen, last_seen, last_full_seen, removed_at)
              VALUES (:c, :site, 'agent', :sid, :n, :dns, 'other', :ip, :mac, UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP(), :full, NULL)"
-        )->execute(['c' => $clientId, 'site' => $siteId, 'sid' => $siteId . ':' . $ip, 'n' => $hostname !== '' ? $hostname : $ip, 'dns' => $hostname, 'ip' => $ip, 'mac' => $mac,
+        )->execute(['c' => $clientId, 'site' => $siteId, 'sid' => $sid, 'n' => $hostname !== '' ? $hostname : $ip, 'dns' => $hostname, 'ip' => $ip, 'mac' => $mac,
                     'full' => $scanned ? gmdate('Y-m-d H:i:s') : null]);
         return [(int) $this->db->lastInsertId(), true];
     }

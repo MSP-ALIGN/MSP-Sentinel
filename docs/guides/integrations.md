@@ -49,10 +49,15 @@ What happens next:
   exploited), with what was found, why it matters, how to fix it and a link back. The same problem on other targets
   of the client joins the open ticket. Warnings go into one ticket per client a week, when there are new ones.
 - **Both ways**, every 5 minutes: when Sentinel no longer sees a problem (or it is accepted or marked false positive),
-  it adds a note and resolves the ticket. When a ticket is resolved or closed in ITFlow while the problem is open,
+  it adds a note and resolves the ticket. When it stopped tracking a problem without seeing it fixed (the device left
+  the inventory source, or the client was unlinked from it), the note says exactly that and the ticket stays open
+  for a technician to decide. When a ticket is resolved or closed in ITFlow while the problem is open,
   Sentinel rechecks it: gone closes the finding; still there reopens the ticket (or opens a new one, since ITFlow
   can't reopen a closed ticket). Without a clear answer within 10 days, Sentinel stops waiting and says so on the
   finding.
+- No backlog: a client linked to ITFlow later (by hand or by name), or restored from the archive, gets tickets only
+  for findings from then on. A newly linked inventory source's first import (its first day) gets no tickets either:
+  review it from its summary. Breached email addresses are masked in tickets, as in alerts.
 - A ticket ITFlow refuses is retried later and the reason shows on the finding. Every change is in the audit log as
   "itflow-sync" and in the finding's history.
 
@@ -84,6 +89,13 @@ Reads each client's computers from NinjaOne every 6 hours. It never changes anyt
 What comes over: approved computers with their operating system, antivirus, disk encryption, missing and failed
 Windows updates, and installed software (matched to known vulnerabilities). Anything NinjaOne doesn't report stays
 unknown and is never a finding.
+
+- **Unknown is not fixed.** When a sync says nothing about a device's antivirus, disk encryption or programs (it was
+  offline, or a report came back empty), Sentinel keeps the last known state, so findings don't close and reopen.
+- **CVEs for the right platform.** A CVE NVD limits to some operating systems (for example Chrome on Android) is
+  reported only on devices running them.
+- **Linking another organisation** to a client unlinks the old one first: its devices leave the client and their
+  findings close as "unlinked" (not as fixed).
 
 ## Breach monitoring
 

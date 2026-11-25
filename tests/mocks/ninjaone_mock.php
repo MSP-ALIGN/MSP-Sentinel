@@ -46,6 +46,10 @@ $devices = [
     // Offline for a month and no inventory yet: its antivirus is unknown, not missing.
     ['id' => 17, 'organizationId' => 901, 'systemName' => 'HARBOUR-OLD', 'nodeClass' => 'WINDOWS_WORKSTATION', 'approvalStatus' => 'APPROVED',
      'os' => ['name' => 'Windows 11 Pro', 'buildNumber' => '26200', 'releaseId' => '25H2'], 'lastContact' => time() - 86400 * 30],
+    // Organisation 902 (1.49): an online workstation with software, but the antivirus report has no rows for anyone:
+    // a gap in the data, never "no antivirus".
+    ['id' => 19, 'organizationId' => 902, 'systemName' => 'QUAY-LT-01', 'nodeClass' => 'WINDOWS_WORKSTATION', 'approvalStatus' => 'APPROVED',
+     'os' => ['name' => 'Windows 11 Pro', 'buildNumber' => '26200', 'releaseId' => '25H2'], 'ipAddresses' => ['10.40.0.19'], 'lastContact' => time() - 120],
     // Organisation 903: its software report ignores the cursor and returns the same page forever.
     ['id' => 18, 'organizationId' => 903, 'systemName' => 'STUCK-LT-01', 'nodeClass' => 'WINDOWS_WORKSTATION', 'approvalStatus' => 'APPROVED', 'os' => ['name' => 'Windows 11 Pro', 'buildNumber' => '26200']],
 ];
@@ -85,6 +89,7 @@ if ($sub === '/v2/queries/software') {
         ['deviceId' => 12, 'name' => 'Microsoft Edge', 'publisher' => 'Microsoft Corporation', 'version' => '120.0.2210.61'],
         ['deviceId' => 13, 'name' => 'Mozilla Firefox (x64 en-US)', 'publisher' => 'Mozilla', 'version' => '115.0'],
         ['deviceId' => 13, 'name' => '<script>alert(1)</script>', 'publisher' => 'Example', 'version' => '1.0'],
+        ['deviceId' => 19, 'name' => '7-Zip 23.01 (x64)', 'publisher' => 'Igor Pavlov', 'version' => '23.01'],
     ]), 'sw'));
 }
 if ($sub === '/v2/queries/os-patches') {

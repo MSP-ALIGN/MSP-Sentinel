@@ -25,7 +25,10 @@ final class FeedParser
      *
      * @param array<mixed> $page Decoded JSON.
      * @param string|null $productPrefix vendor:product prefix that must be marked vulnerable.
-     * @return array{total:int, cves:list<array{cve_id:string,summary:string,cvss_score:?float,cvss_severity:string,cvss_version:string,published:?string,last_modified:?string}>}
+     * Each CVE also gets 'platforms' (1.49): the operating systems the product is only vulnerable on (e.g. Chrome
+     * "running on" Android), or [] when it is vulnerable whatever it runs on. See platformsFor().
+     *
+     * @return array{total:int, cves:list<array{cve_id:string,summary:string,cvss_score:?float,cvss_severity:string,cvss_version:string,published:?string,last_modified:?string,platforms:list<string>}>}
      */
     public static function nvdPage(array $page, ?string $productPrefix = null): array
     {
@@ -57,6 +60,7 @@ final class FeedParser
                 'cvss_version' => $version,
                 'published' => self::date($cve['published'] ?? null),
                 'last_modified' => self::dateTime($cve['lastModified'] ?? null),
+                'platforms' => $productPrefix !== null ? self::platformsFor((array) ($cve['configurations'] ?? []), $productPrefix) : [],
             ];
         }
         return ['total' => max(0, (int) ($page['totalResults'] ?? 0)), 'cves' => $out];
@@ -90,6 +94,116 @@ final class FeedParser
             }
         }
         return false;
+    }
+
+    /**
+     * The platforms (OS families) a product is only vulnerable on, from NVD's configurations (1.49). NVD writes
+     * "Chrome on Android" as a configuration with operator AND: one node marks the product vulnerable, another lists
+     * the OS it runs on (vulnerable: false). The product's own CPE can also name a platform in its target_sw field.
+     * Returns [] as soon as ONE configuration marks the product vulnerable without such a limit (vulnerable
+     * everywhere), else the families of every limit found (windows, macos, linux, android, ios, chromeos, or another
+     * NVD OS product name). Untrusted JSON: only strings are read; anything odd counts as "no limit" (the old,
+     * stricter behaviour), never as a reason to drop a CVE.
+     *
+     * @param array<mixed> $configurations
+     * @return list<string>
+     */
+    public static function platformsFor(array $configurations, string $productPrefix): array
+    {
+        $prefix = strtolower($productPrefix);
+        $limits = [];
+        $found = false;
+        foreach (array_slice($configurations, 0, 500) as $conf) {
+            if (!is_array($conf)) {
+                continue;
+            }
+            $nodes = array_values(array_filter((array) ($conf['nodes'] ?? []), 'is_array'));
+            $here = [];      // limits from this configuration
+            $vulnHere = false;
+            $targetLimited = true; // every vulnerable product match here names a platform in target_sw
+            foreach ($nodes as $node) {
+                foreach ((array) ($node['cpeMatch'] ?? []) as $m) {
+                    if (!is_array($m) || !is_string($m['criteria'] ?? null)) {
+                        continue;
+                    }
+                    $crit = strtolower($m['criteria']);
+                    if (($m['vulnerable'] ?? false) === true && str_starts_with($crit, $prefix)) {
+                        $vulnHere = true;
+                        $target = explode(':', $crit)[10] ?? '*';
+                        $family = ($target === '*' || $target === '-' || $target === '') ? '' : self::platformFamily($target);
+                        if ($family === '') {
+                            $targetLimited = false;
+                        } else {
+                            $here[$family] = true;
+                        }
+                    }
+                }
+            }
+            if (!$vulnHere) {
+                continue;
+            }
+            $found = true;
+            if (strtoupper((string) ($conf['operator'] ?? '')) === 'AND' && count($nodes) > 1) {
+                $os = [];
+                foreach ($nodes as $node) {
+                    foreach ((array) ($node['cpeMatch'] ?? []) as $m) {
+                        if (is_array($m) && ($m['vulnerable'] ?? false) !== true && is_string($m['criteria'] ?? null)
+                            && str_starts_with(strtolower($m['criteria']), 'cpe:2.3:o:')) {
+                            $os[self::platformFamily(explode(':', strtolower($m['criteria']))[4] ?? '')] = true;
+                        }
+                    }
+                }
+                unset($os['']);
+                if ($os !== []) {
+                    $limits += $os;
+                    continue;
+                }
+            }
+            if (!$targetLimited) {
+                return []; // vulnerable whatever it runs on
+            }
+            $limits += $here;
+        }
+        if (!$found) {
+            return [];
+        }
+        $out = array_keys($limits);
+        sort($out);
+        return $out;
+    }
+
+    /** An NVD OS product (or target_sw value) as a platform family: windows, macos, linux, android, ios, chromeos, or the name itself. */
+    public static function platformFamily(string $name): string
+    {
+        $n = strtolower(trim($name));
+        return match (true) {
+            $n === '' => '',
+            str_starts_with($n, 'windows') => 'windows',
+            in_array($n, ['macos', 'mac_os_x', 'mac_os', 'macosx', 'mac'], true) => 'macos',
+            in_array($n, ['iphone_os', 'ios', 'ipados'], true) => 'ios',
+            $n === 'android' => 'android',
+            in_array($n, ['chrome_os', 'chromeos'], true) => 'chromeos',
+            str_starts_with($n, 'linux') => 'linux',
+            default => (string) preg_replace('/[^a-z0-9_]/', '', $n),
+        };
+    }
+
+    /**
+     * The platform family of a device's operating system name (as an inventory source reports it), or '' when unknown.
+     */
+    public static function osFamily(string $osName): string
+    {
+        $n = strtolower($osName);
+        return match (true) {
+            $n === '' => '',
+            str_contains($n, 'windows') => 'windows',
+            str_contains($n, 'macos') || str_contains($n, 'mac os') || str_contains($n, 'os x') => 'macos',
+            str_contains($n, 'android') => 'android',
+            str_contains($n, 'ios') && !str_contains($n, 'bios') => 'ios',
+            str_contains($n, 'chrome os') || str_contains($n, 'chromeos') => 'chromeos',
+            preg_match('/linux|ubuntu|debian|centos|red hat|rhel|fedora|suse|rocky|alma/', $n) === 1 => 'linux',
+            default => '',
+        };
     }
 
     /**

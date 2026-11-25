@@ -731,4 +731,80 @@ return [
         $admin->submit('/admin/integrations', '/admin/integrations/itflow', ['url' => $base($ctx), 'api_key' => $key, 'enabled' => '0', 'tag_name' => 'Sentinel']);
         @unlink($tagsFile);
     },
+
+    'ITFlow (1.49): honest notes for non-fixes, interrupted rows retried, breached addresses masked, no backlog on linking' => function (TestContext $ctx) use ($base, $setItflow, $key): void {
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $dir = dirname($ctx->feedsLog);
+        @unlink($dir . '/itflow-tickets.json');
+        @unlink($dir . '/itflow-fail.json');
+        $setItflow($ctx, [[870, 'Honest Example Ltd']]);
+        $form = ['url' => $base($ctx), 'api_key' => $key, 'enabled' => '1', 'tickets' => '1', 'board' => '0'];
+        $admin->submit('/admin/integrations', '/admin/integrations/itflow', $form);
+        App::itflowSync()->sync();
+        $cid = (int) $ctx->db->query('SELECT id FROM clients WHERE itflow_client_id = 870')->fetchColumn();
+        $sent = static fn (): array => json_decode((string) @file_get_contents($dir . '/itflow-tickets.json'), true) ?: ['tickets' => [], 'replies' => []];
+        $add = static function (string $key, string $type, string $title, string $detail, string $target) use ($ctx, $cid): int {
+            $ctx->db->prepare("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, detail, target, evidence, status, first_seen, last_seen, opened_at, due_at)
+                               VALUES (:c, :k, :t, 'fail', :ti, :d, :tg, 'x', 'open', UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP() + INTERVAL 1 SECOND, UTC_TIMESTAMP() + INTERVAL 14 DAY)")
+                ->execute(['c' => $cid, 'k' => $key, 't' => $type, 'ti' => $title, 'd' => $detail, 'tg' => $target]);
+            return (int) $ctx->db->lastInsertId();
+        };
+        // A device finding whose device leaves the inventory source: a note, the ticket stays open.
+        $gone = $add('dev:ninjaone:9901:av_off', 'device', 'Antivirus or EDR is turned off', 'Off.', 'HONEST-LT-01');
+        App::itflowTickets()->run();
+        $ticket = (int) $ctx->db->query("SELECT itflow_ticket_id FROM itflow_tickets WHERE finding_id = {$gone}")->fetchColumn();
+        Assert::true($ticket > 0, 'ticket opened');
+        $ctx->db->exec("UPDATE findings SET status = 'resolved', resolved_at = UTC_TIMESTAMP(), resolved_reason = 'gone' WHERE id = {$gone}");
+        App::itflowTickets()->run();
+        $mine = array_values(array_filter($sent()['tickets'], static fn (array $t): bool => (int) $t['id'] === $ticket));
+        Assert::same('open', $mine[0]['status'] ?? null, 'not resolved: nothing was confirmed fixed');
+        $notes = implode("\n", array_column(array_filter($sent()['replies'], static fn (array $r): bool => (int) $r['ticket_id'] === $ticket), 'ticket_reply'));
+        Assert::contains('not confirmed fixed', $notes);
+        Assert::notContains('Verified fixed', $notes);
+        // A real fix still resolves its ticket with "Verified fixed".
+        $fixed = $add('port:203.0.113.91:3389', 'port', 'Remote Desktop open', 'Port 3389 open.', '203.0.113.91:3389');
+        App::itflowTickets()->run();
+        $t2 = (int) $ctx->db->query("SELECT itflow_ticket_id FROM itflow_tickets WHERE finding_id = {$fixed}")->fetchColumn();
+        $ctx->db->exec("UPDATE findings SET status = 'resolved', resolved_at = UTC_TIMESTAMP(), resolved_reason = '' WHERE id = {$fixed}");
+        App::itflowTickets()->run();
+        $mine = array_values(array_filter($sent()['tickets'], static fn (array $t): bool => (int) $t['id'] === $t2));
+        Assert::same('resolved', $mine[0]['status'] ?? null, 'a confirmed fix resolves the ticket');
+        // A row a run left before it got as far as opening the ticket (no marker): retried, not stuck.
+        $stuck = $add('port:203.0.113.92:445', 'port', 'SMB open to the internet', 'Port 445 open.', '203.0.113.92:445');
+        $ctx->db->exec("INSERT INTO itflow_tickets (client_id, kind, finding_id, itflow_ticket_id, severity_at_open, kev_noted, state, created_at)
+                        VALUES ({$cid}, 'finding', {$stuck}, 0, 'fail', 0, 'pending', UTC_TIMESTAMP() - INTERVAL 1 HOUR)");
+        App::itflowTickets()->run();
+        Assert::true((int) $ctx->db->query("SELECT MAX(itflow_ticket_id) FROM itflow_tickets WHERE finding_id = {$stuck}")->fetchColumn() > 0, 'the interrupted row got its ticket');
+        // Breached addresses are masked in the ticket, as in alerts.
+        $breach = $add('breach:pat.lee@honest.example', 'breach', 'p***@honest.example appeared in 1 data breach(es)', 'pat.lee@honest.example: Example Breach (2026-10)', 'p***@honest.example');
+        App::itflowTickets()->run();
+        $bt = (int) $ctx->db->query("SELECT itflow_ticket_id FROM itflow_tickets WHERE finding_id = {$breach}")->fetchColumn();
+        $body = (string) (array_values(array_filter($sent()['tickets'], static fn (array $t): bool => (int) $t['id'] === $bt))[0]['ticket_details'] ?? '');
+        Assert::true($body !== '' && !str_contains($body, 'pat.lee@honest.example'), 'full address not in the ticket');
+        // A newly connected inventory source's first import (its first day): no ticket per finding.
+        $ctx->db->exec("INSERT INTO source_links (client_id, source, org_id, org_name, linked_by, linked_at, last_sync_at, first_synced_at)
+                        VALUES ({$cid}, 'ninjaone', 'honest-org', 'Honest Org', 1, UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+        $imported = $add('dev:ninjaone:9902:os_unsupported', 'device', 'Operating system no longer gets security updates', 'Windows 10.', 'HONEST-LT-02');
+        $ctx->db->exec("UPDATE findings SET source = 'ninjaone' WHERE id = {$imported}");
+        App::itflowTickets()->run();
+        Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM itflow_tickets WHERE finding_id = {$imported}")->fetchColumn(), 'first import: no ticket');
+        $ctx->db->exec("UPDATE source_links SET first_synced_at = UTC_TIMESTAMP() - INTERVAL 2 DAY WHERE client_id = {$cid}");
+        $later = $add('dev:ninjaone:9903:av_off', 'device', 'Antivirus or EDR is turned off', 'Off.', 'HONEST-LT-03');
+        $ctx->db->exec("UPDATE findings SET source = 'ninjaone' WHERE id = {$later}");
+        App::itflowTickets()->run();
+        Assert::true((int) $ctx->db->query("SELECT COUNT(*) FROM itflow_tickets WHERE finding_id = {$later}")->fetchColumn() === 1, 'after the first day: tickets as usual');
+        // An existing client linked to ITFlow later: its old Fails get no tickets (no backlog), new ones do.
+        $res = $admin->submit('/clients/new', '/clients', ['name' => 'Linked Later Example', 'itflow_client_id' => '', 'timezone' => 'UTC', 'scan_window_start' => '00:00', 'scan_window_end' => '23:59', 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);
+        $late = (int) basename((string) $res->location());
+        $ctx->db->exec("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, detail, target, evidence, status, first_seen, last_seen, opened_at, due_at)
+                        VALUES ({$late}, 'port:203.0.113.93:23', 'port', 'fail', 'Telnet open', 'Port 23 open.', '203.0.113.93:23', 'x', 'open', UTC_TIMESTAMP() - INTERVAL 5 DAY, UTC_TIMESTAMP(), UTC_TIMESTAMP() - INTERVAL 5 DAY, UTC_TIMESTAMP())");
+        $setItflow($ctx, [[870, 'Honest Example Ltd'], [871, 'Linked Later Example']]);
+        $admin->submit('/clients/' . $late . '/edit', '/clients/' . $late, ['name' => 'Linked Later Example', 'itflow_client_id' => '871', 'timezone' => 'UTC',
+            'scan_window_start' => '00:00', 'scan_window_end' => '23:59', 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);
+        Assert::true($ctx->db->query("SELECT itflow_resumed_at FROM clients WHERE id = {$late}")->fetchColumn() !== null, 'linking records when tickets start');
+        App::itflowTickets()->run();
+        Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM itflow_tickets WHERE client_id = {$late}")->fetchColumn(), 'no backlog of old Fails');
+        // Off again for later tests.
+        $admin->submit('/admin/integrations', '/admin/integrations/itflow', ['url' => $base($ctx), 'api_key' => $key, 'enabled' => '0']);
+    },
 ];

@@ -2,6 +2,16 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.47.2 (2026-11-24): Windows agent scans start
+
+- **"Could not start nmap" on Windows is fixed.** The agent asked Windows to read nmap's input from `/dev/null`,
+  which only exists on Linux, so every scan failed before it began. It now uses Windows' null device, gives nmap the
+  environment Windows networking needs (without `SystemRoot`, Winsock can't start), and collects nmap's output in
+  private temporary files, because PHP can't read process pipes on Windows without blocking. The stop check, kill
+  switch and time limits keep working during a scan. Linux agents and Sentinel's own scans are unchanged.
+- To get the fix, upgrade the Windows agent: run the install command again with `-Upgrade`, or send a signed remote
+  update from the agent's page.
+
 ### 1.47.1 (2026-11-24): Engagement approval fixes from review
 
 - **Back on means back on.** Approving checks the setting again in the same database statement, so turning

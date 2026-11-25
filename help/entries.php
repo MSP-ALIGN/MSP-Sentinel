@@ -363,6 +363,14 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.49.0',
+            'date' => '2026-11-25',
+            'items' => [
+                'Accurate data: CVEs limited to other platforms (e.g. Chrome on Android) are no longer reported on Windows PCs; offline devices and empty NinjaOne reports no longer close and reopen findings; an address DHCP gives to another machine no longer inherits the old device\'s record; re-linking a client to another NinjaOne organisation retires the old devices.',
+                'Calmer alerts and tickets: a new source\'s first import is one summary, without alerts or tickets each; at most 60 immediate alerts per run; no ticket backlog when a client is linked to ITFlow or restored; tickets for problems Sentinel stopped tracking get an honest note and stay open; interrupted tickets are retried; breached addresses masked in tickets.',
+            ],
+        ],
+        [
             'version' => '1.48.1',
             'date' => '2026-11-24',
             'items' => [

@@ -1,1 +1,142 @@
-{"totalResults": 1, "vulnerabilities": [{"cve": {"id": "CVE-2099-0301", "vulnStatus": "Analyzed", "published": "2099-01-15T10:00:00.000", "lastModified": "2099-02-01T08:30:00.000", "descriptions": [{"lang": "en", "value": "Made-up test vulnerability CVE-2099-0301."}], "metrics": {"cvssMetricV31": [{"source": "nvd", "type": "Primary", "cvssData": {"baseScore": 9.6, "baseSeverity": "CRITICAL"}}]}, "configurations": [{"nodes": [{"operator": "OR", "negate": false, "cpeMatch": [{"vulnerable": true, "criteria": "cpe:2.3:a:google:chrome:120.0.6099.130:*:*:*:*:*:*:*"}]}]}]}}]}
+{
+ "totalResults": 3,
+ "vulnerabilities": [
+  {
+   "cve": {
+    "id": "CVE-2099-0301",
+    "vulnStatus": "Analyzed",
+    "published": "2099-01-15T10:00:00.000",
+    "lastModified": "2099-02-01T08:30:00.000",
+    "descriptions": [
+     {
+      "lang": "en",
+      "value": "Made-up test vulnerability CVE-2099-0301."
+     }
+    ],
+    "metrics": {
+     "cvssMetricV31": [
+      {
+       "source": "nvd",
+       "type": "Primary",
+       "cvssData": {
+        "baseScore": 9.6,
+        "baseSeverity": "CRITICAL"
+       }
+      }
+     ]
+    },
+    "configurations": [
+     {
+      "nodes": [
+       {
+        "operator": "OR",
+        "negate": false,
+        "cpeMatch": [
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:a:google:chrome:120.0.6099.130:*:*:*:*:*:*:*"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "cve": {
+    "id": "CVE-2099-0302",
+    "vulnStatus": "Analyzed",
+    "published": "2099-01-15T10:00:00.000",
+    "lastModified": "2099-02-01T08:30:00.000",
+    "descriptions": [
+     {
+      "lang": "en",
+      "value": "Made-up flaw in Chrome on Android only (test fixture)."
+     }
+    ],
+    "metrics": {
+     "cvssMetricV31": [
+      {
+       "source": "nvd",
+       "type": "Primary",
+       "cvssData": {
+        "baseScore": 9.6,
+        "baseSeverity": "CRITICAL"
+       }
+      }
+     ]
+    },
+    "configurations": [
+     {
+      "operator": "AND",
+      "nodes": [
+       {
+        "operator": "OR",
+        "negate": false,
+        "cpeMatch": [
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:a:google:chrome:120.0.6099.130:*:*:*:*:*:*:*"
+         }
+        ]
+       },
+       {
+        "operator": "OR",
+        "negate": false,
+        "cpeMatch": [
+         {
+          "vulnerable": false,
+          "criteria": "cpe:2.3:o:google:android:-:*:*:*:*:*:*:*"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "cve": {
+    "id": "CVE-2099-0303",
+    "vulnStatus": "Analyzed",
+    "published": "2099-01-15T10:00:00.000",
+    "lastModified": "2099-02-01T08:30:00.000",
+    "descriptions": [
+     {
+      "lang": "en",
+      "value": "Made-up flaw in Chrome on macOS only (test fixture)."
+     }
+    ],
+    "metrics": {
+     "cvssMetricV31": [
+      {
+       "source": "nvd",
+       "type": "Primary",
+       "cvssData": {
+        "baseScore": 9.6,
+        "baseSeverity": "CRITICAL"
+       }
+      }
+     ]
+    },
+    "configurations": [
+     {
+      "nodes": [
+       {
+        "operator": "OR",
+        "negate": false,
+        "cpeMatch": [
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:a:google:chrome:120.0.6099.130:*:*:*:*:macos:*:*"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  }
+ ]
+}

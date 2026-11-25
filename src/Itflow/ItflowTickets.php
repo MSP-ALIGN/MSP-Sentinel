@@ -256,6 +256,12 @@ final class ItflowTickets
      */
     private function settlePending(): void
     {
+        // A row a run created but never got as far as opening (no marker yet: killed, deadlock, an error building the
+        // text; 1.49) can't be looked up in ITFlow, because nothing was sent: retry it like a refused ticket, so it
+        // doesn't block its finding, its issue group or the client's weekly ticket for good.
+        $this->db->exec("UPDATE itflow_tickets SET state = 'failed', retry_at = UTC_TIMESTAMP(), attempts = attempts + 1,
+                         last_error = 'Interrupted before the ticket was opened; retrying.'
+                         WHERE state = 'pending' AND marker = '' AND created_at < UTC_TIMESTAMP() - INTERVAL 15 MINUTE");
         $rows = $this->db->query("SELECT t.*, c.itflow_client_id FROM itflow_tickets t JOIN clients c ON c.id = t.client_id AND c.itflow_sync_off = 0
                                   WHERE t.state = 'pending' AND t.marker <> '' ORDER BY t.attempts, t.id LIMIT 20")->fetchAll();
         foreach ($rows as $r) {
@@ -320,7 +326,7 @@ final class ItflowTickets
     private function twoWay(): void
     {
         $rows = $this->db->query(
-            "SELECT t.*, t.id AS row_id, f.status AS f_status, f.resolved_at AS f_resolved_at, f.triage_note, f.verify_result, f.verify_result_at,
+            "SELECT t.*, t.id AS row_id, f.status AS f_status, f.resolved_at AS f_resolved_at, f.resolved_reason AS f_reason, f.triage_note, f.verify_result, f.verify_result_at,
                     f.verify_requested_at, f.last_seen AS f_last_seen, f.title, f.target, f.evidence, f.finding_key, c.itflow_client_id,
                     vj.created_at AS vj_created_at, vj.status AS vj_status,
                     IF(d.source = 'agent', d.last_full_seen, d.last_seen) AS d_seen
@@ -386,6 +392,13 @@ final class ItflowTickets
         }
         switch ($r['state']) {
             case 'open':
+                if ($fixedInSentinel && $status === 'open' && array_filter($group, [self::class, 'notFixed']) !== []) {
+                    // Closed in Sentinel without a fix (device gone, client unlinked; 1.49): say so, leave the ticket open.
+                    $this->fixedNoteOnce($r, $group);
+                    $this->setRow($rowId, ['state' => 'done', 'last_note_at' => $now]);
+                    $this->eventAll($group, 'ITFlow ticket ' . $ref . ' left open with a note: Sentinel stopped tracking this without confirming a fix.');
+                    return;
+                }
                 if ($fixedInSentinel) {
                     // Every target fixed (or decided) in Sentinel: say so and resolve the ticket.
                     if ($status === 'open') {
@@ -439,7 +452,7 @@ final class ItflowTickets
                 if ($status !== 'closed') {
                     $this->fixedNoteOnce($r, $group);
                 }
-                if ($status === 'open') {
+                if ($status === 'open' && array_filter($group, [self::class, 'notFixed']) === []) { // not for a non-fix (1.49)
                     $this->itflow->resolveTicket($itflowClient, $ticket);
                 }
                 $this->setRow($rowId, ['state' => 'done']);
@@ -464,7 +477,7 @@ final class ItflowTickets
     private function members(int $leaderRowId): array
     {
         $stmt = $this->db->prepare(
-            "SELECT t.*, t.id AS row_id, f.status AS f_status, f.resolved_at AS f_resolved_at, f.triage_note, f.verify_result, f.verify_result_at,
+            "SELECT t.*, t.id AS row_id, f.status AS f_status, f.resolved_at AS f_resolved_at, f.resolved_reason AS f_reason, f.triage_note, f.verify_result, f.verify_result_at,
                     f.verify_requested_at, f.last_seen AS f_last_seen, f.title, f.target, f.evidence, f.finding_key, c.itflow_client_id,
                     vj.created_at AS vj_created_at, vj.status AS vj_status,
                     IF(d.source = 'agent', d.last_full_seen, d.last_seen) AS d_seen
@@ -494,7 +507,7 @@ final class ItflowTickets
             $html = $isOpen
                 ? '<p><strong>Seen again on ' . self::h($g['target']) . '.</strong></p>' . $this->evidenceHtml($g)
                 : '<p><strong>' . self::h($g['target']) . ':</strong> ' . match ((string) $g['f_status']) {
-                    'resolved' => 'verified fixed by Sentinel (no longer seen since ' . self::h($g['f_resolved_at']) . ' UTC).',
+                    'resolved' => self::notFixed($g) ? self::notFixedText($g) : 'verified fixed by Sentinel (no longer seen since ' . self::h($g['f_resolved_at']) . ' UTC).',
                     'accepted' => 'marked as an accepted risk in Sentinel.' . ((string) $g['triage_note'] !== '' ? ' Reason: ' . self::h($g['triage_note']) : ''),
                     'false_positive' => 'marked as a false positive in Sentinel.' . ((string) $g['triage_note'] !== '' ? ' Reason: ' . self::h($g['triage_note']) : ''),
                     default => 'closed in Sentinel.',
@@ -791,11 +804,31 @@ final class ItflowTickets
     {
         $reason = (string) $r['triage_note'] !== '' ? '<p>Reason: ' . self::h($r['triage_note']) . '</p>' : '';
         return match ((string) $r['f_status']) {
-            'resolved' => '<p><strong>Verified fixed by Sentinel.</strong> Its checks no longer see this problem (since ' . self::h($r['f_resolved_at']) . ' UTC).</p>',
+            'resolved' => self::notFixed($r) ? '<p><strong>Sentinel stopped tracking this; it was not confirmed fixed.</strong> ' . self::notFixedText($r) . '</p>'
+                : '<p><strong>Verified fixed by Sentinel.</strong> Its checks no longer see this problem (since ' . self::h($r['f_resolved_at']) . ' UTC).</p>',
             'accepted' => '<p><strong>Marked as an accepted risk in Sentinel.</strong></p>' . $reason,
             'false_positive' => '<p><strong>Marked as a false positive in Sentinel.</strong></p>' . $reason,
             default => '<p>Closed in Sentinel.</p>',
         };
+    }
+
+    /**
+     * Resolved for a reason that is not a fix (1.49): its device is no longer reported by its source, or the client was
+     * unlinked from the source. Such tickets get an honest note and are left open for a technician to decide.
+     *
+     * @param array<string,mixed> $r
+     */
+    private static function notFixed(array $r): bool
+    {
+        return (string) ($r['f_status'] ?? '') === 'resolved' && in_array((string) ($r['f_reason'] ?? ''), ['gone', 'unlinked'], true);
+    }
+
+    /** @param array<string,mixed> $r */
+    private static function notFixedText(array $r): string
+    {
+        return (string) ($r['f_reason'] ?? '') === 'unlinked'
+            ? 'The client was unlinked from its inventory source in Sentinel, so Sentinel no longer sees this device. Check it by hand, then resolve this ticket.'
+            : 'The device is no longer reported by its inventory source (removed, retired or moved), so Sentinel can\'t check it any more. Check it by hand, then resolve this ticket.';
     }
 
     /** What Sentinel sees, for a note (every value escaped). @param array<string,mixed> $r */
@@ -837,7 +870,10 @@ final class ItflowTickets
              FROM findings f JOIN clients c ON c.id = f.client_id AND c.is_archived = 0 AND c.is_demo = 0 AND c.itflow_client_id IS NOT NULL AND c.itflow_sync_off = 0
              LEFT JOIN kev_catalog k ON k.cve_id = f.cve_id
              LEFT JOIN itflow_tickets t ON t.kind IN ('finding', 'member') AND t.finding_id = f.id
+             LEFT JOIN source_links sl ON sl.client_id = f.client_id AND sl.source = f.source
              WHERE f.status = 'open' AND (t.id IS NULL OR t.state = 'gone' OR (t.state = 'failed' AND t.retry_at <= UTC_TIMESTAMP()))
+               -- not a source's first import (its first day, 1.49): reviewed from one summary, not ticketed one by one
+               AND (t.id IS NOT NULL OR sl.first_synced_at IS NULL OR COALESCE(f.opened_at, f.first_seen) > sl.first_synced_at + INTERVAL " . \Sentinel\Alerts\AlertService::FIRST_IMPORT_HOURS . " HOUR)
                AND (f.severity = 'fail' OR k.cve_id IS NOT NULL OR t.state = 'failed')
                AND (t.id IS NOT NULL OR COALESCE(f.opened_at, f.first_seen) >= :since OR k.date_added >= DATE(:since2))
                AND (t.id IS NOT NULL OR c.itflow_resumed_at IS NULL OR COALESCE(f.opened_at, f.first_seen) >= c.itflow_resumed_at)
@@ -1023,7 +1059,9 @@ final class ItflowTickets
         $link = $this->publicUrl !== '' ? rtrim($this->publicUrl, '/') . '/findings/' . (int) $f['id'] : '';
         $rows = [
             'Client' => $f['client_name'], 'Severity' => $kev ? 'Fail - known exploited (CISA KEV)' : ($f['severity'] === 'fail' ? 'Fail' : 'Warning'),
-            'Where' => $f['target'], 'Found' => $f['detail'], 'Evidence' => $f['evidence'], 'CVE' => $f['cve_id'],
+            // Breached addresses are masked in tickets as in alerts (1.49): a ticket system is read by more people.
+            'Where' => $f['target'], 'Found' => ($f['finding_type'] ?? '') === 'breach' ? \Sentinel\Breach\BreachMonitor::maskAll((string) $f['detail']) : $f['detail'],
+            'Evidence' => $f['evidence'], 'CVE' => $f['cve_id'],
             'First seen' => ($f['first_seen'] ?? '') !== '' ? $f['first_seen'] . ' UTC' : '', 'Fix by' => ($f['due_at'] ?? '') !== '' && $f['due_at'] !== null ? substr((string) $f['due_at'], 0, 10) : '',
         ];
         $html = '<p><strong>' . self::h($f['title']) . '</strong></p><table>';

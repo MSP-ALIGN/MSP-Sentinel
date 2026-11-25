@@ -156,7 +156,11 @@ final class FindingsEngine
                     'reopen' => $reopen = ($newStatus === 'open' && $status !== 'open') ? 1 : 0, 'reopen2' => $reopen,
                 ]);
             }
-            $resolve = $this->db->prepare("UPDATE findings SET resolved_from = status, status = 'resolved', resolved_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP() WHERE id = :id");
+            $resolve = $this->db->prepare("UPDATE findings SET resolved_from = status, status = 'resolved', resolved_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP(), resolved_reason = :why WHERE id = :id");
+            // Devices their source no longer reports (1.49): their findings close, but that is not a fix.
+            $goneStmt = $this->db->prepare('SELECT id FROM devices WHERE client_id = :c AND removed_at IS NOT NULL');
+            $goneStmt->execute(['c' => $clientId]);
+            $goneDevices = array_fill_keys(array_map('intval', $goneStmt->fetchAll(PDO::FETCH_COLUMN)), true);
             foreach ($existing as $key => $row) {
                 if (isset($current[$key]) || $row['status'] === 'resolved') {
                     continue;
@@ -168,8 +172,9 @@ final class FindingsEngine
                     && str_starts_with((string) $row['finding_key'], 'devvuln:')) {
                     continue; // installed software was updated and its new version has no data yet
                 }
-                $resolve->execute(['id' => $row['id']]);
-                $this->event((int) $row['id'], 'resolved', null, __('No longer seen by the latest checks.'));
+                $gone = $row['device_id'] !== null && isset($goneDevices[(int) $row['device_id']]);
+                $resolve->execute(['id' => $row['id'], 'why' => $gone ? 'gone' : '']);
+                $this->event((int) $row['id'], 'resolved', null, $gone ? __('Closed because the device is no longer reported by its source (not a confirmed fix).') : __('No longer seen by the latest checks.'));
                 $stats['resolved']++;
                 $stats['resolved_ids'][] = (int) $row['id'];
             }

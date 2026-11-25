@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.48.1](https://img.shields.io/badge/version-1.48.1-ff5a1f?style=flat-square)
+![Version 1.49.0](https://img.shields.io/badge/version-1.49.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,26 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.49.0 (2026-11-25): Accurate data, calmer alerts and tickets
+
+From a full review of how devices, findings, alerts and tickets fit together.
+
+- **CVEs for the right platform.** NVD limits some CVEs to an operating system (for example Chrome "running on"
+  Android or macOS). These are now reported only on devices running it, and never as confirmed when the OS is
+  unknown. This removes many of the extra CVEs a NinjaOne connection brought onto Windows PCs. Cached NVD answers are
+  fetched again in the background to pick this up.
+- **Unknown is not fixed.** A device NinjaOne says nothing about in a sync (offline, or a report came back empty)
+  keeps its last known antivirus, encryption and software, so its findings no longer close and reopen with a new
+  due date, alert and ticket. An empty antivirus report never marks every PC as having no antivirus.
+- **The right device.** An address DHCP gives to a different machine no longer carries over the old device's record,
+  name and findings. Re-linking a client to another NinjaOne organisation retires the old organisation's devices.
+- **No floods.** A newly linked source's first import (its first day) is one summary per client, without an alert or
+  ticket each. One run sends at most 60 immediate Fail alerts across clients. Linking a client to ITFlow, or
+  restoring it, no longer opens tickets for months of old findings.
+- **Honest tickets.** When Sentinel stops tracking a problem without seeing it fixed (device gone, source unlinked),
+  the ticket gets a note saying so and stays open, instead of "Verified fixed". A ticket interrupted before it was
+  opened is retried instead of blocking. Breached email addresses are masked in tickets, as in alerts.
+
 ### 1.48.1 (2026-11-24): Time zone fixes from review
 
 - **Everything in your time.** The activity feeds on the dashboard and client overview, the certificate "Checked"
@@ -141,16 +161,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 - **Reports** show times in their client's time zone, labelled.
 - **Still UTC underneath.** Sentinel keeps storing and comparing times in UTC, so daylight-saving changes never
   shift a scan, and the logs, agents and API agree. Leave the server's own clock on UTC.
-
-### 1.47.2 (2026-11-24): Windows agent scans start
-
-- **"Could not start nmap" on Windows is fixed.** The agent asked Windows to read nmap's input from `/dev/null`,
-  which only exists on Linux, so every scan failed before it began. It now uses Windows' null device, gives nmap the
-  environment Windows networking needs (without `SystemRoot`, Winsock can't start), and collects nmap's output in
-  private temporary files, because PHP can't read process pipes on Windows without blocking. The stop check, kill
-  switch and time limits keep working during a scan. Linux agents and Sentinel's own scans are unchanged.
-- To get the fix, upgrade the Windows agent: run the install command again with `-Upgrade`, or send a signed remote
-  update from the agent's page.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

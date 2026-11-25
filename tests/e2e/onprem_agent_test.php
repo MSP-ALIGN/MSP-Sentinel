@@ -274,6 +274,39 @@ return [
         Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE source_id = '{$site}:10.90.0.77'")->fetchColumn(), 'nothing stored after revocation');
         $ctx->db->exec("UPDATE internal_authorisations SET revoked_at = NULL WHERE id = {$auth}");
     },
+    'devices (1.49): an address DHCP gives to another machine never carries the old one\'s record over' => function (TestContext $ctx) use ($setup, $agentDir): void {
+        [$cid, $site] = $setup($ctx);
+        $config = json_decode((string) file_get_contents($agentDir($ctx) . '/agent.json'), true);
+        $agentId = (int) $config['agent_id'];
+        $auth = (int) $ctx->db->query("SELECT id FROM internal_authorisations WHERE site_id = {$site}")->fetchColumn();
+        $ctx->db->exec("UPDATE agent_jobs SET status = 'done' WHERE site_id = {$site} AND status IN ('queued','sent')");
+        $sweep = static function (array $hosts) use ($ctx, $agentId, $cid, $site, $auth, $config): void {
+            $job = App::agents()->queueJob($agentId, $cid, $site, $auth, 'light', 'manual', null, [], 12);
+            App::agents()->markSent($job);
+            Assert::status(200, $ctx->api('POST', '/agent/v1/jobs/' . $job . '/results', $config['token'], ['status' => 'done', 'hosts' => $hosts]));
+        };
+        $dev = static fn (string $mac): array => $ctx->db->query("SELECT id, name, ip_addresses, source_id FROM devices WHERE source = 'agent' AND site_id = {$site} AND mac = '{$mac}'")->fetch() ?: [];
+        // A laptop at .31.
+        $sweep([['ip' => '10.90.0.31', 'mac' => '02:00:00:00:00:31', 'hostname' => 'laptop-a.example']]);
+        $laptop = $dev('02:00:00:00:00:31');
+        Assert::same('10.90.0.31', $laptop['ip_addresses'] ?? null);
+        // DHCP: a printer (no name) gets .31, the laptop moves to .39.
+        $sweep([['ip' => '10.90.0.31', 'mac' => '02:00:00:00:00:32'], ['ip' => '10.90.0.39', 'mac' => '02:00:00:00:00:31', 'hostname' => 'laptop-a.example']]);
+        $after = $dev('02:00:00:00:00:31');
+        $printer = $dev('02:00:00:00:00:32');
+        Assert::same([(int) $laptop['id'], '10.90.0.39', 'laptop-a.example'], [(int) $after['id'], $after['ip_addresses'], $after['name']], 'the laptop keeps its record at its new address');
+        Assert::true($printer !== [] && (int) $printer['id'] !== (int) $laptop['id'], 'the printer gets its own record');
+        Assert::same('10.90.0.31', $printer['name'], 'not named after the laptop');
+        Assert::same($site . ':mac:02:00:00:00:00:32', $printer['source_id'], 'keyed by its MAC (the address was first used by the laptop)');
+        // The other order (printer reported first, laptop not yet moved in this sweep): the same result.
+        $sweep([['ip' => '10.90.0.31', 'mac' => '02:00:00:00:00:32']]);
+        Assert::same((int) $printer['id'], (int) $dev('02:00:00:00:00:32')['id'], 'the printer is found again by its MAC');
+        Assert::same('laptop-a.example', $dev('02:00:00:00:00:31')['name'], 'the laptop untouched');
+        // A host without a MAC (routed subnet) is still found by its address.
+        $sweep([['ip' => '10.90.0.45', 'hostname' => 'routed.example']]);
+        $sweep([['ip' => '10.90.0.45']]);
+        Assert::same(1, (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE source = 'agent' AND site_id = {$site} AND ip_addresses = '10.90.0.45'")->fetchColumn(), 'no MAC: one record by address');
+    },
     'kill switch and revocation stop the agent' => function (TestContext $ctx) use ($setup, $agentDir, $runAgent): void {
         [$cid, $site] = $setup($ctx);
         $config = json_decode((string) file_get_contents($agentDir($ctx) . '/agent.json'), true);

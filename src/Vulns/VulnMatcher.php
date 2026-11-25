@@ -20,6 +20,9 @@ use PDO;
  * - Product known, version unknown: only CVEs in the CISA KEV catalog are
  *   recorded, as POSSIBLE. The whole product history is never listed as if it applied.
  * - No usable CPE: nothing is matched.
+ * - A CVE NVD limits to some platforms (e.g. Chrome "running on" Android, 1.49): for installed software only
+ *   devices on that platform get it (unknown OS: possible); for network services and websites, whose OS is not
+ *   known, it is possible, never confirmed.
  * - If the product or version changed and the new answer isn't available
  *   yet, the old matches are removed. They described a different version.
  *
@@ -89,17 +92,20 @@ final class VulnMatcher
                 continue;
             }
             $cves = [];
+            $limited = [];
             foreach ($fetched as $query) {
                 foreach ($this->repo->cvesForQuery($query) as $id) {
                     $cves[$id] = true;
                 }
+                $limited += $this->repo->platformsForQuery($query);
             }
             $cves = array_keys($cves);
             $matches = [];
             if ($cpe['version'] !== '') {
                 $distro = preg_match(self::DISTRO_MARKERS, $svc['product'] . ' ' . $svc['version'] . ' ' . $svc['extra_info']) === 1;
                 foreach ($cves as $id) {
-                    $matches[$id] = $distro ? 'distro' : 'confirmed';
+                    // Limited to some platforms (1.49): the service's OS isn't known, so never confirmed.
+                    $matches[$id] = isset($limited[$id]) ? 'possible' : ($distro ? 'distro' : 'confirmed');
                 }
             } else {
                 foreach ($this->repo->kevSubset($cves) as $id) {
@@ -136,6 +142,10 @@ final class VulnMatcher
                 $store->clearComponentMatchesUnless($comp['id'], $cpe === null ? '' : Cpe::matchStrings($cpe)[0]);
                 continue;
             }
+            // Website components: the server's OS isn't known, so platform-limited CVEs are possible only (1.49).
+            foreach (array_keys($result['platforms']) as $id) {
+                $result['matches'][$id] = 'possible';
+            }
             $store->setComponentMatches($comp['id'], $result['query'], $result['matches']);
             $stats['matches'] += count($result['matches']);
         }
@@ -164,7 +174,7 @@ final class VulnMatcher
                 $store->markPending($clientId, $cpe); // the device's findings wait for this data instead of resolving
                 continue;
             }
-            $store->setMatchesForCpe($clientId, $cpe, $result['matches'], $result['query']);
+            $store->setMatchesForCpe($clientId, $cpe, $result['matches'], $result['query'], $result['platforms']);
             $stats['matches'] += count($result['matches']);
         }
         return $stats;
@@ -204,15 +214,17 @@ final class VulnMatcher
             return null;
         }
         $cves = [];
+        $platforms = [];
         foreach ($fetched as $query) {
             foreach ($this->repo->cvesForQuery($query) as $id) {
                 $cves[$id] = true;
             }
+            $platforms += $this->repo->platformsForQuery($query);
         }
         $matches = [];
         foreach ($cpe['version'] !== '' ? array_keys($cves) : $this->repo->kevSubset(array_keys($cves)) as $id) {
             $matches[$id] = $cpe['version'] !== '' ? 'confirmed' : 'possible';
         }
-        return ['query' => $queries[0], 'matches' => $matches];
+        return ['query' => $queries[0], 'matches' => $matches, 'platforms' => array_intersect_key($platforms, $matches)];
     }
 }

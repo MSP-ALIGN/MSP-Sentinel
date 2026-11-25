@@ -152,6 +152,12 @@ return [
         $devices = $ctx->clientSection($admin, $cid, 'devices');
         Assert::contains('HARBOUR-LT-01', $devices);
         Assert::notContains('<script>alert(1)', $ctx->clientSection($admin, $cid, 'devices') . $admin->get('/clients/' . $cid . '/devices/' . (int) $ctx->db->query("SELECT id FROM devices WHERE client_id = {$cid} AND source_id = '13'")->fetchColumn())->body, 'escaped');
+        // 1.49: an organisation whose antivirus report is empty: its online workstation is unknown, not "no antivirus".
+        $res = $admin->submit('/clients/new', '/clients', ['name' => 'Quay Ninja Example', 'itflow_client_id' => '', 'timezone' => 'UTC', 'scan_window_start' => '00:00', 'scan_window_end' => '23:59', 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);
+        $quay = (int) basename((string) $res->location());
+        $ctx->db->prepare("INSERT INTO source_links (client_id, source, org_id, org_name, linked_by, linked_at) VALUES (:c, 'ninjaone', '902', 'Quay Example Inc', 1, UTC_TIMESTAMP())")->execute(['c' => $quay]);
+        Assert::same('ok', $sync->syncClient($quay, 'ninjaone')['status']);
+        Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM findings WHERE client_id = {$quay} AND finding_key LIKE '%av_missing'")->fetchColumn(), 'empty antivirus report: no "no antivirus" findings');
         // A failing organisation keeps the devices it had (nothing is removed on a failed sync).
         $ctx->db->prepare("UPDATE source_links SET org_id = '900' WHERE client_id = :c")->execute(['c' => $cid]);
         $r = $sync->syncClient($cid, 'ninjaone');

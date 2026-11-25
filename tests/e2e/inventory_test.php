@@ -105,6 +105,10 @@ return [
         Assert::true($v !== null && $v['severity'] === 'fail' && $v['finding_type'] === 'vuln' && $v['source'] === 'ninjaone', 'critical confirmed CVE in installed software');
         Assert::contains('Google Chrome 120.0.6099.130: 1 known CVE(s)', (string) $v['title']);
         Assert::contains('CVE-2099-0301', (string) $v['detail']);
+        // 1.49: CVEs NVD limits to Android or macOS are not reported on this Windows PC.
+        Assert::notContains('CVE-2099-0302', (string) $v['detail'], 'Android-only CVE left out on Windows');
+        Assert::notContains('CVE-2099-0303', (string) $v['detail'], 'macOS-only (target_sw) CVE left out on Windows');
+        Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM software_vulns WHERE cve_id IN ('CVE-2099-0302', 'CVE-2099-0303')")->fetchColumn(), 'not stored for Windows devices');
         // Chrome updates before NVD has data for the new version: the finding waits instead of resolving.
         $data = json_decode((string) file_get_contents(dirname($ctx->configPath) . '/inventory.json'), true);
         $data['snapshots']['org-101']['devices'][0]['software'][0]['version'] = '120.0.6099.199';
@@ -117,6 +121,30 @@ return [
         file_put_contents(dirname($ctx->configPath) . '/inventory.json', json_encode($data));
         App::inventorySync()->syncClient($cid, 'ninjaone');
         Assert::true((int) $v['device_id'] > 0, 'linked to the device');
+        // 1.49: gaps in the data never resolve findings. The antivirus and disk reports say nothing about these devices
+        // this time (offline, or an empty report), and the software report lists nothing for the workstation.
+        $gap = $data;
+        foreach ($gap['snapshots']['org-101']['devices'] as &$d) {
+            $d['av_state'] = '';
+            $d['av_product'] = '';
+            $d['av_definitions'] = '';
+            $d['encryption'] = '';
+            $d['software'] = [];
+        }
+        unset($d);
+        file_put_contents(dirname($ctx->configPath) . '/inventory.json', json_encode($gap));
+        App::inventorySync()->syncClient($cid, 'ninjaone');
+        foreach (["dev:ninjaone:5002:av_off", "dev:ninjaone:{$ws}:encryption_off", "devvuln:ninjaone:{$ws}:Google Chrome"] as $key) {
+            Assert::same('open', $finding($ctx, $cid, $key)['status'] ?? null, $key . ': unknown is not fixed');
+        }
+        Assert::same(['off', 'Example Defender'], array_values($ctx->db->query("SELECT av_state, av_product FROM devices WHERE source_id = '5002'")->fetch(PDO::FETCH_NUM)), 'last known antivirus state kept');
+        // Real answers still count: antivirus turned on resolves the finding.
+        $gap['snapshots']['org-101']['devices'][1]['av_state'] = 'on';
+        file_put_contents(dirname($ctx->configPath) . '/inventory.json', json_encode($gap));
+        App::inventorySync()->syncClient($cid, 'ninjaone');
+        Assert::same('resolved', $finding($ctx, $cid, 'dev:ninjaone:5002:av_off')['status'] ?? null, 'a real answer still resolves');
+        file_put_contents(dirname($ctx->configPath) . '/inventory.json', json_encode($data));
+        App::inventorySync()->syncClient($cid, 'ninjaone');
     },
     'pages: client card, device page, findings filter, report guidance; data is escaped' => function (TestContext $ctx) use ($setup): void {
         $cid = $setup($ctx);
@@ -156,6 +184,8 @@ return [
         file_put_contents(dirname($ctx->configPath) . '/inventory.json', json_encode($data));
         App::inventorySync()->syncClient($cid, 'ninjaone');
         Assert::true($ctx->db->query("SELECT removed_at FROM devices WHERE source_id = '5002'")->fetchColumn() !== null, 'complete: removed');
+        // 1.49: its findings close as "device gone", not as a fix (tickets get an honest note and stay open).
+        Assert::same(['gone'], array_values(array_unique($ctx->db->query("SELECT f.resolved_reason FROM findings f JOIN devices d ON d.id = f.device_id WHERE d.source_id = '5002' AND f.status = 'resolved'")->fetchAll(PDO::FETCH_COLUMN))), 'resolved as gone');
         Assert::same('resolved', $finding($ctx, $cid, 'dev:ninjaone:5002:av_off')['status'] ?? null);
         // Updates installed: the patch findings resolve.
         $data['snapshots']['org-101']['devices'][0]['patches'] = [];
@@ -194,5 +224,25 @@ return [
         Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM source_links WHERE client_id = {$cid}")->fetchColumn(), 'archived: not linked');
         $ctx->db->exec("UPDATE clients SET is_archived = 0 WHERE id = {$cid}");
         $write($ctx);
+    },
+
+    'links (1.49): re-linking a client to another organisation retires the old one\'s devices and findings (not as fixed)' => function (TestContext $ctx) use ($setup): void {
+        $setup($ctx);
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $res = $admin->submit('/clients/new', '/clients', ['name' => 'Relink Example', 'itflow_client_id' => '', 'timezone' => 'UTC', 'scan_window_start' => '00:00', 'scan_window_end' => '23:59', 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);
+        $cid = (int) basename((string) $res->location());
+        // Linked (by mistake) to org-102, with a device and an open finding from it.
+        $ctx->db->exec("INSERT INTO source_links (client_id, source, org_id, org_name, linked_by, linked_at, last_sync_at, first_synced_at) VALUES ({$cid}, 'ninjaone', 'org-102', 'Hilltop Example', 1, UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP() - INTERVAL 3 DAY)");
+        $ctx->db->exec("INSERT INTO devices (client_id, source, source_id, name, device_class, os_name, ip_addresses, first_seen, last_seen) VALUES ({$cid}, 'ninjaone', 'hill-1', 'HILL-WS-01', 'workstation', 'Windows 11 Pro', '192.0.2.77', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+        $dev = (int) $ctx->db->lastInsertId();
+        $ctx->db->exec("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, detail, target, evidence, status, first_seen, last_seen, opened_at, due_at, source, device_id)
+                        VALUES ({$cid}, 'dev:ninjaone:hill-1:av_off', 'device', 'fail', 'Antivirus or EDR is turned off', '', 'HILL-WS-01', 'x', 'open', UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP(), 'ninjaone', {$dev})");
+        $fid = (int) $ctx->db->lastInsertId();
+        // Re-linked to the right organisation.
+        $admin->submit('/clients/' . $cid . '/inventory/link?source=ninjaone', '/clients/' . $cid . '/inventory/link', ['source' => 'ninjaone', 'org_id' => 'org-fail']);
+        Assert::same('org-fail', (string) $ctx->db->query("SELECT org_id FROM source_links WHERE client_id = {$cid}")->fetchColumn(), 'linked to the new organisation');
+        Assert::true($ctx->db->query("SELECT removed_at FROM devices WHERE id = {$dev}")->fetchColumn() !== null, 'the old organisation\'s device left the client');
+        Assert::same(['resolved', 'unlinked'], array_values($ctx->db->query("SELECT status, resolved_reason FROM findings WHERE id = {$fid}")->fetch(PDO::FETCH_NUM)), 'its finding closed as unlinked, not fixed');
+        Assert::same(null, $ctx->db->query("SELECT first_synced_at FROM source_links WHERE client_id = {$cid}")->fetchColumn(), 'the new organisation starts as a first import');
     },
 ];

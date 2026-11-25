@@ -235,8 +235,9 @@ final class NinjaOneSource implements InventorySource
         });
         // "Missing" only for a Windows workstation the report lists nothing for, that was online in the last week and
         // whose inventory has arrived (installed software): a new or long-offline device is unknown, not unprotected.
+        // An antivirus report with no rows at all (1.49) is a gap in the data, not proof that nothing has antivirus.
         foreach ($devices as $id => &$d) {
-            if (!isset($avSeen[$id]) && $d['node_class'] === 'WINDOWS_WORKSTATION' && $d['software'] !== []
+            if ($avSeen !== [] && !isset($avSeen[$id]) && $d['node_class'] === 'WINDOWS_WORKSTATION' && $d['software'] !== []
                 && $d['last_contact'] !== null && $d['last_contact'] > time() - 7 * 86400) {
                 $d['av_state'] = 'missing';
             }

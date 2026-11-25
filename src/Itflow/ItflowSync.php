@@ -177,7 +177,8 @@ final class ItflowSync
             $byName->execute(['n' => $name]);
             $same = $byName->fetch();
             if ($same !== false) {
-                $this->db->prepare('UPDATE clients SET itflow_client_id = :i, updated_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['i' => $c['id'], 'id' => $same['id']]);
+                // Linked by name (1.49): only findings from now on get ITFlow tickets, not months of old ones.
+                $this->db->prepare('UPDATE clients SET itflow_client_id = :i, itflow_resumed_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['i' => $c['id'], 'id' => $same['id']]);
                 $this->log('client.itflow_linked', (int) $same['id'], ['itflow_client_id' => $c['id']]);
                 $s['linked']++;
                 $mine = $same + ['itflow_client_id' => $c['id']];
@@ -210,7 +211,7 @@ final class ItflowSync
             $this->log('client.archived', $id, ['reason' => ($c['untagged'] ?? false) ? 'no "' . $this->settings->get('itflow_tag_name') . '" tag in ITFlow' : 'archived in ITFlow']);
             $s['archived']++;
         } elseif (!$c['archived'] && (int) $mine['is_archived'] === 1 && (int) ($mine['itflow_archived'] ?? 0) === 1) {
-            $this->db->prepare('UPDATE clients SET is_archived = 0, itflow_archived = 0, updated_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['id' => $id]);
+            $this->db->prepare('UPDATE clients SET is_archived = 0, itflow_archived = 0, itflow_resumed_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['id' => $id]);
             $this->log('client.restored', $id, ['reason' => 'unarchived or tagged in ITFlow']);
             $s['restored']++;
         }

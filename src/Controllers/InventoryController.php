@@ -81,6 +81,17 @@ final class InventoryController extends Controller
             Session::flash('danger', __('Choose an organisation from the list.'));
             return Response::redirect('/clients/' . (int) $client['id'] . '/inventory/link?source=' . rawurlencode($name));
         }
+        if (App::inventory()->orgLinkedElsewhere($name, $org['id'], (int) $client['id'])) {
+            Session::flash('danger', __('This organisation is already linked to another client.'));
+            return Response::redirect('/clients/' . (int) $client['id'] . '/inventory/link?source=' . rawurlencode($name));
+        }
+        // Another organisation than before (1.49): unlink the old one first, so its devices and their findings leave this
+        // client (closed as "unlinked", not as fixed) instead of staying for good; the new one starts as a first import.
+        $previous = App::inventory()->link((int) $client['id'], $name);
+        if ($previous !== null && (string) $previous['org_id'] !== $org['id']) {
+            App::inventorySync()->unlink((int) $client['id'], $name, (int) $this->user()['id']);
+            $this->audit($request, 'inventory.unlinked', 'client', (int) $client['id'], ['source' => $name, 'org_id' => mb_substr((string) $previous['org_id'], 0, 64), 'reason' => 'relinked']);
+        }
         try {
             App::inventory()->setLink((int) $client['id'], $name, $org['id'], $org['name'], (int) $this->user()['id']);
         } catch (\DomainException) {
