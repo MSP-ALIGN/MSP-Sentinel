@@ -368,6 +368,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.57.2',
+            'date' => '2026-11-25',
+            'items' => [
+                'Devices that answer "localhost" are named by their address (existing ones renamed on upgrade); vulnerability findings for internal devices show the installed version in the title and first in the details.',
+            ],
+        ],
+        [
             'version' => '1.57.1',
             'date' => '2026-11-25',
             'items' => [

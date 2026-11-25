@@ -310,6 +310,19 @@ return [
         $sweep([['ip' => '10.90.0.60', 'mac' => '00:1b:21:00:00:60', 'hostname' => 'tv.example'], ['ip' => '10.90.0.61', 'mac' => '00:1b:21:00:00:60', 'hostname' => 'speaker.example']]);
         $sweep([['ip' => '10.90.0.60', 'mac' => '00:1b:21:00:00:60', 'hostname' => 'tv.example'], ['ip' => '10.90.0.61', 'mac' => '00:1b:21:00:00:60', 'hostname' => 'speaker.example']]);
         Assert::same(2, (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE source = 'agent' AND site_id = {$site} AND ip_addresses IN ('10.90.0.60', '10.90.0.61')")->fetchColumn(), 'a shared MAC: one record per address');
+        // 1.57.2: a host that answers "localhost" is named by its address (also one named so before, and by the migration).
+        $sweep([['ip' => '10.90.0.70', 'mac' => '00:1b:21:00:00:70', 'hostname' => 'localhost']]);
+        Assert::same(['10.90.0.70', ''], array_values($ctx->db->query("SELECT name, dns_name FROM devices WHERE source = 'agent' AND site_id = {$site} AND ip_addresses = '10.90.0.70'")->fetch(PDO::FETCH_NUM)), 'not named localhost');
+        $ctx->db->exec("UPDATE devices SET name = 'localhost.localdomain', dns_name = 'localhost.localdomain' WHERE source = 'agent' AND site_id = {$site} AND ip_addresses = '10.90.0.70'");
+        $sweep([['ip' => '10.90.0.70', 'mac' => '00:1b:21:00:00:70', 'hostname' => 'localhost.localdomain']]);
+        Assert::same(['10.90.0.70', ''], array_values($ctx->db->query("SELECT name, dns_name FROM devices WHERE source = 'agent' AND site_id = {$site} AND ip_addresses = '10.90.0.70'")->fetch(PDO::FETCH_NUM)), 'an old localhost name is replaced');
+        $ctx->db->exec("UPDATE devices SET name = 'localhost', dns_name = 'ip6-localhost' WHERE source = 'agent' AND site_id = {$site} AND ip_addresses = '10.90.0.70'");
+        $migration = require dirname(__DIR__, 2) . '/migrations/0061_loopback_device_names.php';
+        $m = new \Sentinel\Migrations\Migrator($ctx->db, dirname(__DIR__, 2) . '/migrations');
+        $migration['up']($ctx->db, $m);
+        $migration['up']($ctx->db, $m);
+        Assert::same(['10.90.0.70', ''], array_values($ctx->db->query("SELECT name, dns_name FROM devices WHERE source = 'agent' AND site_id = {$site} AND ip_addresses = '10.90.0.70'")->fetch(PDO::FETCH_NUM)), 'the migration renames existing ones (twice safely)');
+        Assert::same('laptop-a.example', $dev('00:1b:21:00:00:31')['name'], 'real names untouched');
         // A host without a MAC (routed subnet) is still found by its address.
         $sweep([['ip' => '10.90.0.45', 'hostname' => 'routed.example']]);
         $sweep([['ip' => '10.90.0.45']]);
