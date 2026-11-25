@@ -2,6 +2,13 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.52.1 (2026-11-25): Fixes from review
+
+- A client linked to an RMM that is later turned off is never stuck: the Devices page still shows that link, and it
+  can be unlinked. Links to an RMM Sentinel no longer supports never block a client.
+- Two admins linking the same client to two RMMs at the same moment can't both succeed.
+- Small safeguards for adding RMMs later (setting names, removing saved secrets).
+
 ### 1.52.0 (2026-11-25): Ready for more RMMs
 
 The first step towards working with other RMMs and ticketing systems besides NinjaOne and ITFlow. Nothing changes in

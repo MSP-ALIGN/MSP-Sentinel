@@ -196,13 +196,13 @@ return [
         Assert::true(!in_array('hiddentech', array_column(App::fixWorkflow()->assignableUsers(null, [$mine]), 'username'), true), 'not listed for others');
         Assert::true(in_array('limitedtech', $ownersMine, true), 'listed for their clients');
         // One ITFlow client per Sentinel client.
-        $ctx->db->exec("UPDATE clients SET itflow_client_id = 7701 WHERE id = {$hidden}");
+        (new \Sentinel\Psa\ClientLinks($ctx->db))->set($hidden, 'itflow', '7701');
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $res = $admin->submit('/clients/' . $mine . '/edit', '/clients/' . $mine, ['name' => 'Visible Example', 'itflow_client_id' => '7701', 'timezone' => 'UTC',
             'scan_window_start' => '00:00', 'scan_window_end' => '23:59', 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);
         Assert::status(422, $res);
         Assert::contains('already in use', $res->body);
-        $ctx->db->exec("UPDATE clients SET itflow_client_id = NULL WHERE id = {$hidden}");
+        (new \Sentinel\Psa\ClientLinks($ctx->db))->set($hidden, 'itflow', null);
     },
 
     'client access (1.42.2): reports show breached addresses only to those who may see them' => function (TestContext $ctx) use ($setup): void {

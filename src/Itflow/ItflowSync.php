@@ -138,9 +138,13 @@ final class ItflowSync
     public function syncClients(array $clients): array
     {
         $s = ['seen' => count($clients), 'created' => 0, 'linked' => 0, 'renamed' => 0, 'archived' => 0, 'restored' => 0, 'conflicts' => 0];
-        $byItflow = $this->db->prepare('SELECT * FROM clients WHERE itflow_client_id = :i AND is_demo = 0 ORDER BY id LIMIT 1');
+        // Matched by the link (psa_client_links, 1.54); the PSA's client ID is compared as text.
+        $byItflow = $this->db->prepare("SELECT c.*, l.external_id AS itflow_client_id FROM clients c
+                                        JOIN psa_client_links l ON l.client_id = c.id AND l.provider = 'itflow' AND l.external_id = :i
+                                        WHERE c.is_demo = 0 ORDER BY c.id LIMIT 1");
         // Same name (MariaDB's comparison: case and accents ignored), not archived, not yet linked to ITFlow.
-        $byName = $this->db->prepare('SELECT * FROM clients WHERE name = :n AND itflow_client_id IS NULL AND is_demo = 0 AND is_archived = 0 AND itflow_sync_off = 0 LIMIT 1');
+        $byName = $this->db->prepare("SELECT * FROM clients c WHERE c.name = :n AND c.is_demo = 0 AND c.is_archived = 0 AND c.itflow_sync_off = 0
+                                      AND NOT EXISTS (SELECT 1 FROM psa_client_links l WHERE l.client_id = c.id AND l.provider = 'itflow') LIMIT 1");
         // A client set to "Don't sync with ITFlow" with that name (1.45.1): neither linked nor doubled by a new client.
         $offName = $this->db->prepare('SELECT COUNT(*) FROM clients WHERE name = :n AND itflow_sync_off = 1 AND is_demo = 0');
         foreach ($clients as $c) {
@@ -167,7 +171,7 @@ final class ItflowSync
      */
     private function syncOne(array $c, string $name, array &$s, \PDOStatement $byItflow, \PDOStatement $byName, \PDOStatement $offName): void
     {
-        $byItflow->execute(['i' => $c['id']]);
+        $byItflow->execute(['i' => (string) $c['id']]);
         $mine = $byItflow->fetch();
         if ($mine === false) {
             if ($c['archived']) {
@@ -181,7 +185,8 @@ final class ItflowSync
             $same = $byName->fetch();
             if ($same !== false) {
                 // Linked by name (1.49): only findings from now on get ITFlow tickets, not months of old ones.
-                $this->db->prepare('UPDATE clients SET itflow_client_id = :i, itflow_resumed_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['i' => $c['id'], 'id' => $same['id']]);
+                (new \Sentinel\Psa\ClientLinks($this->db))->set((int) $same['id'], 'itflow', (string) $c['id']);
+                $this->db->prepare('UPDATE clients SET itflow_resumed_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['id' => $same['id']]);
                 $this->log('client.itflow_linked', (int) $same['id'], ['itflow_client_id' => $c['id']]);
                 $s['linked']++;
                 $mine = $same + ['itflow_client_id' => $c['id']];
@@ -243,11 +248,12 @@ final class ItflowSync
         }
         $byPsa = array_diff_key($byPsa, $dupes); // an ITFlow ID on two MSP Align clients: link neither
         $n = 0;
-        $rows = $this->db->query('SELECT id, itflow_client_id FROM clients WHERE itflow_client_id IS NOT NULL AND align_client_id IS NULL AND is_demo = 0 AND is_archived = 0 AND itflow_sync_off = 0')->fetchAll();
+        $rows = $this->db->query("SELECT c.id, l.external_id AS itflow_client_id FROM clients c JOIN psa_client_links l ON l.client_id = c.id AND l.provider = 'itflow'
+                                  WHERE c.align_client_id IS NULL AND c.is_demo = 0 AND c.is_archived = 0 AND c.itflow_sync_off = 0")->fetchAll();
         // An MSP Align client already linked to a Sentinel client is never linked to a second one (1.42.2).
         $used = array_flip(array_map('intval', $this->db->query('SELECT align_client_id FROM clients WHERE align_client_id IS NOT NULL')->fetchAll(\PDO::FETCH_COLUMN)));
         foreach ($rows as $r) {
-            $a = $byPsa[(int) $r['itflow_client_id']] ?? null;
+            $a = $byPsa[(int) $r['itflow_client_id']] ?? null; // ITFlow IDs are whole numbers, as MSP Align reports them
             if ($a !== null && !isset($used[(int) $a['id']])) {
                 $used[(int) $a['id']] = true;
                 $this->db->prepare('UPDATE clients SET align_client_id = :a, align_client_name = :n, updated_at = UTC_TIMESTAMP() WHERE id = :id')
@@ -269,6 +275,7 @@ final class ItflowSync
                  VALUES (:n, :i, :tz, '22:00:00', '06:00:00', :notes, '', '', NULL, UTC_TIMESTAMP(), UTC_TIMESTAMP())"
             )->execute(['n' => $name, 'i' => $itflowId, 'tz' => self::orgZone($this->settings), 'notes' => 'Created from ITFlow (client #' . $itflowId . '). Not scanned until its authorization is recorded.']);
             $id = (int) $this->db->lastInsertId();
+            (new \Sentinel\Psa\ClientLinks($this->db))->set($id, 'itflow', (string) $itflowId);
             $this->db->prepare("INSERT INTO sites (client_id, name, is_default, created_at, updated_at) VALUES (:c, 'Main site', 1, UTC_TIMESTAMP(), UTC_TIMESTAMP())")->execute(['c' => $id]);
             $this->db->commit();
         } catch (\Throwable $ex) {

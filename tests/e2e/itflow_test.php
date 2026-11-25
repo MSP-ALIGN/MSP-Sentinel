@@ -61,7 +61,7 @@ return [
         };
         $lighthouse = $mk('lighthouse example'); // same name in another case: linked, not duplicated
         $dock = $mk('Dock Example');
-        $ctx->db->exec("UPDATE clients SET itflow_client_id = 899 WHERE id = {$dock}"); // already linked to another ITFlow client
+        (new \Sentinel\Psa\ClientLinks($ctx->db))->set($dock, 'itflow', '899'); // already linked to another ITFlow client
         $setItflow($ctx, [[801, 'Lighthouse Example'], [802, 'Pier Example Co'], [803, 'Gone Example', '2026-01-01 00:00:00'], [804, 'Dock Example'], [805, "Bad\u{202E}Name\x07 Example"]]);
         // MSP Align connected too: ITFlow client 802 is MSP Align client 502 (psa_id 802).
         $admin->submit('/admin/integrations', '/admin/integrations/mspalign', ['url' => $alignBase($ctx), 'api_key' => 'msa_TESTKEY1_' . str_repeat('a', 32), 'enabled' => '1']);
@@ -691,13 +691,13 @@ return [
         @unlink($failFile);
         $setTags([860, 861, 864]);
         // A new ITFlow client with the name of a left-out client is neither linked nor doubled.
-        $ctx->db->exec("UPDATE clients SET itflow_client_id = NULL WHERE id = {$left}");
+        (new \Sentinel\Psa\ClientLinks($ctx->db))->set($left, 'itflow', null);
         $setItflow($ctx, [[860, 'Tagged Example One'], [861, 'Untagged Example Two'], [864, 'New Tagged Example'], [865, 'left out example three']]);
         $setTags([860, 861, 864, 865]);
         App::itflowSync()->sync();
         Assert::same([], $c(865), 'not linked to, nor doubled beside, a left-out client');
         Assert::same(1, (int) $ctx->db->query("SELECT COUNT(*) FROM clients WHERE name LIKE 'Left Out Example Three%'")->fetchColumn());
-        $ctx->db->exec("UPDATE clients SET itflow_client_id = 862 WHERE id = {$left}");
+        (new \Sentinel\Psa\ClientLinks($ctx->db))->set($left, 'itflow', '862');
         $setItflow($ctx, [[860, 'Tagged Example One'], [861, 'Untagged Example Two'], [862, 'Renamed In ITFlow Three'], [864, 'New Tagged Example']]);
         $setTags([860, 861, 864]);
         // Tickets: none for the left-out client, as before for the others.

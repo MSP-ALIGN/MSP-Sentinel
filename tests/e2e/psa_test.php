@@ -100,6 +100,7 @@ return [
         $ctx->db->exec("INSERT INTO clients (name, timezone, scan_window_start, scan_window_end, notes, ports_extra, ports_excluded, itflow_client_id, created_at, updated_at)
                         VALUES ('Fake PSA Example', 'UTC', '00:00:00', '23:59:00', '', '', '', 990, UTC_TIMESTAMP(), UTC_TIMESTAMP())");
         $cid = (int) $ctx->db->lastInsertId();
+        (new \Sentinel\Psa\ClientLinks($ctx->db))->set($cid, 'itflow', '990');
         $add = static function (string $key) use ($ctx, $cid): int {
             $ctx->db->prepare("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, detail, target, evidence, status, first_seen, last_seen, opened_at, due_at)
                                VALUES (:c, :k, 'port', 'fail', 'Telnet open', 'Port 23 open.', '203.0.113.95:23', 'x', 'open', UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP() + INTERVAL 14 DAY)")
@@ -112,7 +113,7 @@ return [
             $tickets = new ItflowTickets($ctx->db, $s, App::audit(), $fake, '');
             $f = $add('port:203.0.113.95:23');
             $tickets->run();
-            Assert::same([[990, '[Sentinel] Fail: Telnet open - 203.0.113.95:23', 'High']], array_map(static fn (array $c): array => [$c[0], $c[1], $c[2]], $fake->calls['create']), 'one ticket, for the linked client, High for a Fail: ' . $s->fresh('itflow_tickets_last_result'));
+            Assert::same([['990', '[Sentinel] Fail: Telnet open - 203.0.113.95:23', 'High']], array_map(static fn (array $c): array => [$c[0], $c[1], $c[2]], $fake->calls['create']), 'one ticket, for the linked client, High for a Fail: ' . $s->fresh('itflow_tickets_last_result'));
             $ticket = (string) $ctx->db->query("SELECT itflow_ticket_id FROM itflow_tickets WHERE finding_id = {$f}")->fetchColumn();
             Assert::same('7001', $ticket, 'the fake\'s ticket ID is stored');
             $ctx->db->exec("UPDATE findings SET status = 'resolved', resolved_at = UTC_TIMESTAMP(), resolved_reason = '' WHERE id = {$f}");
@@ -139,7 +140,8 @@ return [
             $ctx->db->exec("DELETE FROM itflow_tickets WHERE client_id = {$cid}");
             $ctx->db->exec("DELETE FROM finding_events WHERE finding_id IN (SELECT id FROM findings WHERE client_id = {$cid})");
             $ctx->db->exec("DELETE FROM findings WHERE client_id = {$cid}");
-            $ctx->db->exec("UPDATE clients SET is_archived = 1, itflow_client_id = NULL WHERE id = {$cid}");
+            (new \Sentinel\Psa\ClientLinks($ctx->db))->set($cid, 'itflow', null);
+            $ctx->db->exec("UPDATE clients SET is_archived = 1 WHERE id = {$cid}");
             if ($others !== []) {
                 $ctx->db->exec('UPDATE clients SET itflow_sync_off = 0 WHERE id IN (' . implode(',', $others) . ')');
             }
@@ -171,5 +173,31 @@ return [
                 $s->set($k, $v);
             }
         }
+    },
+    'client links (1.54): the migration runs twice safely; the link table and the old column always agree; one client per PSA client' => function (TestContext $ctx): void {
+        $migration = require dirname(__DIR__, 2) . '/migrations/0059_psa_client_links.php';
+        $m = new \Sentinel\Migrations\Migrator($ctx->db, dirname(__DIR__, 2) . '/migrations');
+        $migration['up']($ctx->db, $m);
+        $migration['up']($ctx->db, $m); // twice: idempotent
+        // After every earlier test (forms, the ITFlow sync, links by name, unlinking): both copies say the same.
+        $column = $ctx->db->query("SELECT id, CAST(itflow_client_id AS CHAR) FROM clients WHERE itflow_client_id IS NOT NULL ORDER BY id")->fetchAll(PDO::FETCH_KEY_PAIR);
+        $table = $ctx->db->query("SELECT client_id, external_id FROM psa_client_links WHERE provider = 'itflow' ORDER BY client_id")->fetchAll(PDO::FETCH_KEY_PAIR);
+        Assert::same($column, $table, 'psa_client_links matches clients.itflow_client_id');
+        Assert::true($table !== [], 'there are links to compare');
+        // One Sentinel client per PSA client; text IDs are kept exactly.
+        $links = new \Sentinel\Psa\ClientLinks($ctx->db);
+        [$a, $b] = array_map('intval', $ctx->db->query('SELECT id FROM clients ORDER BY id LIMIT 2')->fetchAll(PDO::FETCH_COLUMN));
+        $links->set($a, 'otherpsa', 'Abc-123');
+        Assert::same($a, $links->clientFor('otherpsa', 'Abc-123'));
+        Assert::same(null, $links->clientFor('otherpsa', 'abc-123'), 'compared exactly, case included');
+        $refused = false;
+        try {
+            $links->set($b, 'otherpsa', 'Abc-123');
+        } catch (\DomainException) {
+            $refused = true;
+        }
+        Assert::true($refused, 'a PSA client already linked elsewhere is refused');
+        $links->set($a, 'otherpsa', null);
+        Assert::same(null, $links->externalFor($a, 'otherpsa'), 'unlinked');
     },
 ];

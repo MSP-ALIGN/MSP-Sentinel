@@ -432,8 +432,8 @@ final class ClientController extends Controller
                 // Checked only when it changes (1.42.2: an old duplicate never blocks other edits); the message names
                 // no other client, which the user may not see. The database index (migration 0048) backs it up.
                 $current = $exceptId === null ? null : App::clients()->find($exceptId)['itflow_client_id'] ?? null;
-                $taken = App::db()->prepare('SELECT COUNT(*) FROM clients WHERE itflow_client_id = :i AND id <> :x');
-                $taken->execute(['i' => $itflow, 'x' => $exceptId ?? 0]);
+                $taken = App::db()->prepare("SELECT COUNT(*) FROM psa_client_links WHERE provider = 'itflow' AND external_id = :i AND client_id <> :x");
+                $taken->execute(['i' => (string) $itflow, 'x' => $exceptId ?? 0]);
                 if (($current === null || (int) $current !== $itflow) && (int) $taken->fetchColumn() > 0) {
                     $errors['itflow_client_id'] = __('This ITFlow client can\'t be linked here: it is already in use. Ask an admin who sees every client.');
                 }

@@ -163,7 +163,7 @@ final class ItflowTickets
      *
      * @return array{id:int, reference:string}|null the ticket, or null when ITFlow refused it
      */
-    private function openTicket(int $rowId, int $itflowClient, string $subject, string $html, string $priority): ?array
+    private function openTicket(int $rowId, int|string $itflowClient, string $subject, string $html, string $priority): ?array
     {
         $marker = 'sentinel-' . $rowId . '-' . bin2hex(random_bytes(4));
         $this->setRow($rowId, ['state' => 'pending', 'marker' => $marker, 'marker_at' => $this->dbNow()]);
@@ -189,7 +189,7 @@ final class ItflowTickets
      * (the default) = the board named "Alerts" when there is one, '0' = leave it on ITFlow's default board, else a
      * board ID. A move that fails never undoes the ticket: it stays on ITFlow's default board and the run says so.
      */
-    private function placeOnBoard(int $itflowClient, int $ticketId, bool $unassign = true): void
+    private function placeOnBoard(int|string $itflowClient, int $ticketId, bool $unassign = true): void
     {
         if ($this->boardId === false) {
             $this->boardId = null;
@@ -265,7 +265,8 @@ final class ItflowTickets
         $this->db->exec("UPDATE itflow_tickets SET state = 'failed', retry_at = UTC_TIMESTAMP(), attempts = attempts + 1,
                          last_error = 'Interrupted before the ticket was opened; retrying.'
                          WHERE state = 'pending' AND marker = '' AND created_at < UTC_TIMESTAMP() - INTERVAL 15 MINUTE");
-        $rows = $this->db->query("SELECT t.*, c.itflow_client_id FROM itflow_tickets t JOIN clients c ON c.id = t.client_id AND c.itflow_sync_off = 0
+        $rows = $this->db->query("SELECT t.*, pl.external_id AS itflow_client_id FROM itflow_tickets t JOIN clients c ON c.id = t.client_id AND c.itflow_sync_off = 0
+                                  LEFT JOIN psa_client_links pl ON pl.client_id = c.id AND pl.provider = 'itflow'
                                   WHERE t.state = 'pending' AND t.marker <> '' ORDER BY t.attempts, t.id LIMIT 20")->fetchAll();
         foreach ($rows as $r) {
             $rowId = (int) $r['id'];
@@ -284,7 +285,7 @@ final class ItflowTickets
                 continue;
             }
             try {
-                $found = $this->psa->findByMarker((int) $r['itflow_client_id'], (string) $r['marker'], (string) $r['marker_at']);
+                $found = $this->psa->findByMarker((string) $r['itflow_client_id'], (string) $r['marker'], (string) $r['marker_at']);
             } catch (\Sentinel\Psa\PsaException $ex) {
                 if ($ex->kind !== \Sentinel\Psa\PsaException::KIND_REFUSED) {
                     throw $ex;
@@ -306,7 +307,7 @@ final class ItflowTickets
             // Found again after an unclear answer: moved only if it is still new (within 15 minutes of opening it), and
             // then never unassigned, so a ticket a tech already took or moved stays as they left it (1.44.1).
             if ($this->dbAgeMinutes((string) $r['marker_at']) <= 15) {
-                $this->placeOnBoard((int) $r['itflow_client_id'], (int) $found['id'], false);
+                $this->placeOnBoard((string) $r['itflow_client_id'], (int) $found['id'], false);
             }
             if ($r['finding_id'] !== null) {
                 $this->event((int) $r['finding_id'], 'ITFlow ticket ' . ($found['reference'] !== '' ? $found['reference'] : '#' . $found['id']) . ' opened.');
@@ -339,11 +340,12 @@ final class ItflowTickets
     {
         $rows = $this->db->query(
             "SELECT t.*, t.id AS row_id, f.status AS f_status, f.resolved_at AS f_resolved_at, f.resolved_reason AS f_reason, f.triage_note, f.verify_result, f.verify_result_at,
-                    f.verify_requested_at, f.last_seen AS f_last_seen, f.title, f.target, f.evidence, f.finding_key, c.itflow_client_id,
+                    f.verify_requested_at, f.last_seen AS f_last_seen, f.title, f.target, f.evidence, f.finding_key, pl.external_id AS itflow_client_id,
                     vj.created_at AS vj_created_at, vj.status AS vj_status,
                     IF(d.source = 'agent', d.last_full_seen, d.last_seen) AS d_seen
              FROM itflow_tickets t JOIN findings f ON f.id = t.finding_id
-             JOIN clients c ON c.id = t.client_id AND c.is_archived = 0 AND c.is_demo = 0 AND c.itflow_client_id IS NOT NULL AND c.itflow_sync_off = 0
+             JOIN clients c ON c.id = t.client_id AND c.is_archived = 0 AND c.is_demo = 0 AND c.itflow_sync_off = 0
+             JOIN psa_client_links pl ON pl.client_id = c.id AND pl.provider = 'itflow'
              LEFT JOIN scan_jobs vj ON vj.id = f.verify_job_id
              LEFT JOIN devices d ON d.id = f.device_id
              WHERE t.kind = 'finding' AND (t.state IN ('open', 'sentinel_resolved', 'awaiting_check')
@@ -370,7 +372,7 @@ final class ItflowTickets
     private function follow(array $r): void
     {
         $rowId = (int) $r['row_id'];
-        $itflowClient = (int) $r['itflow_client_id'];
+        $itflowClient = (string) $r['itflow_client_id'];
         $ticket = (int) $r['itflow_ticket_id'];
         $ref = $r['reference'] !== '' ? $r['reference'] : '#' . $ticket;
         $members = $this->members($rowId);
@@ -495,10 +497,11 @@ final class ItflowTickets
     {
         $stmt = $this->db->prepare(
             "SELECT t.*, t.id AS row_id, f.status AS f_status, f.resolved_at AS f_resolved_at, f.resolved_reason AS f_reason, f.triage_note, f.verify_result, f.verify_result_at,
-                    f.verify_requested_at, f.last_seen AS f_last_seen, f.title, f.target, f.evidence, f.finding_key, c.itflow_client_id,
+                    f.verify_requested_at, f.last_seen AS f_last_seen, f.title, f.target, f.evidence, f.finding_key, pl.external_id AS itflow_client_id,
                     vj.created_at AS vj_created_at, vj.status AS vj_status,
                     IF(d.source = 'agent', d.last_full_seen, d.last_seen) AS d_seen
              FROM itflow_tickets t JOIN findings f ON f.id = t.finding_id JOIN clients c ON c.id = t.client_id
+             LEFT JOIN psa_client_links pl ON pl.client_id = c.id AND pl.provider = 'itflow'
              LEFT JOIN scan_jobs vj ON vj.id = f.verify_job_id
              LEFT JOIN devices d ON d.id = f.device_id
              WHERE t.kind = 'member' AND t.parent_id = :p AND t.state = 'open' ORDER BY t.id LIMIT 500"
@@ -533,7 +536,7 @@ final class ItflowTickets
                 return; // the rest next run (the notes depend on state, nothing is lost)
             }
             try {
-                $this->psa->addNote((int) $g['itflow_client_id'], (int) $g['itflow_ticket_id'], $html);
+                $this->psa->addNote((string) $g['itflow_client_id'], (int) $g['itflow_ticket_id'], $html);
             } catch (\Sentinel\Psa\PsaException $ex) {
                 if ($ex->stopsRun()) {
                     throw $ex;
@@ -612,8 +615,8 @@ final class ItflowTickets
             return;
         }
         if ($status === 'resolved' || ($status === 'closed' && $this->psa->capabilities()['reopen_closed'])) {
-            $this->psa->reopenTicket((int) $r['itflow_client_id'], (int) $r['itflow_ticket_id']);
-            $this->psa->addNote((int) $r['itflow_client_id'], (int) $r['itflow_ticket_id'], '<p><strong>' . self::h($why) . '</strong> The ticket was reopened.</p>'
+            $this->psa->reopenTicket((string) $r['itflow_client_id'], (int) $r['itflow_ticket_id']);
+            $this->psa->addNote((string) $r['itflow_client_id'], (int) $r['itflow_ticket_id'], '<p><strong>' . self::h($why) . '</strong> The ticket was reopened.</p>'
                 . implode('', array_map(fn (array $g): string => $this->evidenceHtml($g), array_slice($open, 0, 50))));
             $this->setRow($rowId, ['state' => 'open', 'closed_seen_at' => null, 'fixed_noted_at' => null, 'last_note_at' => gmdate('Y-m-d H:i:s')]);
             foreach ($open as $g) {
@@ -710,7 +713,7 @@ final class ItflowTickets
         $html = count($group) > 1
             ? '<p><strong>Every target of this ticket is fixed or decided in Sentinel.</strong></p>' . implode('', array_map(fn (array $g): string => '<p>' . self::h($g['target']) . ':</p>' . $this->fixedNote($g), array_slice($group, 0, 100)))
             : $this->fixedNote($r);
-        $this->psa->addNote((int) $r['itflow_client_id'], (int) $r['itflow_ticket_id'], $html);
+        $this->psa->addNote((string) $r['itflow_client_id'], (int) $r['itflow_ticket_id'], $html);
         $this->setRow((int) $r['row_id'], ['fixed_noted_at' => gmdate('Y-m-d H:i:s'), 'last_note_at' => gmdate('Y-m-d H:i:s')]);
         // Every target is in that note: no separate "fixed" note for any of them later.
         foreach ($group as $g) {
@@ -765,7 +768,7 @@ final class ItflowTickets
             throw $ex;
         }
         $also = implode('', array_map(fn (array $o): string => $this->alsoFoundHtml($o), array_slice($others, 0, 50)));
-        $ticket = $this->openTicket($newRow, (int) $r['itflow_client_id'], $this->subject($f), '<p><strong>' . self::h($why) . '</strong></p>' . $this->findingHtml($f) . $also, $this->priority($f));
+        $ticket = $this->openTicket($newRow, (string) $r['itflow_client_id'], $this->subject($f), '<p><strong>' . self::h($why) . '</strong></p>' . $this->findingHtml($f) . $also, $this->priority($f));
         if ($ticket === null) {
             return; // retried as a normal finding ticket; the members follow it
         }
@@ -842,8 +845,9 @@ final class ItflowTickets
      */
     private function archivedClients(): void
     {
-        $rows = $this->db->query("SELECT t.id AS row_id, t.itflow_ticket_id, t.state, c.itflow_client_id FROM itflow_tickets t
-                                  JOIN clients c ON c.id = t.client_id AND c.is_archived = 1 AND c.is_demo = 0 AND c.itflow_client_id IS NOT NULL AND c.itflow_sync_off = 0
+        $rows = $this->db->query("SELECT t.id AS row_id, t.itflow_ticket_id, t.state, pl.external_id AS itflow_client_id FROM itflow_tickets t
+                                  JOIN clients c ON c.id = t.client_id AND c.is_archived = 1 AND c.is_demo = 0 AND c.itflow_sync_off = 0
+                                  JOIN psa_client_links pl ON pl.client_id = c.id AND pl.provider = 'itflow'
                                   WHERE t.kind = 'finding' AND t.itflow_ticket_id > 0 AND t.state IN ('open', 'sentinel_resolved', 'awaiting_check') ORDER BY t.id LIMIT 50")->fetchAll();
         foreach ($rows as $r) {
             if ($this->budget <= 0) {
@@ -851,7 +855,7 @@ final class ItflowTickets
             }
             try {
                 if ($r['state'] === 'open' && $this->psa->ticketStatus((int) $r['itflow_ticket_id']) === 'open') {
-                    $this->psa->addNote((int) $r['itflow_client_id'], (int) $r['itflow_ticket_id'],
+                    $this->psa->addNote((string) $r['itflow_client_id'], (int) $r['itflow_ticket_id'],
                         '<p><strong>The client was archived in Sentinel</strong>, so it is no longer scanned and Sentinel no longer follows this ticket. Resolve it here when it is dealt with. If the client is restored, Sentinel opens a new ticket for anything still open.</p>');
                     $this->budget--;
                     $this->n['notes']++;
@@ -928,8 +932,9 @@ final class ItflowTickets
         $since = $this->settings->fresh('itflow_tickets_since');
         $since = $since !== '' ? $since : gmdate('Y-m-d H:i:s');
         $stmt = $this->db->prepare(
-            "SELECT f.id, c.itflow_client_id, t.id AS row_id
-             FROM findings f JOIN clients c ON c.id = f.client_id AND c.is_archived = 0 AND c.is_demo = 0 AND c.itflow_client_id IS NOT NULL AND c.itflow_sync_off = 0
+            "SELECT f.id, pl.external_id AS itflow_client_id, t.id AS row_id
+             FROM findings f JOIN clients c ON c.id = f.client_id AND c.is_archived = 0 AND c.is_demo = 0 AND c.itflow_sync_off = 0
+             JOIN psa_client_links pl ON pl.client_id = c.id AND pl.provider = 'itflow'
              LEFT JOIN kev_catalog k ON k.cve_id = f.cve_id
              LEFT JOIN itflow_tickets t ON t.kind IN ('finding', 'member') AND t.finding_id = f.id
              WHERE f.status = 'open' AND (t.id IS NULL OR t.state = 'gone' OR (t.state = 'failed' AND t.retry_at <= UTC_TIMESTAMP()))
@@ -959,7 +964,7 @@ final class ItflowTickets
                 $leader = $this->openLeader($f);
                 if ($leader !== null) {
                     if ($leader['state'] === 'open' && (int) $leader['itflow_ticket_id'] > 0) {
-                        $this->addMember($leader, $f, (int) $row['itflow_client_id']);
+                        $this->addMember($leader, $f, (string) $row['itflow_client_id']);
                     }
                     continue; // its ticket is still being opened: joins next run
                 }
@@ -968,7 +973,7 @@ final class ItflowTickets
             $this->setRow($rowId, ['kev_noted' => $kev ? 1 : 0, 'severity_at_open' => $f['severity']]);
             // A retried replacement ticket names the targets that moved to it.
             $also = implode('', array_map(fn (array $m): string => $this->alsoFoundHtml($m), array_slice($this->members($rowId), 0, 50)));
-            $ticket = $this->openTicket($rowId, (int) $row['itflow_client_id'], $this->subject($f), $this->findingHtml($f) . $also, $this->priority($f));
+            $ticket = $this->openTicket($rowId, (string) $row['itflow_client_id'], $this->subject($f), $this->findingHtml($f) . $also, $this->priority($f));
             if ($ticket === null) {
                 continue;
             }
@@ -1001,7 +1006,7 @@ final class ItflowTickets
      * @param array<string,mixed> $leader
      * @param array<string,mixed> $f
      */
-    private function addMember(array $leader, array $f, int $itflowClient): void
+    private function addMember(array $leader, array $f, int|string $itflowClient): void
     {
         $this->db->prepare("INSERT INTO itflow_tickets (client_id, kind, finding_id, parent_id, itflow_ticket_id, reference, severity_at_open, kev_noted, state, created_at)
                             VALUES (:c, 'member', :f, :p, :t, :r, :s, :kev, 'open', UTC_TIMESTAMP())")
@@ -1034,9 +1039,10 @@ final class ItflowTickets
     private function kevNotes(): void
     {
         $rows = $this->db->query(
-            "SELECT t.id AS row_id, t.itflow_ticket_id, c.itflow_client_id, k.required_action AS kev_action, k.due_date AS kev_due
+            "SELECT t.id AS row_id, t.itflow_ticket_id, pl.external_id AS itflow_client_id, k.required_action AS kev_action, k.due_date AS kev_due
              FROM itflow_tickets t JOIN findings f ON f.id = t.finding_id
-             JOIN clients c ON c.id = f.client_id AND c.is_archived = 0 AND c.is_demo = 0 AND c.itflow_client_id IS NOT NULL AND c.itflow_sync_off = 0
+             JOIN clients c ON c.id = f.client_id AND c.is_archived = 0 AND c.is_demo = 0 AND c.itflow_sync_off = 0
+             JOIN psa_client_links pl ON pl.client_id = c.id AND pl.provider = 'itflow'
              JOIN kev_catalog k ON k.cve_id = f.cve_id
              WHERE t.kind = 'finding' AND t.state = 'open' AND t.kev_noted = 0 AND (f.status = 'open' OR " . self::OPEN_MEMBER_SQL . ") LIMIT 50"
         )->fetchAll();
@@ -1045,7 +1051,7 @@ final class ItflowTickets
                 . ((string) $r['kev_action'] !== '' ? '<p>Required action: ' . self::h($r['kev_action']) . '</p>' : '')
                 . ((string) $r['kev_due'] !== '' ? '<p>CISA due date: ' . self::h($r['kev_due']) . '</p>' : '');
             try {
-                $this->psa->addNote((int) $r['itflow_client_id'], (int) $r['itflow_ticket_id'], $html);
+                $this->psa->addNote((string) $r['itflow_client_id'], (int) $r['itflow_ticket_id'], $html);
             } catch (\Sentinel\Psa\PsaException $ex) {
                 $this->skip($ex);
                 $this->setRow((int) $r['row_id'], ['kev_noted' => 2, 'last_error' => mb_substr($ex->getMessage(), 0, 255)]);
@@ -1070,10 +1076,11 @@ final class ItflowTickets
             $this->settings->set('itflow_tickets_weekly_since', $since);
         }
         $clients = $this->db->query(
-            "SELECT c.id, c.name, c.itflow_client_id,
+            "SELECT c.id, c.name, pl.external_id AS itflow_client_id,
                     (SELECT MAX(t.created_at) FROM itflow_tickets t WHERE t.client_id = c.id AND t.kind = 'weekly' AND t.state NOT IN ('pending', 'failed')) AS last_weekly,
                     (SELECT MAX(t.id) FROM itflow_tickets t WHERE t.client_id = c.id AND t.kind = 'weekly' AND t.state = 'failed' AND t.retry_at <= UTC_TIMESTAMP()) AS retry_row
-             FROM clients c WHERE c.is_archived = 0 AND c.is_demo = 0 AND c.itflow_client_id IS NOT NULL AND c.itflow_sync_off = 0
+             FROM clients c JOIN psa_client_links pl ON pl.client_id = c.id AND pl.provider = 'itflow'
+             WHERE c.is_archived = 0 AND c.is_demo = 0 AND c.itflow_sync_off = 0
                AND EXISTS (SELECT 1 FROM findings f WHERE f.client_id = c.id AND f.status = 'open' AND f.severity = 'warn')
                AND NOT EXISTS (SELECT 1 FROM itflow_tickets t WHERE t.client_id = c.id AND t.kind = 'weekly'
                                AND (t.state = 'pending' OR (t.state = 'failed' AND t.retry_at > UTC_TIMESTAMP())))
@@ -1099,7 +1106,7 @@ final class ItflowTickets
                 continue; // nothing new since the last weekly ticket (or since tickets were turned on)
             }
             $rowId = $c['retry_row'] !== null ? (int) $c['retry_row'] : $this->newRow((int) $c['id'], 'weekly', null, 'warn', false);
-            $ticket = $this->openTicket($rowId, (int) $c['itflow_client_id'], '[Sentinel] ' . count($new) . ' new security warning(s) this week - ' . $c['name'],
+            $ticket = $this->openTicket($rowId, (string) $c['itflow_client_id'], '[Sentinel] ' . count($new) . ' new security warning(s) this week - ' . $c['name'],
                 $this->weeklyHtml((string) $c['name'], $warnings, $cut), 'Medium');
             if ($ticket === null) {
                 continue;

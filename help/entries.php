@@ -366,6 +366,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.54.0',
+            'date' => '2026-11-25',
+            'items' => [
+                'Client links ready for other ticketing systems: each client\'s link to its ticketing-system client is kept in one place that also fits text IDs (ITFlow links copied over on upgrade). The ITFlow client ID, the API and MSP Align matching work as before.',
+            ],
+        ],
+        [
             'version' => '1.53.1',
             'date' => '2026-11-25',
             'items' => [

@@ -78,6 +78,8 @@ final class ClientRepository
                 'pe' => $v['ports_extra'], 'px' => $v['ports_excluded'], 'so' => $v['itflow_sync_off'] ? 1 : 0, 'uid' => $userId,
             ]);
             $id = (int) $this->db->lastInsertId();
+            // The ticketing-system link (1.54), kept in step with the column written above.
+            (new \Sentinel\Psa\ClientLinks($this->db))->set($id, 'itflow', $v['itflow_client_id'] === null ? null : (string) $v['itflow_client_id']);
             $this->db->prepare(
                 "INSERT INTO sites (client_id, name, is_default, created_at, updated_at) VALUES (:c, 'Main site', 1, UTC_TIMESTAMP(), UTC_TIMESTAMP())"
             )->execute(['c' => $id]);
@@ -97,6 +99,20 @@ final class ClientRepository
      * @param array{name:string,itflow_client_id:?int,timezone:string,scan_window_start:string,scan_window_end:string,notes:string,ports_extra:string,ports_excluded:string,itflow_sync_off:int} $v Validated values.
      */
     public function update(int $id, array $v): void
+    {
+        $this->db->beginTransaction(); // the client and its ticketing-system link change together (1.54)
+        try {
+            $this->updateRow($id, $v);
+            (new \Sentinel\Psa\ClientLinks($this->db))->set($id, 'itflow', $v['itflow_client_id'] === null ? null : (string) $v['itflow_client_id']);
+            $this->db->commit();
+        } catch (\Throwable $ex) {
+            $this->db->rollBack();
+            throw $ex;
+        }
+    }
+
+    /** @param array<string,mixed> $v as update() */
+    private function updateRow(int $id, array $v): void
     {
         $stmt = $this->db->prepare(
             'UPDATE clients SET

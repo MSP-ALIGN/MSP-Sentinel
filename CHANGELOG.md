@@ -2,6 +2,17 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.54.0 (2026-11-25): Client links ready for other ticketing systems
+
+Nothing changes in how ITFlow works.
+
+- **Client links in their own table.** The link between a Sentinel client and its client in the ticketing system now
+  lives in one place that also fits systems with text IDs. Existing ITFlow links are copied over on upgrade. The ticket
+  rules and the client sync read it from there.
+- **Nothing breaks.** The ITFlow client ID on each client stays and is kept in step, so the REST API
+  (`itflow_client_id`), MSP Align matching and the client form work as before. A ticketing-system client can still be
+  linked to only one Sentinel client.
+
 ### 1.53.1 (2026-11-25): Fixes from review
 
 - When a ticketing system can't look a ticket up after an unclear answer, the "check for a duplicate" warning is also

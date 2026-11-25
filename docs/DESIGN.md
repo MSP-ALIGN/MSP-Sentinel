@@ -180,8 +180,10 @@ find by marker, notes, status, resolve, reopen, link), `ClientDirectory` (client
 and `ClientTags`. `capabilities()` says whether closed tickets can be reopened (otherwise a replacement is opened) and
 whether a ticket can be found again by its marker (otherwise an unclear create is opened again and may leave a
 duplicate). Errors are `PsaException` (refused one request, or stop the run). ITFlow is `Psa\ItflowProvider`, a thin
-adapter over `Itflow\ItflowClient`. One PSA is active at a time (`App::psa()`). Client links and ticket rows still use
-the ITFlow columns (integer IDs); they become provider-neutral in the next steps, and a PSA with text IDs needs those first.
+adapter over `Itflow\ItflowClient`. One PSA is active at a time (`App::psa()`). Client links are in `psa_client_links`
+(1.54: provider, the PSA's client ID as exact text; one Sentinel client per PSA client), always changed through
+`Psa\ClientLinks`, which keeps `clients.itflow_client_id` in step for the REST API and MSP Align. Ticket rows still
+store integer ticket IDs; they become provider-neutral in the next step.
 
 ## 7. Default port profile
 
