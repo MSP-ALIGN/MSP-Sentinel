@@ -366,6 +366,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.53.0',
+            'date' => '2026-11-25',
+            'items' => [
+                'Ready for more ticketing systems: tickets and the client sync go through one ticketing layer, with ITFlow as its first system, so another PSA can be added later without changing the ticket rules. ITFlow works as before.',
+            ],
+        ],
+        [
             'version' => '1.52.1',
             'date' => '2026-11-25',
             'items' => [

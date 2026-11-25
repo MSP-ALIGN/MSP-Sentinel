@@ -2,6 +2,18 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.53.0 (2026-11-25): Ready for more ticketing systems
+
+The next step towards working with ticketing systems besides ITFlow. Nothing changes in how ITFlow works.
+
+- **One ticketing layer.** Opening, following, resolving and reopening tickets, and the client sync, now go through a
+  general ticketing layer, with ITFlow as its first system. Another PSA can be added later without touching the ticket
+  rules (one ticket per issue, two-way status, rechecks, the weekly Warnings ticket).
+- **Adapts to what a PSA can do.** A PSA that can reopen closed tickets gets them reopened instead of replaced. One
+  that can't look a ticket up again after an unclear answer gets it opened again, with a note to check for a
+  duplicate. ITFlow keeps its current behavior on both.
+- Service boards and the client tag filter are used only with PSAs that have them.
+
 ### 1.52.1 (2026-11-25): Fixes from review
 
 - A client linked to an RMM that is later turned off is never stuck: the Devices page still shows that link, and it

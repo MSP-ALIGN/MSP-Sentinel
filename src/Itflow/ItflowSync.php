@@ -34,14 +34,14 @@ final class ItflowSync
     public const INTERVAL_MINUTES = 15;
 
     public function __construct(private readonly PDO $db, private readonly Settings $settings, private readonly Audit $audit,
-        private readonly ?ItflowClient $itflow, private readonly ?\Sentinel\Compliance\AlignClient $align = null)
+        private readonly ?\Sentinel\Psa\ClientDirectory $psa, private readonly ?\Sentinel\Compliance\AlignClient $align = null)
     {
     }
 
     /** Sync when due (worker). Returns the summary, or null when nothing ran. */
     public function syncIfDue(): ?string
     {
-        if ($this->itflow === null || $this->settings->fresh('itflow_enabled') !== '1') {
+        if ($this->psa === null || $this->settings->fresh('itflow_enabled') !== '1') {
             return null;
         }
         $last = $this->settings->fresh('itflow_last_sync');
@@ -56,7 +56,7 @@ final class ItflowSync
      */
     public function sync(): string
     {
-        if ($this->itflow === null) {
+        if ($this->psa === null) {
             return 'ITFlow is not connected.';
         }
         $lock = $this->db->quote('msp_sentinel_itflow_' . substr(hash('sha256', (string) $this->db->query('SELECT DATABASE()')->fetchColumn()), 0, 16));
@@ -66,23 +66,26 @@ final class ItflowSync
         try {
             $this->settings->set('itflow_last_sync', gmdate('Y-m-d H:i:s'));
             try {
-                $clients = $this->itflow->clients();
+                $clients = $this->psa->clients();
                 // Only clients with the chosen tag (1.45): the others are treated as archived in ITFlow, so they are
                 // never added, and linked ones are archived here (and restored when the tag comes back). A tag that
                 // can't be read stops the sync with nothing changed: never "everyone" or "no one" by mistake.
                 $tagNote = '';
                 if ($this->settings->get('itflow_tag_filter') === '1') {
                     $tag = $this->settings->get('itflow_tag_name');
-                    $ids = $this->itflow->taggedClientIds($tag);
+                    if (!$this->psa instanceof \Sentinel\Psa\ClientTags) {
+                        throw new \Sentinel\Psa\PsaException('This ticketing system has no client tags, so the tag filter can\'t be used. Turn it off.', \Sentinel\Psa\PsaException::KIND_REFUSED);
+                    }
+                    $ids = $this->psa->taggedClientIds($tag);
                     if ($ids === null) {
                         // A missing tag (a typo, or renamed in ITFlow) would archive every client: stop instead.
-                        throw new ItflowException('ITFlow has no client tag named "' . $tag . '", so nothing was changed. Create the tag in ITFlow or fix the name.', ItflowException::KIND_REFUSED);
+                        throw new \Sentinel\Psa\PsaException('ITFlow has no client tag named "' . $tag . '", so nothing was changed. Create the tag in ITFlow or fix the name.', \Sentinel\Psa\PsaException::KIND_REFUSED);
                     }
                     $tagged = array_flip($ids);
                     $taggedCount = count(array_intersect_key($tagged, array_flip(array_column($clients, 'id'))));
                     if ($taggedCount === 0) {
                         // Nobody tagged would archive every linked client in one run (1.45.1): stop instead.
-                        throw new ItflowException('No ITFlow client the key can see has the "' . $tag . '" tag, so nothing was changed. Tag the clients to sync in ITFlow first.', ItflowException::KIND_REFUSED);
+                        throw new \Sentinel\Psa\PsaException('No ITFlow client the key can see has the "' . $tag . '" tag, so nothing was changed. Tag the clients to sync in ITFlow first.', \Sentinel\Psa\PsaException::KIND_REFUSED);
                     }
                     $tagNote = ' ' . sprintf('%d tagged "%s".', $taggedCount, $tag);
                     foreach ($clients as &$c) {
@@ -101,13 +104,13 @@ final class ItflowSync
                 }
                 $ok = true;
                 // Keep the board list fresh for the Integrations page (1.44.1); a board problem never fails the sync.
-                if ($this->settings->get('itflow_tickets_enabled') === '1') {
+                if ($this->settings->get('itflow_tickets_enabled') === '1' && $this->psa instanceof \Sentinel\Psa\TicketBoards) {
                     try {
-                        $this->itflow->refreshBoards($this->settings);
-                    } catch (ItflowException) {
+                        $this->psa->refreshBoards($this->settings);
+                    } catch (\Sentinel\Psa\PsaException) {
                     }
                 }
-            } catch (ItflowException $ex) {
+            } catch (\Sentinel\Psa\PsaException $ex) {
                 $summary = 'Failed: ' . $ex->getMessage();
                 $ok = false;
             } catch (\Throwable $ex) {

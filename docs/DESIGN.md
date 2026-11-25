@@ -172,6 +172,17 @@ source from the saved settings). Register the type in `Inventory\Sources`, add i
 links, syncs, device findings and merging with agent devices then work without other changes. A client is linked to
 one RMM at a time.
 
+### Ticketing systems (PSA, 1.53)
+
+The ticket workflow (`Itflow\ItflowTickets`: tickets per finding, grouping, two-way status, rechecks, weekly Warnings
+ticket) and the client sync (`Itflow\ItflowSync`) talk to a PSA only through `src/Psa`: `TicketingProvider` (open,
+find by marker, notes, status, resolve, reopen, link), `ClientDirectory` (client list) and the optional `TicketBoards`
+and `ClientTags`. `capabilities()` says whether closed tickets can be reopened (otherwise a replacement is opened) and
+whether a ticket can be found again by its marker (otherwise an unclear create is opened again and may leave a
+duplicate). Errors are `PsaException` (refused one request, or stop the run). ITFlow is `Psa\ItflowProvider`, a thin
+adapter over `Itflow\ItflowClient`. One PSA is active at a time (`App::psa()`). Client links and ticket rows still use
+the ITFlow columns; they become provider-neutral in the next steps.
+
 ## 7. Default port profile
 
 As built in 0.4.0: TCP only. UDP needs raw sockets (root), and the scanner runs unprivileged on purpose. nmap

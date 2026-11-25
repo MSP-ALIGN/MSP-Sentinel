@@ -2,6 +2,13 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.51.1 (2026-11-25): Fixes from review
+
+- The Getting started checklist can only be hidden by someone who sees every client, like other organization-wide
+  settings.
+- Links and bookmarks to the three help topics renamed in 1.51.0 still land on them.
+- The Authorizations page loads only what it shows, and the dashboard checks the checklist once per page.
+
 ### 1.51.0 (2026-11-25): Easier to find your way, one vocabulary, US spelling
 
 - **Main pages stay in reach.** Inside a client, the menu keeps Dashboard, All clients, All findings and Help.

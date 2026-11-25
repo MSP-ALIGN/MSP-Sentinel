@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.52.1](https://img.shields.io/badge/version-1.52.1-ff5a1f?style=flat-square)
+![Version 1.53.0](https://img.shields.io/badge/version-1.53.0-ff5a1f?style=flat-square)
 ![License AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,18 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.53.0 (2026-11-25): Ready for more ticketing systems
+
+The next step towards working with ticketing systems besides ITFlow. Nothing changes in how ITFlow works.
+
+- **One ticketing layer.** Opening, following, resolving and reopening tickets, and the client sync, now go through a
+  general ticketing layer, with ITFlow as its first system. Another PSA can be added later without touching the ticket
+  rules (one ticket per issue, two-way status, rechecks, the weekly Warnings ticket).
+- **Adapts to what a PSA can do.** A PSA that can reopen closed tickets gets them reopened instead of replaced. One
+  that can't look a ticket up again after an unclear answer gets it opened again, with a note to check for a
+  duplicate. ITFlow keeps its current behavior on both.
+- Service boards and the client tag filter are used only with PSAs that have them.
+
 ### 1.52.1 (2026-11-25): Fixes from review
 
 - A client linked to an RMM that is later turned off is never stuck: the Devices page still shows that link, and it
@@ -138,13 +150,6 @@ how NinjaOne works.
 - **One RMM per client.** A client is linked to one RMM at a time, so the same machines never come in twice with
   duplicate findings. Linking a client already linked elsewhere is refused with the reason.
 - The Administration overview names the connected RMMs, and a client's Devices page no longer assumes NinjaOne.
-
-### 1.51.1 (2026-11-25): Fixes from review
-
-- The Getting started checklist can only be hidden by someone who sees every client, like other organization-wide
-  settings.
-- Links and bookmarks to the three help topics renamed in 1.51.0 still land on them.
-- The Authorizations page loads only what it shows, and the dashboard checks the checklist once per page.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

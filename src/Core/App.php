@@ -459,16 +459,26 @@ final class App
         return $url === '' || $key === '' ? null : new \Sentinel\Itflow\ItflowClient($url, $key, self::webhookTestMode());
     }
 
-    /** ITFlow client sync (worker every 15 minutes, and "Sync now"). */
-    public static function itflowSync(): \Sentinel\Itflow\ItflowSync
+    /**
+     * The active ticketing system (PSA), or null while none is connected (1.53). ITFlow is the only one for now; one PSA
+     * is active at a time.
+     */
+    public static function psa(): ?\Sentinel\Psa\ItflowProvider
     {
-        return new \Sentinel\Itflow\ItflowSync(self::db(), self::settings(), self::audit(), self::itflow(), self::align());
+        $client = self::itflow();
+        return $client === null ? null : new \Sentinel\Psa\ItflowProvider($client, self::settings()->fresh('itflow_url'), self::webhookTestMode());
     }
 
-    /** ITFlow tickets from findings (worker every 5 minutes, and "Open tickets now"). */
+    /** PSA client sync (worker every 15 minutes, and "Sync now"). */
+    public static function itflowSync(): \Sentinel\Itflow\ItflowSync
+    {
+        return new \Sentinel\Itflow\ItflowSync(self::db(), self::settings(), self::audit(), self::psa(), self::align());
+    }
+
+    /** PSA tickets from findings (worker every 5 minutes, and "Open tickets now"). */
     public static function itflowTickets(): \Sentinel\Itflow\ItflowTickets
     {
-        return new \Sentinel\Itflow\ItflowTickets(self::db(), self::settings(), self::audit(), self::itflow(), (string) self::config()->get('app.public_url', ''));
+        return new \Sentinel\Itflow\ItflowTickets(self::db(), self::settings(), self::audit(), self::psa(), (string) self::config()->get('app.public_url', ''));
     }
 
     /** Inventory sync service (worker and "Sync now"). */
