@@ -2,6 +2,23 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.49.1 (2026-11-25): Fixes from review
+
+- **Platform limits only for real operating systems.** NVD labels such as "node.js" or "WordPress", and other
+  vendors' "IOS", no longer hide CVEs; Linux distributions (Debian, Ubuntu, Red Hat) count as Linux; NVD's "not on
+  this platform" is never read as "only on it"; a CVE listed without a limit by any NVD answer keeps no limit.
+  "Cisco IOS XE" is no longer read as macOS, and iPadOS counts as iOS.
+- **Private MAC addresses.** Phones and laptops that rotate private MACs are recognized by their address, so each
+  rotation isn't a new device and a new-device alert.
+- **Gentler refresh.** The one-off refresh of cached vulnerability data (for platform limits) takes at most 50
+  products per run, after the regular work, so a feeds run never stalls on it.
+- **Clearer tickets.** Ticket history no longer says "confirmed fixed" when Sentinel stopped tracking a problem
+  without a fix, and a ticket left open that way says "seen again" when the problem returns.
+- **First sync as usual.** A newly linked source alerts and opens tickets normally from its first sync (the planned
+  first-import summary was dropped: you're setting the client up and expect that data).
+- A program list without any usable entry no longer clears a device's software; a re-link that loses a race says
+  so plainly; the "alerts paused" notice says where the rest are.
+
 ### 1.49.0 (2026-11-25): Accurate data, calmer alerts and tickets
 
 From a full review of how devices, findings, alerts and tickets fit together.

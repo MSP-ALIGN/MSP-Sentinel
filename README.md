@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.50.1](https://img.shields.io/badge/version-1.50.1-ff5a1f?style=flat-square)
+![Version 1.51.0](https://img.shields.io/badge/version-1.51.0-ff5a1f?style=flat-square)
 ![License AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,27 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.51.0 (2026-11-25): Easier to find your way, one vocabulary, US spelling
+
+- **Main pages stay in reach.** Inside a client, the menu keeps Dashboard, All clients, All findings and Help.
+  Finding and report pages keep their client's menu.
+- **One name per page.** Each client page's heading is its section, with the client's name above it, and the browser
+  tab reads "Client · Section". Menu labels match the headings ("Scans and ports", "Certificates and web pages",
+  "Website and email"); Discovery sits next to Authorizations.
+- **Getting started checklist** on the dashboard for whoever manages settings: time zone, a second admin, alerts,
+  the first client, its authorization and the first scan, ticked off from what Sentinel already holds. One click hides
+  it for everyone.
+- **Scan now on the client's Overview**, where the help always said it was. The Authorizations page also lists each
+  site's internal authorization, and the authorization form explains Change scope / renew.
+- **Administration**: one entry in the user menu; the overview has a Roles card and complete descriptions; the API
+  page has an API reference button. The engagements list can start a new engagement for a chosen client.
+- **One vocabulary**: "finding", "agent host", "two-factor authentication", "Pen-test engagements", "Time zone";
+  every Save button says what it saves, and new records use "Add". Text no longer assumes "an admin" where a role
+  permission decides.
+- **US spelling** throughout the interface, help and docs (authorization, organization, enrollment, canceled).
+  Web addresses, API fields and settings keep their names, so links, bookmarks and integrations keep working. The
+  agent accepts `enroll` as well as `enrol`.
+
 ### 1.50.1 (2026-11-25): Fixes from review
 
 - **Safer device matching.** A MAC several agent devices share (a router or VPN server answering for others) no longer
@@ -147,23 +168,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
   Existing findings are moved to the new form on upgrade.
 - **Archived clients' tickets.** When a client is archived in Sentinel, each of its open ITFlow tickets gets one note
   saying it is no longer followed. If the client is restored while a problem is still open, a new ticket is opened.
-
-### 1.49.1 (2026-11-25): Fixes from review
-
-- **Platform limits only for real operating systems.** NVD labels such as "node.js" or "WordPress", and other
-  vendors' "IOS", no longer hide CVEs; Linux distributions (Debian, Ubuntu, Red Hat) count as Linux; NVD's "not on
-  this platform" is never read as "only on it"; a CVE listed without a limit by any NVD answer keeps no limit.
-  "Cisco IOS XE" is no longer read as macOS, and iPadOS counts as iOS.
-- **Private MAC addresses.** Phones and laptops that rotate private MACs are recognized by their address, so each
-  rotation isn't a new device and a new-device alert.
-- **Gentler refresh.** The one-off refresh of cached vulnerability data (for platform limits) takes at most 50
-  products per run, after the regular work, so a feeds run never stalls on it.
-- **Clearer tickets.** Ticket history no longer says "confirmed fixed" when Sentinel stopped tracking a problem
-  without a fix, and a ticket left open that way says "seen again" when the problem returns.
-- **First sync as usual.** A newly linked source alerts and opens tickets normally from its first sync (the planned
-  first-import summary was dropped: you're setting the client up and expect that data).
-- A program list without any usable entry no longer clears a device's software; a re-link that loses a race says
-  so plainly; the "alerts paused" notice says where the rest are.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

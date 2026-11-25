@@ -1,6 +1,8 @@
 # Start here
 
-New to MSP Sentinel? Follow these steps on your first day. Each one links to a short guide.
+New to MSP Sentinel? Follow these steps on your first day. Each one links to a short guide. The dashboard shows the
+same steps as a **Getting started** checklist (to whoever manages settings), ticked off as you go; **Hide checklist**
+hides it for everyone.
 
 ## Your first day
 
@@ -17,7 +19,7 @@ New to MSP Sentinel? Follow these steps on your first day. Each one links to a s
 6. **Record the client's authorization.** Enter who approved scanning, the dates and exactly which addresses and
    domains. Nothing is scanned without it. See [Your first client](guides/first-client.md#record-the-authorization)
    and the [authorization form](authorisation-form.md) template.
-7. **Scan.** Press **Scan now**, or let the weekly scan run in the client's window. See
+7. **Scan.** Press **Scan now** on the client's **Overview**, or let the weekly scan run in the client's window. See
    [Your first client](guides/first-client.md#scan).
 8. **Read and triage the findings.** Fix what matters first; accept a risk or mark a false positive with a note. See
    [Findings](guides/findings.md).

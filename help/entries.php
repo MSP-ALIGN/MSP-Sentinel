@@ -363,6 +363,15 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.51.0',
+            'date' => '2026-11-25',
+            'items' => [
+                'Easier navigation: inside a client the menu keeps Dashboard, All clients, All findings and Help; each page\'s heading is its section, with the client\'s name above it, and the browser tab reads "Client · Section"; finding and report pages keep their client\'s menu.',
+                'A Getting started checklist on the dashboard (for whoever manages settings), Scan now on the client\'s Overview, internal authorizations listed on the Authorizations page, a Roles card on the Administration overview, and New engagement on the engagements list.',
+                'One vocabulary (finding, agent host, two-factor authentication, Pen-test engagements, Time zone), named Save buttons, and US spelling throughout. Web addresses, API fields and settings keep their names.',
+            ],
+        ],
+        [
             'version' => '1.50.1',
             'date' => '2026-11-25',
             'items' => [
