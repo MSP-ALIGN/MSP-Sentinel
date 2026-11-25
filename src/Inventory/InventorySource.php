@@ -6,7 +6,7 @@ namespace Sentinel\Inventory;
 
 /**
  * An inventory source: a system that already knows a client's devices
- * (NinjaOne first; the on-premises agent later). Sources are read-only:
+ * (an RMM such as NinjaOne; each kind is described by a SourceType and registered in Sources, 1.52). Sources are read-only:
  * Sentinel only reads from them and never sends anything to a device.
  *
  * Everything a source returns is untrusted text from an outside system;
@@ -47,4 +47,12 @@ interface InventorySource
      * @throws InventoryException When the source can't be reached or refuses.
      */
     public function snapshot(string $orgId): array;
+
+    /**
+     * For "Test connection" (in the interface since 1.52): signs in and counts the organizations the access can see.
+     * Nothing is stored.
+     *
+     * @throws InventoryException With the source's reason when it can't be reached or refuses.
+     */
+    public function testConnection(): int;
 }

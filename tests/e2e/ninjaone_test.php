@@ -165,4 +165,33 @@ return [
         Assert::true($r['status'] !== 'ok', 'failed sync reported');
         Assert::same(4, (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE client_id = {$cid} AND removed_at IS NULL")->fetchColumn(), 'devices kept');
     },
+    'RMM registry (1.52): sources come from one list, share one form, save and test; a client has one RMM at a time' => function (TestContext $ctx): void {
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        Assert::same(['ninjaone'], array_keys(\Sentinel\Inventory\Sources::types()), 'NinjaOne is registered');
+        Assert::same(null, \Sentinel\Inventory\Sources::type('nonsense'), 'unknown names are not');
+        // The generic card, save and test (same URL, settings and audit entry as before 1.52).
+        $page = $admin->get('/admin/integrations')->body;
+        foreach (['id="ninjaone"', 'id="ninjaone-host"', 'name="client_secret"', 'list="ninjaone-host-list"', 'A client can be linked to one RMM at a time.'] as $text) {
+            Assert::contains($text, $page);
+        }
+        $admin->submit('/admin/integrations', '/admin/integrations/ninjaone', ['host' => 'app.ninjarmm.com', 'client_id' => 'test-client', 'client_secret' => 'test-secret-value', 'enabled' => '1']);
+        Assert::same(['app.ninjarmm.com', 'test-client', '1'], [App::settings()->fresh('ninjaone_host'), App::settings()->fresh('ninjaone_client_id'), App::settings()->fresh('ninjaone_enabled')], 'saved');
+        Assert::true((int) $ctx->db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'settings.ninjaone_updated'")->fetchColumn() > 0, 'audited as before');
+        $admin->submit('/admin/integrations', '/admin/integrations/ninjaone/test', []);
+        Assert::contains('Connected', App::settings()->fresh('ninjaone_test_result'));
+        Assert::contains('NinjaOne on', $admin->get('/admin')->body, 'admin overview names the connected RMM');
+        Assert::status(404, $admin->post('/admin/integrations/otherrmm', ['_csrf' => $admin->get('/admin/integrations')->csrf()]), 'no route for a source that is not registered');
+        // One RMM per client: a client linked elsewhere can't be linked to NinjaOne too.
+        $res = $admin->submit('/clients/new', '/clients', ['name' => 'One RMM Example', 'itflow_client_id' => '', 'timezone' => 'UTC', 'scan_window_start' => '00:00', 'scan_window_end' => '23:59', 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);
+        $cid = (int) basename((string) $res->location());
+        $ctx->db->prepare("INSERT INTO source_links (client_id, source, org_id, org_name, linked_by, linked_at) VALUES (:c, 'otherrmm', 'x1', 'Other RMM Org', 1, UTC_TIMESTAMP())")->execute(['c' => $cid]);
+        Assert::redirect('/clients/' . $cid . '/devices', $admin->get('/clients/' . $cid . '/inventory/link?source=ninjaone'), 'link form refused');
+        $res = $admin->post('/clients/' . $cid . '/inventory/link', ['_csrf' => $admin->get('/')->csrf(), 'source' => 'ninjaone', 'org_id' => '901']);
+        Assert::redirect('/clients/' . $cid . '/devices', $res, 'link refused');
+        Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM source_links WHERE client_id = {$cid} AND source = 'ninjaone'")->fetchColumn(), 'not linked');
+        Assert::contains('already linked to otherrmm', $admin->get('/clients/' . $cid . '/devices')->body, 'says why');
+        // Off again for later tests.
+        $admin->submit('/admin/integrations', '/admin/integrations/ninjaone', ['host' => '', 'client_id' => '', 'clear_client_secret' => '1', 'enabled' => '0']);
+        Assert::same(['', '0'], [App::settings()->fresh('ninjaone_host'), App::settings()->fresh('ninjaone_enabled')], 'cleared');
+    },
 ];

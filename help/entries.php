@@ -366,6 +366,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.52.0',
+            'date' => '2026-11-25',
+            'items' => [
+                'Ready for more RMMs: each RMM is described in one place, and the Integrations page draws, saves and tests its card from that, so others can be added later without new pages. NinjaOne works as before. A client is linked to one RMM at a time, so machines never come in twice.',
+            ],
+        ],
+        [
             'version' => '1.51.1',
             'date' => '2026-11-25',
             'items' => [

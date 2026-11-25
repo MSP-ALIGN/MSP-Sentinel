@@ -37,6 +37,10 @@ final class InventoryController extends Controller
             return Response::redirect('/clients/' . (int) $client['id'] . '/devices');
         }
         [$name, $source] = $this->source($request->query('source'));
+        if (($other = App::inventory()->otherLink((int) $client['id'], $name)) !== null) {
+            Session::flash('warning', self::oneRmmMessage((string) $other['source']));
+            return Response::redirect('/clients/' . (int) $client['id'] . '/devices');
+        }
         $orgs = [];
         $error = '';
         try {
@@ -49,6 +53,13 @@ final class InventoryController extends Controller
             'client' => $client, 'sourceName' => $name, 'sourceLabel' => $source->label(), 'orgs' => $orgs, 'error' => $error,
             'suggested' => self::suggest((string) $client['name'], $orgs), 'link' => App::inventory()->link((int) $client['id'], $name),
         ]);
+    }
+
+    /** Why a client already linked to another RMM can't be linked here (1.52), naming that RMM. */
+    private static function oneRmmMessage(string $otherSource): string
+    {
+        $label = \Sentinel\Inventory\Sources::type($otherSource)?->label() ?? $otherSource;
+        return __('This client is already linked to {source}. A client is linked to one RMM at a time, so its machines don\'t come in twice: unlink it there first.', ['source' => $label]);
     }
 
     /** POST /clients/{id}/inventory/link (admins). */
@@ -64,6 +75,10 @@ final class InventoryController extends Controller
             return Response::redirect('/clients/' . (int) $client['id'] . '/devices');
         }
         [$name, $source] = $this->source($request->input('source'));
+        if (($other = App::inventory()->otherLink((int) $client['id'], $name)) !== null) {
+            Session::flash('warning', self::oneRmmMessage((string) $other['source']));
+            return Response::redirect('/clients/' . (int) $client['id'] . '/devices');
+        }
         $orgId = $request->input('org_id');
         try {
             $orgs = $source->organisations();

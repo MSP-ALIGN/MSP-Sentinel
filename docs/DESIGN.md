@@ -162,6 +162,16 @@ clients.
   - Some findings become roadmap seeds, for example "Replace firewall: 2 KEV CVEs".
 - **ITFlow:** in v1 the IDs are stored so the data lines up later. Tickets and automatic asset matching come in v1.x.
 
+### Adding an RMM (inventory source, 1.52)
+
+Each RMM is two classes in `src/Inventory`: an `InventorySource` (organizations, a snapshot of normalized devices,
+test connection) and a `SourceType` (name, label, settings fields with their checks, setup steps, and how to build the
+source from the saved settings). Register the type in `Inventory\Sources`, add its settings to `Settings::DEFAULTS`
+(secrets also to `Settings::SECRETS`), and add a mock server under `tests/mocks/` with an end-to-end test modeled on
+`tests/e2e/ninjaone_test.php`. The Integrations card, the save and test routes (`/admin/integrations/<name>`), client
+links, syncs, device findings and merging with agent devices then work without other changes. A client is linked to
+one RMM at a time.
+
 ## 7. Default port profile
 
 As built in 0.4.0: TCP only. UDP needs raw sockets (root), and the scanner runs unprivileged on purpose. nmap

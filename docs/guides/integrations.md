@@ -98,6 +98,8 @@ unknown and is never a finding.
   reported only on devices running them.
 - **MAC addresses** of each device's network cards come over too, so an agent's device is matched to the right
   NinjaOne device even when addresses are reused (see Agents).
+- **One RMM per client.** A client is linked to one RMM at a time, so the same machines never come in twice with
+  duplicate findings. To move a client to another RMM, unlink it first.
 - **Linking another organization** to a client unlinks the old one first: its devices leave the client and their
   findings close as "unlinked" (not as fixed).
 

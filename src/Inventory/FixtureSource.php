@@ -31,6 +31,12 @@ final class FixtureSource implements InventorySource
         return $this->sourceLabel;
     }
 
+    /** {@inheritDoc} Counts the file's organizations (1.52). */
+    public function testConnection(): int
+    {
+        return count($this->organisations());
+    }
+
     /** {@inheritDoc} */
     public function organisations(): array
     {

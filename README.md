@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.51.1](https://img.shields.io/badge/version-1.51.1-ff5a1f?style=flat-square)
+![Version 1.52.0](https://img.shields.io/badge/version-1.52.0-ff5a1f?style=flat-square)
 ![License AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,19 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.52.0 (2026-11-25): Ready for more RMMs
+
+The first step towards working with other RMMs and ticketing systems besides NinjaOne and ITFlow. Nothing changes in
+how NinjaOne works.
+
+- **One list of RMMs.** Each RMM Sentinel can connect to is described in one place: its settings, how they are
+  checked, its setup steps and how to connect. The Integrations page draws its card, and saves and tests it, from that
+  description, so adding another RMM later needs no new pages. NinjaOne keeps the same settings, address and audit
+  entries.
+- **One RMM per client.** A client is linked to one RMM at a time, so the same machines never come in twice with
+  duplicate findings. Linking a client already linked elsewhere is refused with the reason.
+- The Administration overview names the connected RMMs, and a client's Devices page no longer assumes NinjaOne.
+
 ### 1.51.1 (2026-11-25): Fixes from review
 
 - The Getting started checklist can only be hidden by someone who sees every client, like other organization-wide
@@ -146,21 +159,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 - **US spelling** throughout the interface, help and docs (authorization, organization, enrollment, canceled).
   Web addresses, API fields and settings keep their names, so links, bookmarks and integrations keep working. The
   agent accepts `enroll` as well as `enrol`.
-
-### 1.50.1 (2026-11-25): Fixes from review
-
-- **Safer device matching.** A MAC several agent devices share (a router or VPN server answering for others) no longer
-  joins them all to one NinjaOne device. A real MAC the NinjaOne device doesn't list rules it out, a name only
-  matches a device NinjaOne saw in the last day, and an address range two sites use stays ambiguous after one site's
-  authorization lapses.
-- **Certificate findings keep their decisions.** The upgrade moves the evidence to the new form too, so false
-  positives and accepted findings don't reopen. Where an endpoint had both an old "expired" and an "expires soon"
-  finding, the open one is kept, and an open one combined into another closes with an honest ticket note instead of
-  "Verified fixed".
-- **An accepted Warning that becomes a Fail opens again** (an accepted "expires soon" certificate that expires), with
-  a Fail deadline from that day.
-- **Archived clients' tickets**: only open tickets get the note; a note ITFlow refuses no longer retries every run.
-- NinjaOne MAC addresses are read only in their usual written forms; multicast and broadcast addresses are dropped.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

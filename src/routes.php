@@ -188,8 +188,11 @@ $router->add('POST', '/admin/roles/{id}/delete', [\Sentinel\Controllers\RoleCont
 $router->add('GET', '/admin', [AdminController::class, 'index'], $anyAdmin);
 $router->add('GET', '/admin/audit', [AdminController::class, 'auditLog'], ['perm' => 'audit.view', 'all_clients' => true]);
 $router->add('GET', '/admin/integrations', [IntegrationsController::class, 'index'], ['perm' => 'integrations.manage', 'all_clients' => true]);
-$router->add('POST', '/admin/integrations/ninjaone', [IntegrationsController::class, 'saveNinjaOne'], ['perm' => 'integrations.manage', 'all_clients' => true]);
-$router->add('POST', '/admin/integrations/ninjaone/test', [IntegrationsController::class, 'testNinjaOne'], ['perm' => 'integrations.manage', 'all_clients' => true]);
+// Inventory sources (1.52): one save and test route per registered source, e.g. /admin/integrations/ninjaone.
+foreach (array_keys(\Sentinel\Inventory\Sources::types()) as $sourceName) {
+    $router->add('POST', '/admin/integrations/' . $sourceName, [IntegrationsController::class, 'saveInventory'], ['perm' => 'integrations.manage', 'all_clients' => true]);
+    $router->add('POST', '/admin/integrations/' . $sourceName . '/test', [IntegrationsController::class, 'testInventory'], ['perm' => 'integrations.manage', 'all_clients' => true]);
+}
 $router->add('POST', '/admin/integrations/itflow', [IntegrationsController::class, 'saveItflow'], ['perm' => 'integrations.manage', 'all_clients' => true]);
 $router->add('POST', '/admin/integrations/itflow/test', [IntegrationsController::class, 'testItflow'], ['perm' => 'integrations.manage', 'all_clients' => true]);
 $router->add('POST', '/admin/integrations/itflow/sync', [IntegrationsController::class, 'syncItflow'], ['perm' => 'integrations.manage', 'all_clients' => true]);

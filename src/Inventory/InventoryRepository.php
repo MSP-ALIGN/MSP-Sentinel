@@ -632,7 +632,28 @@ final class InventoryRepository
      */
     public function link(int $clientId, string $source): ?array
     {
-        $stmt = $this->db->prepare('SELECT l.*, u.username AS linked_by_username FROM source_links l LEFT JOIN users u ON u.id = l.linked_by WHERE l.client_id = :c AND l.source = :s');
+        return $this->linkWhere($clientId, $source, '=');
+    }
+
+    /**
+     * The client's link to any other inventory source than $source, or null (1.52: a client is linked to one RMM at a
+     * time, so the same machines never come in twice with duplicate findings).
+     *
+     * @return array<string,mixed>|null
+     */
+    public function otherLink(int $clientId, string $source): ?array
+    {
+        return $this->linkWhere($clientId, $source, '<>');
+    }
+
+    /**
+     * @param string $op '=' or '<>' (written in code, never input)
+     * @return array<string,mixed>|null
+     */
+    private function linkWhere(int $clientId, string $source, string $op): ?array
+    {
+        $op = $op === '<>' ? '<>' : '=';
+        $stmt = $this->db->prepare("SELECT l.*, u.username AS linked_by_username FROM source_links l LEFT JOIN users u ON u.id = l.linked_by WHERE l.client_id = :c AND l.source {$op} :s ORDER BY l.source LIMIT 1");
         $stmt->execute(['c' => $clientId, 's' => $source]);
         $row = $stmt->fetch();
         return $row === false ? null : $row;

@@ -399,8 +399,8 @@ final class App
     }
 
     /**
-     * Configured inventory sources by name. The fixture source exists only in the test suite (config flag AND
-     * SENTINEL_TEST_MODE=1, like webhookTestMode()). The NinjaOne connector is added here when it is configured.
+     * Configured and turned-on inventory sources by name, from the registry (Inventory\Sources, 1.52). The fixture
+     * source exists only in the test suite (config flag AND SENTINEL_TEST_MODE=1, like webhookTestMode()).
      *
      * @return array<string,\Sentinel\Inventory\InventorySource>
      */
@@ -412,28 +412,27 @@ final class App
             $sources['ninjaone'] = new \Sentinel\Inventory\FixtureSource($fixture);
             return $sources;
         }
-        $ninja = self::ninjaOne();
-        if ($ninja !== null && self::settings()->get('ninjaone_enabled') === '1') {
-            $sources['ninjaone'] = $ninja;
+        foreach (\Sentinel\Inventory\Sources::types() as $name => $type) {
+            $source = self::inventorySource($name);
+            if ($source !== null && self::settings()->get($name . '_enabled') === '1') {
+                $sources[$name] = $source;
+            }
         }
         return $sources;
     }
 
     /**
-     * The NinjaOne connector from Administration > Integrations, or null while it isn't filled in.
-     * The test suite may point it at a local mock (config testing.ninjaone_base_url, test mode only).
+     * One registered source's connector from its saved settings (on or off), or null while it isn't filled in or the
+     * name isn't registered. The test suite may point it at a local mock (config testing.<name>_base_url, test mode only).
      */
-    public static function ninjaOne(): ?\Sentinel\Inventory\NinjaOneSource
+    public static function inventorySource(string $name): ?\Sentinel\Inventory\InventorySource
     {
-        $s = self::settings();
-        $host = $s->get('ninjaone_host');
-        $id = $s->get('ninjaone_client_id');
-        $secret = $s->getSecret('ninjaone_client_secret');
-        if ($host === '' || $id === '' || $secret === '') {
+        $type = \Sentinel\Inventory\Sources::type($name);
+        if ($type === null) {
             return null;
         }
-        $base = self::webhookTestMode() ? (string) self::config()->get('testing.ninjaone_base_url', '') : '';
-        return new \Sentinel\Inventory\NinjaOneSource($host, $id, $secret, $base);
+        $base = self::webhookTestMode() ? (string) self::config()->get('testing.' . $name . '_base_url', '') : '';
+        return $type->build(self::settings(), $base);
     }
 
     /**

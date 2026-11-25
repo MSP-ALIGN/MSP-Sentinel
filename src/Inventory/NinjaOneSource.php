@@ -107,10 +107,7 @@ final class NinjaOneSource implements InventorySource
         return array_values($out);
     }
 
-    /**
-     * For "Test connection": signs in and lists organisations. Returns how many organisations the app can see;
-     * throws InventoryException with NinjaOne's reason otherwise.
-     */
+    /** {@inheritDoc} Gets an access token and lists the organizations; NinjaOne's reason is in the exception. */
     public function testConnection(): int
     {
         $this->accessToken();
