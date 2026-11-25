@@ -15,7 +15,7 @@ use Sentinel\Core\Csrf;
         <p class="small text-body-secondary"><?= e(__('Sentinel then reads this organization\'s devices, installed software and missing updates from {source} every 6 hours (read-only). Each organization can belong to only one client.', ['source' => $sourceLabel])) ?></p>
         <?php if ($link !== null): ?><p class="small"><?= e(__('Currently linked to {org}. Choosing another organization replaces the link.', ['org' => $link['org_name']])) ?></p><?php endif; ?>
         <?php if ($suggested !== null): ?><p class="small"><i class="bi bi-lightbulb me-1" aria-hidden="true"></i><?= e(__('Suggested by name. Check it before you link.')) ?></p><?php endif; ?>
-        <label class="form-label" for="org_id"><?= e(__('Organisation')) ?></label>
+        <label class="form-label" for="org_id"><?= e(__('Organization')) ?></label>
         <select class="form-select" id="org_id" name="org_id" required>
             <option value=""><?= e(__('Choose…')) ?></option>
             <?php foreach ($orgs as $o): ?><option value="<?= e($o['id']) ?>" <?= $suggested === $o['id'] ? 'selected' : '' ?>><?= e($o['name']) ?><?= $suggested === $o['id'] ? ' ' . e(__('(suggested)')) : '' ?></option><?php endforeach; ?>

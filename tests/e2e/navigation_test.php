@@ -23,7 +23,19 @@ return [
             Assert::contains('aria-label="Client sections"', $res->body, "{$path}: client menu");
             Assert::contains('All clients', $res->body, "{$path}: way back");
             Assert::true((bool) preg_match('#href="' . preg_quote($path, '#') . '" class="nav-link active" aria-current="page"#', $res->body), "{$path}: its own item is active");
-            Assert::notContains('aria-label="Main menu"', $res->body, "{$path}: main menu replaced");
+            // 1.51: Dashboard, all findings and Help stay reachable; the heading is the section, the tab names the client.
+            foreach (['href="/" class="nav-link"', 'href="/findings" class="nav-link"', 'href="/help" class="nav-link"'] as $link) {
+                Assert::contains($link, $res->body, "{$path}: main pages kept ({$link})");
+            }
+            $label = \Sentinel\Controllers\ClientController::sectionLabel($section);
+            Assert::contains('<h1 class="h3 mb-0">' . e($label) . '</h1>', $res->body, "{$path}: heading is the section");
+            Assert::true((bool) preg_match('#<title>[^<]+ · ' . preg_quote(e($label), '#') . ' · #', $res->body), "{$path}: tab reads Client · Section");
+            Assert::true((bool) preg_match('#class="nav-link( active)?"( aria-current="page")?>\s*<i class="nav-icon bi [^"]+" aria-hidden="true"></i><p>' . preg_quote(e($label), '#') . '#', $res->body), "{$path}: menu label matches the heading");
+        }
+        // A finding's own page keeps its client's menu (1.51).
+        $fid = (int) $ctx->db->query("SELECT id FROM findings WHERE client_id = {$id} LIMIT 1")->fetchColumn();
+        if ($fid > 0) {
+            Assert::contains('aria-label="Client sections"', $admin->get('/findings/' . $fid)->body, 'finding page: client menu');
         }
         // Each section shows only itself: discovery isn't on the findings page, and so on.
         Assert::notContains('Discover now', $admin->get('/clients/' . $id . '/findings')->body);
@@ -32,7 +44,7 @@ return [
         // Pages about the client (edit form, new authorisation) keep its menu; the client list doesn't.
         Assert::contains('aria-label="Client sections"', $admin->get('/clients/' . $id . '/edit')->body);
         Assert::contains('aria-label="Client sections"', $admin->get('/clients/' . $id . '/authorisations/new')->body);
-        Assert::contains('aria-label="Main menu"', $admin->get('/clients')->body);
+        Assert::notContains('aria-label="Client sections"', $admin->get('/clients')->body);
         // Viewers get the same pages.
         if ((int) $ctx->db->query("SELECT COUNT(*) FROM users WHERE username = 'navview'")->fetchColumn() === 0) {
             $ctx->createUser('navview', 'viewer', 'Navview-Pass-01!');
@@ -48,9 +60,11 @@ return [
         Assert::notContains('href="/users"', $sidebar);
         Assert::contains('Reports', $sidebar);
         $dropdown = substr($home, (int) strpos($home, 'dropdown-menu'), 3000);
-        foreach (['/admin"', '/users"', '/admin/settings"', '/admin/api"', '/admin/system"', '/admin/audit"'] as $href) {
+        // 1.51: one Administration entry (its own menu lists the rest), and Help.
+        foreach (['/admin"', '/help"', '/profile"'] as $href) {
             Assert::contains('href="' . $href, $dropdown, 'user menu links to ' . $href);
         }
+        Assert::notContains('href="/admin/audit"', $dropdown, 'admin pages are not repeated in the user menu');
 
         $over = $admin->get('/admin');
         Assert::status(200, $over);

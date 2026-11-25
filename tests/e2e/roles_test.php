@@ -125,7 +125,7 @@ return [
             Assert::status(403, $m->post('/admin/roles/' . $lead . '/delete', ['_csrf' => $csrf]), 'a role above them');
         }
         // The Administration menu and overview show only what they may open (1.40.1: the overview cards too).
-        $menu = $m->get('/profile')->body;
+        $menu = $m->get('/admin')->body; // the Administration menu (1.51: no longer repeated in the user menu)
         Assert::contains('/admin/roles', $menu);
         Assert::notContains('href="/admin/settings"', $menu);
         $overview = $m->get('/admin')->body;

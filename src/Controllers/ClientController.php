@@ -163,7 +163,8 @@ final class ClientController extends Controller
             $data[$key] = $load();
         }
         $data['clientNav'] = self::nav($client, $section, $data['findingCounts']);
-        return $this->page('clients/show', (string) $client['name'], $data);
+        // The heading is the section; the layout adds the client's name above it and in the browser tab (1.51).
+        return $this->page('clients/show', self::sectionLabel($section), $data);
     }
 
     /**
@@ -175,21 +176,45 @@ final class ClientController extends Controller
      */
     public static function nav(array $client, string $section, array $counts): array
     {
-        $item = static fn (string $key, string $label, string $icon): array => ['key' => $key, 'label' => $label, 'icon' => $icon,
+        $item = static fn (string $key, string $icon): array => ['key' => $key, 'label' => self::sectionLabel($key), 'icon' => $icon,
             'url' => '/clients/' . (int) $client['id'] . ($key === 'overview' ? '' : '/' . $key), 'active' => $key === $section];
         $open = (int) ($counts['fail'] ?? 0) + (int) ($counts['warn'] ?? 0);
         return [
             'name' => (string) $client['name'], 'id' => (int) $client['id'], 'demo' => (int) ($client['is_demo'] ?? 0) === 1, 'archived' => (int) $client['is_archived'] === 1,
+            'section' => $section, 'section_label' => self::sectionLabel($section),
             'groups' => [
-                ['label' => null, 'items' => [$item('overview', __('Overview'), 'bi-speedometer2'), $item('findings', __('Findings'), 'bi-flag') + ['badge' => $open]]],
-                ['label' => __('External'), 'items' => [$item('scans', __('Scans & ports'), 'bi-hdd-network'), $item('vulnerabilities', __('Vulnerabilities'), 'bi-bug'),
-                    $item('certificates', __('Certificates & web'), 'bi-shield-lock'), $item('website', __('Website & email'), 'bi-globe')]],
-                ['label' => __('Internal'), 'items' => [$item('agents', __('Agents'), 'bi-router'), $item('devices', __('Devices'), 'bi-pc-display')]],
-                ['label' => __('Manage'), 'items' => [$item('authorisations', __('Authorisations'), 'bi-file-earmark-check'), $item('engagements', __('Pen-test engagements'), 'bi-crosshair'),
-                    $item('discovery', __('Discovery'), 'bi-search'),
-                    $item('reports', __('Reports'), 'bi-file-earmark-text'), $item('compliance', __('Compliance'), 'bi-clipboard-check')]],
+                ['label' => null, 'items' => [$item('overview', 'bi-speedometer2'), $item('findings', 'bi-flag') + ['badge' => $open]]],
+                ['label' => __('External'), 'items' => [$item('scans', 'bi-hdd-network'), $item('vulnerabilities', 'bi-bug'),
+                    $item('certificates', 'bi-shield-lock'), $item('website', 'bi-globe')]],
+                ['label' => __('Internal'), 'items' => [$item('agents', 'bi-router'), $item('devices', 'bi-pc-display')]],
+                // Discovery feeds the authorizations, so it sits next to them (1.51).
+                ['label' => __('Manage'), 'items' => [$item('authorisations', 'bi-file-earmark-check'), $item('discovery', 'bi-search'),
+                    $item('engagements', 'bi-crosshair'), $item('reports', 'bi-file-earmark-text'), $item('compliance', 'bi-clipboard-check')]],
             ],
         ];
+    }
+
+    /**
+     * The one name of a client section (1.51): the same in the menu, the page heading and the browser tab. The key is
+     * one of SECTIONS (written in code, never input); anything else is shown as "Overview".
+     */
+    public static function sectionLabel(string $key): string
+    {
+        return match ($key) {
+            'findings' => __('Findings'),
+            'scans' => __('Scans and ports'),
+            'vulnerabilities' => __('Vulnerabilities'),
+            'certificates' => __('Certificates and web pages'),
+            'website' => __('Website and email'),
+            'agents' => __('Agents'),
+            'devices' => __('Devices'),
+            'authorisations' => __('Authorizations'),
+            'engagements' => __('Pen-test engagements'),
+            'discovery' => __('Discovery'),
+            'reports' => __('Reports'),
+            'compliance' => __('Compliance'),
+            default => __('Overview'),
+        };
     }
 
     /**

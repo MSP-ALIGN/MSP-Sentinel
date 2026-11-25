@@ -15,7 +15,7 @@ $jobBadges = [
     'done' => ['text-bg-success', 'bi-check-circle', __('Completed')],
     'partial' => ['text-bg-warning', 'bi-exclamation-circle', __('Partly completed')],
     'failed' => ['text-bg-danger', 'bi-x-octagon', __('Failed')],
-    'cancelled' => ['text-bg-secondary', 'bi-slash-circle', __('Cancelled')],
+    'cancelled' => ['text-bg-secondary', 'bi-slash-circle', __('Canceled')],
 ];
 $resultLabels = [
     'scanned' => __('Scanned'), 'skipped_out_of_scope' => __('Skipped: not in scope'), 'stopped' => __('Stopped'),

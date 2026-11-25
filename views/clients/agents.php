@@ -10,7 +10,7 @@ use Sentinel\Core\Csrf;
 $agentRelease = \Sentinel\Core\App::agentRelease()->version(); // the signed agent release this Sentinel can hand out
 $cid = (int) $client['id'];
 $jobLabel = static fn (array $j): string => match ($j['status']) {
-    'done' => __('done'), 'partial' => __('partial'), 'failed' => __('failed'), 'cancelled' => __('cancelled'), 'expired' => __('expired (agent offline?)'),
+    'done' => __('done'), 'partial' => __('partial'), 'failed' => __('failed'), 'cancelled' => __('canceled'), 'expired' => __('expired (agent offline?)'),
     'sent' => __('running'), default => __('waiting for the agent'),
 };
 ?>

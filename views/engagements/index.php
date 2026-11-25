@@ -13,7 +13,7 @@ $stateBadge = [
     EngagementRepository::STATE_ACTIVE => ['text-bg-danger', __('Active: testing allowed')],
     EngagementRepository::STATE_ENDED => ['text-bg-secondary', __('Ended')],
     EngagementRepository::STATE_STOPPED => ['text-bg-dark', __('Stopped')],
-    EngagementRepository::STATE_CANCELLED => ['text-bg-light border', __('Cancelled')],
+    EngagementRepository::STATE_CANCELLED => ['text-bg-light border', __('Canceled')],
 ];
 $isAdmin = can('engagements.approve');
 ?>
