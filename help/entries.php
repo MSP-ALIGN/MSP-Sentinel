@@ -144,6 +144,7 @@ return [
         [
             'section' => 'admin',
             'title' => 'Clients and the authorized-to-scan register',
+            'old_anchors' => ['clients-and-the-authorised-to-scan-register'],
             'paragraphs' => [
                 'Sentinel only scans what a client has authorized. To add a client: Clients → Add client. Then open it, choose Record authorization, and enter who at the client approved it (name, role, date), for which dates, and exactly which addresses and domains.',
                 'Scope, one entry per line: public IP addresses (for example 203.0.113.10), ranges up to /24, and domain names. *.client.example includes all subdomains; list client.example as well if the bare domain should be scanned. Private addresses are refused here: internal networks are approved per site on the Agents page.',
@@ -325,6 +326,7 @@ return [
         [
             'section' => 'reference',
             'title' => 'Breach monitoring in detail',
+            'old_anchors' => ['breach-monitoring-details'],
             'paragraphs' => [
                 'Once a week Sentinel asks XposedOrNot which addresses of your verified domains appear in known data breaches. An address goes to the client whose authorization lists its domain (exactly, or under a *. entry); other verified domains are listed on the settings card and ignored.',
                 'Each address is one finding: Fail when a breach happened in the last 12 months, Warning when all its breaches are older, with the breach names, dates and what was exposed. Passwords are never stored or shown. Addresses are masked in finding titles, alerts and chat messages, and for viewers; the full address is in the finding\'s details for technicians and admins.',
@@ -352,6 +354,7 @@ return [
         [
             'section' => 'reference',
             'title' => 'Signing in and two-factor authentication in detail',
+            'old_anchors' => ['signing-in-and-2fa-details'],
             'paragraphs' => [
                 'Sign in with Microsoft: when an admin has set it up (Administration → Integrations), the sign-in page shows "Sign in with Microsoft" for your Microsoft 365 work account. Link your account once: sign in with your password and code, then My profile → enter your password → Link my Microsoft account (pick your own account: whoever owns it can sign in as you). Only linked accounts can use it (an email address alone is never enough; guests from other directories never can). Sentinel skips its own code only when Microsoft confirms MFA within the last hour. Your password keeps working too unless an admin turned password sign-in off for you.',
                 'Every account must use two-factor authentication (2FA). At first sign-in, scan the QR code with an authenticator app and enter the 6-digit code it shows.',
@@ -362,6 +365,13 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.51.1',
+            'date' => '2026-11-25',
+            'items' => [
+                'Fixes from review: only someone who sees every client can hide the Getting started checklist; old links to renamed help topics still work; the Authorizations page and dashboard do less work.',
+            ],
+        ],
         [
             'version' => '1.51.0',
             'date' => '2026-11-25',

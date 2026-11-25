@@ -57,7 +57,7 @@ $router->add('GET', '/recovery-codes', [AuthController::class, 'showRecoveryCode
 // Everyone signed in
 $router->add('GET', '/', [PageController::class, 'dashboard']);
 $router->add('GET', '/dashboard/live', [PageController::class, 'live'], ['passive' => true]);
-$router->add('POST', '/dashboard/setup-checklist/hide', [PageController::class, 'hideSetup'], ['perm' => 'settings.manage']);
+$router->add('POST', '/dashboard/setup-checklist/hide', [PageController::class, 'hideSetup'], ['perm' => 'settings.manage', 'all_clients' => true]);
 $router->add('GET', '/help', [PageController::class, 'help'], $duringPasswordChange);
 $router->add('GET', '/search', [PageController::class, 'search']);
 $router->add('GET', '/profile', [ProfileController::class, 'index']);

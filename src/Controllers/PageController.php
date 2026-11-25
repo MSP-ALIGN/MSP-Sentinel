@@ -40,8 +40,7 @@ final class PageController extends Controller
         if (!App::auth()->can('settings.manage') || App::auth()->clientIds() !== null) {
             return [];
         }
-        $list = new \Sentinel\Dashboard\SetupChecklist(App::db(), App::settings());
-        return $list->visible() ? $list->steps() : [];
+        return (new \Sentinel\Dashboard\SetupChecklist(App::db(), App::settings()))->shown();
     }
 
     /** POST /dashboard/setup-checklist/hide: hide the first-run checklist for everyone (settings.manage; CSRF-checked by the router). */

@@ -46,12 +46,18 @@ final class SetupChecklist
         ];
     }
 
-    /** Whether to show it: not hidden, and at least one step still open. */
-    public function visible(): bool
+    /**
+     * The steps when the checklist should be shown (not hidden, at least one step still open), else [] (1.51.1: one
+     * set of queries per page).
+     *
+     * @return list<array{key:string,label:string,hint:string,url:string,done:bool}>
+     */
+    public function shown(): array
     {
         if ($this->settings->get('setup_checklist_hidden') === '1') {
-            return false;
+            return [];
         }
-        return array_filter($this->steps(), static fn (array $s): bool => !$s['done']) !== [];
+        $steps = $this->steps();
+        return array_filter($steps, static fn (array $s): bool => !$s['done']) !== [] ? $steps : [];
     }
 }

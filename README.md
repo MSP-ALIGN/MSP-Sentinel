@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.51.0](https://img.shields.io/badge/version-1.51.0-ff5a1f?style=flat-square)
+![Version 1.51.1](https://img.shields.io/badge/version-1.51.1-ff5a1f?style=flat-square)
 ![License AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,13 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.51.1 (2026-11-25): Fixes from review
+
+- The Getting started checklist can only be hidden by someone who sees every client, like other organization-wide
+  settings.
+- Links and bookmarks to the three help topics renamed in 1.51.0 still land on them.
+- The Authorizations page loads only what it shows, and the dashboard checks the checklist once per page.
+
 ### 1.51.0 (2026-11-25): Easier to find your way, one vocabulary, US spelling
 
 - **Main pages stay in reach.** Inside a client, the menu keeps Dashboard, All clients, All findings and Help.
@@ -154,20 +161,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
   a Fail deadline from that day.
 - **Archived clients' tickets**: only open tickets get the note; a note ITFlow refuses no longer retries every run.
 - NinjaOne MAC addresses are read only in their usual written forms; multicast and broadcast addresses are dropped.
-
-### 1.50.0 (2026-11-25): The right device, one certificate finding, tidy tickets
-
-- **Matching agents to NinjaOne devices.** Sentinel now uses the strongest evidence first: the network card's MAC
-  address (NinjaOne's MACs now come over), then the address, then the name. An address only counts when the NinjaOne
-  device was seen in the last day and only one site's networks cover it, so two clients both on 192.168.1.x, or a
-  stale address, never join the wrong machines. A machine an agent saw without a name can still be matched by MAC.
-- **Routers and firewalls.** A MAC that answers on several addresses is no longer used to tell devices apart, so
-  each address stays its own device instead of overwriting one record.
-- **One certificate finding.** A certificate that expires soon and then expires is the same finding: it moves from
-  Warning to Fail and keeps its owner, history and ticket, instead of closing as "fixed" and opening a new one.
-  Existing findings are moved to the new form on upgrade.
-- **Archived clients' tickets.** When a client is archived in Sentinel, each of its open ITFlow tickets gets one note
-  saying it is no longer followed. If the client is restored while a problem is still open, a new ticket is opened.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

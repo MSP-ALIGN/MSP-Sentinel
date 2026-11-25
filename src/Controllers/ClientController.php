@@ -125,7 +125,7 @@ final class ClientController extends Controller
                           'deviceTotal' => fn () => (int) App::db()->query('SELECT COUNT(*) FROM devices d WHERE d.removed_at IS NULL AND ' . \Sentinel\Inventory\InventoryRepository::notMerged('d') . ' AND d.client_id = ' . $cid)->fetchColumn(),
                           'devicePatches' => fn () => App::inventory()->patchesByDevice($cid)],
             // Internal authorizations are listed here too (1.51), per site; they are recorded on Agents.
-            'authorisations' => ['authorisations' => $authorisations, 'agentSites' => fn () => self::agentSites($client)],
+            'authorisations' => ['authorisations' => $authorisations, 'agentSites' => fn () => self::internalAuthorisations($client)],
             'engagements' => ['engagements' => fn () => App::engagements()->forClient($cid)],
             'discovery' => ['suggestions' => fn () => App::suggestions()->forClient($cid, 'pending'), 'dismissed' => fn () => App::suggestions()->forClient($cid, 'dismissed'),
                             'lastRun' => fn () => App::suggestions()->lastRun($cid)],
@@ -216,6 +216,21 @@ final class ClientController extends Controller
             'compliance' => __('Compliance'),
             default => __('Overview'),
         };
+    }
+
+    /**
+     * Per site: only the site and its active internal authorization (1.51.1), for the Authorizations page, which lists
+     * them; the Agents page loads the rest (agentSites). The client comes from the route, already access-checked.
+     *
+     * @param array<string,mixed> $client
+     * @return list<array{site:array<string,mixed>,active:array<string,mixed>|null}>
+     */
+    private static function internalAuthorisations(array $client): array
+    {
+        $today = \Sentinel\Scope\ScopeService::today((string) $client['timezone']);
+        $repo = App::agents();
+        return array_map(static fn (array $site): array => ['site' => $site, 'active' => $repo->activeAuthorisation((int) $site['id'], $today)],
+            App::clients()->sites((int) $client['id']));
     }
 
     /**

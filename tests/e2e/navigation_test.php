@@ -134,4 +134,38 @@ return [
         }
         Assert::status(403, $ctx->login('wfview', 'Wfview-Pass-00001!')->get('/engagements/new?client=' . $id), 'needs Run engagements');
     },
+    'review fixes (1.51.1): client-limited users, old help anchors' => function (TestContext $ctx): void {
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $ids = array_map('intval', $ctx->db->query("SELECT id FROM clients WHERE is_archived = 0 AND is_demo = 0 ORDER BY id LIMIT 2")->fetchAll(PDO::FETCH_COLUMN));
+        Assert::true(count($ids) === 2, 'two clients');
+        [$mine, $other] = $ids;
+        // An admin limited to one client: manages settings, yet can't hide the org-wide checklist or see another client.
+        if ((int) $ctx->db->query("SELECT COUNT(*) FROM users WHERE username = 'oneclient'")->fetchColumn() === 0) {
+            $ctx->createUser('oneclient', 'admin', 'Oneclient-Pass-001!');
+            $uid = (int) $ctx->db->query("SELECT id FROM users WHERE username = 'oneclient'")->fetchColumn();
+            $ctx->db->exec("UPDATE users SET all_clients = 0 WHERE id = {$uid}");
+            $ctx->db->exec("INSERT INTO user_clients (user_id, client_id) VALUES ({$uid}, {$mine})");
+        }
+        $one = $ctx->login('oneclient', 'Oneclient-Pass-001!');
+        \Sentinel\Core\App::settings()->set('setup_checklist_hidden', '0');
+        $res = $one->post('/dashboard/setup-checklist/hide', ['_csrf' => $one->get('/')->csrf()]);
+        Assert::true(in_array($res->status, [403, 404], true), 'client-limited: cannot hide the checklist (got ' . $res->status . ')');
+        Assert::same('0', \Sentinel\Core\App::settings()->fresh('setup_checklist_hidden'));
+        \Sentinel\Core\App::settings()->set('setup_checklist_hidden', '1');
+        Assert::redirect('/engagements', $one->get('/engagements/new?client=' . $other), 'another client: back to the list');
+        $fid = (int) $ctx->db->query("SELECT id FROM findings WHERE client_id = {$other} LIMIT 1")->fetchColumn();
+        if ($fid > 0) {
+            $page = $one->get('/findings/' . $fid);
+            Assert::status(404, $page, 'another client\'s finding');
+        }
+        // Scan now is not offered on a paused client.
+        $ctx->db->exec("UPDATE clients SET scanning_paused = 1 WHERE id = {$mine}");
+        Assert::notContains('action="/clients/' . $mine . '/scan"', $admin->get('/clients/' . $mine)->body, 'paused: no Scan now');
+        $ctx->db->exec("UPDATE clients SET scanning_paused = 0 WHERE id = {$mine}");
+        // Old help anchors still land on their topic.
+        $help = $admin->get('/help')->body;
+        foreach (['breach-monitoring-details', 'signing-in-and-2fa-details', 'clients-and-the-authorised-to-scan-register'] as $old) {
+            Assert::contains('id="' . $old . '"', $help, 'old anchor ' . $old);
+        }
+    },
 ];
