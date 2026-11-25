@@ -632,28 +632,49 @@ final class InventoryRepository
      */
     public function link(int $clientId, string $source): ?array
     {
-        return $this->linkWhere($clientId, $source, '=');
+        return $this->linkWhere($clientId, $source);
     }
 
     /**
-     * The client's link to any other inventory source than $source, or null (1.52: a client is linked to one RMM at a
-     * time, so the same machines never come in twice with duplicate findings).
+     * The client's link to another registered RMM than $source, or null (1.52: a client is linked to one RMM at a time,
+     * so the same machines never come in twice with duplicate findings). Rows of sources no longer registered are
+     * ignored (1.52.1), so they can never block a client.
      *
      * @return array<string,mixed>|null
      */
     public function otherLink(int $clientId, string $source): ?array
     {
-        return $this->linkWhere($clientId, $source, '<>');
+        foreach ($this->linksFor($clientId) as $l) {
+            if ($l['source'] !== $source) {
+                return $l;
+            }
+        }
+        return null;
     }
 
     /**
-     * @param string $op '=' or '<>' (written in code, never input)
-     * @return array<string,mixed>|null
+     * Every link of the client to a registered RMM, on or off (1.52.1), by source name: the Devices page shows each
+     * so a link to an RMM that was turned off can still be unlinked.
+     *
+     * @return array<string,array<string,mixed>>
      */
-    private function linkWhere(int $clientId, string $source, string $op): ?array
+    public function linksFor(int $clientId): array
     {
-        $op = $op === '<>' ? '<>' : '=';
-        $stmt = $this->db->prepare("SELECT l.*, u.username AS linked_by_username FROM source_links l LEFT JOIN users u ON u.id = l.linked_by WHERE l.client_id = :c AND l.source {$op} :s ORDER BY l.source LIMIT 1");
+        $stmt = $this->db->prepare('SELECT l.*, u.username AS linked_by_username FROM source_links l LEFT JOIN users u ON u.id = l.linked_by WHERE l.client_id = :c ORDER BY l.source');
+        $stmt->execute(['c' => $clientId]);
+        $out = [];
+        foreach ($stmt->fetchAll() as $row) {
+            if (Sources::type((string) $row['source']) !== null) {
+                $out[(string) $row['source']] = $row;
+            }
+        }
+        return $out;
+    }
+
+    /** @return array<string,mixed>|null */
+    private function linkWhere(int $clientId, string $source): ?array
+    {
+        $stmt = $this->db->prepare('SELECT l.*, u.username AS linked_by_username FROM source_links l LEFT JOIN users u ON u.id = l.linked_by WHERE l.client_id = :c AND l.source = :s');
         $stmt->execute(['c' => $clientId, 's' => $source]);
         $row = $stmt->fetch();
         return $row === false ? null : $row;
@@ -684,13 +705,32 @@ final class InventoryRepository
      */
     public function setLink(int $clientId, string $source, string $orgId, string $orgName, int $userId): void
     {
-        if ($this->orgLinkedElsewhere($source, $orgId, $clientId)) {
-            throw new \DomainException('This organization is already linked to another client.');
+        // The client row is locked while checking (1.52.1), so two admins linking it to two RMMs at once can't both win.
+        $own = !$this->db->inTransaction();
+        if ($own) {
+            $this->db->beginTransaction();
         }
-        $this->db->prepare('INSERT INTO source_links (client_id, source, org_id, org_name, linked_by, linked_at) VALUES (:c, :s, :o, :n, :u, UTC_TIMESTAMP())
-                            ON DUPLICATE KEY UPDATE org_id = VALUES(org_id), org_name = VALUES(org_name), linked_by = VALUES(linked_by), linked_at = UTC_TIMESTAMP(),
-                               last_sync_at = NULL, last_sync_status = \'\', last_sync_message = \'\'')
-            ->execute(['c' => $clientId, 's' => $source, 'o' => self::clean($orgId, 64), 'n' => self::clean($orgName, 200), 'u' => $userId]);
+        try {
+            $this->db->prepare('SELECT id FROM clients WHERE id = :c FOR UPDATE')->execute(['c' => $clientId]);
+            if ($this->otherLink($clientId, $source) !== null) {
+                throw new \UnexpectedValueException('This client is already linked to another RMM.');
+            }
+            if ($this->orgLinkedElsewhere($source, $orgId, $clientId)) {
+                throw new \DomainException('This organization is already linked to another client.');
+            }
+            $this->db->prepare('INSERT INTO source_links (client_id, source, org_id, org_name, linked_by, linked_at) VALUES (:c, :s, :o, :n, :u, UTC_TIMESTAMP())
+                                ON DUPLICATE KEY UPDATE org_id = VALUES(org_id), org_name = VALUES(org_name), linked_by = VALUES(linked_by), linked_at = UTC_TIMESTAMP(),
+                                   last_sync_at = NULL, last_sync_status = \'\', last_sync_message = \'\'')
+                ->execute(['c' => $clientId, 's' => $source, 'o' => self::clean($orgId, 64), 'n' => self::clean($orgName, 200), 'u' => $userId]);
+            if ($own) {
+                $this->db->commit();
+            }
+        } catch (\Throwable $ex) {
+            if ($own && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $ex;
+        }
     }
 
     /** True when this organisation is already linked to another client. */

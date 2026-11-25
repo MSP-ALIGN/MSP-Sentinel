@@ -181,17 +181,37 @@ return [
         Assert::contains('Connected', App::settings()->fresh('ninjaone_test_result'));
         Assert::contains('NinjaOne on', $admin->get('/admin')->body, 'admin overview names the connected RMM');
         Assert::status(404, $admin->post('/admin/integrations/otherrmm', ['_csrf' => $admin->get('/admin/integrations')->csrf()]), 'no route for a source that is not registered');
-        // One RMM per client: a client linked elsewhere can't be linked to NinjaOne too.
+        // One RMM per client (checked under a lock in setLink, 1.52.1): a client linked to NinjaOne can't be linked to another RMM.
         $res = $admin->submit('/clients/new', '/clients', ['name' => 'One RMM Example', 'itflow_client_id' => '', 'timezone' => 'UTC', 'scan_window_start' => '00:00', 'scan_window_end' => '23:59', 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);
         $cid = (int) basename((string) $res->location());
-        $ctx->db->prepare("INSERT INTO source_links (client_id, source, org_id, org_name, linked_by, linked_at) VALUES (:c, 'otherrmm', 'x1', 'Other RMM Org', 1, UTC_TIMESTAMP())")->execute(['c' => $cid]);
-        Assert::redirect('/clients/' . $cid . '/devices', $admin->get('/clients/' . $cid . '/inventory/link?source=ninjaone'), 'link form refused');
-        $res = $admin->post('/clients/' . $cid . '/inventory/link', ['_csrf' => $admin->get('/')->csrf(), 'source' => 'ninjaone', 'org_id' => '901']);
-        Assert::redirect('/clients/' . $cid . '/devices', $res, 'link refused');
-        Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM source_links WHERE client_id = {$cid} AND source = 'ninjaone'")->fetchColumn(), 'not linked');
-        Assert::contains('already linked to otherrmm', $admin->get('/clients/' . $cid . '/devices')->body, 'says why');
-        // Off again for later tests.
+        App::inventory()->setLink($cid, 'ninjaone', '901', 'Harbour Example Ltd', 1);
+        $refused = false;
+        try {
+            App::inventory()->setLink($cid, 'otherrmm', 'x1', 'Other RMM Org', 1);
+        } catch (\UnexpectedValueException) {
+            $refused = true;
+        }
+        Assert::true($refused, 'a second RMM is refused');
+        Assert::same('ninjaone', (string) (App::inventory()->otherLink($cid, 'otherrmm')['source'] ?? ''), 'the other link is named');
+        // A link of a source that is no longer registered never blocks a client.
+        $ctx->db->prepare("INSERT INTO source_links (client_id, source, org_id, org_name, linked_by, linked_at) VALUES (:c, 'retiredrmm', 'r1', 'Retired Org', 1, UTC_TIMESTAMP())")->execute(['c' => $cid]);
+        Assert::same(['ninjaone'], array_keys(App::inventory()->linksFor($cid)), 'unregistered links ignored');
+        Assert::same(null, App::inventory()->otherLink($cid, 'ninjaone'));
+        // Off again: the link stays visible with Unlink (1.52.1), and unlinking works although NinjaOne is off.
         $admin->submit('/admin/integrations', '/admin/integrations/ninjaone', ['host' => '', 'client_id' => '', 'clear_client_secret' => '1', 'enabled' => '0']);
         Assert::same(['', '0'], [App::settings()->fresh('ninjaone_host'), App::settings()->fresh('ninjaone_enabled')], 'cleared');
+        Assert::same('', (string) $ctx->db->query("SELECT value FROM settings WHERE name = 'ninjaone_client_secret'")->fetchColumn(), 'secret removed');
+        $devices = $admin->get('/clients/' . $cid . '/devices')->body;
+        // In the suite a fixture source stands in for NinjaOne on the page, so the "turned off" row is checked by rendering the view.
+        $html = \Sentinel\Core\View::render('clients/devices', ['client' => ['id' => $cid], 'inventorySources' => [], 'inventoryLinks' => [],
+            'clientLinks' => App::inventory()->linksFor($cid), 'devices' => [], 'deviceTotal' => 0, 'devicePatches' => [], 'currentUser' => null], null);
+        Assert::contains('this RMM is turned off', $html, 'a link to an RMM that is off is still shown');
+        Assert::contains('NinjaOne:', $html);
+        Assert::contains('name="source" value="ninjaone"', $devices, 'with Unlink');
+        $admin->submit('/clients/' . $cid . '/devices', '/clients/' . $cid . '/inventory/unlink', ['source' => 'ninjaone']);
+        Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM source_links WHERE client_id = {$cid} AND source = 'ninjaone'")->fetchColumn(), 'unlinked while off');
+        Assert::status(404, $admin->post('/clients/' . $cid . '/inventory/unlink', ['_csrf' => $admin->get('/')->csrf(), 'source' => 'retiredrmm']), 'only registered sources');
+        $ctx->db->exec("DELETE FROM source_links WHERE client_id = {$cid}");
+        $ctx->db->exec("UPDATE clients SET is_archived = 1 WHERE id = {$cid}");
     },
 ];

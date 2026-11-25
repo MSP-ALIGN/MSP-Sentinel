@@ -366,6 +366,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.52.1',
+            'date' => '2026-11-25',
+            'items' => [
+                'Fixes from review: a client linked to an RMM that is later turned off can still be unlinked (the Devices page shows the link); two admins can\'t link one client to two RMMs at once.',
+            ],
+        ],
+        [
             'version' => '1.52.0',
             'date' => '2026-11-25',
             'items' => [

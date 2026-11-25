@@ -1,7 +1,8 @@
 <?php
 /**
  * Internal devices card on the client's pages (inventory sources such as NinjaOne).
- * Expects: $client, $inventorySources (name => label), $inventoryLinks (name => link row|null),
+ * Expects: $client, $inventorySources (name => label), $inventoryLinks (name => link row|null), $clientLinks (every link to a
+ * registered RMM, on or off, by name: 1.52.1),
  * $devices (InventoryRepository::devicesForClient, first 500), $deviceTotal, $devicePatches (by device ID), $currentUser.
  * Device data comes from the source (untrusted) and is always escaped.
  */
@@ -26,7 +27,7 @@ $chip = static function (string $sev, string $text): string {
             <strong><?= e($label) ?>:</strong>
             <?php if ($link === null): ?>
                 <span class="text-body-secondary"><?= e(__('not linked')) ?></span>
-                <?php $otherLinked = array_filter($inventoryLinks, static fn ($l, $k): bool => $l !== null && $k !== $name, ARRAY_FILTER_USE_BOTH) !== []; ?>
+                <?php $otherLinked = array_diff(array_keys($clientLinks ?? []), [$name]) !== []; ?>
                 <?php if ($otherLinked): ?><span class="small text-body-secondary"><?= e(__('(linked to another RMM: one at a time)')) ?></span>
                 <?php elseif ($isAdmin): ?><a class="btn btn-sm btn-outline-primary" href="<?= e(url('/clients/' . (int) $client['id'] . '/inventory/link', ['source' => $name])) ?>"><?= e(__('Link to an organization')) ?></a><?php endif; ?>
             <?php else: ?>
@@ -41,6 +42,17 @@ $chip = static function (string $sev, string $text): string {
                 <form method="post" action="<?= e(url('/clients/' . (int) $client['id'] . '/inventory/unlink')) ?>" class="d-inline" data-confirm="<?= e(__('Unlink? Its devices disappear from Sentinel and their findings are resolved.')) ?>"><?= Csrf::field() ?><input type="hidden" name="source" value="<?= e($name) ?>"><button type="submit" class="btn btn-sm btn-outline-secondary"><?= e(__('Unlink')) ?></button></form>
                 <?php endif; ?>
                 <?php if ($link['last_sync_message'] !== ''): ?><div class="w-100 text-body-secondary"><?= e($link['last_sync_message']) ?></div><?php endif; ?>
+            <?php endif; ?>
+        </div>
+        <?php endforeach; ?>
+        <?php // Links to an RMM that is turned off or not filled in (1.52.1): shown, so they can still be removed. ?>
+        <?php foreach ($clientLinks ?? [] as $offName => $offLink): if (isset($inventorySources[$offName])) { continue; } ?>
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-2 small">
+            <strong><?= e(\Sentinel\Inventory\Sources::type($offName)?->label() ?? $offName) ?>:</strong>
+            <span><?= e(__('linked to {org}', ['org' => $offLink['org_name']])) ?></span>
+            <span class="text-body-secondary">· <?= e(__('this RMM is turned off under Administration → Integrations, so it is not synced')) ?></span>
+            <?php if ($isAdmin): ?>
+            <form method="post" action="<?= e(url('/clients/' . (int) $client['id'] . '/inventory/unlink')) ?>" class="d-inline" data-confirm="<?= e(__('Unlink? Its devices disappear from Sentinel and their findings are resolved.')) ?>"><?= Csrf::field() ?><input type="hidden" name="source" value="<?= e($offName) ?>"><button type="submit" class="btn btn-sm btn-outline-secondary"><?= e(__('Unlink')) ?></button></form>
             <?php endif; ?>
         </div>
         <?php endforeach; ?>

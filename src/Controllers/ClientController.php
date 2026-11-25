@@ -121,6 +121,7 @@ final class ClientController extends Controller
             'agents' => ['agentSites' => fn () => self::agentSites($client)],
             'devices' => ['inventorySources' => fn () => array_map(static fn (\Sentinel\Inventory\InventorySource $s): string => $s->label(), App::inventorySources()),
                           'inventoryLinks' => fn () => array_map(fn (\Sentinel\Inventory\InventorySource $s): ?array => App::inventory()->link($cid, $s->name()), App::inventorySources()),
+                          'clientLinks' => fn () => App::inventory()->linksFor($cid),
                           'devices' => fn () => App::inventory()->devicesForClient($cid, 500),
                           'deviceTotal' => fn () => (int) App::db()->query('SELECT COUNT(*) FROM devices d WHERE d.removed_at IS NULL AND ' . \Sentinel\Inventory\InventoryRepository::notMerged('d') . ' AND d.client_id = ' . $cid)->fetchColumn(),
                           'devicePatches' => fn () => App::inventory()->patchesByDevice($cid)],

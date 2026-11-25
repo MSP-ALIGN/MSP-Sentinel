@@ -2,6 +2,13 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.52.1 (2026-11-25): Fixes from review
+
+- A client linked to an RMM that is later turned off is never stuck: the Devices page still shows that link, and it
+  can be unlinked. Links to an RMM Sentinel no longer supports never block a client.
+- Two admins linking the same client to two RMMs at the same moment can't both succeed.
+- Small safeguards for adding RMMs later (setting names, removing saved secrets).
+
 ### 1.52.0 (2026-11-25): Ready for more RMMs
 
 The first step towards working with other RMMs and ticketing systems besides NinjaOne and ITFlow. Nothing changes in

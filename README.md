@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.52.0](https://img.shields.io/badge/version-1.52.0-ff5a1f?style=flat-square)
+![Version 1.52.1](https://img.shields.io/badge/version-1.52.1-ff5a1f?style=flat-square)
 ![License AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,13 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.52.1 (2026-11-25): Fixes from review
+
+- A client linked to an RMM that is later turned off is never stuck: the Devices page still shows that link, and it
+  can be unlinked. Links to an RMM Sentinel no longer supports never block a client.
+- Two admins linking the same client to two RMMs at the same moment can't both succeed.
+- Small safeguards for adding RMMs later (setting names, removing saved secrets).
+
 ### 1.52.0 (2026-11-25): Ready for more RMMs
 
 The first step towards working with other RMMs and ticketing systems besides NinjaOne and ITFlow. Nothing changes in
@@ -138,27 +145,6 @@ how NinjaOne works.
   settings.
 - Links and bookmarks to the three help topics renamed in 1.51.0 still land on them.
 - The Authorizations page loads only what it shows, and the dashboard checks the checklist once per page.
-
-### 1.51.0 (2026-11-25): Easier to find your way, one vocabulary, US spelling
-
-- **Main pages stay in reach.** Inside a client, the menu keeps Dashboard, All clients, All findings and Help.
-  Finding and report pages keep their client's menu.
-- **One name per page.** Each client page's heading is its section, with the client's name above it, and the browser
-  tab reads "Client · Section". Menu labels match the headings ("Scans and ports", "Certificates and web pages",
-  "Website and email"); Discovery sits next to Authorizations.
-- **Getting started checklist** on the dashboard for whoever manages settings: time zone, a second admin, alerts,
-  the first client, its authorization and the first scan, ticked off from what Sentinel already holds. One click hides
-  it for everyone.
-- **Scan now on the client's Overview**, where the help always said it was. The Authorizations page also lists each
-  site's internal authorization, and the authorization form explains Change scope / renew.
-- **Administration**: one entry in the user menu; the overview has a Roles card and complete descriptions; the API
-  page has an API reference button. The engagements list can start a new engagement for a chosen client.
-- **One vocabulary**: "finding", "agent host", "two-factor authentication", "Pen-test engagements", "Time zone";
-  every Save button says what it saves, and new records use "Add". Text no longer assumes "an admin" where a role
-  permission decides.
-- **US spelling** throughout the interface, help and docs (authorization, organization, enrollment, canceled).
-  Web addresses, API fields and settings keep their names, so links, bookmarks and integrations keep working. The
-  agent accepts `enroll` as well as `enrol`.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

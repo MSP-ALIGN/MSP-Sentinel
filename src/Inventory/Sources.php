@@ -13,11 +13,20 @@ namespace Sentinel\Inventory;
  */
 final class Sources
 {
+    /** Settings every source has ("<name>_enabled", ...): no field may use these keys. */
+    public const RESERVED = ['enabled', 'tested_at', 'test_result'];
+
     /** @return array<string,SourceType> by name */
     public static function types(): array
     {
         $types = [];
         foreach ([new NinjaOneType()] as $type) {
+            // Field keys must not take the place of the keys every source has (1.52.1): a mistake here would be caught at once.
+            foreach ($type->fields() as $f) {
+                if (in_array($f['key'], self::RESERVED, true) || preg_match('/^[a-z][a-z0-9_]*$/', $f['key']) !== 1) {
+                    throw new \LogicException('Field key not allowed: ' . $type->name() . '.' . $f['key']);
+                }
+            }
             $types[$type->name()] = $type;
         }
         return $types;

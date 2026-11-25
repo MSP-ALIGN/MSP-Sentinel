@@ -2,6 +2,27 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.51.0 (2026-11-25): Easier to find your way, one vocabulary, US spelling
+
+- **Main pages stay in reach.** Inside a client, the menu keeps Dashboard, All clients, All findings and Help.
+  Finding and report pages keep their client's menu.
+- **One name per page.** Each client page's heading is its section, with the client's name above it, and the browser
+  tab reads "Client · Section". Menu labels match the headings ("Scans and ports", "Certificates and web pages",
+  "Website and email"); Discovery sits next to Authorizations.
+- **Getting started checklist** on the dashboard for whoever manages settings: time zone, a second admin, alerts,
+  the first client, its authorization and the first scan, ticked off from what Sentinel already holds. One click hides
+  it for everyone.
+- **Scan now on the client's Overview**, where the help always said it was. The Authorizations page also lists each
+  site's internal authorization, and the authorization form explains Change scope / renew.
+- **Administration**: one entry in the user menu; the overview has a Roles card and complete descriptions; the API
+  page has an API reference button. The engagements list can start a new engagement for a chosen client.
+- **One vocabulary**: "finding", "agent host", "two-factor authentication", "Pen-test engagements", "Time zone";
+  every Save button says what it saves, and new records use "Add". Text no longer assumes "an admin" where a role
+  permission decides.
+- **US spelling** throughout the interface, help and docs (authorization, organization, enrollment, canceled).
+  Web addresses, API fields and settings keep their names, so links, bookmarks and integrations keep working. The
+  agent accepts `enroll` as well as `enrol`.
+
 ### 1.50.1 (2026-11-25): Fixes from review
 
 - **Safer device matching.** A MAC several agent devices share (a router or VPN server answering for others) no longer

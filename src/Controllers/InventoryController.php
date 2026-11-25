@@ -109,6 +109,10 @@ final class InventoryController extends Controller
         }
         try {
             App::inventory()->setLink((int) $client['id'], $name, $org['id'], $org['name'], (int) $this->user()['id']);
+        } catch (\UnexpectedValueException) {
+            // Linked to another RMM in the meantime (1.52.1).
+            Session::flash('warning', __('This client was just linked to another RMM, so it was not linked here. A client is linked to one RMM at a time.'));
+            return Response::redirect('/clients/' . (int) $client['id'] . '/devices');
         } catch (\DomainException) {
             // Someone linked that organisation elsewhere in the meantime (1.49.1): say plainly if the old link is gone too.
             Session::flash('danger', $previous !== null && (string) $previous['org_id'] !== $org['id']
@@ -125,7 +129,11 @@ final class InventoryController extends Controller
     public function unlink(Request $request, array $params): Response
     {
         $client = $this->client($params);
-        [$name] = $this->source($request->input('source'));
+        // Any registered RMM, also one turned off (1.52.1), so a link to it can always be removed.
+        $name = $request->input('source');
+        if (\Sentinel\Inventory\Sources::type($name) === null) {
+            throw new HttpException(404);
+        }
         if (App::inventory()->link((int) $client['id'], $name) !== null) {
             App::inventorySync()->unlink((int) $client['id'], $name, (int) $this->user()['id']);
             $this->audit($request, 'inventory.unlinked', 'client', (int) $client['id'], ['source' => $name]);

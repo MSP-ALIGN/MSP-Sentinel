@@ -11,6 +11,7 @@ use Sentinel\Core\Settings;
  * its name and label, the settings an admin fills in on the Integrations page, how they are checked, and how to build
  * the connector from them. Adding an RMM means one SourceType and one InventorySource, registered in Sources.
  *
+ * Field keys are lower case letters, digits and "_", never enabled, tested_at or test_result (Sources checks).
  * Settings are stored under "<name>_<field key>" (secret fields encrypted: they must be listed in Settings::SECRETS
  * and in Settings::DEFAULTS), plus "<name>_enabled", "<name>_tested_at" and "<name>_test_result".
  *

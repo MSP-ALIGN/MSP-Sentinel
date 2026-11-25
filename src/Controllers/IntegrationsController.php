@@ -155,8 +155,9 @@ final class IntegrationsController extends Controller
                 return $back;
             }
             if ($f['secret']) {
-                // "clear_secret" is the field's name from before 1.52 (one secret per source then).
-                if ($request->input('clear_' . $f['key']) === '1' || $request->input('clear_secret') === '1') {
+                // "clear_secret" is the field's name from before 1.52, honored only for a source with one secret (1.52.1).
+                $oneSecret = count(array_filter($type->fields(), static fn (array $x): bool => $x['secret'])) === 1;
+                if ($request->input('clear_' . $f['key']) === '1' || ($oneSecret && $request->input('clear_secret') === '1')) {
                     $secrets[$f['key']] = '';
                 } elseif ($value !== '') {
                     $secrets[$f['key']] = $value;
