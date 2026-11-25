@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.56.3](https://img.shields.io/badge/version-1.56.3-ff5a1f?style=flat-square)
+![Version 1.57.0](https://img.shields.io/badge/version-1.57.0-ff5a1f?style=flat-square)
 ![License AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,16 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.57.0 (2026-11-25): Threat level sonar
+
+- **The main dashboard's threat level is now a sonar.** Every client is a dot in the band of its level: a red core
+  for clients at risk, amber for needs attention and a green rim for good. Within its band, the higher a client's
+  score, the closer it sits to the center, and each client keeps its place between refreshes. The center shows the
+  highest client's score.
+- **Hover a dot** for the client's name, level and score; **click it** to open the client.
+- The sweep turns like the logo's radar and dots ping as it passes; nothing moves for people whose system asks for
+  reduced motion. Up to 60 clients are drawn (worst first). Client pages keep their own gauge.
+
 ### 1.56.3 (2026-11-25): Fixes from review
 
 - The Windows installer's check that the newly installed nmap runs never stops the install by mistake; it falls back
@@ -134,12 +144,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
   the whole install is unattended again. Where the silent install can't finish within 5 minutes, it is stopped and
   the installer falls back to nmap's setup window as before (or, with no one at the screen, stops with a clear
   message).
-
-### 1.56.1 (2026-11-25): Fixes from review
-
-- Correcting the ITFlow ticket template retries tickets that failed on it at the next run, instead of up to a day
-  later.
-- The priority setting says plainly that a fixed priority applies to known-exploited findings too.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

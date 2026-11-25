@@ -341,6 +341,7 @@ return [
                 'The dashboard shows every client: the threat level (the highest client risk), totals, a 90-day trend of open problems, clients ranked by risk, the worst open findings, live activity, the attack surface by type of service, certificates expiring in the next 30 days, and a status strip (scanning armed or paused, worker, threat feeds, scans running, scan windows, authorizations). Each client\'s Overview is the same for that client.',
                 'The risk score runs from 0 to 100; higher is worse. It adds 20 for each open known-exploited Fail, 10 for each other open Fail and 2 for each open Warning, up to 100. Accepted risks and false positives don\'t count. The level is the same as in reports: At risk (any open Fail), Needs attention (Warnings only) or Good (nothing open). A client shows "Not scanned yet" until its first scan.',
                 'Clients are ranked by level first, then by score, so a client with many Warnings never appears above one with a Fail.',
+                'The threat level is a sonar (1.57): every client is a dot in the band of its level (red core = at risk, amber = needs attention, green rim = good), closer to the center the higher its score within that band. The center shows the highest client\'s score. Hover a dot for the client\'s name, level and score; click it to open the client. The sweep turns and dots ping as it passes, except when your system asks for reduced motion. Up to 60 clients are drawn (worst first).',
                 'Dashboards refresh themselves every minute while the page is open and visible; "Pause live refresh" holds the view still, and refreshes also wait while you are using a panel. Refreshes don\'t count as activity: an unattended screen still signs out after 30 minutes, and refreshing stops after 30 minutes without input. The trend fills in day by day from when Sentinel started recording. Certificates are counted only on services that are still open.',
             ],
         ],
@@ -366,6 +367,13 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.57.0',
+            'date' => '2026-11-25',
+            'items' => [
+                'Threat level sonar on the main dashboard: every client is a dot in the band of its level (red core, amber, green rim), closer to the center the higher its score; hover for name and score, click to open the client.',
+            ],
+        ],
         [
             'version' => '1.56.3',
             'date' => '2026-11-25',

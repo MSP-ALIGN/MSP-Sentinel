@@ -371,3 +371,57 @@ a.kpi:hover { background: rgba(var(--st-ember-rgb), .07); }
 /* 1.51: long menu labels ("Certificates and web pages", "Pen-test engagements") wrap instead of being cut off. */
 .app-sidebar .sidebar-menu .nav-link { align-items: flex-start; }
 .app-sidebar .sidebar-menu .nav-link > p { white-space: normal; line-height: 1.3; }
+
+
+/* ---- Dashboard sonar (1.57): Svg::sonar. Bands, rings and dots follow the theme; the sweep turns in 6 s and each dot
+   pings as the sweep passes its 15-degree slice (sn-d0..sn-d23). No motion for people who prefer reduced motion. ---- */
+.sonar { display: block; width: 100%; max-width: 300px; margin: 0 auto; overflow: visible; }
+.sonar .sn-band.sn-good { fill: color-mix(in srgb, var(--st-ok) 6%, transparent); }
+.sonar .sn-band.sn-attention { fill: color-mix(in srgb, var(--st-warn) 9%, transparent); }
+.sonar .sn-band.sn-risk { fill: color-mix(in srgb, var(--st-fail) 13%, transparent); }
+.sonar .sn-ring { fill: none; stroke: color-mix(in srgb, var(--st-ember) 28%, transparent); stroke-width: 1; }
+.sonar .sn-ring-outer { stroke: color-mix(in srgb, var(--st-ember) 55%, transparent); }
+.sonar .sn-cross { stroke: color-mix(in srgb, var(--st-ember) 16%, transparent); stroke-width: 1; }
+.sonar .sn-tick { stroke: var(--st-ember); stroke-width: 1.2; opacity: .55; }
+.sonar .sn-lbl { font: 600 7.5px var(--st-mono); letter-spacing: .12em; fill: var(--bs-secondary-color); opacity: .75; }
+.sonar .sn-sweep { transform-origin: 150px 150px; animation: sn-spin 6s linear infinite; }
+.sonar .sn-wedge { fill: color-mix(in srgb, var(--st-ember) 30%, transparent); }
+.sonar .sn-edge { stroke: #ffb347; stroke-width: 1.5; opacity: .9; }
+.sonar .sn-dot { cursor: pointer; }
+.sonar .sn-blip { stroke: var(--bs-body-bg); stroke-width: 1.5; }
+.sonar .sn-risk .sn-blip { fill: var(--st-fail); filter: drop-shadow(0 0 5px color-mix(in srgb, var(--st-fail) 85%, transparent)); }
+.sonar .sn-attention .sn-blip { fill: var(--st-warn); filter: drop-shadow(0 0 4px color-mix(in srgb, var(--st-warn) 75%, transparent)); }
+.sonar .sn-good .sn-blip { fill: var(--st-ok); }
+.sonar .sn-dot:hover .sn-blip, .sonar .sn-dot:focus .sn-blip { stroke: var(--bs-emphasis-color); stroke-width: 2; }
+.sonar .sn-ping { fill: none; stroke-width: 1.5; opacity: 0; transform-box: fill-box; transform-origin: center; animation: sn-ping 6s linear infinite; }
+.sonar .sn-risk .sn-ping { stroke: var(--st-fail); } .sonar .sn-attention .sn-ping { stroke: var(--st-warn); } .sonar .sn-good .sn-ping { stroke: var(--st-ok); }
+.sonar .sn-core { fill: var(--bs-body-bg); stroke: color-mix(in srgb, var(--st-ember) 55%, transparent); stroke-width: 1.2; }
+.sonar .sn-num { font: 700 20px var(--st-display); fill: var(--bs-emphasis-color); }
+.sonar .sn-num-risk { fill: var(--st-fail); } .sonar .sn-num-attention { fill: var(--st-warn); }
+@keyframes sn-spin { to { transform: rotate(360deg); } }
+@keyframes sn-ping { 0% { opacity: .9; transform: scale(1); } 12% { opacity: 0; transform: scale(2.6); } 100% { opacity: 0; transform: scale(2.6); } }
+.sonar .sn-d0 { animation-delay: 0.00s; }
+.sonar .sn-d1 { animation-delay: 0.25s; }
+.sonar .sn-d2 { animation-delay: 0.50s; }
+.sonar .sn-d3 { animation-delay: 0.75s; }
+.sonar .sn-d4 { animation-delay: 1.00s; }
+.sonar .sn-d5 { animation-delay: 1.25s; }
+.sonar .sn-d6 { animation-delay: 1.50s; }
+.sonar .sn-d7 { animation-delay: 1.75s; }
+.sonar .sn-d8 { animation-delay: 2.00s; }
+.sonar .sn-d9 { animation-delay: 2.25s; }
+.sonar .sn-d10 { animation-delay: 2.50s; }
+.sonar .sn-d11 { animation-delay: 2.75s; }
+.sonar .sn-d12 { animation-delay: 3.00s; }
+.sonar .sn-d13 { animation-delay: 3.25s; }
+.sonar .sn-d14 { animation-delay: 3.50s; }
+.sonar .sn-d15 { animation-delay: 3.75s; }
+.sonar .sn-d16 { animation-delay: 4.00s; }
+.sonar .sn-d17 { animation-delay: 4.25s; }
+.sonar .sn-d18 { animation-delay: 4.50s; }
+.sonar .sn-d19 { animation-delay: 4.75s; }
+.sonar .sn-d20 { animation-delay: 5.00s; }
+.sonar .sn-d21 { animation-delay: 5.25s; }
+.sonar .sn-d22 { animation-delay: 5.50s; }
+.sonar .sn-d23 { animation-delay: 5.75s; }
+@media (prefers-reduced-motion: reduce) { .sonar .sn-sweep, .sonar .sn-ping { animation: none; } }

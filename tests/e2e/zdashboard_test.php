@@ -32,6 +32,17 @@ return [
         foreach (['Threat level', 'Client risk grid', 'Top exposures', 'Activity', 'Attack surface', 'Certificates, next 30 days', 'Worker', 'data-refresh-url="/dashboard/live"', 'class="gauge'] as $s) {
             Assert::contains($s, $dash);
         }
+        // 1.57: the threat level is a sonar of every client: a dot per client, linking to it, its name escaped.
+        Assert::contains('class="sonar"', $dash);
+        $ctx->db->exec("INSERT INTO clients (name, timezone, created_at, updated_at) VALUES ('Sonar <b>Example</b>', 'UTC', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+        $sonarId = (int) $ctx->db->lastInsertId();
+        $dash = $admin->get('/')->body;
+        Assert::contains('<a href="/clients/' . $sonarId . '" class="sn-dot sn-', $dash, 'a dot links to its client');
+        Assert::contains('<title>Sonar &lt;b&gt;Example&lt;/b&gt; · ', $dash, 'hover text escaped');
+        Assert::notContains('Sonar <b>Example</b>', $dash);
+        Assert::true(preg_match_all('/class="sn-dot /', $dash) === min(\Sentinel\Dashboard\Svg::SONAR_MAX, (int) $ctx->db->query('SELECT COUNT(*) FROM clients WHERE is_archived = 0')->fetchColumn()), 'one dot per active client, up to the limit');
+        Assert::notContains('style="', substr($dash, (int) strpos($dash, '<svg class="sonar"'), (int) strpos($dash, '</svg>', (int) strpos($dash, '<svg class="sonar"')) - (int) strpos($dash, '<svg class="sonar"')), 'no inline style (strict CSP)');
+        $ctx->db->exec("UPDATE clients SET is_archived = 1 WHERE id = {$sonarId}");
         $live = $admin->get('/dashboard/live');
         Assert::same(200, $live->status);
         Assert::same('1', $live->header('x-sentinel-fragment'));
