@@ -515,6 +515,11 @@ final class Runner
     /** A host name from a certificate's common name (only a plain DNS name, no wildcards). */
     private static function hostFromCert(string $cn): string
     {
+        // 1.57.3: a certificate made out to "localhost" (common on a NAS or self-signed appliances) names no machine: it
+        // is skipped, so another certificate on the host can still give its real name.
+        if (preg_match('/^(localhost6?|ip6-localhost|ip6-loopback)(\.|$)/i', $cn) === 1) {
+            return '';
+        }
         return preg_match('/^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/i', $cn) === 1 ? strtolower($cn) : '';
     }
 }

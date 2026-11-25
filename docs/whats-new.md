@@ -2,6 +2,16 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.57.0 (2026-11-25): Threat level sonar
+
+- **The main dashboard's threat level is now a sonar.** Every client is a dot in the band of its level: a red core
+  for clients at risk, amber for needs attention and a green rim for good. Within its band, the higher a client's
+  score, the closer it sits to the center, and each client keeps its place between refreshes. The center shows the
+  highest client's score.
+- **Hover a dot** for the client's name, level and score; **click it** to open the client.
+- The sweep turns like the logo's radar and dots ping as it passes; nothing moves for people whose system asks for
+  reduced motion. Up to 60 clients are drawn (worst first). Client pages keep their own gauge.
+
 ### 1.56.3 (2026-11-25): Fixes from review
 
 - The Windows installer's check that the newly installed nmap runs never stops the install by mistake; it falls back

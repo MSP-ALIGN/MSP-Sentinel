@@ -323,6 +323,14 @@ return [
         $migration['up']($ctx->db, $m);
         Assert::same(['10.90.0.70', ''], array_values($ctx->db->query("SELECT name, dns_name FROM devices WHERE source = 'agent' AND site_id = {$site} AND ip_addresses = '10.90.0.70'")->fetch(PDO::FETCH_NUM)), 'the migration renames existing ones (twice safely)');
         Assert::same('laptop-a.example', $dev('00:1b:21:00:00:31')['name'], 'real names untouched');
+        // 1.57.3: any case, localhost6, and the agent itself skips a certificate made out to localhost.
+        foreach (['LOCALHOST', 'localhost6', 'localhost6.localdomain6', 'ip6-loopback', 'Localhost.Localdomain'] as $loop) {
+            Assert::same('', \Sentinel\Agent\AgentService::hostname($loop), $loop . ' names no machine');
+        }
+        Assert::same('nas-01.example', \Sentinel\Agent\AgentService::hostname('nas-01.example'));
+        Assert::same('localhostess.example', \Sentinel\Agent\AgentService::hostname('localhostess.example'), 'only the loopback names themselves');
+        $fromCert = new ReflectionMethod(\Sentinel\AgentClient\Runner::class, 'hostFromCert');
+        Assert::same(['', 'nas-01.example'], [$fromCert->invoke(null, 'localhost'), $fromCert->invoke(null, 'NAS-01.example')], 'agent: no name from a localhost certificate');
         // A host without a MAC (routed subnet) is still found by its address.
         $sweep([['ip' => '10.90.0.45', 'hostname' => 'routed.example']]);
         $sweep([['ip' => '10.90.0.45']]);

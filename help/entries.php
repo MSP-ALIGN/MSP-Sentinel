@@ -368,6 +368,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.57.3',
+            'date' => '2026-11-25',
+            'items' => [
+                'Fixes from review: SMB names can\'t bring "localhost" back after a full scan; agents skip certificates made out to localhost so a real name can be used; localhost6 names are recognized.',
+            ],
+        ],
+        [
             'version' => '1.57.2',
             'date' => '2026-11-25',
             'items' => [

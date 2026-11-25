@@ -2,6 +2,14 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.57.3 (2026-11-25): Fixes from review
+
+- **"localhost" stays gone.** The names a Windows or Samba machine gives in its SMB answer are checked too, so a
+  full scan can no longer bring "LOCALHOST" back and make the device's name change with every scan.
+- **The agent skips certificates made out to "localhost"** (common on a NAS), so a real name from another
+  certificate on the same machine can still be used. This takes effect when agents update.
+- "localhost6" names (some Linux systems) are recognized too.
+
 ### 1.57.2 (2026-11-25): Device names and CVE versions
 
 - **No more "localhost" devices.** Some machines (often a NAS, or a Linux box whose own name maps to localhost) answer

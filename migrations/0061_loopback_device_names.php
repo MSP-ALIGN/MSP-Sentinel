@@ -15,7 +15,7 @@ use Sentinel\Migrations\Migrator;
 return [
     'description' => 'Agent devices named localhost get their address as name',
     'up' => static function (PDO $db, Migrator $m): void {
-        $loop = "'^(localhost|ip6-localhost|ip6-loopback)([.]|$)'";
+        $loop = "'^(localhost6?|ip6-localhost|ip6-loopback)([.]|$)'"; // the same as AgentService::LOOPBACK_SQL
         $db->exec("UPDATE devices SET name = SUBSTRING_INDEX(ip_addresses, ',', 1)
                    WHERE source = 'agent' AND ip_addresses <> '' AND name REGEXP {$loop}");
         $db->exec("UPDATE devices SET dns_name = '' WHERE source = 'agent' AND dns_name REGEXP {$loop}");

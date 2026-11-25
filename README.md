@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.57.2](https://img.shields.io/badge/version-1.57.2-ff5a1f?style=flat-square)
+![Version 1.57.3](https://img.shields.io/badge/version-1.57.3-ff5a1f?style=flat-square)
 ![License AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,14 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.57.3 (2026-11-25): Fixes from review
+
+- **"localhost" stays gone.** The names a Windows or Samba machine gives in its SMB answer are checked too, so a
+  full scan can no longer bring "LOCALHOST" back and make the device's name change with every scan.
+- **The agent skips certificates made out to "localhost"** (common on a NAS), so a real name from another
+  certificate on the same machine can still be used. This takes effect when agents update.
+- "localhost6" names (some Linux systems) are recognized too.
+
 ### 1.57.2 (2026-11-25): Device names and CVE versions
 
 - **No more "localhost" devices.** Some machines (often a NAS, or a Linux box whose own name maps to localhost) answer
@@ -139,16 +147,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
   no longer sit under a dot.
 - The dots are a mouse shortcut and stay out of the keyboard's tab order; the client risk grid beside the sonar
   links every client.
-
-### 1.57.0 (2026-11-25): Threat level sonar
-
-- **The main dashboard's threat level is now a sonar.** Every client is a dot in the band of its level: a red core
-  for clients at risk, amber for needs attention and a green rim for good. Within its band, the higher a client's
-  score, the closer it sits to the center, and each client keeps its place between refreshes. The center shows the
-  highest client's score.
-- **Hover a dot** for the client's name, level and score; **click it** to open the client.
-- The sweep turns like the logo's radar and dots ping as it passes; nothing moves for people whose system asks for
-  reduced motion. Up to 60 clients are drawn (worst first). Client pages keep their own gauge.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 
