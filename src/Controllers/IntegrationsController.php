@@ -514,6 +514,10 @@ final class IntegrationsController extends Controller
             $s->setSecret('itflow_api_key', '');
             $changed['itflow_api_key'] = 'cleared (address changed)';
         }
+        // A changed template (1.56.1): tickets that failed are retried on the next run, not up to a day later.
+        if ($template !== $s->get('itflow_ticket_template')) {
+            App::db()->exec("UPDATE itflow_tickets SET retry_at = UTC_TIMESTAMP() WHERE state = 'failed'");
+        }
         $tickets = $request->input('tickets') === '1';
         if ($tickets && $s->get('tickets_enabled') !== '1') {
             $s->set('tickets_since', gmdate('Y-m-d H:i:s')); // only findings from now on (no flood when turning it on)

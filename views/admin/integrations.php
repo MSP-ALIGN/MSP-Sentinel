@@ -83,7 +83,7 @@ use Sentinel\Core\Csrf;
                         <option value="<?= e($pv) ?>" <?= $it['priority'] === $pv ? 'selected' : '' ?>><?= e(__('{p} for every ticket', ['p' => $pl])) ?></option>
                         <?php endforeach; ?>
                     </select>
-                    <div class="form-text"><?= e(__('ITFlow sets a ticket\'s SLA from its priority. To keep SLAs off Sentinel\'s tickets, choose a priority that has no SLA in ITFlow.')) ?></div>
+                    <div class="form-text"><?= e(__('A fixed priority applies to every Sentinel ticket, known-exploited findings included. ITFlow sets a ticket\'s SLA from its priority: to keep SLAs off Sentinel\'s tickets, choose a priority that has no SLA in ITFlow.')) ?></div>
                 </div>
                 <div class="col-md-4">
                     <label class="form-label" for="itflow-template"><?= e(__('Ticket template (optional)')) ?></label>

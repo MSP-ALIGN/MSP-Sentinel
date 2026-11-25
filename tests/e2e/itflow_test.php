@@ -845,6 +845,11 @@ return [
         $g = (int) $ctx->db->lastInsertId();
         App::itflowTickets()->run();
         Assert::contains('Ticket template not found', (string) $ctx->db->query("SELECT last_error FROM itflow_tickets WHERE finding_id = {$g}")->fetchColumn());
+        // Fixing the template retries it on the next run (1.56.1), not up to a day later.
+        $ctx->db->exec("UPDATE itflow_tickets SET retry_at = UTC_TIMESTAMP() + INTERVAL 1 DAY WHERE finding_id = {$g}");
+        $admin->submit('/admin/integrations', '/admin/integrations/itflow', $form + ['ticket_priority' => '', 'ticket_template' => '12']);
+        App::itflowTickets()->run();
+        Assert::true((int) $ctx->db->query("SELECT itflow_ticket_id FROM itflow_tickets WHERE finding_id = {$g}")->fetchColumn() > 0, 'opened once the template is fixed');
         // Back to automatic and no template for later tests.
         $admin->submit('/admin/integrations', '/admin/integrations/itflow', ['url' => $base($ctx), 'api_key' => $key, 'enabled' => '0', 'ticket_priority' => '', 'ticket_template' => '']);
         Assert::true($f > 0, 'fixture made');

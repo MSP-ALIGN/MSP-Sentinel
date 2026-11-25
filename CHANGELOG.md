@@ -2,6 +2,12 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.56.1 (2026-11-25): Fixes from review
+
+- Correcting the ITFlow ticket template retries tickets that failed on it at the next run, instead of up to a day
+  later.
+- The priority setting says plainly that a fixed priority applies to known-exploited findings too.
+
 ### 1.56.0 (2026-11-25): ITFlow ticket priority and category
 
 - **One priority for every ticket.** Under **Integrations → ITFlow**, choose **Priority for Sentinel tickets**:

@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.56.0](https://img.shields.io/badge/version-1.56.0-ff5a1f?style=flat-square)
+![Version 1.56.1](https://img.shields.io/badge/version-1.56.1-ff5a1f?style=flat-square)
 ![License AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,12 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.56.1 (2026-11-25): Fixes from review
+
+- Correcting the ITFlow ticket template retries tickets that failed on it at the next run, instead of up to a day
+  later.
+- The priority setting says plainly that a fixed priority applies to known-exploited findings too.
+
 ### 1.56.0 (2026-11-25): ITFlow ticket priority and category
 
 - **One priority for every ticket.** Under **Integrations → ITFlow**, choose **Priority for Sentinel tickets**:
@@ -136,12 +142,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
   whether GitHub has no published release yet (or the repository is private), whether the server couldn't reach
   GitHub at all, or that the check is off. Servers installed from a branch are told how far behind their branch they
   are.
-
-### 1.55.1 (2026-11-25): Fixes from review
-
-- When a ticket closed in ITFlow is replaced and the new ticket can't be opened yet, the targets moving to it no longer
-  keep the old ticket's ID in the new text field.
-- The ticketing-layer tests no longer depend on which tests ran before them.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

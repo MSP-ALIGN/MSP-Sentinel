@@ -367,6 +367,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.56.1',
+            'date' => '2026-11-25',
+            'items' => [
+                'Fixes from review: a corrected ITFlow ticket template is used at the next run for tickets that failed on it; the priority setting notes that known-exploited findings get the fixed priority too.',
+            ],
+        ],
+        [
             'version' => '1.56.0',
             'date' => '2026-11-25',
             'items' => [

@@ -2,6 +2,12 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.55.1 (2026-11-25): Fixes from review
+
+- When a ticket closed in ITFlow is replaced and the new ticket can't be opened yet, the targets moving to it no longer
+  keep the old ticket's ID in the new text field.
+- The ticketing-layer tests no longer depend on which tests ran before them.
+
 ### 1.55.0 (2026-11-25): Tickets ready for other ticketing systems
 
 Nothing changes in how ITFlow works.
