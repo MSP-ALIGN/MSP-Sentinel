@@ -197,5 +197,26 @@ return [
         App::inventory()->refreshMerges($cid);
         Assert::same(null, $into($privA), 'a private MAC is not matched');
         Assert::true($staleN > 0 && $sharedN > 0, 'fixtures made');
+        // 1.50.1: a MAC two agent devices carry (a router or VPN server answering for others) identifies neither.
+        $routerN = $add('ninjaone', 'rules-6', 'RAS-01', '10.94.0.70', '', '00:1b:21:cc:00:01');
+        $behind1 = $add('agent', 'rules-a6', '10.94.0.71', '10.94.0.71', '00:1b:21:cc:00:01');
+        $behind2 = $add('agent', 'rules-a7', '10.94.0.72', '10.94.0.72', '00:1b:21:cc:00:01');
+        // A real MAC the inventory device doesn't list (while listing others) rules it out, even at the same address.
+        $otherN = $add('ninjaone', 'rules-7', 'DESK-07', '10.94.0.60', '', '00:1b:21:bb:00:01');
+        $otherA = $add('agent', 'rules-a8', '10.94.0.60', '10.94.0.60', '00:1b:21:bb:00:09');
+        // A unique name only counts for a device seen lately (default names come back on other machines).
+        $oldNameN = $add('ninjaone', 'rules-8', 'MACBOOK-PRO', '10.94.0.80', '', '', gmdate('Y-m-d H:i:s', time() - 5 * 86400));
+        $oldNameA = $add('agent', 'rules-a9', 'MacBook-Pro.local', '10.94.0.81');
+        // A lapsed authorisation still counts as that site's range.
+        $ctx->db->exec("UPDATE internal_authorisations SET valid_until = UTC_DATE() - INTERVAL 1 DAY WHERE client_id = {$cid} AND site_id = {$siteB}");
+        // An admin's merge is kept even without evidence.
+        App::inventory()->setMerge($cid, $staleA, $staleN);
+        App::inventory()->refreshMerges($cid);
+        Assert::same([null, null], [$into($behind1), $into($behind2)], 'a shared MAC matches nothing');
+        Assert::same(null, $into($otherA), 'a contradicting MAC blocks the address match');
+        Assert::same(null, $into($oldNameA), 'a name of a device not seen lately is not matched');
+        Assert::same(null, $into($sharedA), 'lapsed authorisation: the range is still shared');
+        Assert::same($staleN, $into($staleA), 'manual merge kept');
+        Assert::true($routerN > 0 && $otherN > 0 && $oldNameN > 0, 'fixtures made');
     },
 ];

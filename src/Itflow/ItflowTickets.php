@@ -824,29 +824,32 @@ final class ItflowTickets
      * members are set to 'gone' (no longer followed); if the client is restored while the problem is still open,
      * findingTickets keeps the old row in the history and opens a new ticket, as for a ticket deleted in ITFlow.
      * Untrusted: ITFlow's answers (only compared with 'open'). Archived clients are never scanned or ticketed otherwise.
+     * Only 'open' rows get the note (1.50.1): Sentinel already resolved the others, or is waiting on a closed ticket, so
+     * they are set aside silently. The note is best effort: a refused note (ITFlow archived the client too) still sets
+     * the row aside, so it isn't retried every run; only a refusal that stops the run (ITFlow down) leaves it for later.
      */
     private function archivedClients(): void
     {
-        $rows = $this->db->query("SELECT t.id AS row_id, t.itflow_ticket_id, c.itflow_client_id FROM itflow_tickets t
+        $rows = $this->db->query("SELECT t.id AS row_id, t.itflow_ticket_id, t.state, c.itflow_client_id FROM itflow_tickets t
                                   JOIN clients c ON c.id = t.client_id AND c.is_archived = 1 AND c.is_demo = 0 AND c.itflow_client_id IS NOT NULL AND c.itflow_sync_off = 0
-                                  WHERE t.kind = 'finding' AND t.itflow_ticket_id > 0 AND t.state IN ('open', 'sentinel_resolved', 'awaiting_check') LIMIT 50")->fetchAll();
+                                  WHERE t.kind = 'finding' AND t.itflow_ticket_id > 0 AND t.state IN ('open', 'sentinel_resolved', 'awaiting_check') ORDER BY t.id LIMIT 50")->fetchAll();
         foreach ($rows as $r) {
             if ($this->budget <= 0) {
                 return;
             }
             try {
-                if ($this->itflow->ticketStatus((int) $r['itflow_ticket_id']) === 'open') {
+                if ($r['state'] === 'open' && $this->itflow->ticketStatus((int) $r['itflow_ticket_id']) === 'open') {
                     $this->itflow->addNote((int) $r['itflow_client_id'], (int) $r['itflow_ticket_id'],
                         '<p><strong>The client was archived in Sentinel</strong>, so it is no longer scanned and Sentinel no longer follows this ticket. Resolve it here when it is dealt with. If the client is restored, Sentinel opens a new ticket for anything still open.</p>');
                     $this->budget--;
                     $this->n['notes']++;
                 }
-                $this->setRow((int) $r['row_id'], ['state' => 'gone', 'last_note_at' => $this->dbNow()]);
-                $this->db->prepare("UPDATE itflow_tickets SET state = 'gone' WHERE kind = 'member' AND parent_id = :p AND state = 'open'")->execute(['p' => $r['row_id']]);
             } catch (ItflowException $ex) {
                 $this->setRow((int) $r['row_id'], ['last_error' => mb_substr($ex->getMessage(), 0, 255)]);
-                $this->skip($ex);
+                $this->skip($ex); // rethrows when the run must stop: the row is left for the next run
             }
+            $this->setRow((int) $r['row_id'], ['state' => 'gone', 'last_note_at' => $this->dbNow()]);
+            $this->db->prepare("UPDATE itflow_tickets SET state = 'gone' WHERE kind = 'member' AND parent_id = :p AND state = 'open'")->execute(['p' => $r['row_id']]);
         }
     }
 
@@ -858,7 +861,7 @@ final class ItflowTickets
      */
     private static function notFixed(array $r): bool
     {
-        return (string) ($r['f_status'] ?? '') === 'resolved' && in_array((string) ($r['f_reason'] ?? ''), ['gone', 'unlinked'], true);
+        return (string) ($r['f_status'] ?? '') === 'resolved' && in_array((string) ($r['f_reason'] ?? ''), ['gone', 'unlinked', 'merged'], true);
     }
 
     /** True when any target of a ticket closed without a fix. @param list<array<string,mixed>> $group */
@@ -870,9 +873,12 @@ final class ItflowTickets
     /** @param array<string,mixed> $r */
     private static function notFixedText(array $r): string
     {
-        return (string) ($r['f_reason'] ?? '') === 'unlinked'
-            ? 'The client was unlinked from its inventory source in Sentinel, so Sentinel no longer sees this device. Check it by hand, then resolve this ticket.'
-            : 'The device is no longer reported by its inventory source (removed, retired or moved), so Sentinel can\'t check it any more. Check it by hand, then resolve this ticket.';
+        return match ((string) ($r['f_reason'] ?? '')) {
+            'unlinked' => 'The client was unlinked from its inventory source in Sentinel, so Sentinel no longer sees this device. Check it by hand, then resolve this ticket.',
+            // 1.50.1: an upgrade combined two findings for one certificate; the other one carries on.
+            'merged' => 'Sentinel combined this finding with another finding for the same certificate, which it follows from now on. Nothing was confirmed fixed: check the certificate, then resolve this ticket.',
+            default => 'The device is no longer reported by its inventory source (removed, retired or moved), so Sentinel can\'t check it any more. Check it by hand, then resolve this ticket.',
+        };
     }
 
     /** What Sentinel sees, for a note (every value escaped). @param array<string,mixed> $r */

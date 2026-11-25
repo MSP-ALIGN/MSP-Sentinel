@@ -363,6 +363,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.50.1',
+            'date' => '2026-11-25',
+            'items' => [
+                'Fixes from review: a MAC several devices share (a router or VPN server) no longer joins them to one NinjaOne device; a contradicting MAC, a name of a device not seen lately, or a range two sites use (even after an authorisation lapses) no longer match; upgraded certificate findings keep their decisions; an accepted Warning that becomes a Fail opens again; only open tickets of archived clients get the note.',
+            ],
+        ],
+        [
             'version' => '1.50.0',
             'date' => '2026-11-25',
             'items' => [

@@ -158,10 +158,8 @@ final class NinjaOneSource implements InventorySource
                     'os_release' => self::str($os['releaseId'] ?? ''),
                     'ip_addresses' => array_values(array_filter(array_map([self::class, 'str'], is_array($d['ipAddresses'] ?? null) ? $d['ipAddresses'] : []))),
                     // MAC addresses (1.50): matched against the agent's devices first. Normalised; anything else dropped.
-                    'mac_addresses' => array_values(array_unique(array_filter(array_map(static function ($m): string {
-                        $hex = strtolower((string) preg_replace('/[^0-9A-Fa-f]/', '', is_string($m) ? $m : ''));
-                        return strlen($hex) === 12 && $hex !== '000000000000' ? implode(':', str_split($hex, 2)) : '';
-                    }, is_array($d['macAddresses'] ?? null) ? array_slice($d['macAddresses'], 0, 20) : [])))),
+                    'mac_addresses' => array_values(array_unique(array_filter(array_map([self::class, 'mac'],
+                        is_array($d['macAddresses'] ?? null) ? array_slice($d['macAddresses'], 0, 20) : [])))),
                     'last_contact' => is_numeric($d['lastContact'] ?? null) ? (int) $d['lastContact'] : null,
                     'av_product' => '', 'av_state' => '', 'av_definitions' => '', 'encryption' => '',
                     'software' => [], 'patches' => [],
@@ -415,6 +413,25 @@ final class NinjaOneSource implements InventorySource
             throw new InventoryException(strlen($body) > self::MAX_BYTES ? 'NinjaOne sent more data than Sentinel accepts in one answer.' : 'Could not reach NinjaOne: ' . mb_substr($err, 0, 200));
         }
         return [$status, $body];
+    }
+
+    /**
+     * One MAC address from NinjaOne, normalised to lower case with colons, or '' (1.50; stricter in 1.50.1). Untrusted
+     * input: only the usual written forms are accepted (six pairs with ':' or '-' or none, or Cisco's three dotted
+     * groups), so a label that happens to contain twelve hex digits is not read as a MAC. All-zero and group
+     * (multicast and broadcast) addresses identify no machine and are dropped.
+     */
+    private static function mac(mixed $m): string
+    {
+        $m = is_string($m) ? trim($m) : '';
+        if (preg_match('/^[0-9a-f]{2}([:-]?)[0-9a-f]{2}(\1[0-9a-f]{2}){4}$/i', $m) !== 1 && preg_match('/^[0-9a-f]{4}\.[0-9a-f]{4}\.[0-9a-f]{4}$/i', $m) !== 1) {
+            return '';
+        }
+        $hex = strtolower((string) preg_replace('/[^0-9a-f]/i', '', $m));
+        if ($hex === '000000000000' || (hexdec($hex[1]) & 1) === 1) {
+            return ''; // all zero, or the group bit (multicast; broadcast ff:ff:... included)
+        }
+        return implode(':', str_split($hex, 2));
     }
 
     /** A scalar from the API as a trimmed string ('' for anything else). */

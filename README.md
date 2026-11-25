@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.50.0](https://img.shields.io/badge/version-1.50.0-ff5a1f?style=flat-square)
+![Version 1.50.1](https://img.shields.io/badge/version-1.50.1-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,21 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.50.1 (2026-11-25): Fixes from review
+
+- **Safer device matching.** A MAC several agent devices share (a router or VPN server answering for others) no longer
+  joins them all to one NinjaOne device. A real MAC the NinjaOne device doesn't list rules it out, a name only
+  matches a device NinjaOne saw in the last day, and an address range two sites use stays ambiguous after one site's
+  authorisation lapses.
+- **Certificate findings keep their decisions.** The upgrade moves the evidence to the new form too, so false
+  positives and accepted findings don't reopen. Where an endpoint had both an old "expired" and an "expires soon"
+  finding, the open one is kept, and an open one combined into another closes with an honest ticket note instead of
+  "Verified fixed".
+- **An accepted Warning that becomes a Fail opens again** (an accepted "expires soon" certificate that expires), with
+  a Fail deadline from that day.
+- **Archived clients' tickets**: only open tickets get the note; a note ITFlow refuses no longer retries every run.
+- NinjaOne MAC addresses are read only in their usual written forms; multicast and broadcast addresses are dropped.
+
 ### 1.50.0 (2026-11-25): The right device, one certificate finding, tidy tickets
 
 - **Matching agents to NinjaOne devices.** Sentinel now uses the strongest evidence first: the network card's MAC
@@ -149,26 +164,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
   first-import summary was dropped: you're setting the client up and expect that data).
 - A program list without any usable entry no longer clears a device's software; a re-link that loses a race says
   so plainly; the "alerts paused" notice says where the rest are.
-
-### 1.49.0 (2026-11-25): Accurate data, calmer alerts and tickets
-
-From a full review of how devices, findings, alerts and tickets fit together.
-
-- **CVEs for the right platform.** NVD limits some CVEs to an operating system (for example Chrome "running on"
-  Android or macOS). These are now reported only on devices running it, and never as confirmed when the OS is
-  unknown. This removes many of the extra CVEs a NinjaOne connection brought onto Windows PCs. Cached NVD answers are
-  fetched again in the background to pick this up.
-- **Unknown is not fixed.** A device NinjaOne says nothing about in a sync (offline, or a report came back empty)
-  keeps its last known antivirus, encryption and software, so its findings no longer close and reopen with a new
-  due date, alert and ticket. An empty antivirus report never marks every PC as having no antivirus.
-- **The right device.** An address DHCP gives to a different machine no longer carries over the old device's record,
-  name and findings. Re-linking a client to another NinjaOne organisation retires the old organisation's devices.
-- **No floods.** One run sends at most 60 immediate Fail alerts across clients (for example after new vulnerability
-  data), then one notice. Linking a client to ITFlow, or restoring it, no longer opens tickets for months of old
-  findings.
-- **Honest tickets.** When Sentinel stops tracking a problem without seeing it fixed (device gone, source unlinked),
-  the ticket gets a note saying so and stays open, instead of "Verified fixed". A ticket interrupted before it was
-  opened is retried instead of blocking. Breached email addresses are masked in tickets, as in alerts.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

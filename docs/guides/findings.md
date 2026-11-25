@@ -19,7 +19,8 @@ Read what Sentinel found, decide what to do with each finding, and get it fixed 
      portal, missing HSTS or Content-Security-Policy, missing SPF or DMARC, or a confirmed high-severity
      vulnerability.
    - A certificate that expires soon and then expires stays **one finding**: it moves from Warning to Fail, keeping
-     its owner, history and ticket.
+     its owner, history and ticket. If the Warning was accepted or marked a false positive, it opens again as a Fail
+     with a new deadline: the decision was about the Warning.
    - **Info** items are shown on the client's pages but are not findings.
 3. Use the filters (client, status, grade, type, owner, due) and the quick links **Assigned to me**, **Overdue** and
    **Due soon**. To find one finding by text, see [Search](search.md).

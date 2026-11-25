@@ -136,14 +136,22 @@ final class FindingsEngine
                     $stats['reopened']++;
                     $stats['reopened_ids'][] = $id;
                 }
+                // 1.50.1: a Warning accepted or marked false positive that becomes a Fail (an expiring certificate that
+                // expired) needs attention again: the decision was about the Warning.
+                $escalated = $row['severity'] === 'warn' && $issue['severity'] === 'fail';
+                if ($escalated && in_array($newStatus, ['accepted', 'false_positive'], true)) {
+                    $this->event($id, 'reopened', null, __('Reopened: it was a Warning when marked {status}, and it is now a Fail.', ['status' => $newStatus]));
+                    $newStatus = 'open';
+                    $stats['reopened']++;
+                }
                 if ($row['severity'] !== $issue['severity']) {
                     $this->event($id, 'severity_changed', null, __('Severity changed from {old} to {new}.', ['old' => $row['severity'], 'new' => $issue['severity']]));
                     if ($issue['severity'] === 'fail' && $newStatus === 'open') {
                         $stats['escalated_ids'][] = $id; // an open Warning became a Fail: alert like a new Fail
                     }
                 }
-                if ($newStatus === 'open' && $status !== 'open' && (int) ($row['due_custom'] ?? 0) === 1) {
-                    $this->event($id, 'due_changed', null, __('Due date follows the policy again (the finding came back).'));
+                if ($newStatus === 'open' && ($status !== 'open' || $escalated) && (int) ($row['due_custom'] ?? 0) === 1) {
+                    $this->event($id, 'due_changed', null, $status !== 'open' ? __('Due date follows the policy again (the finding came back).') : __('Due date follows the policy again (it became a Fail).'));
                 }
                 $update->execute([
                     'sev' => $issue['severity'], 't' => $issue['title'], 'd' => $issue['detail'], 'tg' => $issue['target'], 'ev' => $issue['evidence'],
@@ -153,7 +161,9 @@ final class FindingsEngine
                     'reap' => $status === 'resolved' ? 1 : 0, 'inc' => $status === 'resolved' || $newStatus !== $status ? 1 : 0, 'id' => $id,
                     // Seen again after being resolved, or a false positive whose evidence changed: a new problem, so a new
                     // fix deadline starts now (and an admin-set date no longer applies; the history says so below).
-                    'reopen' => $reopen = ($newStatus === 'open' && $status !== 'open') ? 1 : 0, 'reopen2' => $reopen,
+                    // A Warning that became a Fail starts the Fail's deadline now too (1.50.1), and so counts as new for
+                    // ITFlow tickets on clients linked after the Warning first appeared.
+                    'reopen' => $reopen = (($newStatus === 'open' && $status !== 'open') || ($escalated && $newStatus === 'open')) ? 1 : 0, 'reopen2' => $reopen,
                 ]);
             }
             $resolve = $this->db->prepare("UPDATE findings SET resolved_from = status, status = 'resolved', resolved_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP(), resolved_reason = :why WHERE id = :id");

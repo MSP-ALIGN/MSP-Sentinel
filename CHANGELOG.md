@@ -2,6 +2,21 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.50.1 (2026-11-25): Fixes from review
+
+- **Safer device matching.** A MAC several agent devices share (a router or VPN server answering for others) no longer
+  joins them all to one NinjaOne device. A real MAC the NinjaOne device doesn't list rules it out, a name only
+  matches a device NinjaOne saw in the last day, and an address range two sites use stays ambiguous after one site's
+  authorisation lapses.
+- **Certificate findings keep their decisions.** The upgrade moves the evidence to the new form too, so false
+  positives and accepted findings don't reopen. Where an endpoint had both an old "expired" and an "expires soon"
+  finding, the open one is kept, and an open one combined into another closes with an honest ticket note instead of
+  "Verified fixed".
+- **An accepted Warning that becomes a Fail opens again** (an accepted "expires soon" certificate that expires), with
+  a Fail deadline from that day.
+- **Archived clients' tickets**: only open tickets get the note; a note ITFlow refuses no longer retries every run.
+- NinjaOne MAC addresses are read only in their usual written forms; multicast and broadcast addresses are dropped.
+
 ### 1.50.0 (2026-11-25): The right device, one certificate finding, tidy tickets
 
 - **Matching agents to NinjaOne devices.** Sentinel now uses the strongest evidence first: the network card's MAC

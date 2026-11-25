@@ -268,7 +268,10 @@ final class AgentService
         foreach ($hosts as $h) {
             $m = self::mac((string) ($h['mac'] ?? ''));
             if ($m !== '') {
-                $macIps[$m][(string) ($h['ip'] ?? '')] = true;
+                // Keyed by the address as PHP reads it, so written variants of one address count once (1.50.1).
+                $ip = trim((string) ($h['ip'] ?? ''));
+                $bin = @inet_pton($ip);
+                $macIps[$m][$bin !== false ? inet_ntop($bin) : $ip] = true;
             }
         }
         foreach ($hosts as &$h) {

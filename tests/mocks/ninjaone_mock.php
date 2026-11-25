@@ -35,7 +35,7 @@ $orgFrom = static function (): ?int {
 };
 $devices = [
     ['id' => 11, 'organizationId' => 901, 'systemName' => 'HARBOUR-LT-01', 'dnsName' => 'harbour-lt-01.harbour.example', 'nodeClass' => 'WINDOWS_WORKSTATION', 'approvalStatus' => 'APPROVED',
-     'os' => ['name' => 'Windows 10 Pro', 'buildNumber' => '19045', 'releaseId' => '22H2'], 'ipAddresses' => ['10.30.0.11'], 'macAddresses' => ['00-1B-21-3A-4F-11', 'not-a-mac', '00:00:00:00:00:00'], 'lastContact' => time() - 600],
+     'os' => ['name' => 'Windows 10 Pro', 'buildNumber' => '19045', 'releaseId' => '22H2'], 'ipAddresses' => ['10.30.0.11'], 'macAddresses' => ['00-1B-21-3A-4F-11', 'not-a-mac', '00:00:00:00:00:00', '01:00:5E:00:00:FB', 'Ethernet 001B213A4F12', '001b.213a.4f13'], 'lastContact' => time() - 600],
     ['id' => 12, 'organizationId' => 901, 'systemName' => 'HARBOUR-SRV-01', 'dnsName' => '', 'nodeClass' => 'WINDOWS_SERVER', 'approvalStatus' => 'APPROVED',
      'os' => ['name' => 'Windows Server 2022 Standard', 'buildNumber' => '20348', 'releaseId' => '21H2'], 'ipAddresses' => ['10.30.0.12'], 'lastContact' => time() - 300],
     ['id' => 13, 'organizationId' => 901, 'systemName' => 'HARBOUR-LT-02', 'nodeClass' => 'WINDOWS_WORKSTATION', 'approvalStatus' => 'APPROVED',

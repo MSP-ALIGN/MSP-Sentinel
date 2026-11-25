@@ -83,8 +83,10 @@ agent then pins the new address at its next sign-in.
   Sentinel matches them on the strongest evidence it has, in this order: the network card's MAC address (when it
   belongs to exactly one NinjaOne device and isn't a private or shared one); then the address, but only from a
   NinjaOne device seen in the last day, only where one site's networks cover it (two sites using the same 192.168.1.x
-  range prove nothing), and only when the name matches or the agent saw none; then a name exactly one NinjaOne device
-  has. A MAC that answers on several addresses (a router or firewall) is never used to tell devices apart. The device page then shows NinjaOne's OS, antivirus and patches together with the agent's open
+  range prove nothing, even after one site's authorisation lapses), and only when the name matches or the agent saw
+  none; then a name exactly one NinjaOne device seen in the last day has. A MAC that answers on several addresses (a
+  router, firewall or VPN server) is never used to tell devices apart, and a real MAC the NinjaOne device doesn't list
+  rules that device out. The device page then shows NinjaOne's OS, antivirus and patches together with the agent's open
   services, certificates and findings. Admins can **split** a wrong match, or **merge** an agent device into a NinjaOne
   device by hand (on the agent device's page). Nothing is deleted either way.
 
