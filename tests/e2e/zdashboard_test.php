@@ -36,12 +36,23 @@ return [
         Assert::contains('class="sonar"', $dash);
         $ctx->db->exec("INSERT INTO clients (name, timezone, created_at, updated_at) VALUES ('Sonar <b>Example</b>', 'UTC', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
         $sonarId = (int) $ctx->db->lastInsertId();
+        // At risk, so it is drawn even when there are more clients than the sonar shows (they are drawn worst first).
+        $ctx->db->exec("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, detail, target, evidence, status, first_seen, last_seen, opened_at, due_at)
+                        VALUES ({$sonarId}, 'port:203.0.113.101:23', 'port', 'fail', 'Telnet open', '', '203.0.113.101:23', 'x', 'open', UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP())");
         $dash = $admin->get('/')->body;
-        Assert::contains('<a href="/clients/' . $sonarId . '" class="sn-dot sn-', $dash, 'a dot links to its client');
-        Assert::contains('<title>Sonar &lt;b&gt;Example&lt;/b&gt; · ', $dash, 'hover text escaped');
+        $active = (int) $ctx->db->query('SELECT COUNT(*) FROM clients WHERE is_archived = 0')->fetchColumn();
+        $riskier = (int) $ctx->db->query("SELECT COUNT(DISTINCT client_id) FROM findings f JOIN clients c ON c.id = f.client_id AND c.is_archived = 0 WHERE f.status = 'open' AND f.severity = 'fail'")->fetchColumn();
+        if ($riskier <= \Sentinel\Dashboard\Svg::SONAR_MAX) {
+            Assert::contains('<a href="/clients/' . $sonarId . '" class="sn-dot sn-risk"', $dash, 'a dot links to its client');
+            Assert::contains('<title>Sonar &lt;b&gt;Example&lt;/b&gt; · ', $dash, 'hover text escaped');
+        }
+        if ($active > \Sentinel\Dashboard\Svg::SONAR_MAX) {
+            Assert::contains(($active - \Sentinel\Dashboard\Svg::SONAR_MAX) . ' more not drawn', $dash, 'the rest are counted');
+        }
         Assert::notContains('Sonar <b>Example</b>', $dash);
         Assert::true(preg_match_all('/class="sn-dot /', $dash) === min(\Sentinel\Dashboard\Svg::SONAR_MAX, (int) $ctx->db->query('SELECT COUNT(*) FROM clients WHERE is_archived = 0')->fetchColumn()), 'one dot per active client, up to the limit');
         Assert::notContains('style="', substr($dash, (int) strpos($dash, '<svg class="sonar"'), (int) strpos($dash, '</svg>', (int) strpos($dash, '<svg class="sonar"')) - (int) strpos($dash, '<svg class="sonar"')), 'no inline style (strict CSP)');
+        $ctx->db->exec("DELETE FROM findings WHERE client_id = {$sonarId}");
         $ctx->db->exec("UPDATE clients SET is_archived = 1 WHERE id = {$sonarId}");
         $live = $admin->get('/dashboard/live');
         Assert::same(200, $live->status);
