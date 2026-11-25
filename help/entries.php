@@ -367,6 +367,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.56.2',
+            'date' => '2026-11-25',
+            'items' => [
+                'Windows agent installer: nmap is installed silently first (it finishes on its own where Npcap is already installed); only when that can\'t finish does nmap\'s setup window open as before.',
+            ],
+        ],
+        [
             'version' => '1.56.1',
             'date' => '2026-11-25',
             'items' => [

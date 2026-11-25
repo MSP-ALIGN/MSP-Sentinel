@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.56.1](https://img.shields.io/badge/version-1.56.1-ff5a1f?style=flat-square)
+![Version 1.56.2](https://img.shields.io/badge/version-1.56.2-ff5a1f?style=flat-square)
 ![License AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,14 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.56.2 (2026-11-25): Silent nmap install on Windows where it can work
+
+- **The Windows agent installer tries a silent nmap install first.** nmap itself installs silently; only the free
+  edition's bundled Npcap waits for a click. So on a machine that already has Npcap (for example from Wireshark),
+  the whole install is unattended again. Where the silent install can't finish within 5 minutes, it is stopped and
+  the installer falls back to nmap's setup window as before (or, with no one at the screen, stops with a clear
+  message).
+
 ### 1.56.1 (2026-11-25): Fixes from review
 
 - Correcting the ITFlow ticket template retries tickets that failed on it at the next run, instead of up to a day
@@ -135,13 +143,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
   ITFlow ticket template that has the category you want. New tickets get its category (and any tags, tasks and due
   time); Sentinel's subject, details and priority are kept. A template ITFlow refuses is reported on the finding and
   retried later.
-
-### 1.55.2 (2026-11-25): Clearer update check
-
-- **Check now says what happened.** Instead of one message for every case ("did not get an answer"), it now says
-  whether GitHub has no published release yet (or the repository is private), whether the server couldn't reach
-  GitHub at all, or that the check is off. Servers installed from a branch are told how far behind their branch they
-  are.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

@@ -28,9 +28,9 @@ agent in Sentinel. Give the release key by hand: `-Upgrade -ReleaseKey BASE64KEY
 What the installer checks before it runs anything:
 
 - **PHP 8.4 (NTS x64):** the SHA-256 that windows.php.net publishes in its release list.
-- **nmap:** the SHA-256 in nmap.org's digest file, and a valid Authenticode signature. The free nmap has no silent
-  install, so its setup window opens: click through it and untick Npcap. An nmap that is already installed is used
-  as it is.
+- **nmap:** the SHA-256 in nmap.org's digest file, and a valid Authenticode signature. It is installed silently
+  first; where that can't finish (the free nmap's bundled Npcap waits for a click), its setup window opens: click
+  through it and untick Npcap. An nmap that is already installed is used as it is.
 - **Visual C++ runtime:** a valid Microsoft signature.
 - **WinSW 2.12.0:** a SHA-256 pinned in the script.
 - **The agent code:** downloaded from GitHub (the same trust as the Linux one-line install).
@@ -106,11 +106,13 @@ folder and the files resolve to themselves (no junction, link or pipe).
   documentation says are slower.
 - **No name-poisoning check.** Windows uses the UDP 137 and 5355 ports itself, so the agent can't listen on them.
 - **Diagnostics leave out uptime and free memory.**
-- **nmap needs a click-through.** The free nmap installer has no silent mode (nmap.org keeps that, and its
-  command-line zip, for the paid OEM edition). The installer opens nmap's setup window and waits up to 30 minutes:
-  click through and untick Npcap. For an unattended install (an RMM tool running as SYSTEM, with no desktop),
-  install nmap first (`nmap-<version>-setup.exe` from nmap.org, Npcap unticked); the installer then uses it and
-  needs no clicks. Without a desktop and without nmap, it stops at once and says so.
+- **nmap may need a click-through.** The installer first runs nmap's setup silently (at most 5 minutes). nmap
+  itself installs silently; the free edition's bundled Npcap can't, so on a machine that already has Npcap (from
+  Wireshark or an earlier nmap) it all finishes on its own. Otherwise the silent setup is stopped and nmap's setup
+  window opens and waits up to 30 minutes: click through and untick Npcap. For an unattended install on such a
+  machine (an RMM tool running as SYSTEM, with no desktop), install nmap first (`nmap-<version>-setup.exe` from
+  nmap.org, Npcap unticked); the installer then uses it and needs no clicks. Without a desktop, it stops with a
+  clear message when the silent install can't finish.
 - **Not verified on Windows yet:**
   - The `sc queryex` output the update task reads is assumed to be in English.
 - **Updates use the address the agent was enrolled with.** The update task doesn't follow a move to a new Sentinel

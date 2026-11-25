@@ -2,6 +2,13 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.55.2 (2026-11-25): Clearer update check
+
+- **Check now says what happened.** Instead of one message for every case ("did not get an answer"), it now says
+  whether GitHub has no published release yet (or the repository is private), whether the server couldn't reach
+  GitHub at all, or that the check is off. Servers installed from a branch are told how far behind their branch they
+  are.
+
 ### 1.55.1 (2026-11-25): Fixes from review
 
 - When a ticket closed in ITFlow is replaced and the new ticket can't be opened yet, the targets moving to it no longer

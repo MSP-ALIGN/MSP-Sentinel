@@ -13,8 +13,9 @@
   - installs the Microsoft Visual C++ runtime PHP needs, if missing (only when signed by Microsoft);
   - downloads PHP 8.4 (NTS x64) from windows.php.net and checks it against the SHA-256 windows.php.net publishes;
   - if nmap is missing, downloads it from nmap.org, checks it against nmap.org's published SHA-256 and its
-    Authenticode signature, and opens its setup: click through and untick Npcap (the agent only uses unprivileged TCP
-    connect scans). The free nmap has no silent install, so for an unattended install put nmap on first;
+    Authenticode signature, and installs it silently. That works where Npcap is already installed; otherwise the free
+    nmap's bundled Npcap needs a click, so its setup window opens: click through and untick Npcap (the agent only uses
+    unprivileged TCP connect scans). For an unattended install on such a machine, put nmap on first;
   - downloads the agent code (this repository) and WinSW (the service wrapper; SHA-256 pinned below);
   - puts code, PHP and WinSW in C:\Program Files\MSP Sentinel Agent (Administrators and SYSTEM can change it), and
     config, state, logs and update results in C:\ProgramData\MSP Sentinel Agent with tight permissions: the agent's
@@ -171,6 +172,41 @@ function Install-Php {
     Say "PHP $v installed"
 }
 
+# Runs nmap's setup silently (/S) for at most 5 minutes. Returns nmap.exe's path when nmap was installed, or $null when
+# the setup did not finish on its own (usually Npcap's installer waiting for a click): then the setup and everything
+# it started are stopped, so the setup window can be used next without two installers running at once.
+function Install-NmapSilently([string]$exe) {
+    Say 'Trying a silent nmap install (it finishes on its own when Npcap is already installed)'
+    $p = Start-Process -FilePath $exe -ArgumentList '/S' -PassThru
+    $null = $p.Handle  # keep the process handle, or ExitCode reads as empty after WaitForExit
+    $finished = $p.WaitForExit(300000)
+    if (-not $finished) {
+        Stop-ProcessTree $p.Id
+    }
+    $found = @("${env:ProgramFiles(x86)}\Nmap\nmap.exe", "$env:ProgramFiles\Nmap\nmap.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if ($found) {
+        # Installed, even if Npcap's part was stopped: nmap must also run (the agent never needs Npcap).
+        & $found --version *> $null
+        if ($LASTEXITCODE -eq 0) {
+            if ($finished) { Say "nmap installed silently: $found" } else { Say "nmap installed silently (Npcap's part was skipped): $found" }
+            return $found
+        }
+    }
+    if ($finished) {
+        Say "The silent nmap install did not leave a working nmap (exit $($p.ExitCode)); using the setup window instead."
+    } else {
+        Say 'The silent nmap install waited for a click (Npcap); it was stopped. Using the setup window instead.'
+    }
+    return $null
+}
+
+# Stops a process and every process it started (children first), e.g. nmap's setup and the Npcap installer it runs.
+function Stop-ProcessTree([int]$id) {
+    $children = @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $id" -ErrorAction SilentlyContinue)
+    foreach ($c in $children) { Stop-ProcessTree ([int]$c.ProcessId) }
+    Stop-Process -Id $id -Force -ErrorAction SilentlyContinue
+}
+
 function Install-Nmap {
     $existing = @("${env:ProgramFiles(x86)}\Nmap\nmap.exe", "$env:ProgramFiles\Nmap\nmap.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
     if ($existing) { Say "nmap found: $existing"; return $existing }
@@ -186,9 +222,13 @@ function Install-Nmap {
     if ($sha.Length -ne 64) { Fail 'nmap.org published no SHA-256 for that file.' }
     Assert-Sha256 $exe $sha
     Assert-Signed $exe 'Insecure\.Com|Nmap Software'
-    # The free nmap installer has no silent mode (nmap.org keeps that, and the command-line zip, for the OEM edition),
-    # so (1.45.3) it runs with its window and someone clicks through it. Nobody can do that in a session without a
-    # desktop (an RMM tool running this as SYSTEM): stop at once and say to install nmap first.
+    # 1.56.2: try the silent install first. nmap itself installs silently with /S; only the bundled Npcap (free
+    # edition) can't, and waits for a click. So it finishes on its own where Npcap is already installed (or not
+    # needed), and otherwise is stopped after a few minutes and the setup window below is used instead.
+    $silent = Install-NmapSilently $exe
+    if ($silent) { return $silent }
+    # Not silent: someone clicks through the setup window. Nobody can do that in a session without a desktop (an RMM
+    # tool running this as SYSTEM): stop at once and say to install nmap first.
     if (-not [Environment]::UserInteractive) {
         Fail 'nmap is not installed, and its installer needs someone at the screen. Install nmap from nmap.org first (untick Npcap), then run this again.'
     }
