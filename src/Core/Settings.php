@@ -62,6 +62,8 @@ final class Settings
         'worker_last_tick' => '',
         'update_latest_version' => '',
         'update_checked_at' => '',
+        // Why the last release check found no version (1.55.2): '' (it did), 'no_release' or 'unreachable'.
+        'update_last_error' => '',
         // Vulnerability data refresh (FeedSchedule): last run start and end, and the last "Refresh now" (UTC).
         'feeds_run_started' => '',
         'feeds_run_finished' => '',
@@ -93,6 +95,10 @@ final class Settings
         'itflow_last_ok' => '',
         // ITFlow tickets from findings (ItflowTickets): on/off, from when, and the last run.
         'tickets_enabled' => '0',
+        // 1.56: one priority for every Sentinel ticket ('' = automatic: High, Urgent when exploited, Medium weekly), and an
+        // optional ITFlow ticket template whose category (tags, tasks, due time) new tickets get.
+        'tickets_priority' => '',
+        'itflow_ticket_template' => '',
         'tickets_since' => '', 'tickets_weekly_since' => '',
         // Moving agents to a new Sentinel address: ONE value in SECRETS (agent_move, JSON url/ca/requested_at), encrypted
         // and authenticated with the app key from the config file, so a database write alone can't set a move.

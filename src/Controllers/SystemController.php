@@ -299,9 +299,24 @@ final class SystemController extends Controller
         $s = App::settings();
         if ($request->input('action') === 'check') {
             $v = App::updates()->check(true);
-            Session::flash($v === null ? 'warning' : 'success', $v === null
-                ? __('The update check did not get an answer (it may be off, or the server cannot reach the releases feed).')
-                : (App::updates()->newer() !== null ? __('Version {v} is available.', ['v' => $v]) : __('You are up to date ({v}).', ['v' => App::version()])));
+            if ($v !== null) {
+                Session::flash('success', App::updates()->newer() !== null ? __('Version {v} is available.', ['v' => $v]) : __('You are up to date ({v}).', ['v' => App::version()]));
+            } else {
+                // 1.55.2: say what actually happened instead of one message for every case.
+                $branch = App::updates()->branchStatus();
+                $why = $s->fresh('update_last_error');
+                if ($s->get('update_check_enabled') !== '1') {
+                    Session::flash('warning', __('The update check is off. Turn it on below to check.'));
+                } elseif ($branch !== null) {
+                    Session::flash($branch['behind'] > 0 ? 'info' : 'success', $branch['behind'] > 0
+                        ? __('Checked: the {b} branch has {n} new commit(s) since this install.', ['b' => $branch['branch'], 'n' => $branch['behind']])
+                        : __('Checked: up to date with the {b} branch.', ['b' => $branch['branch']]));
+                } elseif ($why === 'no_release') {
+                    Session::flash('info', __('Checked: GitHub has no published release of Sentinel yet (or the repository is private, which GitHub reports the same way), so there is no version to compare with. Nothing is wrong with this server.'));
+                } else {
+                    Session::flash('warning', __('The update check got no answer: this server could not reach GitHub (api.github.com). Check its internet access, DNS and firewall.'));
+                }
+            }
         } else {
             $on = $request->input('update_check_enabled') === '1';
             $s->set('update_check_enabled', $on ? '1' : '0');

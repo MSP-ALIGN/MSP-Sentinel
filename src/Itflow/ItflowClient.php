@@ -96,11 +96,12 @@ final class ItflowClient
     /**
      * Open a ticket for a client. ITFlow stores the details as HTML: the caller must have escaped every value in it.
      * $marker goes into the ticket's vendor ticket number, so a ticket whose create call timed out can be found again
-     * (findByMarker) instead of opened twice.
+     * (findByMarker) instead of opened twice. $templateId (1.56, 0 = none) is an ITFlow ticket template: ITFlow takes the
+     * ticket's category (and any tags, tasks and due time) from it; the subject, details and priority sent here win.
      *
      * @return array{id:int, reference:string}
      */
-    public function createTicket(int $clientId, string $subject, string $detailsHtml, string $priority, string $marker = ''): array
+    public function createTicket(int $clientId, string $subject, string $detailsHtml, string $priority, string $marker = '', int $templateId = 0): array
     {
         if (!in_array($priority, ['Low', 'Medium', 'High', 'Urgent'], true)) {
             throw new \InvalidArgumentException('Unknown ITFlow priority.');
@@ -108,6 +109,9 @@ final class ItflowClient
         $fields = ['client_id' => $clientId, 'ticket_subject' => mb_substr($subject, 0, 200), 'ticket_details' => $detailsHtml, 'ticket_priority' => $priority];
         if ($marker !== '') {
             $fields['ticket_vendor_ticket_number'] = $marker;
+        }
+        if ($templateId > 0) {
+            $fields['ticket_template_id'] = $templateId;
         }
         $data = $this->post('/api/v1/tickets/create.php', $fields);
         $id = $data['data'][0]['insert_id'] ?? null;

@@ -50,6 +50,7 @@ final class IntegrationsController extends Controller
                 'sync_off' => (int) App::db()->query('SELECT COUNT(*) FROM clients WHERE itflow_sync_off = 1 AND is_demo = 0')->fetchColumn(),
                 // Service boards (1.44, ITFlow builds with boards); null: this ITFlow has none, or isn't reachable now.
                 'board' => $s->get('itflow_board'),
+                'priority' => $s->get('tickets_priority'), 'template' => $s->get('itflow_ticket_template'),
                 // The list kept by the last sync, test or ticket run: the page never waits on ITFlow (1.44.1).
                 'boards' => (static function () use ($s): ?array {
                     $c = json_decode($s->get('itflow_boards_cache'), true);
@@ -494,6 +495,17 @@ final class IntegrationsController extends Controller
             Session::flash('danger', __('The ITFlow tag name can be at most 100 characters, without line breaks.'));
             return $back;
         }
+        // 1.56: one priority for every ticket ('' = automatic) and an ITFlow ticket template (number, '' = none). Untrusted.
+        $priority = $request->input('ticket_priority');
+        $template = trim($request->input('ticket_template'));
+        if (!in_array($priority, ['', 'Low', 'Medium', 'High', 'Urgent'], true)) {
+            Session::flash('danger', __('Choose a priority from the list.'));
+            return $back;
+        }
+        if (preg_match('/^(|[1-9][0-9]{0,9})$/', $template) !== 1) {
+            Session::flash('danger', __('The ticket template is the template\'s number in ITFlow (Admin → Ticket Templates), or empty for none.'));
+            return $back;
+        }
         $changed = [];
         // A saved key never follows a new address: a changed address needs the key entered again (so a typo, a hijacked
         // session or a rogue admin can't send the stored key to another server).
@@ -501,6 +513,10 @@ final class IntegrationsController extends Controller
         if ($keyDropped) {
             $s->setSecret('itflow_api_key', '');
             $changed['itflow_api_key'] = 'cleared (address changed)';
+        }
+        // A changed template (1.56.1): tickets that failed are retried on the next run, not up to a day later.
+        if ($template !== $s->get('itflow_ticket_template')) {
+            App::db()->exec("UPDATE itflow_tickets SET retry_at = UTC_TIMESTAMP() WHERE state = 'failed'");
         }
         $tickets = $request->input('tickets') === '1';
         if ($tickets && $s->get('tickets_enabled') !== '1') {
@@ -517,7 +533,7 @@ final class IntegrationsController extends Controller
             $changed['itflow_board'] = $board;
         }
         foreach (['itflow_url' => $url, 'itflow_enabled' => $enabled ? '1' : '0', 'tickets_enabled' => $tickets ? '1' : '0',
-                  'itflow_tag_filter' => $tagFilter ? '1' : '0', 'itflow_tag_name' => $tagName] as $key => $value) {
+                  'itflow_tag_filter' => $tagFilter ? '1' : '0', 'itflow_tag_name' => $tagName, 'tickets_priority' => $priority, 'itflow_ticket_template' => $template] as $key => $value) {
             if ($s->get($key) !== $value) {
                 $s->set($key, $value);
                 $changed[$key] = in_array($key, ['itflow_enabled', 'tickets_enabled', 'itflow_tag_filter'], true) ? $value === '1' : $value;

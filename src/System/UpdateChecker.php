@@ -28,6 +28,9 @@ use Sentinel\Core\Settings;
  */
 final class UpdateChecker
 {
+    /** The HTTP status of the last request (0: no answer), so a failed check can say why (1.55.2). */
+    private int $lastStatus = 0;
+
     public const DEFAULT_URL = 'https://api.github.com/repos/msp-align/msp-sentinel/releases/latest';
     public const DEFAULT_COMPARE_URL = 'https://api.github.com/repos/{repo}/compare/{base}...{head}';
 
@@ -54,13 +57,17 @@ final class UpdateChecker
         $this->checkBranch();
         $body = $this->get($this->url);
         if ($body === null) {
+            // 1.55.2: say why. GitHub answers 404 when no release is published yet (or the repository is private).
+            $this->settings->set('update_last_error', $this->lastStatus === 404 ? 'no_release' : 'unreachable');
             return null;
         }
         $data = json_decode($body, true);
         $tag = is_array($data) && is_string($data['tag_name'] ?? null) ? $data['tag_name'] : '';
         if (!preg_match('/^v?(\d{1,4}\.\d{1,4}\.\d{1,4})$/', $tag, $m) || (($data['prerelease'] ?? false) === true) || (($data['draft'] ?? false) === true)) {
+            $this->settings->set('update_last_error', 'no_release'); // no usable release (e.g. a pre-release only)
             return null;
         }
+        $this->settings->set('update_last_error', '');
         $this->settings->set('update_latest_version', $m[1]);
         return $m[1];
     }
@@ -131,6 +138,7 @@ final class UpdateChecker
         $ok = curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
         curl_close($ch);
+        $this->lastStatus = $ok === false ? 0 : $status;
         return $ok === false || $status !== 200 ? null : $body;
     }
 

@@ -124,6 +124,9 @@ if ($sub === '/api/v1/tickets/create.php' && $_SERVER['REQUEST_METHOD'] === 'POS
     if (in_array((int) $body['client_id'], array_map('intval', $fail['refuse_clients'] ?? []), true)) {
         $refuse('Client not found');
     }
+    if (isset($body['ticket_template_id']) && (int) $body['ticket_template_id'] === 999) {
+        $refuse('Ticket template not found'); // as ITFlow answers an unknown or archived template (400)
+    }
     $id = 5000 + count($state['tickets']) + 1;
     $state['tickets'][] = ['id' => $id, 'status' => 'open', 'created_at' => gmdate('Y-m-d H:i:s')] + $body;
     $save();

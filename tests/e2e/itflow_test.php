@@ -811,4 +811,47 @@ return [
         // Off again for later tests.
         $admin->submit('/admin/integrations', '/admin/integrations/itflow', ['url' => $base($ctx), 'api_key' => $key, 'enabled' => '0']);
     },
+    'ITFlow (1.56): one priority for every ticket and a ticket template for the category; checked before saving' => function (TestContext $ctx) use ($base, $setItflow, $key): void {
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $dir = dirname($ctx->feedsLog);
+        @unlink($dir . '/itflow-tickets.json');
+        $setItflow($ctx, [[885, 'Template Example Co']]);
+        $form = ['url' => $base($ctx), 'api_key' => $key, 'enabled' => '1', 'tickets' => '1', 'board' => '0'];
+        // Bad values are refused and nothing is saved.
+        $admin->submit('/admin/integrations', '/admin/integrations/itflow', $form + ['ticket_priority' => 'Critical', 'ticket_template' => '']);
+        $admin->submit('/admin/integrations', '/admin/integrations/itflow', $form + ['ticket_priority' => '', 'ticket_template' => 'abc']);
+        Assert::same(['', ''], [App::settings()->fresh('tickets_priority'), App::settings()->fresh('itflow_ticket_template')], 'refused');
+        $admin->submit('/admin/integrations', '/admin/integrations/itflow', $form + ['ticket_priority' => 'Low', 'ticket_template' => '12']);
+        Assert::same(['Low', '12'], [App::settings()->fresh('tickets_priority'), App::settings()->fresh('itflow_ticket_template')]);
+        $page = $admin->get('/admin/integrations')->body;
+        Assert::contains('<option value="Low" selected>', $page);
+        Assert::contains('value="12"', $page);
+        App::itflowSync()->sync();
+        $cid = (int) $ctx->db->query('SELECT id FROM clients WHERE itflow_client_id = 885')->fetchColumn();
+        $sent = static fn (): array => json_decode((string) @file_get_contents($dir . '/itflow-tickets.json'), true) ?: ['tickets' => []];
+        $ctx->db->prepare("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, detail, target, evidence, status, first_seen, last_seen, opened_at, due_at)
+                           VALUES (:c, 'port:203.0.113.99:23', 'port', 'fail', 'Telnet open', 'Port 23 open.', '203.0.113.99:23', 'x', 'open', UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP() + INTERVAL 1 SECOND, UTC_TIMESTAMP() + INTERVAL 14 DAY)")
+            ->execute(['c' => $cid]);
+        $f = (int) $ctx->db->lastInsertId();
+        App::itflowTickets()->run();
+        $mine = array_values(array_filter($sent()['tickets'], static fn (array $t): bool => (int) ($t['client_id'] ?? 0) === 885));
+        Assert::same(1, count($mine), 'one ticket: ' . App::settings()->fresh('tickets_last_result'));
+        Assert::same(['Low', '12'], [$mine[0]['ticket_priority'] ?? null, (string) ($mine[0]['ticket_template_id'] ?? '')], 'the chosen priority (not High) and the template');
+        // A template ITFlow doesn't know: refused, retried later, the reason on the finding's ticket row.
+        $admin->submit('/admin/integrations', '/admin/integrations/itflow', $form + ['ticket_priority' => '', 'ticket_template' => '999']);
+        $ctx->db->prepare("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, detail, target, evidence, status, first_seen, last_seen, opened_at, due_at)
+                           VALUES (:c, 'port:203.0.113.100:21', 'port', 'fail', 'FTP open', 'Port 21 open.', '203.0.113.100:21', 'x', 'open', UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP() + INTERVAL 1 SECOND, UTC_TIMESTAMP() + INTERVAL 14 DAY)")
+            ->execute(['c' => $cid]);
+        $g = (int) $ctx->db->lastInsertId();
+        App::itflowTickets()->run();
+        Assert::contains('Ticket template not found', (string) $ctx->db->query("SELECT last_error FROM itflow_tickets WHERE finding_id = {$g}")->fetchColumn());
+        // Fixing the template retries it on the next run (1.56.1), not up to a day later.
+        $ctx->db->exec("UPDATE itflow_tickets SET retry_at = UTC_TIMESTAMP() + INTERVAL 1 DAY WHERE finding_id = {$g}");
+        $admin->submit('/admin/integrations', '/admin/integrations/itflow', $form + ['ticket_priority' => '', 'ticket_template' => '12']);
+        App::itflowTickets()->run();
+        Assert::true((int) $ctx->db->query("SELECT itflow_ticket_id FROM itflow_tickets WHERE finding_id = {$g}")->fetchColumn() > 0, 'opened once the template is fixed');
+        // Back to automatic and no template for later tests.
+        $admin->submit('/admin/integrations', '/admin/integrations/itflow', ['url' => $base($ctx), 'api_key' => $key, 'enabled' => '0', 'ticket_priority' => '', 'ticket_template' => '']);
+        Assert::true($f > 0, 'fixture made');
+    },
 ];

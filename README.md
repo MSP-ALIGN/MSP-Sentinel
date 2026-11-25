@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.55.1](https://img.shields.io/badge/version-1.55.1-ff5a1f?style=flat-square)
+![Version 1.56.1](https://img.shields.io/badge/version-1.56.1-ff5a1f?style=flat-square)
 ![License AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,31 +119,29 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
-### 1.55.1 (2026-11-25): Fixes from review
+### 1.56.1 (2026-11-25): Fixes from review
 
-- When a ticket closed in ITFlow is replaced and the new ticket can't be opened yet, the targets moving to it no longer
-  keep the old ticket's ID in the new text field.
-- The ticketing-layer tests no longer depend on which tests ran before them.
+- Correcting the ITFlow ticket template retries tickets that failed on it at the next run, instead of up to a day
+  later.
+- The priority setting says plainly that a fixed priority applies to known-exploited findings too.
 
-### 1.55.0 (2026-11-25): Tickets ready for other ticketing systems
+### 1.56.0 (2026-11-25): ITFlow ticket priority and category
 
-Nothing changes in how ITFlow works.
+- **One priority for every ticket.** Under **Integrations → ITFlow**, choose **Priority for Sentinel tickets**:
+  *Automatic* (as before: High, Urgent when known exploited, Medium for the weekly ticket) or Low, Medium, High or
+  Urgent for every ticket. ITFlow sets a ticket's SLA from its priority, so choosing a priority without an SLA keeps
+  SLAs off Sentinel's tickets.
+- **Category through a ticket template.** ITFlow's API can't set a category directly, so enter the number of an
+  ITFlow ticket template that has the category you want. New tickets get its category (and any tags, tasks and due
+  time); Sentinel's subject, details and priority are kept. A template ITFlow refuses is reported on the finding and
+  retried later.
 
-- **Each ticket knows its system.** Every ticket Sentinel follows now records which ticketing system it belongs to,
-  and its ID there as text, so systems with text ticket IDs fit. Existing tickets are filled in on upgrade.
-- **Neutral ticket settings.** "Open tickets for findings", "since when" and the weekly Warnings ticket, and the last
-  run's result, are stored under names that don't depend on ITFlow. Your current choices are copied over on upgrade.
+### 1.55.2 (2026-11-25): Clearer update check
 
-### 1.54.1 (2026-11-25): Fixes from review
-
-- **ITFlow sync keeps going.** When an ITFlow client is already linked to another Sentinel client (for example a demo
-  client), the sync counts it as a conflict and carries on with the rest, instead of stopping.
-- **The client form never fails on a taken ITFlow ID.** It says "already in use", also when the ID was linked elsewhere
-  at the same moment.
-- **Old duplicates.** On an install where two clients shared one ITFlow ID, the upgrade keeps the link on the older
-  client, logs the other, and that client's Edit page shows "already in use" until the duplicate is cleared.
-- Linking a client to ITFlow by name and "tickets only from now on" are saved together, so a broken run can never
-  open tickets for old findings.
+- **Check now says what happened.** Instead of one message for every case ("did not get an answer"), it now says
+  whether GitHub has no published release yet (or the repository is private), whether the server couldn't reach
+  GitHub at all, or that the check is off. Servers installed from a branch are told how far behind their branch they
+  are.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

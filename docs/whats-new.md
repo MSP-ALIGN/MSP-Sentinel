@@ -2,6 +2,32 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.55.1 (2026-11-25): Fixes from review
+
+- When a ticket closed in ITFlow is replaced and the new ticket can't be opened yet, the targets moving to it no longer
+  keep the old ticket's ID in the new text field.
+- The ticketing-layer tests no longer depend on which tests ran before them.
+
+### 1.55.0 (2026-11-25): Tickets ready for other ticketing systems
+
+Nothing changes in how ITFlow works.
+
+- **Each ticket knows its system.** Every ticket Sentinel follows now records which ticketing system it belongs to,
+  and its ID there as text, so systems with text ticket IDs fit. Existing tickets are filled in on upgrade.
+- **Neutral ticket settings.** "Open tickets for findings", "since when" and the weekly Warnings ticket, and the last
+  run's result, are stored under names that don't depend on ITFlow. Your current choices are copied over on upgrade.
+
+### 1.54.1 (2026-11-25): Fixes from review
+
+- **ITFlow sync keeps going.** When an ITFlow client is already linked to another Sentinel client (for example a demo
+  client), the sync counts it as a conflict and carries on with the rest, instead of stopping.
+- **The client form never fails on a taken ITFlow ID.** It says "already in use", also when the ID was linked elsewhere
+  at the same moment.
+- **Old duplicates.** On an install where two clients shared one ITFlow ID, the upgrade keeps the link on the older
+  client, logs the other, and that client's Edit page shows "already in use" until the duplicate is cleared.
+- Linking a client to ITFlow by name and "tickets only from now on" are saved together, so a broken run can never
+  open tickets for old findings.
+
 ### 1.54.0 (2026-11-25): Client links ready for other ticketing systems
 
 Nothing changes in how ITFlow works.

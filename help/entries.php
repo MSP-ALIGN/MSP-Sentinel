@@ -194,6 +194,7 @@ return [
             'paragraphs' => [
                 'Connect other systems under Administration → Integrations. Sentinel only reads from them, except ITFlow tickets. Changing an integration\'s address clears its saved key: enter the key again for the new address.',
                 'ITFlow: every 15 minutes Sentinel adds new ITFlow clients, applies renames, and archives or restores clients archived or unarchived in ITFlow (a client you archived in Sentinel stays archived; changes show in the audit log as itflow-sync). With ticketing on, Sentinel opens, updates and closes ITFlow tickets for findings: see "ITFlow tickets in detail". On ITFlow builds with service boards, new tickets are moved to the board chosen under Integrations (by default the one named Alerts), unassigned so the board\'s own rules pick them up; on stock ITFlow they stay where ITFlow puts them.',
+                'ITFlow ticket priority and category (1.56): under Integrations → ITFlow, choose one priority for every Sentinel ticket (or Automatic: High, Urgent when exploited, Medium weekly). ITFlow sets SLAs from the priority, so pick one without an SLA to keep SLAs off these tickets. For the category, enter the number of an ITFlow ticket template (Admin → Ticket Templates) that has it.',
                 'Only some ITFlow clients: tick "Only sync ITFlow clients with this tag" under Integrations and tag those clients in ITFlow (default tag Sentinel, any case). Untagged clients are not added, and ones already here are archived (restored when the tag comes back). Tag the clients first: the first sync archives every linked client without the tag. If the tags can\'t be read, no client tag has that name, or no client has it, the sync stops and changes nothing; only client tags count. To leave one client out entirely, tick "Don\'t sync with ITFlow" on its Edit page: no renames, archives, restores, MSP Align linking by ITFlow ID or ITFlow tickets for it, and an ITFlow client of the same name is not added. Tickets already open in ITFlow are no longer followed; when the switch is turned off again, only findings from then on get tickets.',
                 'Sign in with Microsoft, set up automatically: under Integrations, enter your password and click Create setup code, then run the PowerShell command shown on any Windows PC and sign in at Microsoft as an Entra admin. The script creates the app registration (sign-in permissions only), adds a 12-month client secret and sends everything to Sentinel with the one-time code; then turn the switch on. Sentinel reminds admins 30 and 7 days before the secret expires: run the script again with a new code to renew it. A run signed in to another tenant than the saved one changes nothing, unless you ticked "Switch to another Microsoft tenant" for the code (that clears every user\'s Microsoft link and turns password sign-in back on for them).',
                 'MSP Align: connect it, then link each client on its Compliance page (see "Compliance").',
@@ -365,6 +366,27 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.56.1',
+            'date' => '2026-11-25',
+            'items' => [
+                'Fixes from review: a corrected ITFlow ticket template is used at the next run for tickets that failed on it; the priority setting notes that known-exploited findings get the fixed priority too.',
+            ],
+        ],
+        [
+            'version' => '1.56.0',
+            'date' => '2026-11-25',
+            'items' => [
+                'ITFlow ticket priority and category: choose one priority for every Sentinel ticket (or keep Automatic); a priority without an SLA in ITFlow keeps SLAs off these tickets. For the category, enter an ITFlow ticket template\'s number: new tickets get its category.',
+            ],
+        ],
+        [
+            'version' => '1.55.2',
+            'date' => '2026-11-25',
+            'items' => [
+                'Clearer update check: Check now says whether GitHub has no published release yet (or the repository is private), whether GitHub couldn\'t be reached, or that the check is off; branch installs see how far behind their branch they are.',
+            ],
+        ],
         [
             'version' => '1.55.1',
             'date' => '2026-11-25',

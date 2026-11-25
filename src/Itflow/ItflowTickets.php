@@ -12,7 +12,8 @@ use Sentinel\Reports\Guidance;
 /**
  * Opens ITFlow tickets from findings (phase 2 of docs/ROADMAP-itflow.md):
  *
- * - Each open Fail finding, and anything known-exploited, gets its own ticket (priority High; Urgent when known
+ * - Each open Fail finding, and anything known-exploited, gets its own ticket (priority High, or the one priority chosen
+ *   on the Integrations page since 1.56; Urgent when known
  *   exploited), with what was found, where, the evidence, why it matters, how to fix it, the due date and a link to
  *   the finding in Sentinel.
  * - A finding never gets two tickets (unique key in itflow_tickets). A finding that becomes known-exploited after its
@@ -817,7 +818,14 @@ final class ItflowTickets
     /** @param array<string,mixed> $f */
     private function priority(array $f): string
     {
-        return (int) $f['in_kev'] === 1 ? 'Urgent' : 'High';
+        return $this->fixedPriority() ?? ((int) $f['in_kev'] === 1 ? 'Urgent' : 'High');
+    }
+
+    /** The one priority chosen for every Sentinel ticket (1.56), or null for automatic. */
+    private function fixedPriority(): ?string
+    {
+        $p = $this->settings->get('tickets_priority');
+        return in_array($p, ['Low', 'Medium', 'High', 'Urgent'], true) ? $p : null;
     }
 
     /** The note when Sentinel no longer sees the problem, or it was decided in Sentinel. @param array<string,mixed> $r */
@@ -1118,7 +1126,7 @@ final class ItflowTickets
             }
             $rowId = $c['retry_row'] !== null ? (int) $c['retry_row'] : $this->newRow((int) $c['id'], 'weekly', null, 'warn', false);
             $ticket = $this->openTicket($rowId, (string) $c['itflow_client_id'], '[Sentinel] ' . count($new) . ' new security warning(s) this week - ' . $c['name'],
-                $this->weeklyHtml((string) $c['name'], $warnings, $cut), 'Medium');
+                $this->weeklyHtml((string) $c['name'], $warnings, $cut), $this->fixedPriority() ?? 'Medium');
             if ($ticket === null) {
                 continue;
             }
