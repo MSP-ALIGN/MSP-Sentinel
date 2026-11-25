@@ -135,7 +135,7 @@ final class EngagementFindings
                         __('Answered without any login.'),
                         __('Turn on authentication, and allow connections only from the servers that need it (bind to localhost or firewall it).'));
                 } elseif (($c['result'] ?? '') === 'locked') {
-                    $add('info', 'creds_locked', __('{s} signalled a lockout or block during the default-password test (testing stopped)', ['s' => $name]), $target, $origin,
+                    $add('info', 'creds_locked', __('{s} signaled a lockout or block during the default-password test (testing stopped)', ['s' => $name]), $target, $origin,
                         __('Stopped after {n} attempt(s).', ['n' => (int) ($c['tried'] ?? 0)]), __('Good: it limits failed logins. Check the account wasn\'t left locked.'));
                 }
             }

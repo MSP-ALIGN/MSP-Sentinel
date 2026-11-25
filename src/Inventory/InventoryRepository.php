@@ -62,7 +62,7 @@ final class InventoryRepository
             $active = (int) $activeStmt->fetchColumn();
             if ($complete && $active > 0 && (count($devices) === 0 || ($active >= self::SHRINK_MIN_DEVICES && count($devices) < $active / 2))) {
                 $complete = false;
-                $stats['warning'] = __('The source reported far fewer devices than before ({n} of {m}); nothing was removed. Check the source\'s access to this organisation.', ['n' => count($devices), 'm' => $active]);
+                $stats['warning'] = __('The source reported far fewer devices than before ({n} of {m}); nothing was removed. Check the source\'s access to this organization.', ['n' => count($devices), 'm' => $active]);
             }
             $softwareLeft = self::MAX_SOFTWARE_TOTAL;
             $upDevice = $this->db->prepare(
@@ -664,7 +664,7 @@ final class InventoryRepository
     public function setLink(int $clientId, string $source, string $orgId, string $orgName, int $userId): void
     {
         if ($this->orgLinkedElsewhere($source, $orgId, $clientId)) {
-            throw new \DomainException('This organisation is already linked to another client.');
+            throw new \DomainException('This organization is already linked to another client.');
         }
         $this->db->prepare('INSERT INTO source_links (client_id, source, org_id, org_name, linked_by, linked_at) VALUES (:c, :s, :o, :n, :u, UTC_TIMESTAMP())
                             ON DUPLICATE KEY UPDATE org_id = VALUES(org_id), org_name = VALUES(org_name), linked_by = VALUES(linked_by), linked_at = UTC_TIMESTAMP(),

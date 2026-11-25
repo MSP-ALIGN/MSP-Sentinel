@@ -55,7 +55,7 @@ final class InternalRanges
             $ranges[$r] = true;
         }
         if (count($ranges) > self::MAX_ENTRIES) {
-            $errors[] = 'At most ' . self::MAX_ENTRIES . ' ranges per authorisation.';
+            $errors[] = 'At most ' . self::MAX_ENTRIES . ' ranges per authorization.';
         }
         if ($total > self::MAX_TOTAL_V4) {
             $errors[] = 'Too many addresses in total (at most ' . self::MAX_TOTAL_V4 . ', for example four /16 networks).';
@@ -96,7 +96,7 @@ final class InternalRanges
                 return ['cidr' => $cidr];
             }
         }
-        return ['error' => '"' . mb_substr($text, 0, 60) . '" is not a private (internal) address. Internet addresses belong in the external authorisation.'];
+        return ['error' => '"' . mb_substr($text, 0, 60) . '" is not a private (internal) address. Internet addresses belong in the external authorization.'];
     }
 
     /** True if the address or CIDR $inner lies completely inside the CIDR $outer. */

@@ -59,7 +59,7 @@ final class ScanController extends Controller
         }
         $payload = App::scanWorker()->payloadFor($client);
         if ($payload === null) {
-            Session::flash('danger', __('There is nothing to scan: the client has no active authorisation with IP addresses or exact hostnames.'));
+            Session::flash('danger', __('There is nothing to scan: the client has no active authorization with IP addresses or exact hostnames.'));
             return $back;
         }
         // Check-and-insert under a row lock on the client, so two quick clicks can't queue two scans.
@@ -99,13 +99,13 @@ final class ScanController extends Controller
         $job = App::scans()->find((int) ($params['id'] ?? 0)) ?? throw new HttpException(404);
         $result = App::scans()->cancel((int) $job['id']);
         if ($result === 'cancelled') {
-            \Sentinel\Findings\VerifyOutcome::recordAborted(App::db(), $job, __('the recheck was cancelled by a user.'));
+            \Sentinel\Findings\VerifyOutcome::recordAborted(App::db(), $job, __('the recheck was canceled by a user.'));
         }
         if ($result !== 'not_open') {
             $this->audit($request, 'scan.cancelled', 'scan_job', (int) $job['id'], ['client_id' => (int) $job['client_id'], 'was' => $job['status']]);
         }
         Session::flash($result === 'not_open' ? 'info' : 'warning', match ($result) {
-            'cancelled' => __('Queued scan cancelled.'),
+            'cancelled' => __('Queued scan canceled.'),
             'requested' => __('The running scan will stop within a few seconds.'),
             default => __('This scan is no longer running.'),
         });

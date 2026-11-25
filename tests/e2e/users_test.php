@@ -111,9 +111,9 @@ return [
         Assert::true($ctx->db->query("SELECT totp_enabled_at FROM users WHERE id = {$id}")->fetchColumn() !== null, 'reset refused without a password');
         Assert::redirect('/users/' . $id, $admin->submit('/users/' . $id, '/users/' . $id . '/2fa-reset', ['password' => 'Lou-Temp-Pass-02!', 'my_password' => 'Admin-Pass-0001!']));
         $old = $ctx->client()->submit('/login', '/login', ['username' => 'lou', 'password' => 'Lou-Pass-00001!!']);
-        Assert::status(422, $old, 'old password no longer works, so nobody else can enrol in the user\'s place');
+        Assert::status(422, $old, 'old password no longer works, so nobody else can enroll in the user\'s place');
         $res = $ctx->client()->submit('/login', '/login', ['username' => 'lou', 'password' => 'Lou-Temp-Pass-02!']);
-        Assert::redirect('/2fa/setup', $res, 'must enrol again');
+        Assert::redirect('/2fa/setup', $res, 'must enroll again');
         Assert::same(1, (int) $ctx->db->query("SELECT must_change_password FROM users WHERE id = {$id}")->fetchColumn(), 'temporary password must be changed');
         Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM user_recovery_codes WHERE user_id = {$id}")->fetchColumn(), 'old recovery codes removed');
     },

@@ -24,7 +24,7 @@ $risk ??= [];
                 <th scope="col"><?= e(__('Client')) ?></th>
                 <th scope="col"><?= e(__('Risk')) ?></th>
                 <th scope="col"><?= e(__('Open findings')) ?></th>
-                <th scope="col"><?= e(__('Scan authorisation')) ?></th>
+                <th scope="col"><?= e(__('Scan authorization')) ?></th>
                 <th scope="col"><?= e(__('Scanning')) ?></th>
                 <th scope="col"><?= e(__('Sites')) ?></th>
                 <th scope="col"><?= e(__('ITFlow ID')) ?></th>

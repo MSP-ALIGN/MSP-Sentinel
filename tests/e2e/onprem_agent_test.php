@@ -43,7 +43,7 @@ $setup = static function (TestContext $ctx) use ($agentDir, $runAgent, $namePort
     @mkdir($agentDir($ctx), 0700, true);
     [$code, $out] = $runAgent($ctx, ['enrol', '--server', $ctx->baseUrl, '--code', $m[0] ?? 'missing']);
     if ($code !== 0) {
-        throw new RuntimeException('Agent enrolment failed: ' . $out);
+        throw new RuntimeException('Agent enrollment failed: ' . $out);
     }
     // Test-only agent settings: the fake nmap and the mock services (honoured only with SENTINEL_TEST_MODE=1).
     $app = require $ctx->configPath;
@@ -62,7 +62,7 @@ $scanNow = static function (TestContext $ctx, int $cid, int $site): int {
 };
 
 return [
-    'internal authorisations: private ranges only, signed, admin-only' => function (TestContext $ctx) use ($setup): void {
+    'internal authorizations: private ranges only, signed, admin-only' => function (TestContext $ctx) use ($setup): void {
         [$cid, $site] = $setup($ctx);
         $a = $ctx->db->query("SELECT * FROM internal_authorisations WHERE site_id = {$site}")->fetch();
         Assert::same("10.90.0.0/24", $a['ranges']);
@@ -79,15 +79,15 @@ return [
         }
         $tech = $ctx->login('agtech', 'Agtech-Pass-0001!');
         Assert::status(403, $tech->get('/clients/' . $cid . '/sites/' . $site . '/internal-authorisations/new'));
-        Assert::status(403, $tech->submit('/clients/' . $cid, '/clients/' . $cid . '/sites/' . $site . '/enrol', []), 'only admins create enrolment codes');
+        Assert::status(403, $tech->submit('/clients/' . $cid, '/clients/' . $cid . '/sites/' . $site . '/enrol', []), 'only admins create enrollment codes');
         Assert::contains('10.90.0.0/24', $ctx->clientSection($admin, (int) $cid, 'agents'));
     },
-    'enrolment: one-time code, token stored hashed, server key pinned' => function (TestContext $ctx) use ($setup, $agentDir): void {
+    'enrollment: one-time code, token stored hashed, server key pinned' => function (TestContext $ctx) use ($setup, $agentDir): void {
         [$cid, $site] = $setup($ctx);
         // A site without an internal authorisation gets no enrolment code (the agent could never scan).
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
-        $admin->submit('/clients/' . $cid, '/clients/' . $cid . '/sites', ['name' => 'Unauthorised Annex', 'itflow_location_id' => '']);
-        $bare = (int) $ctx->db->query("SELECT id FROM sites WHERE client_id = {$cid} AND name = 'Unauthorised Annex'")->fetchColumn();
+        $admin->submit('/clients/' . $cid, '/clients/' . $cid . '/sites', ['name' => 'Unauthorized Annex', 'itflow_location_id' => '']);
+        $bare = (int) $ctx->db->query("SELECT id FROM sites WHERE client_id = {$cid} AND name = 'Unauthorized Annex'")->fetchColumn();
         $before = (int) $ctx->db->query('SELECT COUNT(*) FROM agent_enrolments')->fetchColumn();
         Assert::redirect('/clients/' . $cid . '/agents', $admin->submit('/clients/' . $cid, '/clients/' . $cid . '/sites/' . $bare . '/enrol', []));
         Assert::same($before, (int) $ctx->db->query('SELECT COUNT(*) FROM agent_enrolments')->fetchColumn(), 'no code created');
@@ -117,7 +117,7 @@ return [
         Assert::contains('data-copy="cmd-windows"', $page);
         Assert::contains('Check it worked', $page);
         Assert::notContains('--code ' . ($m[0] ?? 'missing'), $page, 'the code is never put on a command line');
-        Assert::notContains('no internal authorisation valid today', $page, 'this site has one');
+        Assert::notContains('no internal authorization valid today', $page, 'this site has one');
         // A site without an authorisation: no code at all (1.34; earlier the page only warned).
         $res = $admin->submit('/clients/new', '/clients', ['name' => 'Unapproved Example', 'itflow_client_id' => '', 'timezone' => 'UTC', 'scan_window_start' => '00:00',
             'scan_window_end' => '23:59', 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);
@@ -177,7 +177,7 @@ return [
         Assert::contains('replay', $out, 'replay refused');
         $ctx->db->exec("UPDATE agent_jobs SET status = 'done' WHERE id = {$job}");
     },
-    'scope is enforced by server and agent: out-of-range results, tampered authorisations, forged jobs' => function (TestContext $ctx) use ($setup, $agentDir): void {
+    'scope is enforced by server and agent: out-of-range results, tampered authorizations, forged jobs' => function (TestContext $ctx) use ($setup, $agentDir): void {
         [$cid, $site] = $setup($ctx);
         $config = json_decode((string) file_get_contents($agentDir($ctx) . '/agent.json'), true);
         $agentId = (int) $config['agent_id'];
@@ -206,14 +206,14 @@ return [
         $other = \Sentinel\Agent\Signer::fromAppKey(random_bytes(32))->sign($base);
         Assert::same('bad signature', $v->verify($other['payload'], $other['signature'], []));
         $wide = $signer->sign(['targets' => ['10.90.0.0/16']] + $base);
-        Assert::same('targets outside the signed authorisation', $v->verify($wide['payload'], $wide['signature'], []));
+        Assert::same('targets outside the signed authorization', $v->verify($wide['payload'], $wide['signature'], []));
         $forOther = $signer->sign(['agent_id' => $agentId + 1] + $base);
         Assert::same('job is for another agent', $v->verify($forOther['payload'], $forOther['signature'], []));
         $old = $signer->sign(['expires_at' => gmdate('Y-m-d\TH:i:s\Z', time() - 60)] + $base);
         Assert::same('job expired', $v->verify($old['payload'], $old['signature'], []));
         $fakeAuth = \Sentinel\Agent\Signer::fromAppKey(random_bytes(32))->sign(json_decode($a['signed_payload'], true));
         $forged = $signer->sign(['authorisation' => $fakeAuth] + $base);
-        Assert::same('authorisation not signed by the server', $v->verify($forged['payload'], $forged['signature'], []));
+        Assert::same('authorization not signed by the server', $v->verify($forged['payload'], $forged['signature'], []));
         // Another client's site, with its own validly signed authorisation: refused by the server and by the agent.
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $res = $admin->submit('/clients/new', '/clients', ['name' => 'Inlet Example', 'itflow_client_id' => '', 'timezone' => 'UTC', 'scan_window_start' => '00:00', 'scan_window_end' => '23:59', 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);

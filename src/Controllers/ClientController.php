@@ -79,7 +79,7 @@ final class ClientController extends Controller
             App::db()->prepare('INSERT IGNORE INTO user_clients (user_id, client_id) VALUES (:u, :c)')->execute(['u' => (int) $this->user()['id'], 'c' => $id]);
         }
         $this->audit($request, 'client.created', 'client', $id, ['name' => $clean['name']]);
-        Session::flash('success', __('Client {name} created. Next, choose Record authorisation (below) to note who approved scanning and what may be scanned.', ['name' => $clean['name']]));
+        Session::flash('success', __('Client {name} created. Next, choose Record authorization (below) to note who approved scanning and what may be scanned.', ['name' => $clean['name']]));
         return Response::redirect('/clients/' . $id);
     }
 

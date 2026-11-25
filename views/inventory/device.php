@@ -84,7 +84,7 @@ $other = count($device['software']) - count($matched);
         <div class="card">
             <div class="card-header"><h2 class="card-title h6 mb-0"><?= e(__('Installed software')) ?></h2></div>
             <div class="card-body small p-0">
-                <p class="text-body-secondary px-3 pt-3"><?= e(__('Programs in Sentinel\'s software catalogue are matched to known vulnerabilities for the installed version. {n} other program(s) are listed but not matched (not in the catalogue).', ['n' => $other])) ?></p>
+                <p class="text-body-secondary px-3 pt-3"><?= e(__('Programs in Sentinel\'s software catalog are matched to known vulnerabilities for the installed version. {n} other program(s) are listed but not matched (not in the catalog).', ['n' => $other])) ?></p>
                 <table class="table table-sm mb-0"><thead><tr><th><?= e(__('Program')) ?></th><th><?= e(__('Version')) ?></th><th><?= e(__('Vulnerabilities')) ?></th></tr></thead><tbody>
                 <?php foreach ($device['software'] as $s): ?>
                 <tr><td><?= e($s['name']) ?><?php if ($s['publisher'] !== ''): ?><div class="text-body-secondary"><?= e($s['publisher']) ?></div><?php endif; ?></td>

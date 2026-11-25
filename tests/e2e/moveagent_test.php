@@ -31,7 +31,7 @@ $mvSetup = static function (TestContext $ctx) use ($mvDir): array {
     @mkdir($mvDir($ctx), 0700, true);
     [$code, $out] = $ctx->cli('bin/sentinel-agent.php', ['enrol', '--server', $ctx->baseUrl, '--code', $m[0] ?? 'missing', '--config', $mvDir($ctx) . '/agent.json']);
     if ($code !== 0) {
-        throw new RuntimeException('Agent enrolment failed: ' . $out);
+        throw new RuntimeException('Agent enrollment failed: ' . $out);
     }
     $app = require $ctx->configPath;
     $c = json_decode((string) file_get_contents($mvDir($ctx) . '/agent.json'), true);
@@ -179,7 +179,7 @@ return [
             // An override written for another enrolment is ignored.
             file_put_contents($mvDir($ctx) . '/server-override.json', json_encode(['agent_id' => $agentId + 1000] + $base + ['server' => $dead, 'moved_at' => gmdate('Y-m-d\TH:i:s\Z')]));
             [$code, $out] = $ctx->cli('bin/sentinel-agent.php', ['status', '--config', $mvDir($ctx) . '/agent.json']);
-            Assert::contains('→ ' . $ctx->baseUrl . ': connected', $out, 'other enrolment\'s override ignored');
+            Assert::contains('→ ' . $ctx->baseUrl . ': connected', $out, 'other enrollment\'s override ignored');
             @unlink($mvDir($ctx) . '/server-override.json');
             [$code, $out] = $mvRun($ctx);
             Assert::same(0, $code);

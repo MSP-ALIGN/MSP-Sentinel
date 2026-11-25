@@ -14,7 +14,7 @@ use Sentinel\Tests\Assert;
 use Sentinel\Tests\TestContext;
 
 return [
-    'port lists parse, normalise and refuse junk' => function (TestContext $ctx): void {
+    'port lists parse, normalize and refuse junk' => function (TestContext $ctx): void {
         Assert::same([22, 8090, 9000, 9001, 9002], PortProfile::parseList('8090, 9000-9002 22 22'));
         Assert::same([], PortProfile::parseList('  '));
         foreach (['0', '65536', '80-70', 'abc', '80;rm -rf /', '1-2000', '-p 80', '80,,,,x'] as $bad) {

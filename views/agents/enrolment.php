@@ -18,14 +18,14 @@ $cmd = static function (string $id, string $text): string {
 };
 ?>
 <div class="card">
-    <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Enrol an agent: {client}, {site}', ['client' => $client['name'], 'site' => $site['name']])) ?></h2></div>
+    <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Enroll an agent: {client}, {site}', ['client' => $client['name'], 'site' => $site['name']])) ?></h2></div>
     <div class="card-body">
         <div class="alert alert-warning"><i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i><?= e(__('This code is shown only once. It works once, within 24 hours, for this site only. Keep this page open until the agent shows up.')) ?></div>
         <?php if (!$authorised): ?>
-        <div class="alert alert-info"><i class="bi bi-info-circle me-1" aria-hidden="true"></i><?= e(__('This site has no internal authorisation valid today. The agent will enrol and check in, but it scans nothing until you record one (who at the client approved scanning, the dates and the networks).')) ?>
-            <a href="<?= e(url('/clients/' . $cid . '/sites/' . (int) $site['id'] . '/internal-authorisations/new')) ?>"><?= e(__('Record an internal authorisation')) ?></a></div>
+        <div class="alert alert-info"><i class="bi bi-info-circle me-1" aria-hidden="true"></i><?= e(__('This site has no internal authorization valid today. The agent will enroll and check in, but it scans nothing until you record one (who at the client approved scanning, the dates and the networks).')) ?>
+            <a href="<?= e(url('/clients/' . $cid . '/sites/' . (int) $site['id'] . '/internal-authorisations/new')) ?>"><?= e(__('Record an internal authorization')) ?></a></div>
         <?php endif; ?>
-        <p class="mb-1"><?= e(__('Enrolment code')) ?></p>
+        <p class="mb-1"><?= e(__('Enrollment code')) ?></p>
         <div class="d-flex gap-2 align-items-center mb-4">
             <span class="h3 font-monospace mb-0" id="enrol-code"><?= e($code) ?></span>
             <button type="button" class="btn btn-sm btn-outline-secondary" data-copy="enrol-code" data-copied="<?= e(__('Copied')) ?>"><i class="bi bi-clipboard me-1" aria-hidden="true"></i><?= e(__('Copy')) ?></button>
@@ -41,11 +41,11 @@ $cmd = static function (string $id, string $text): string {
         </ul>
 
         <h3 class="h6"><?= e(__('2. Install')) ?></h3>
-        <p class="small mb-1"><strong><?= e(__('One-line install (the appliance can reach GitHub):')) ?></strong> <?= e(__('paste this into the appliance\'s shell; it asks for the enrolment code.')) ?></p>
+        <p class="small mb-1"><strong><?= e(__('One-line install (the appliance can reach GitHub):')) ?></strong> <?= e(__('paste this into the appliance\'s shell; it asks for the enrollment code.')) ?></p>
         <?= $cmd('cmd-oneline', $oneLine) ?>
-        <p class="small mb-1"><strong><?= e(__('Or from the release archive (no GitHub access needed):')) ?></strong> <?= e(__('copy the Sentinel release archive (the same file you installed Sentinel from) to the appliance, unpack it, and run in the unpacked folder (it asks for the enrolment code):')) ?></p>
+        <p class="small mb-1"><strong><?= e(__('Or from the release archive (no GitHub access needed):')) ?></strong> <?= e(__('copy the Sentinel release archive (the same file you installed Sentinel from) to the appliance, unpack it, and run in the unpacked folder (it asks for the enrollment code):')) ?></p>
         <?= $cmd('cmd-archive', $fromArchive) ?>
-        <p class="small mb-1"><strong><?= e(__('Or on Windows:')) ?></strong> <?= e(__('paste this into PowerShell opened with Run as administrator; it asks for the enrolment code. It installs PHP and nmap (without Npcap: scans are TCP connect scans, slower than on Linux), and the agent as the "MSP Sentinel Agent" service running under its own low-privilege account.')) ?></p>
+        <p class="small mb-1"><strong><?= e(__('Or on Windows:')) ?></strong> <?= e(__('paste this into PowerShell opened with Run as administrator; it asks for the enrollment code. It installs PHP and nmap (without Npcap: scans are TCP connect scans, slower than on Linux), and the agent as the "MSP Sentinel Agent" service running under its own low-privilege account.')) ?></p>
         <?= $cmd('cmd-windows', $windows) ?>
         <?php if ($serverUrl === ''): ?><div class="small text-warning mb-2"><?= e(__('Set app.public_url in the config so these commands show your address.')) ?></div><?php endif; ?>
         <p class="small"><?= e(__('The code is typed at the prompt, not put on the command line, so it stays out of the shell history. If Sentinel uses a certificate from a private certificate authority, copy the CA certificate (PEM) to the appliance and add SENTINEL_CA=/path/ca.pem after sudo (one-line install), --ca /path/ca.pem (archive install) or -Ca C:\path\ca.pem (Windows). Add --dry-run to the archive install to see every step first.')) ?></p>
@@ -64,9 +64,9 @@ $cmd = static function (string $id, string $text): string {
 
         <h3 class="h6"><?= e(__('If something goes wrong')) ?></h3>
         <ul class="small">
-            <li><?= e(__('"Enrolment refused": the code was already used or is older than 24 hours. Create a new code and run the installer again.')) ?></li>
+            <li><?= e(__('"Enrollment refused": the code was already used or is older than 24 hours. Create a new code and run the installer again.')) ?></li>
             <li><?= e(__('Cannot connect, or a certificate error: from the appliance, try curl -I {server}. Check DNS, the firewall\'s outbound rules and any proxy; with a private certificate authority, give its certificate as described above.', ['server' => $server])) ?></li>
-            <li><?= e(__('Online but no scans: check the internal authorisation, the scan window and the pause switches for the client and site. Scan now (with a reason) starts one at once.')) ?></li>
+            <li><?= e(__('Online but no scans: check the internal authorization, the scan window and the pause switches for the client and site. Scan now (with a reason) starts one at once.')) ?></li>
             <li><?= e(__('Diagnostics on the Agents page shows the agent\'s versions, disk, memory and clock difference without logging in to it.')) ?></li>
         </ul>
         <a class="btn btn-outline-secondary" href="<?= e(url('/clients/' . $cid . '/agents')) ?>"><?= e(__('Back to the client')) ?></a>

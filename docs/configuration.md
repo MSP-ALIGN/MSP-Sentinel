@@ -19,7 +19,7 @@ cannot be recovered. Set the path in the `SENTINEL_CONFIG` environment variable 
 | `updates.url` | GitHub releases API | Feed for the daily update check. Only a version number is read from it. |
 | `dns.resolver`, `dns.port`, `dns.timeout` | first resolver in `/etc/resolv.conf`, 53, 2.0 | DNS server for passive discovery and for resolving scan targets. |
 | `crtsh.enabled`, `crtsh.base_url`, `crtsh.timeout` | `true`, `https://crt.sh`, 30 | Certificate Transparency search for discovery. |
-| `scanner.nmap_path` | `/usr/bin/nmap` | nmap binary. nmap is not bundled (NPSL licence). |
+| `scanner.nmap_path` | `/usr/bin/nmap` | nmap binary. nmap is not bundled (NPSL license). |
 | `scanner.host_timeout` | 1500 | Seconds one host may take before nmap stops. |
 | `tls.ca_file` | `''` | Extra CA certificates (PEM) for certificate checks and SMTP, **added** to the system store. |
 | `nvd.api_key` | `''` | Optional NVD API key (free); makes lookups about ten times faster. |

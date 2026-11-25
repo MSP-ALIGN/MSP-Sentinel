@@ -15,7 +15,7 @@ $bv = $branding;
             <div class="row g-2">
                 <div class="col-md-6"><label class="form-label small mb-0" for="brand_name"><?= e(__('Company name on reports')) ?></label>
                     <input class="form-control form-control-sm" id="brand_name" name="brand_name" value="<?= e($bv['brand_name']) ?>" maxlength="100" placeholder="<?= e($bv['product_name']) ?>"></div>
-                <div class="col-md-3"><label class="form-label small mb-0" for="brand_color"><?= e(__('Accent colour')) ?></label>
+                <div class="col-md-3"><label class="form-label small mb-0" for="brand_color"><?= e(__('Accent color')) ?></label>
                     <input class="form-control form-control-sm form-control-color w-100" type="color" id="brand_color" name="brand_color" value="<?= e($bv['brand_color']) ?>"></div>
                 <div class="col-md-3"><label class="form-label small mb-0" for="report_paper"><?= e(__('Paper size')) ?></label>
                     <select class="form-select form-select-sm" id="report_paper" name="report_paper">

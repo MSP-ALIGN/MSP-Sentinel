@@ -149,7 +149,7 @@ final class ExposureRules
         return match ($code) {
             'spf_pass_all' => ['severity' => 'fail', 'text' => __('SPF lets anyone send email as this domain (+all)')],
             'spf_missing' => ['severity' => 'warn', 'text' => __('No SPF record')],
-            'spf_weak' => ['severity' => 'warn', 'text' => __('SPF does not reject unauthorised senders')],
+            'spf_weak' => ['severity' => 'warn', 'text' => __('SPF does not reject unauthorized senders')],
             'spf_multiple' => ['severity' => 'warn', 'text' => __('More than one SPF record (receivers treat this as an error)')],
             'dmarc_missing' => ['severity' => 'warn', 'text' => __('No DMARC record for this domain')],
             'dmarc_weak' => ['severity' => 'warn', 'text' => __('DMARC policy not enforced (p=none)')],

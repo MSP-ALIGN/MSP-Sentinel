@@ -23,7 +23,7 @@ $n = $ninja;
         <span class="ms-auto small text-body-secondary"><?= e(__('{n} client(s) from ITFlow', ['n' => $it['linked']])) ?></span>
     </div>
     <div class="card-body">
-        <p class="small"><?= e(__('ITFlow is the list of clients: every 15 minutes new ITFlow clients are added to Sentinel, names are kept in step, and clients archived in ITFlow are archived here. A new client is not scanned until its written authorisation is recorded. With MSP Align connected, clients are linked to MSP Align by their ITFlow ID too. With tickets on, findings open tickets on the ITFlow board with how to fix them.')) ?></p>
+        <p class="small"><?= e(__('ITFlow is the list of clients: every 15 minutes new ITFlow clients are added to Sentinel, names are kept in step, and clients archived in ITFlow are archived here. A new client is not scanned until its written authorization is recorded. With MSP Align connected, clients are linked to MSP Align by their ITFlow ID too. With tickets on, findings open tickets on the ITFlow board with how to fix them.')) ?></p>
         <details class="small mb-3">
             <summary><?= e(__('How to create the API key in ITFlow')) ?></summary>
             <ol class="mt-2 mb-0">
@@ -81,7 +81,7 @@ $n = $ninja;
         <div class="d-flex flex-wrap align-items-center gap-2">
             <form method="post" action="<?= e(url('/admin/integrations/itflow/test')) ?>"><?= Csrf::field() ?>
                 <button type="submit" class="btn btn-outline-secondary btn-sm"><i class="bi bi-plug me-1" aria-hidden="true"></i><?= e(__('Test connection')) ?></button></form>
-            <form method="post" data-confirm="<?= e(__('Sync clients with ITFlow now? New ITFlow clients are added here (not scanned until authorised), renames are applied, and clients archived in ITFlow are archived here.')) ?>" action="<?= e(url('/admin/integrations/itflow/sync')) ?>"><?= Csrf::field() ?>
+            <form method="post" data-confirm="<?= e(__('Sync clients with ITFlow now? New ITFlow clients are added here (not scanned until authorized), renames are applied, and clients archived in ITFlow are archived here.')) ?>" action="<?= e(url('/admin/integrations/itflow/sync')) ?>"><?= Csrf::field() ?>
                 <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i><?= e(__('Sync now')) ?></button></form>
             <?php if ($it['tickets']): ?>
             <form method="post" data-confirm="<?= e(__('Open ITFlow tickets now? Tickets are created in ITFlow for open Fail and known-exploited findings that have none yet.')) ?>" action="<?= e(url('/admin/integrations/itflow/tickets')) ?>"><?= Csrf::field() ?>
@@ -106,7 +106,7 @@ $n = $ninja;
         <span class="ms-auto small text-body-secondary"><?= e(__('{n} client(s) linked', ['n' => $n['linked']])) ?></span>
     </div>
     <div class="card-body">
-        <p class="small"><?= e(__('Brings each linked client\'s devices into Sentinel every 6 hours: operating system and its support date, antivirus, disk encryption (BitLocker), missing Windows updates and installed software, which is checked for known vulnerabilities. Link a client to its NinjaOne organisation on the client\'s Devices page.')) ?></p>
+        <p class="small"><?= e(__('Brings each linked client\'s devices into Sentinel every 6 hours: operating system and its support date, antivirus, disk encryption (BitLocker), missing Windows updates and installed software, which is checked for known vulnerabilities. Link a client to its NinjaOne organization on the client\'s Devices page.')) ?></p>
         <details class="small mb-3">
             <summary><?= e(__('How to create the API app in NinjaOne')) ?></summary>
             <ol class="mt-2 mb-0">
@@ -214,7 +214,7 @@ $n = $ninja;
         <span class="ms-auto small text-body-secondary"><?= e(__('{n} breached address(es) on file', ['n' => $br['addresses']])) ?></span>
     </div>
     <div class="card-body">
-        <p class="small"><?= e(__('Once a week, Sentinel reads which addresses of your verified domains (domains you have proved you own in your XposedOrNot account, by a DNS record or email) appear in known data breaches, and adds them to the client whose authorisation lists that domain. A breach in the last 12 months is a Fail, older ones a Warning. Only breach names, dates and what was exposed are kept: never a password.')) ?></p>
+        <p class="small"><?= e(__('Once a week, Sentinel reads which addresses of your verified domains (domains you have proved you own in your XposedOrNot account, by a DNS record or email) appear in known data breaches, and adds them to the client whose authorization lists that domain. A breach in the last 12 months is a Fail, older ones a Warning. Only breach names, dates and what was exposed are kept: never a password.')) ?></p>
         <details class="small mb-3">
             <summary><?= e(__('How to set it up')) ?></summary>
             <ol class="mt-2 mb-0">
@@ -248,7 +248,7 @@ $n = $ninja;
             <?php endif; ?>
         </form>
         <?php if ($br['unmatched'] !== []): ?>
-        <p class="small mt-2 mb-0"><i class="bi bi-info-circle me-1" aria-hidden="true"></i><?= e(__('Verified domains in no client\'s authorisation (ignored until one lists them): {list}', ['list' => implode(', ', $br['unmatched'])])) ?></p>
+        <p class="small mt-2 mb-0"><i class="bi bi-info-circle me-1" aria-hidden="true"></i><?= e(__('Verified domains in no client\'s authorization (ignored until one lists them): {list}', ['list' => implode(', ', $br['unmatched'])])) ?></p>
         <?php endif; ?>
     </div>
 </div>

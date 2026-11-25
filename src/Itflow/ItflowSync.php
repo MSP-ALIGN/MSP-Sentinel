@@ -264,7 +264,7 @@ final class ItflowSync
             $this->db->prepare(
                 "INSERT INTO clients (name, itflow_client_id, timezone, scan_window_start, scan_window_end, notes, ports_extra, ports_excluded, created_by, created_at, updated_at)
                  VALUES (:n, :i, :tz, '22:00:00', '06:00:00', :notes, '', '', NULL, UTC_TIMESTAMP(), UTC_TIMESTAMP())"
-            )->execute(['n' => $name, 'i' => $itflowId, 'tz' => self::orgZone($this->settings), 'notes' => 'Created from ITFlow (client #' . $itflowId . '). Not scanned until its authorisation is recorded.']);
+            )->execute(['n' => $name, 'i' => $itflowId, 'tz' => self::orgZone($this->settings), 'notes' => 'Created from ITFlow (client #' . $itflowId . '). Not scanned until its authorization is recorded.']);
             $id = (int) $this->db->lastInsertId();
             $this->db->prepare("INSERT INTO sites (client_id, name, is_default, created_at, updated_at) VALUES (:c, 'Main site', 1, UTC_TIMESTAMP(), UTC_TIMESTAMP())")->execute(['c' => $id]);
             $this->db->commit();

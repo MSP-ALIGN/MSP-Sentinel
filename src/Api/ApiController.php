@@ -131,7 +131,7 @@ final class ApiController
         }
         $payload = App::scanWorker()->payloadFor($c);
         if ($payload === null) {
-            throw new ApiError(409, 'Nothing to scan: the client has no active authorisation with IP addresses or exact hostnames.');
+            throw new ApiError(409, 'Nothing to scan: the client has no active authorization with IP addresses or exact hostnames.');
         }
         $this->db->beginTransaction();
         try {

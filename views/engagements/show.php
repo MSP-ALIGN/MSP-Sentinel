@@ -17,7 +17,7 @@ $tz = new DateTimeZone((string) $client['timezone']);
 $local = static fn (?string $utc): string => $utc === null ? '–' : (new DateTimeImmutable($utc, new DateTimeZone('UTC')))->setTimezone($tz)->format('Y-m-d H:i');
 $labels = [ER::STATE_AWAITING => ['warning', __('Awaiting approval by another admin')], ER::STATE_SCHEDULED => ['info', __('Approved: testing starts at the window\'s start')],
     ER::STATE_ACTIVE => ['danger', __('Active: testing is allowed now')], ER::STATE_ENDED => ['secondary', __('Ended: the window is over')],
-    ER::STATE_STOPPED => ['dark', __('Stopped (kill switch)')], ER::STATE_CANCELLED => ['secondary', __('Cancelled before approval')]];
+    ER::STATE_STOPPED => ['dark', __('Stopped (kill switch)')], ER::STATE_CANCELLED => ['secondary', __('Canceled before approval')]];
 [$cls, $label] = $labels[$state];
 $byKind = ['external' => [], 'internal' => [], 'exclude' => []];
 foreach ($e['targets'] as $t) {
@@ -45,7 +45,7 @@ foreach ($e['targets'] as $t) {
     </div>
     <div class="col-lg-5">
         <div class="card mb-3">
-            <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Authorisation and approval')) ?></h2></div>
+            <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Authorization and approval')) ?></h2></div>
             <div class="card-body">
                 <p class="mb-2"><?= e(__('Signed by {n} ({r}) on {d}.', ['n' => $e['signer_name'], 'r' => $e['signer_role'], 'd' => $e['signed_on']])) ?>
                     <?php if ($isTech || $isAdmin): ?><a href="<?= e(url('/engagements/' . (int) $e['id'] . '/document')) ?>"><?= e(__('Download the signed document')) ?></a><?php endif; ?></p>

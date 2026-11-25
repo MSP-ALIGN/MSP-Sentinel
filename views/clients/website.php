@@ -43,7 +43,7 @@ $chip = static function (string $sev, string $text): string {
         <?php endif; ?>
         <h3 class="h6 mt-2"><?= e(__('Email (SPF, DMARC, DKIM)')) ?></h3>
         <?php if ($emailChecks === []): ?>
-        <p class="small text-body-secondary mb-0"><?= e(__('No domains checked yet. Domains come from the client\'s authorisation.')) ?></p>
+        <p class="small text-body-secondary mb-0"><?= e(__('No domains checked yet. Domains come from the client\'s authorization.')) ?></p>
         <?php else: ?>
         <div class="table-responsive">
         <table class="table table-sm align-middle small mb-0">
@@ -89,7 +89,7 @@ $chip = static function (string $sev, string $text): string {
         <?php endif; ?>
         <h3 class="h6 mt-3"><?= e(__('DNS (zone transfers and subdomain takeover)')) ?></h3>
         <?php $domainChecks ??= []; if ($domainChecks === []): ?>
-        <p class="small text-body-secondary mb-0"><?= e(__('No names checked yet. Names come from the client\'s authorisation.')) ?></p>
+        <p class="small text-body-secondary mb-0"><?= e(__('No names checked yet. Names come from the client\'s authorization.')) ?></p>
         <?php else: ?>
         <div class="table-responsive">
         <table class="table table-sm align-middle small mb-0">

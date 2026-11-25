@@ -100,7 +100,7 @@ final class DiscoveryService
         }
         $this->entries = $this->authorisations->activeEntries($clientId, ScopeService::today((string) $client['timezone']));
         if ($this->entries === []) {
-            return $refuse(__('This client has no active authorisation, so there is nothing to start discovery from.'));
+            return $refuse(__('This client has no active authorization, so there is nothing to start discovery from.'));
         }
         // Lock names are server-wide in MariaDB, so include the database name: two installs on one server don't block each other.
         $lock = 'msp_sentinel_disc_' . substr(hash('sha256', (string) $this->db->query('SELECT DATABASE()')->fetchColumn()), 0, 16) . '_' . $clientId;
@@ -392,7 +392,7 @@ final class DiscoveryService
             throw new DiscoveryStopped(__('Stopped because scanning was paused.'), false);
         }
         if ($this->authorisations->activeEntries($this->clientId, ScopeService::today((string) $client['timezone'])) === []) {
-            throw new DiscoveryStopped(__('Stopped because the client no longer has an active authorisation.'), false);
+            throw new DiscoveryStopped(__('Stopped because the client no longer has an active authorization.'), false);
         }
     }
 

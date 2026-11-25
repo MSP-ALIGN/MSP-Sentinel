@@ -89,7 +89,7 @@ $router->add('POST', '/clients/{id}/resume', [ClientController::class, 'resume']
 $router->add('POST', '/clients/{id}/sites', [ClientController::class, 'addSite'], ['perm' => 'clients.manage']);
 $router->add('POST', '/sites/{id}', [ClientController::class, 'updateSite'], ['perm' => 'clients.manage', 'client' => 'site']);
 
-// Authorised-to-scan register: admins only (everyone sees it on the client page)
+// Authorized-to-scan register: admins only (everyone sees it on the client page)
 // Pen-test engagements: technicians and admins create, stop and cancel; a DIFFERENT admin approves (two-person rule).
 $router->add('GET', '/clients/{id}/engagements/new', [\Sentinel\Controllers\EngagementController::class, 'create'], ['perm' => 'engagements.run']);
 $router->add('POST', '/clients/{id}/engagements', [\Sentinel\Controllers\EngagementController::class, 'store'], ['perm' => 'engagements.run']);

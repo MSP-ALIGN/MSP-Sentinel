@@ -156,7 +156,7 @@ final class AdminController extends Controller
         }
         $zone = App::settings()->get('display_timezone');
         if ($zone === 'UTC' || !valid_timezone($zone)) {
-            Session::flash('warning', __('Choose the organisation\'s time zone first.'));
+            Session::flash('warning', __('Choose the organization\'s time zone first.'));
             return $back;
         }
         $rows = App::db()->query("SELECT id, name FROM clients WHERE timezone = 'UTC' AND is_archived = 0 AND is_demo = 0 ORDER BY name")->fetchAll();

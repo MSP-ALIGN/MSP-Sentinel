@@ -14,7 +14,7 @@ Three roles are built in and can't be changed:
 |---|---|
 | **Viewer** | See everything. Changes nothing. |
 | **Technician** | Also run scans and discovery, triage, assign and verify findings, see breached addresses, create reports, run engagements, pause scanning. |
-| **Admin** | Every permission: users and roles, clients and authorisations, settings, integrations, the API, agents, approving engagements, the System page, resuming scanning. |
+| **Admin** | Every permission: users and roles, clients and authorizations, settings, integrations, the API, agents, approving engagements, the System page, resuming scanning. |
 
 ### Make your own role
 
@@ -69,14 +69,14 @@ Lost both your phone and your recovery codes? Ask an admin to reset your two-fac
 ## Time zone
 
 Sentinel stores and compares every time in UTC, so daylight-saving changes never shift a scan. It shows times in
-your time zone, each labelled (for example `2026-11-24 13:33 PST`):
+your time zone, each labeled (for example `2026-11-24 13:33 PST`):
 
-- **The organisation's time zone:** under **Administration → Settings → General** (admins). New clients start in it,
+- **The organization's time zone:** under **Administration → Settings → General** (admins). New clients start in it,
   also those added from ITFlow. If clients are still on UTC, the Settings page lists them with a button that moves
   them to your time zone; their scan window times stay the same numbers, now read in that time zone. It needs Manage
   settings and Edit clients, and the change is in the audit log.
 - **Your own:** under **My profile → Time zone**, for someone who works elsewhere. Leave it empty to use the
-  organisation's.
+  organization's.
 - **Scan windows** always follow each client's own time zone (on the client's Edit page).
 - **Reports** show times in their client's time zone.
 
@@ -96,7 +96,7 @@ sign-in provider, so Sentinel signs in against the same Microsoft tenant your te
    Administrator). It shows which tenant you signed in to and asks before changing anything. Then enter the setup
    code.
 4. The script creates the app registration **MSP Sentinel (your address)** in your tenant: single tenant,
-   Sentinel's redirect address, sign-in permissions only (openid, profile, email, granted for the organisation), the
+   Sentinel's redirect address, sign-in permissions only (openid, profile, email, granted for the organization), the
    optional claim **auth_time**, and a client secret valid for 12 months. It sends the IDs and the secret straight to
    Sentinel with the code; the secret is never shown.
 5. Back in Sentinel, tick **Show "Sign in with Microsoft"** and save. Recommended: in Entra Conditional Access,
@@ -186,16 +186,16 @@ A token never does more than the person who made it:
 Before an action that deletes or revokes something, sends something out, starts work or costs something, Sentinel
 shows a dialog saying exactly what will happen. **Cancel** stops; **Yes, continue** goes ahead. For example:
 
-- deleting a report, revoking an authorisation, an agent or an API token;
+- deleting a report, revoking an authorization, an agent or an API token;
 - sending a test email, webhook message or event;
 - starting a scan, an internal scan or a recheck (verify fix);
-- approving, stopping or cancelling an engagement;
+- approving, stopping or canceling an engagement;
 - Update now, loading or removing demo data, saving retention periods.
 
 ## Audit log
 
 1. Admins open **Administration → Audit log**.
-2. It lists sign-ins and failed sign-ins, user and settings changes, authorisations, scans, triage and API writes,
+2. It lists sign-ins and failed sign-ins, user and settings changes, authorizations, scans, triage and API writes,
    with the user and IP address. Type in the filter box to narrow it down (see [Search](search.md)).
 
 Entries can't be edited or deleted from the web interface, and data retention never removes them.

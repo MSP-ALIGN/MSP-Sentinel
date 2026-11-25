@@ -22,7 +22,7 @@ $restore = static function (TestContext $ctx, array $utcClientIds = []): void {
 };
 
 return [
-    'time zones (1.48): when() shows a stored UTC time in a zone, labelled; bad values pass through' => function (TestContext $ctx): void {
+    'time zones (1.48): when() shows a stored UTC time in a zone, labeled; bad values pass through' => function (TestContext $ctx): void {
         $la = new DateTimeZone('America/Los_Angeles');
         Assert::same('2026-01-15 13:33 PST', when('2026-01-15 21:33:00', $la), 'winter');
         Assert::same('2026-07-15 14:33 PDT', when('2026-07-15 21:33:00', $la), 'summer: daylight saving');
@@ -33,21 +33,21 @@ return [
         Assert::same('2026-01-15 13:33 PST', when('2026-01-15T21:33:00.123Z', $la), 'ISO with fractions and Z');
         Assert::true(valid_timezone('America/Los_Angeles') && !valid_timezone('Mars/Olympus_Mons') && !valid_timezone(''), 'real zones accepted (and any older aliases PHP knows), made-up names not');
     },
-    'time zones (1.48): the organisation\'s zone is shown everywhere, each user may pick their own' => function (TestContext $ctx) use ($restore): void {
+    'time zones (1.48): the organization\'s zone is shown everywhere, each user may pick their own' => function (TestContext $ctx) use ($restore): void {
         try {
         $s = App::settings();
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $adminId = (int) $ctx->db->query("SELECT id FROM users WHERE username = 'admin'")->fetchColumn();
         $ctx->db->prepare("INSERT INTO notifications (user_id, kind, severity, title, body, link, created_at) VALUES (:u, 'security', 'info', 'Time zone test notice', '', '/', '2026-01-15 21:33:00')")
             ->execute(['u' => $adminId]);
-        Assert::contains('2026-01-15 21:33 UTC', $admin->get('/notifications')->body, 'UTC by default, labelled');
+        Assert::contains('2026-01-15 21:33 UTC', $admin->get('/notifications')->body, 'UTC by default, labeled');
         // A zone that isn't in the list is refused; a real one is saved.
         $base = ['product_name' => $s->get('product_name'), 'source_url' => $s->get('source_url')];
         Assert::status(422, $admin->submit('/admin/settings', '/admin/settings', $base + ['display_timezone' => 'Mars/Olympus_Mons']));
         Assert::same('UTC', $s->fresh('display_timezone'));
         $admin->submit('/admin/settings', '/admin/settings', $base + ['display_timezone' => 'America/Los_Angeles']);
         Assert::same('America/Los_Angeles', $s->fresh('display_timezone'));
-        Assert::contains('2026-01-15 13:33 PST', $admin->get('/notifications')->body, 'shown in the organisation\'s zone');
+        Assert::contains('2026-01-15 13:33 PST', $admin->get('/notifications')->body, 'shown in the organization\'s zone');
         Assert::contains((new DateTimeImmutable('now', new DateTimeZone('America/Los_Angeles')))->format('T'), $admin->get('/admin/audit')->body, 'audit log in the zone');
         // My profile: my own zone, then back to the organisation's.
         $admin->submit('/profile', '/profile/timezone', ['timezone' => 'Nowhere/Land']);
@@ -55,7 +55,7 @@ return [
         $admin->submit('/profile', '/profile/timezone', ['timezone' => 'America/New_York']);
         Assert::contains('2026-01-15 16:33 EST', $admin->get('/notifications')->body, 'shown in my own zone');
         $admin->submit('/profile', '/profile/timezone', ['timezone' => '']);
-        Assert::contains('2026-01-15 13:33 PST', $admin->get('/notifications')->body, 'empty: the organisation\'s again');
+        Assert::contains('2026-01-15 13:33 PST', $admin->get('/notifications')->body, 'empty: the organization\'s again');
         // A missing field (an older form) keeps the zone.
         $admin->submit('/admin/settings', '/admin/settings', $base);
         Assert::same('America/Los_Angeles', $s->fresh('display_timezone'), 'missing field: unchanged');
@@ -63,20 +63,20 @@ return [
             $restore($ctx);
         }
     },
-    'time zones (1.48): new clients start in the organisation\'s zone; clients on UTC can be moved once' => function (TestContext $ctx) use ($restore): void {
+    'time zones (1.48): new clients start in the organization\'s zone; clients on UTC can be moved once' => function (TestContext $ctx) use ($restore): void {
         // Other tests' clients on UTC are put back afterwards, so later tests keep their windows.
         $othersOnUtc = array_map('intval', $ctx->db->query("SELECT id FROM clients WHERE timezone = 'UTC'")->fetchAll(PDO::FETCH_COLUMN));
         try {
         $s = App::settings();
         $s->set('display_timezone', 'America/Los_Angeles');
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
-        Assert::contains('value="America/Los_Angeles"', $admin->get('/clients/new')->body, 'new client form starts in the organisation\'s zone');
+        Assert::contains('value="America/Los_Angeles"', $admin->get('/clients/new')->body, 'new client form starts in the organization\'s zone');
         // Made by the ITFlow sync: the organisation's zone too.
         $base = str_replace('/ninja', '/itflow', (string) (require $ctx->configPath)['testing']['ninjaone_base_url']);
         file_put_contents(dirname($ctx->feedsLog) . '/itflow-clients.json', json_encode([['client_id' => 880, 'client_name' => 'Pacific Example Co', 'client_archived_at' => null, 'client_updated_at' => '2026-11-22 10:00:00']]));
         $admin->submit('/admin/integrations', '/admin/integrations/itflow', ['url' => $base, 'api_key' => 'itflow-test-key-0123456789abcdef', 'enabled' => '1']);
         App::itflowSync()->sync();
-        Assert::same('America/Los_Angeles', (string) $ctx->db->query('SELECT timezone FROM clients WHERE itflow_client_id = 880')->fetchColumn(), 'ITFlow client in the organisation\'s zone');
+        Assert::same('America/Los_Angeles', (string) $ctx->db->query('SELECT timezone FROM clients WHERE itflow_client_id = 880')->fetchColumn(), 'ITFlow client in the organization\'s zone');
         $admin->submit('/admin/integrations', '/admin/integrations/itflow', ['url' => $base, 'api_key' => 'itflow-test-key-0123456789abcdef', 'enabled' => '0']);
         // Clients still on UTC: listed, and moved by the button (window times kept).
         $ctx->db->exec("INSERT INTO clients (name, timezone, scan_window_start, scan_window_end, notes, ports_extra, ports_excluded, created_at, updated_at)

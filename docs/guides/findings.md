@@ -32,7 +32,7 @@ distribution build that may already carry the fix). Sentinel never guesses a ver
 
 ## Where findings come from
 
-- **Scans** of the authorised addresses: open services, certificates, exposed admin pages and portals, and
+- **Scans** of the authorized addresses: open services, certificates, exposed admin pages and portals, and
   vulnerabilities in the versions found.
 - **Website and email checks**, with each scan and once a day: HTTPS, headers, cookies, a short list of commonly
   exposed files (reported only when their content proves it, and never stored), CMS and library versions, and SPF,
@@ -91,7 +91,7 @@ Owners get one daily reminder of their overdue findings and those due within 2 d
 
 ## Good to know
 
-- A recheck only runs while the target is in an active authorisation and scanning isn't paused, at most once every 10
+- A recheck only runs while the target is in an active authorization and scanning isn't paused, at most once every 10
   minutes per finding.
 - Accepted risks and false positives never cause alerts and don't count towards the risk score or report totals;
   reports list them in their own section with their notes.

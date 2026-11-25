@@ -90,7 +90,7 @@ return [
             Assert::true(preg_match('/^' . preg_quote($p, '/') . '$/m', $ignore) === 1, 'not in the image: ' . $p);
         }
     },
-    'container agents: the real Docker image enrols and checks in (when SENTINEL_TEST_DOCKER_IMAGE is set)' => function (TestContext $ctx) use ($ctDir, $ctSetup, $enrolCode): void {
+    'container agents: the real Docker image enrolls and checks in (when SENTINEL_TEST_DOCKER_IMAGE is set)' => function (TestContext $ctx) use ($ctDir, $ctSetup, $enrolCode): void {
         $image = (string) getenv('SENTINEL_TEST_DOCKER_IMAGE');
         if ($image === '' || preg_match('/^[a-z0-9._\/:-]{1,200}$/', $image) !== 1) {
             return; // optional: needs a built image and a Docker daemon

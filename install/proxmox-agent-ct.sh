@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # MSP Sentinel agent on Proxmox VE (1.36): creates an unprivileged Debian 13 LXC container ready for the agent.
 # Run it on the Proxmox host as root. It only creates and starts the container; the agent itself is then installed
-# inside it with the normal install command from Sentinel's enrolment page (the enrolment code is never passed here).
+# inside it with the normal install command from Sentinel's enrollment page (the enrollment code is never passed here).
 #
 # Usage:
 #   bash proxmox-agent-ct.sh --bridge vmbr0 [--vlan 20] [--ip dhcp | --ip 10.0.20.50/24 --gw 10.0.20.1]
@@ -94,8 +94,8 @@ run pct start "$ctid"
 
 say "Next steps"
 cat <<NEXT
-  1. In Sentinel: open the client, Agents, record the site's internal authorisation, then Create an enrolment code.
+  1. In Sentinel: open the client, Agents, record the site's internal authorization, then Create an enrollment code.
   2. On this host: pct enter $ctid
   3. Inside the container: apt-get update && apt-get install -y curl, then paste the install command from the
-     enrolment page and enter the code when asked.
+     enrollment page and enter the code when asked.
 NEXT

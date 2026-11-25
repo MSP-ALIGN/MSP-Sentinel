@@ -78,11 +78,11 @@ final class InventoryController extends Controller
             }
         }
         if ($org === null) {
-            Session::flash('danger', __('Choose an organisation from the list.'));
+            Session::flash('danger', __('Choose an organization from the list.'));
             return Response::redirect('/clients/' . (int) $client['id'] . '/inventory/link?source=' . rawurlencode($name));
         }
         if (App::inventory()->orgLinkedElsewhere($name, $org['id'], (int) $client['id'])) {
-            Session::flash('danger', __('This organisation is already linked to another client.'));
+            Session::flash('danger', __('This organization is already linked to another client.'));
             return Response::redirect('/clients/' . (int) $client['id'] . '/inventory/link?source=' . rawurlencode($name));
         }
         // Another organisation than before (1.49): unlink the old one first, so its devices and their findings leave this
@@ -97,8 +97,8 @@ final class InventoryController extends Controller
         } catch (\DomainException) {
             // Someone linked that organisation elsewhere in the meantime (1.49.1): say plainly if the old link is gone too.
             Session::flash('danger', $previous !== null && (string) $previous['org_id'] !== $org['id']
-                ? __('This organisation was just linked to another client, so it could not be linked here. The previous organisation was unlinked: link the right one again.')
-                : __('This organisation is already linked to another client.'));
+                ? __('This organization was just linked to another client, so it could not be linked here. The previous organization was unlinked: link the right one again.')
+                : __('This organization is already linked to another client.'));
             return Response::redirect('/clients/' . (int) $client['id'] . '/inventory/link?source=' . rawurlencode($name));
         }
         $this->audit($request, 'inventory.linked', 'client', (int) $client['id'], ['source' => $name, 'org_id' => mb_substr($org['id'], 0, 64), 'org_name' => mb_substr($org['name'], 0, 200)]);

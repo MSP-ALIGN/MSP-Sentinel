@@ -87,11 +87,11 @@ final class NinjaOneSource implements InventorySource
         // Until an empty page (not a short one: the server may cap pageSize below what was asked).
         for ($page = 0; ; $page++) {
             if ($page >= self::MAX_PAGES) {
-                throw new InventoryException('NinjaOne returned more organisations than Sentinel reads in one go.');
+                throw new InventoryException('NinjaOne returned more organizations than Sentinel reads in one go.');
             }
             $rows = $this->getJson('/v2/organizations', ['pageSize' => $this->pageSize] + ($after === null ? [] : ['after' => $after]));
             if (!array_is_list($rows)) {
-                throw new InventoryException('NinjaOne returned an unexpected organisation list.');
+                throw new InventoryException('NinjaOne returned an unexpected organization list.');
             }
             $before = $after;
             foreach ($rows as $o) {
@@ -121,7 +121,7 @@ final class NinjaOneSource implements InventorySource
     public function snapshot(string $orgId): array
     {
         if (!ctype_digit($orgId) || strlen($orgId) > 10) {
-            throw new InventoryException('Not a NinjaOne organisation ID.');
+            throw new InventoryException('Not a NinjaOne organization ID.');
         }
         $df = 'org = ' . $orgId;
 

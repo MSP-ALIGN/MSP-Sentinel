@@ -4,7 +4,7 @@
 
 .DESCRIPTION
   For Windows Server 2022/2025 and Windows 11 (64-bit), run in an elevated PowerShell (Run as administrator). With a
-  one-time enrolment code from the client's Agents page in Sentinel:
+  one-time enrollment code from the client's Agents page in Sentinel:
 
     [Net.ServicePointManager]::SecurityProtocol = 'Tls12'; & ([scriptblock]::Create((Invoke-RestMethod https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install-agent.ps1))) -Server https://sentinel.example
 
@@ -20,11 +20,11 @@
     config, state, logs and update results in C:\ProgramData\MSP Sentinel Agent with tight permissions: the agent's
     service account (NT SERVICE\SentinelAgent, a virtual account without password or admin rights) reads its config
     and writes only its state and logs;
-  - enrols with the code (pins Sentinel's key, site and client, and the release key);
+  - enrolls with the code (pins Sentinel's key, site and client, and the release key);
   - starts the "MSP Sentinel Agent" service and registers the "MSP Sentinel Agent Update" task (SYSTEM, every 5
     minutes), which installs updates only when signed with the pinned release key.
 
-  -Upgrade      installs this script's code over the existing agent (keeps the enrolment).
+  -Upgrade      installs this script's code over the existing agent (keeps the enrollment).
   -Uninstall    removes the service, the task and the files (revoke the agent in Sentinel too).
   -ReleaseKey   gives the agent the release key by hand (after the key was replaced on Sentinel's System page).
   -Ca           a CA certificate (PEM file) when Sentinel uses a certificate from a private CA.
@@ -370,7 +370,7 @@ try {
 
     if ($Upgrade) {
         if (-not (Test-Path (Join-Path $ConfDir 'agent.json'))) { Fail 'No enrolled agent found. Install without -Upgrade first.' }
-        Say 'Upgrading the agent (the enrolment is kept)'
+        Say 'Upgrading the agent (the enrollment is kept)'
         # Only an agent this script installed: its service exists and its protected folders are still only
         # Administrators' (a folder a local user made, or changed, is never trusted).
         if (-not (Get-Service -Name $Service -ErrorAction SilentlyContinue)) { Fail 'No agent service found: install without -Upgrade (after -Uninstall).' }
@@ -401,10 +401,10 @@ try {
         if ($Server -notmatch '^https://[^\s/]+') { Fail 'The Sentinel address must start with https://' }
     }
     $Server = $Server.TrimEnd('/')
-    $secure = Read-Host 'One-time enrolment code' -AsSecureString
+    $secure = Read-Host 'One-time enrollment code' -AsSecureString
     $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
     try { $code = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) } finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
-    if ($code -notmatch '^SNE(-[A-Z2-9]{5}){4}$') { Fail 'That is not an enrolment code (SNE-XXXXX-XXXXX-XXXXX-XXXXX).' }
+    if ($code -notmatch '^SNE(-[A-Z2-9]{5}){4}$') { Fail 'That is not an enrollment code (SNE-XXXXX-XXXXX-XXXXX-XXXXX).' }
 
     Install-VcRuntime
     Install-Php
@@ -420,10 +420,10 @@ try {
     if ($ReleaseKey) { Set-ReleaseKey $ReleaseKey }
 
     Say 'Enrolling with Sentinel (pins its signing key, site and client)'
-    $enrol = @('-c', $PhpIni, "$App\bin\sentinel-agent.php", 'enrol', '--server', $Server, '--code-stdin', '--config', "$ConfDir\agent.json", '--state-dir', $StateDir, '--nmap', $nmap) + $caArg
+    $enrol = @('-c', $PhpIni, "$App\bin\sentinel-agent.php", 'enroll', '--server', $Server, '--code-stdin', '--config', "$ConfDir\agent.json", '--state-dir', $StateDir, '--nmap', $nmap) + $caArg
     $code | & $Php @enrol
     $code = $null
-    if ($LASTEXITCODE -ne 0) { Fail 'Enrolment failed (see above). Create a new code if this one was used or expired.' }
+    if ($LASTEXITCODE -ne 0) { Fail 'Enrollment failed (see above). Create a new code if this one was used or expired.' }
 
     Install-Winsw
     Register-Service

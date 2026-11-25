@@ -310,7 +310,7 @@ final class AlertService
         $link = '/clients/' . $clientId . '/devices';
         $this->notifyUsers('new_device', 'warn', $title, implode("\n", array_slice($items, 0, 20)), $link, null, $clientId);
         $this->queueEmail($this->emailRecipients(['immediate', 'both'], $clientId), '[' . $client . '] ' . $title,
-            $title . "\n\n" . implode("\n", $items) . "\n\n" . __('If you don\'t recognise a device, find out what it is and who connected it.') . "\n\n" . $this->absolute($link));
+            $title . "\n\n" . implode("\n", $items) . "\n\n" . __('If you don\'t recognize a device, find out what it is and who connected it.') . "\n\n" . $this->absolute($link));
         $this->queueWebhook(['title' => $title, 'text' => __('Devices not seen on this network before.'), 'severity' => 'warn', 'client' => $client, 'items' => $items, 'link' => $this->absolute($link)]);
     }
 

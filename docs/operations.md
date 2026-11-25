@@ -53,7 +53,7 @@ What it adds:
 | Riverside Example Ltd | Lots to fix: known exploited vulnerabilities, an exposed firewall admin page and VPN portal, expired and weak certificates, website and email problems. Also an on-premises agent site (SMBv1, Telnet, SNMP "private", RDP without NLA, a login page over HTTP) and inventory devices (unsupported Windows, antivirus off, encryption off, missing and failed patches, vulnerable Chrome and 7-Zip). |
 | Lakeshore Example Inc | An Exchange server with a possible known exploited vulnerability, a remote desktop web portal, TLS 1.0, weak SPF and DMARC. |
 | Hillcrest Example Clinic | A well-run client: no open problems, only fixed history. |
-| Bayview Example Co | MySQL open to the internet, a certificate name mismatch, and an authorisation that ends in 12 days. |
+| Bayview Example Co | MySQL open to the internet, a certificate name mismatch, and an authorization that ends in 12 days. |
 
 Findings are built by the normal findings engine, then some are assigned to the admin who loaded the data, accepted,
 marked false positive, given a due date, or left overdue. There are also scan history, discovery suggestions,
@@ -83,7 +83,7 @@ Safety:
 | Symptom | Check |
 |---|---|
 | "Scan worker has never run" | Is the cron file in `/etc/cron.d/` and is cron running? Look at `worker.log`. |
-| Scans stay "queued" | Is the client's scan window open now (client time zone)? Is scanning paused? Is there an active authorisation? |
+| Scans stay "queued" | Is the client's scan window open now (client time zone)? Is scanning paused? Is there an active authorization? |
 | No vulnerability matches | Has `feeds.php` run (System page)? NVD without an API key is slow: big first runs finish over several days. |
 | Emails not arriving | Settings → Alerts → recent deliveries shows the last error. Use "Send test email". |
 | API always answers 401 | Does the web server pass the `Authorization` header (see [install.md](install.md))? Is the token expired or revoked? |

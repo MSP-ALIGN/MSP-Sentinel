@@ -7,7 +7,7 @@ Debian 13 in it and follow the [agent guide](agents.md).)
 ## Before you start
 
 - A Proxmox VE host with a bridge on the client's network (and the VLAN tag, if the network is a VLAN).
-- In Sentinel: the client's **Agents** page, with the site's **internal authorisation** recorded.
+- In Sentinel: the client's **Agents** page, with the site's **internal authorization** recorded.
 
 ## Set it up
 
@@ -24,9 +24,9 @@ Debian 13 in it and follow the [agent guide](agents.md).)
 
    Or create it yourself in the Proxmox web UI: Debian 13 template, **Unprivileged container** ticked, **Nesting**
    ticked (Options → Features), network on the client's bridge and VLAN.
-2. In Sentinel, click **Create an enrolment code** for the site.
+2. In Sentinel, click **Create an enrollment code** for the site.
 3. On the Proxmox host: `pct enter <CTID>`. Inside the container: `apt-get update && apt-get install -y curl`, then
-   paste the install command from the enrolment page and enter the code when asked.
+   paste the install command from the enrollment page and enter the code when asked.
 4. The agent shows as **Online** on the Agents page, with an **LXC** badge.
 
 ## Good to know

@@ -53,7 +53,7 @@ return [
         Assert::contains('ITFlow refused the API key', $admin->get('/admin/integrations')->body);
         $admin->submit('/admin/integrations', '/admin/integrations/itflow', ['url' => $base($ctx), 'api_key' => $key, 'enabled' => '1']);
     },
-    'ITFlow sync: new clients are added (never scanned without authorisation), same names linked, archives followed' => function (TestContext $ctx) use ($setItflow, $alignBase): void {
+    'ITFlow sync: new clients are added (never scanned without authorization), same names linked, archives followed' => function (TestContext $ctx) use ($setItflow, $alignBase): void {
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $mk = static function (string $name) use ($admin): int {
             $res = $admin->submit('/clients/new', '/clients', ['name' => $name, 'itflow_client_id' => '', 'timezone' => 'UTC', 'scan_window_start' => '00:00', 'scan_window_end' => '23:59', 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);
@@ -74,8 +74,8 @@ return [
         Assert::same($lighthouse, (int) $c(801)['id'], 'linked by name');
         $pier = $c(802);
         Assert::same('Pier Example Co', $pier['name']);
-        Assert::same(0, (int) $ctx->db->query('SELECT COUNT(*) FROM scan_authorisations WHERE client_id = ' . (int) $pier['id'])->fetchColumn(), 'no authorisation: never scanned');
-        Assert::contains('Not scanned until its authorisation is recorded', (string) $pier['notes']);
+        Assert::same(0, (int) $ctx->db->query('SELECT COUNT(*) FROM scan_authorisations WHERE client_id = ' . (int) $pier['id'])->fetchColumn(), 'no authorization: never scanned');
+        Assert::contains('Not scanned until its authorization is recorded', (string) $pier['notes']);
         Assert::same(1, (int) $ctx->db->query('SELECT COUNT(*) FROM sites WHERE client_id = ' . (int) $pier['id'])->fetchColumn(), 'default site');
         Assert::same(502, (int) $pier['align_client_id'], 'linked to MSP Align by ITFlow ID');
         Assert::same([], $c(803), 'already archived in ITFlow: not created');
@@ -185,7 +185,7 @@ return [
         $before = count($sent()['tickets']);
         App::itflowTickets()->run();
         Assert::same($before, count($sent()['tickets']), 'no new Warnings: no weekly ticket');
-        $finding('email:ticket.example:spf_weak', 'warn', 'SPF does not reject unauthorised senders', 'ticket.example');
+        $finding('email:ticket.example:spf_weak', 'warn', 'SPF does not reject unauthorized senders', 'ticket.example');
         App::itflowTickets()->run();
         Assert::same($before + 1, count($sent()['tickets']), 'new Warning a week later: weekly ticket');
         // Archived clients get no tickets; a failing ITFlow is reported.

@@ -93,7 +93,7 @@ then merge `develop` into `main` and update production.
 
 Keep the two apart:
 - Use a separate server or VM and a separate host name, for example `sentinel-dev.msp.example`.
-- Use made-up test clients, or only addresses you would scan from production too: the same written authorisation
+- Use made-up test clients, or only addresses you would scan from production too: the same written authorization
   rules apply.
 - A development server has its own database and app key. Don't restore a production backup onto it unless you mean
   to copy client data there.
@@ -218,9 +218,9 @@ Then check everything with `sudo -u sentinel php8.4 /opt/msp-sentinel/bin/doctor
 ## After installing
 
 1. **Settings → Alerts:** set up email (SMTP) and, if you like, a Teams or Slack webhook. Use the test buttons.
-2. **Settings → Report branding:** your company name, logo, colour and contact details.
+2. **Settings → Report branding:** your company name, logo, color and contact details.
 3. **Users:** add your technicians (role *technician*) and anyone who only needs to read (role *viewer*).
-4. **Clients:** add a client, record the scan authorisation with the approved addresses, and run a first scan.
+4. **Clients:** add a client, record the scan authorization with the approved addresses, and run a first scan.
 5. Optionally, get a free **NVD API key** and set `nvd.api_key` in the config: vulnerability lookups get about ten
    times faster.
 6. If you skipped it during install, encrypt the daily backups: see [backup.md](backup.md).

@@ -6,7 +6,7 @@ Create a branded report for a client, save it as a PDF, or export the findings a
 
 - **Technicians and admins** create reports. Everyone can open and download them. Only admins delete reports, turn
   on monthly reports and set the branding.
-- Set your branding once (admins): **Administration → Settings → Report branding**: company name, logo, accent colour,
+- Set your branding once (admins): **Administration → Settings → Report branding**: company name, logo, accent color,
   contact details and paper size.
 
 ## Create a report
@@ -44,6 +44,6 @@ Create a branded report for a client, save it as a PDF, or export the findings a
   totals or the rating.
 - Monthly reports need email set up: see [Alerts](alerts.md). Reports over 5 MB are not attached; the email links to
   them instead. If creating them fails, admins get a notification and Sentinel retries hourly, up to 5 times.
-- Every report states its limits: these are non-intrusive checks of the authorised targets, and not a PCI ASV scan.
+- Every report states its limits: these are non-intrusive checks of the authorized targets, and not a PCI ASV scan.
 - Pen-test reports and retest letters are made from an engagement: see [Pen-test engagements](engagements.md).
 - The API can fetch reports and their CSV: see [API](../api.md).

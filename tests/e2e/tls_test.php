@@ -133,7 +133,7 @@ return [
             \Sentinel\Core\App::scans()->queue($id, 'scheduled', null, false, null, ['endpoints' => []], 'tls');
             $admin = $ctx->login('admin', 'Admin-Pass-0001!');
             $admin->submit('/clients/' . $id, '/clients/' . $id . '/scan', []);
-            Assert::same('ports', $ctx->db->query("SELECT job_type FROM scan_jobs WHERE client_id = {$id} AND status = 'queued'")->fetchColumn(), 'port scan queued, TLS job cancelled');
+            Assert::same('ports', $ctx->db->query("SELECT job_type FROM scan_jobs WHERE client_id = {$id} AND status = 'queued'")->fetchColumn(), 'port scan queued, TLS job canceled');
             $ctx->db->exec("UPDATE scan_jobs SET status = 'cancelled' WHERE client_id = {$id} AND status = 'queued'");
 
             // A TLS job naming an address outside the scope never connects to it.

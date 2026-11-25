@@ -215,7 +215,7 @@ return [
         Assert::same([null, null], [$into($behind1), $into($behind2)], 'a shared MAC matches nothing');
         Assert::same(null, $into($otherA), 'a contradicting MAC blocks the address match');
         Assert::same(null, $into($oldNameA), 'a name of a device not seen lately is not matched');
-        Assert::same(null, $into($sharedA), 'lapsed authorisation: the range is still shared');
+        Assert::same(null, $into($sharedA), 'lapsed authorization: the range is still shared');
         Assert::same($staleN, $into($staleA), 'manual merge kept');
         Assert::true($routerN > 0 && $otherN > 0 && $oldNameN > 0, 'fixtures made');
     },

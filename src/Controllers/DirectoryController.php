@@ -44,8 +44,8 @@ final class DirectoryController extends Controller
             (int) ($client['is_demo'] ?? 0) === 1 => __('This is a demo client with made-up data: it is never scanned.'),
             preg_match('/^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/', $domain) !== 1 => __('Enter the Active Directory domain name, for example corp.example.'),
             filter_var($dcIp, FILTER_VALIDATE_IP) === false => __('Enter the domain controller\'s IP address.'),
-            $auth === null => __('This site has no valid internal authorisation.'),
-            !InternalRanges::allWithin([$dcIp], $auth['ranges_list']) => __('The domain controller must be inside the site\'s internal authorisation ({ranges}).', ['ranges' => implode(', ', $auth['ranges_list'])]),
+            $auth === null => __('This site has no valid internal authorization.'),
+            !InternalRanges::allWithin([$dcIp], $auth['ranges_list']) => __('The domain controller must be inside the site\'s internal authorization ({ranges}).', ['ranges' => implode(', ', $auth['ranges_list'])]),
             $username === '' || strlen($username) > 256 || preg_match('/[\x00-\x1F\x7F]/', $username) === 1 || preg_match('/^[^@\\\\\s]+(@[^@\s]+|)$|^[^\\\\\s]+\\\\[^\\\\\s]+$/', $username) !== 1
                 => __('Enter the account as user@domain or DOMAIN\\user.'),
             default => null,

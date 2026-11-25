@@ -42,7 +42,7 @@ Keeps Sentinel's clients in step with ITFlow and puts security work on the ITFlo
 
 What happens next:
 
-- **Clients**, every 15 minutes: new ITFlow clients are added (not scanned until you record their authorisation),
+- **Clients**, every 15 minutes: new ITFlow clients are added (not scanned until you record their authorization),
   renames are applied, and archiving in ITFlow archives in Sentinel. A client with the same name is linked, not
   duplicated. A client you archived or restored yourself in Sentinel is left as you set it.
 - **Tickets**: Sentinel opens an internal ticket for each Fail and known-exploited finding (High, or Urgent when
@@ -86,7 +86,7 @@ Reads each client's computers from NinjaOne every 6 hours. It never changes anyt
    (machine-to-machine)**, scope **Monitoring** only, grant type **Client credentials**. Copy the client ID and secret.
 2. In Sentinel, under **NinjaOne**, enter the instance (the address you sign in at, for example `eu.ninjarmm.com`),
    the client ID and the secret. Tick **Sync linked clients**, save, and click **Test connection**.
-3. On each client's **Devices** page, click **Link to an organisation** and pick its NinjaOne organisation.
+3. On each client's **Devices** page, click **Link to an organization** and pick its NinjaOne organization.
 
 What comes over: approved computers with their operating system, antivirus, disk encryption, missing and failed
 Windows updates, and installed software (matched to known vulnerabilities). Anything NinjaOne doesn't report stays
@@ -98,7 +98,7 @@ unknown and is never a finding.
   reported only on devices running them.
 - **MAC addresses** of each device's network cards come over too, so an agent's device is matched to the right
   NinjaOne device even when addresses are reused (see Agents).
-- **Linking another organisation** to a client unlinks the old one first: its devices leave the client and their
+- **Linking another organization** to a client unlinks the old one first: its devices leave the client and their
   findings close as "unlinked" (not as fixed).
 
 ## Breach monitoring
@@ -110,7 +110,7 @@ Finds your clients' email addresses in known data breaches, once a week, using X
 2. In Sentinel, under **Breach monitoring**, paste the API key and tick **Check weekly**. **Check now** runs at most
    once an hour.
 
-Each address becomes one finding for the client whose authorisation lists its domain: **Fail** if a breach happened
+Each address becomes one finding for the client whose authorization lists its domain: **Fail** if a breach happened
 in the last 12 months, **Warning** if all its breaches are older. Passwords are never stored or shown. Addresses are
 masked in titles and alerts (`j***@client.example`). Verified domains in no client's register are listed and ignored.
 

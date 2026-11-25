@@ -20,7 +20,7 @@ return [
         // A page size of 2 makes every list (organisations, devices, cursor reports) take several pages.
         $src = new NinjaOneSource('app.ninjarmm.com', 'test-client', 'test-secret-value', $base($ctx), 2);
         $orgs = $src->organisations();
-        Assert::same(['900', '901', '902'], array_column($orgs, 'id'), 'all organisations, across pages (until an empty page)');
+        Assert::same(['900', '901', '902'], array_column($orgs, 'id'), 'all organizations, across pages (until an empty page)');
         Assert::same('Harbour Example Ltd', $orgs[1]['name']);
 
         $snap = $src->snapshot('901');
@@ -87,7 +87,7 @@ return [
         } catch (InventoryException) {
             $badOrg = true;
         }
-        Assert::true($badOrg, 'organisation IDs are digits only (they go into the device filter)');
+        Assert::true($badOrg, 'organization IDs are digits only (they go into the device filter)');
     },
     'Integrations page: admins save NinjaOne settings, the secret is encrypted and never shown, test connection works' => function (TestContext $ctx): void {
         if ((int) $ctx->db->query("SELECT COUNT(*) FROM users WHERE username = 'intech'")->fetchColumn() === 0) {
@@ -116,7 +116,7 @@ return [
         Assert::notContains('test-secret-value', $audit, 'secret never audited');
 
         $admin->submit('/admin/integrations', '/admin/integrations/ninjaone/test', []);
-        Assert::contains('Connected: the API app can see 3 organisation(s)', $admin->get('/admin/integrations')->body);
+        Assert::contains('Connected: the API app can see 3 organization(s)', $admin->get('/admin/integrations')->body);
         // Saving again with the secret field empty keeps the saved secret.
         $admin->submit('/admin/integrations', '/admin/integrations/ninjaone', ['host' => 'app.ninjarmm.com', 'client_id' => 'test-client', 'client_secret' => '', 'enabled' => '1']);
         Assert::same('test-secret-value', App::settings()->getSecret('ninjaone_client_secret'));
@@ -140,7 +140,7 @@ return [
         $r = $sync->syncClient($cid, 'ninjaone');
         Assert::same('ok', $r['status'], $r['message']);
         Assert::same(4, (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE client_id = {$cid} AND removed_at IS NULL")->fetchColumn());
-        Assert::same('00:1b:21:3a:4f:11,00:1b:21:3a:4f:13', (string) $ctx->db->query("SELECT mac_addresses FROM devices WHERE client_id = {$cid} AND source_id = '11'")->fetchColumn(), 'MAC addresses normalised, junk, multicast and labels dropped, dotted form read (1.50.1)');
+        Assert::same('00:1b:21:3a:4f:11,00:1b:21:3a:4f:13', (string) $ctx->db->query("SELECT mac_addresses FROM devices WHERE client_id = {$cid} AND source_id = '11'")->fetchColumn(), 'MAC addresses normalized, junk, multicast and labels dropped, dotted form read (1.50.1)');
         // Missing updates count from when Sentinel first saw them: 40 days later they are late.
         $ctx->db->exec("UPDATE device_patches p JOIN devices d ON d.id = p.device_id SET p.first_seen = UTC_TIMESTAMP() - INTERVAL 40 DAY WHERE d.client_id = {$cid}");
         $r = $sync->syncClient($cid, 'ninjaone');

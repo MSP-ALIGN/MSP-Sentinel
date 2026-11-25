@@ -76,7 +76,7 @@ final class EngagementController extends Controller
             $v['internal'][(int) $s['id']] = mb_substr($request->raw('internal_' . (int) $s['id']), 0, 20000);
         }
         $errors = [];
-        foreach (['name' => [__('Name the engagement, e.g. "Annual internal test 2027".'), 150], 'signer_name' => [__('Enter who at the client signed the authorisation.'), 150],
+        foreach (['name' => [__('Name the engagement, e.g. "Annual internal test 2027".'), 150], 'signer_name' => [__('Enter who at the client signed the authorization.'), 150],
                   'signer_role' => [__('Enter their role.'), 150]] as $f => [$msg, $max]) {
             if ($v[$f] === '' || mb_strlen($v[$f]) > $max || preg_match('/[\x00-\x1F\x7F]/u', $v[$f])) {
                 $errors[$f] = $msg;
@@ -139,7 +139,7 @@ final class EngagementController extends Controller
             $activeEnd = App::authorisations()->activeEntries($clientId, max($today, $endDay));
             foreach ($parsed['entries'] as $entry) {
                 if (!EngagementRepository::insideScope($entry, $activeNow) || !EngagementRepository::insideScope($entry, $activeEnd)) {
-                    $parsed['errors'][] = __('{t} is not inside this client\'s authorised scope for the whole window: authorise it first (Authorisations).', ['t' => $entry['value']]);
+                    $parsed['errors'][] = __('{t} is not inside this client\'s authorized scope for the whole window: authorize it first (Authorizations).', ['t' => $entry['value']]);
                     continue;
                 }
                 $external[] = $entry['value'];
@@ -159,9 +159,9 @@ final class EngagementController extends Controller
             $authNow = App::agents()->activeAuthorisation($sid, $today);
             $authEnd = App::agents()->activeAuthorisation($sid, max($today, $endDay));
             if ($authNow === null || $authEnd === null) {
-                $parsed['errors'][] = __('Site {s} has no internal authorisation valid for the whole window.', ['s' => $s['name']]);
+                $parsed['errors'][] = __('Site {s} has no internal authorization valid for the whole window.', ['s' => $s['name']]);
             } elseif (!InternalRanges::allWithin($parsed['ranges'], $authNow['ranges_list']) || !InternalRanges::allWithin($parsed['ranges'], $authEnd['ranges_list'])) {
-                $parsed['errors'][] = __('Site {s}: every range must lie inside the site\'s internal authorisation.', ['s' => $s['name']]);
+                $parsed['errors'][] = __('Site {s}: every range must lie inside the site\'s internal authorization.', ['s' => $s['name']]);
             }
             if ($parsed['errors'] !== []) {
                 $errors['internal_' . $sid] = implode(' ', array_slice($parsed['errors'], 0, 5));
@@ -204,16 +204,16 @@ final class EngagementController extends Controller
         $doc = $request->uploadedFile('document');
         $docBytes = $doc !== null ? (int) filesize($doc) : 0;
         if ($doc === null) {
-            $errors['document'] = __('Attach the client\'s signed authorisation (PDF).');
+            $errors['document'] = __('Attach the client\'s signed authorization (PDF).');
         } elseif ($docBytes === 0 || $docBytes > self::MAX_DOC_BYTES || (string) file_get_contents($doc, false, null, 0, 5) !== '%PDF-') {
-            $errors['document'] = __('The signed authorisation must be a PDF of at most 10 MB.');
+            $errors['document'] = __('The signed authorization must be a PDF of at most 10 MB.');
         }
         if ($v['confirm'] !== '1') {
-            $errors['confirm'] = __('Confirm that the client signed this authorisation for these targets, tests and window.');
+            $errors['confirm'] = __('Confirm that the client signed this authorization for these targets, tests and window.');
         }
         // Trying passwords is a step further than scanning: the signed document must say so explicitly (annex, item 6).
         if (in_array('default_creds', $v['tests'], true) && $v['creds_confirm'] !== '1') {
-            $errors['creds_confirm'] = __('Confirm that the signed authorisation explicitly allows trying vendor default passwords, or untick that test.');
+            $errors['creds_confirm'] = __('Confirm that the signed authorization explicitly allows trying vendor default passwords, or untick that test.');
         }
         if ($errors !== []) {
             return $this->form($client, $v, $errors, 422);
@@ -316,7 +316,7 @@ final class EngagementController extends Controller
             return $back;
         }
         if (!App::engagements()->approve((int) $e['id'], $me, $self)) {
-            Session::flash('danger', __('It can no longer be approved (stopped, cancelled, already approved or its window has ended).'));
+            Session::flash('danger', __('It can no longer be approved (stopped, canceled, already approved or its window has ended).'));
             return $back;
         }
         $this->audit($request, 'engagement.approved', 'engagement', (int) $e['id'], ['client_id' => (int) $e['client_id'], 'by_creator' => (int) $e['created_by'] === $me]);
@@ -410,7 +410,7 @@ final class EngagementController extends Controller
             $auth = App::agents()->activeAuthorisation($siteId, ScopeService::today((string) $client['timezone']));
             if ($auth === null || isset($open[$siteId])) {
                 $siteName = (string) ($this->siteName($siteId) ?: '#' . $siteId);
-                $notes[] = $auth === null ? __('Site {s} has no valid internal authorisation today: record one under the client\'s Agents page.', ['s' => $siteName])
+                $notes[] = $auth === null ? __('Site {s} has no valid internal authorization today: record one under the client\'s Agents page.', ['s' => $siteName])
                     : __('Site {s} already has internal tests queued or running.', ['s' => $siteName]);
                 continue;
             }
@@ -418,7 +418,7 @@ final class EngagementController extends Controller
             $siteAgents = App::agents()->agents($siteId);
             $siteName = (string) ($this->siteName($siteId) ?: '#' . $siteId);
             if (array_filter($siteAgents, static fn (array $a): bool => $a['status'] === 'active') === []) {
-                $notes[] = __('No agent is enrolled at site {s}: enrol one under the client\'s Agents page first.', ['s' => $siteName]);
+                $notes[] = __('No agent is enrolled at site {s}: enroll one under the client\'s Agents page first.', ['s' => $siteName]);
                 continue;
             }
             foreach ($siteAgents as $a) {
@@ -503,7 +503,7 @@ final class EngagementController extends Controller
         $e = $this->engagementOr404($params);
         if (App::engagements()->cancel((int) $e['id'])) {
             $this->audit($request, 'engagement.cancelled', 'engagement', (int) $e['id'], ['client_id' => (int) $e['client_id']]);
-            Session::flash('success', __('Engagement cancelled.'));
+            Session::flash('success', __('Engagement canceled.'));
         }
         return Response::redirect('/clients/' . (int) $e['client_id'] . '/engagements');
     }

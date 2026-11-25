@@ -8,7 +8,7 @@
 inside and outside the network, and get it fixed on time.
 
 ![Version 1.50.1](https://img.shields.io/badge/version-1.50.1-ff5a1f?style=flat-square)
-![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
+![License AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
 ![Self-hosted](https://img.shields.io/badge/self--hosted-your%20data%20stays%20yours-2ea44f?style=flat-square)
@@ -55,7 +55,7 @@ check proves them. Its companion product, **MSP Align**, plans, reports and prov
     <td><img src="docs/images/website-email.webp" alt="Website and email security results"><br><sub><b>Website and email</b>: headers, exposed files, CMS versions, SPF/DMARC/DKIM.</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/images/agents.webp" alt="On-premises agents for a client site"><br><sub><b>On-premises agents</b>: signed internal authorisation, check-ins, kill switch.</sub></td>
+    <td><img src="docs/images/agents.webp" alt="On-premises agents for a client site"><br><sub><b>On-premises agents</b>: signed internal authorization, check-ins, kill switch.</sub></td>
     <td><img src="docs/images/device.webp" alt="An internal device with its services and findings"><br><sub><b>Internal device</b>: open services, certificates, software and findings.</sub></td>
   </tr>
   <tr>
@@ -68,7 +68,7 @@ All screenshots use made-up clients and documentation addresses only.
 
 ## How it stays safe
 
-- **Authorised targets only.** Nothing is scanned unless the client approved it in writing and you recorded it.
+- **Authorized targets only.** Nothing is scanned unless the client approved it in writing and you recorded it.
   Scope is checked again at the moment of scanning, and every active scan is logged.
 - **Gentle by default.** Slow, rate-limited scans inside each client's scan window, with a global kill switch and a
   pause per client and per site.
@@ -101,7 +101,7 @@ Requirements, a development server, unattended installs and signed release archi
 
 | Guide | |
 |---|---|
-| [Your first client](docs/guides/first-client.md) | Add a client, record the authorisation, run the first scan |
+| [Your first client](docs/guides/first-client.md) | Add a client, record the authorization, run the first scan |
 | [Findings](docs/guides/findings.md) | Read, triage and fix findings; owners, due dates, verify fix |
 | [Search](docs/guides/search.md) | The top-bar search and the filters |
 | [Reports](docs/guides/reports.md) | Executive and technical reports, monthly reports, PDF and CSV |
@@ -124,7 +124,7 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 - **Safer device matching.** A MAC several agent devices share (a router or VPN server answering for others) no longer
   joins them all to one NinjaOne device. A real MAC the NinjaOne device doesn't list rules it out, a name only
   matches a device NinjaOne saw in the last day, and an address range two sites use stays ambiguous after one site's
-  authorisation lapses.
+  authorization lapses.
 - **Certificate findings keep their decisions.** The upgrade moves the evidence to the new form too, so false
   positives and accepted findings don't reopen. Where an endpoint had both an old "expired" and an "expires soon"
   finding, the open one is kept, and an open one combined into another closes with an honest ticket note instead of
@@ -154,7 +154,7 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
   vendors' "IOS", no longer hide CVEs; Linux distributions (Debian, Ubuntu, Red Hat) count as Linux; NVD's "not on
   this platform" is never read as "only on it"; a CVE listed without a limit by any NVD answer keeps no limit.
   "Cisco IOS XE" is no longer read as macOS, and iPadOS counts as iOS.
-- **Private MAC addresses.** Phones and laptops that rotate private MACs are recognised by their address, so each
+- **Private MAC addresses.** Phones and laptops that rotate private MACs are recognized by their address, so each
   rotation isn't a new device and a new-device alert.
 - **Gentler refresh.** The one-off refresh of cached vulnerability data (for platform limits) takes at most 50
   products per run, after the regular work, so a feeds run never stalls on it.
@@ -205,6 +205,6 @@ Please report vulnerabilities privately. See [SECURITY.md](SECURITY.md).
 
 ## Third-party components
 
-Served from `public/assets/vendor/`, each with its licence file: Bootstrap 5.3.8 (MIT), AdminLTE 4.10.0 (MIT),
-Bootstrap Icons 1.13.1 (MIT), qrcode-generator 2.0.4 (MIT, licence notice in the file header), and the fonts
-Chakra Petch and JetBrains Mono (SIL Open Font License 1.1, licence files in `public/assets/vendor/fonts/`).
+Served from `public/assets/vendor/`, each with its license file: Bootstrap 5.3.8 (MIT), AdminLTE 4.10.0 (MIT),
+Bootstrap Icons 1.13.1 (MIT), qrcode-generator 2.0.4 (MIT, license notice in the file header), and the fonts
+Chakra Petch and JetBrains Mono (SIL Open Font License 1.1, license files in `public/assets/vendor/fonts/`).

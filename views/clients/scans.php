@@ -45,7 +45,7 @@ $canQueue = can('scans.run') && !$archived && !$paused && !$globallyPaused;
             <?php endif; ?>
         </div>
         <?php elseif ($canQueue): ?>
-        <form method="post" data-confirm="<?= e(__('Start a scan of this client now? Only addresses and names in its active authorisation are scanned.')) ?>" action="<?= e(url('/clients/' . $clientId . '/scan')) ?>" class="mb-3" novalidate>
+        <form method="post" data-confirm="<?= e(__('Start a scan of this client now? Only addresses and names in its active authorization are scanned.')) ?>" action="<?= e(url('/clients/' . $clientId . '/scan')) ?>" class="mb-3" novalidate>
             <?= Csrf::field() ?>
             <div class="d-flex flex-wrap align-items-center gap-2">
                 <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-broadcast me-1" aria-hidden="true"></i><?= e(__('Scan now')) ?></button>

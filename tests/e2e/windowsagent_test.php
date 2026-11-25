@@ -36,7 +36,7 @@ $wSetup = static function (TestContext $ctx) use ($wDir): array {
     [$code, $out] = $ctx->cli('bin/sentinel-agent.php', ['enrol', '--server', $ctx->baseUrl, '--code', $m[0] ?? 'missing', '--config', $wDir($ctx) . '/config/agent.json',
         '--state-dir', $wDir($ctx) . '/state'], ['SENTINEL_TEST_PLATFORM' => 'windows']);
     if ($code !== 0) {
-        throw new RuntimeException('Agent enrolment failed: ' . $out);
+        throw new RuntimeException('Agent enrollment failed: ' . $out);
     }
     $app = require $ctx->configPath;
     $c = json_decode((string) file_get_contents($wDir($ctx) . '/config/agent.json'), true);
@@ -63,7 +63,7 @@ return [
     'Windows agent: the agent only asks; the SYSTEM update task downloads, checks and installs the signed release' => function (TestContext $ctx) use ($wSetup, $wRun, $wDir, $task, $fakeApp): void {
         [$cid, $site] = $wSetup($ctx);
         $c = json_decode((string) file_get_contents($wDir($ctx) . '/config/agent.json'), true);
-        Assert::same($wDir($ctx) . '/state/state.json', $c['state_file'], 'state folder named at enrolment');
+        Assert::same($wDir($ctx) . '/state/state.json', $c['state_file'], 'state folder named at enrollment');
         $wRun($ctx); // reports its version
         $agentId = (int) $ctx->db->query("SELECT id FROM agents WHERE site_id = {$site} AND status = 'active'")->fetchColumn();
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');

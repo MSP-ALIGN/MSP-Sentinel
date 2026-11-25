@@ -19,14 +19,14 @@ $chip = static function (string $sev, string $text): string {
     <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Internal devices')) ?></h2></div>
     <div class="card-body">
         <?php if ($inventorySources === []): ?>
-        <p class="small text-body-secondary mb-0"><?= e(__('No inventory source is set up yet. When NinjaOne is connected (Administration > Integrations), an admin links this client to its NinjaOne organisation and its devices, installed software and missing updates appear here.')) ?></p>
+        <p class="small text-body-secondary mb-0"><?= e(__('No inventory source is set up yet. When NinjaOne is connected (Administration > Integrations), an admin links this client to its NinjaOne organization and its devices, installed software and missing updates appear here.')) ?></p>
         <?php endif; ?>
         <?php foreach ($inventorySources as $name => $label): $link = $inventoryLinks[$name] ?? null; ?>
         <div class="d-flex flex-wrap align-items-center gap-2 mb-2 small">
             <strong><?= e($label) ?>:</strong>
             <?php if ($link === null): ?>
                 <span class="text-body-secondary"><?= e(__('not linked')) ?></span>
-                <?php if ($isAdmin): ?><a class="btn btn-sm btn-outline-primary" href="<?= e(url('/clients/' . (int) $client['id'] . '/inventory/link', ['source' => $name])) ?>"><?= e(__('Link to an organisation')) ?></a><?php endif; ?>
+                <?php if ($isAdmin): ?><a class="btn btn-sm btn-outline-primary" href="<?= e(url('/clients/' . (int) $client['id'] . '/inventory/link', ['source' => $name])) ?>"><?= e(__('Link to an organization')) ?></a><?php endif; ?>
             <?php else: ?>
                 <span><?= e(__('linked to {org}', ['org' => $link['org_name']])) ?></span>
                 <span class="text-body-secondary">· <?= e($link['last_sync_at'] !== null ? __('last sync {t}', ['t' => when($link['last_sync_at'])]) : __('first sync pending')) ?></span>

@@ -27,7 +27,7 @@ return [
         Assert::same(['android', 'ios', 'macos'], FeedParser::platformsFor([$android, $iosMac], $chrome), 'limits add up');
         Assert::same([], FeedParser::platformsFor([$android, $plain], $chrome), 'one unlimited configuration: any platform');
         Assert::same(['windows'], FeedParser::platformsFor([$target], $chrome), 'target_sw in the product CPE');
-        Assert::same([], FeedParser::platformsFor([$other], $chrome), 'product not in it: no limit (stricter old behaviour)');
+        Assert::same([], FeedParser::platformsFor([$other], $chrome), 'product not in it: no limit (stricter old behavior)');
         Assert::same([], FeedParser::platformsFor([['operator' => 'AND', 'nodes' => [['cpeMatch' => [$vuln($chrome . '1:*:*:*:*:*:*:*')]], ['cpeMatch' => [$on('cpe:2.3:a:example:lib:1:*:*:*:*:*:*:*')]]]]], $chrome), 'AND with an application, not an OS: no limit');
         Assert::same([], FeedParser::platformsFor(['junk', ['nodes' => 'junk']], $chrome), 'malformed input: no limit');
         // 1.49.1: only real operating systems limit; negated nodes never do.

@@ -5,7 +5,7 @@
 # Install (from the unpacked release folder, with a one-time code from the client page in Sentinel; without
 # --code it asks for the code, which keeps it out of the shell history and the process list):
 #   sudo ./install/agent-install.sh --server https://sentinel.msp.example [--code SNE-XXXXX-XXXXX-XXXXX-XXXXX] [--ca /path/ca.pem]
-# Upgrade (from the NEW release folder; keeps the enrolment):
+# Upgrade (from the NEW release folder; keeps the enrollment):
 #   sudo ./install/agent-install.sh --upgrade
 # Remove (also revoke the agent in Sentinel):
 #   sudo ./install/agent-install.sh --uninstall
@@ -17,7 +17,7 @@
 #
 # What it does (install): installs PHP (CLI) and nmap, creates the unprivileged
 # "sentinel-agent" system user, copies the release to /opt/sentinel-agent,
-# enrols the agent with the code (pinning Sentinel's signing key), and starts
+# enrolls the agent with the code (pinning Sentinel's signing key), and starts
 # the hardened systemd service "sentinel-agent".
 #
 # Security notes:
@@ -32,7 +32,7 @@
 #   agent (0640): the agent can't change what it trusts. Only its state folder
 #   /var/lib/sentinel-agent is writable. The token is never printed.
 # - The agent only connects out to Sentinel over HTTPS; no inbound port is opened.
-# - Safe to re-run: an existing enrolment is kept unless you remove it.
+# - Safe to re-run: an existing enrollment is kept unless you remove it.
 set -euo pipefail
 
 APP_DIR=/opt/sentinel-agent
@@ -93,7 +93,7 @@ render() {
 # Remote updates (1.22): pin the maintainer's release public key OUTSIDE the code folder (root-owned; a remote update
 # never changes it), and install the root update helper's path unit. Without a key in the release, remote updates stay
 # off and the agent can only be upgraded by hand.
-# Whether a release key was pinned at enrolment (in agent.json): parsed as JSON, not matched as text. When agent.json
+# Whether a release key was pinned at enrollment (in agent.json): parsed as JSON, not matched as text. When agent.json
 # can't be read or parsed, say yes, so a key file from the release folder never replaces a pin we couldn't check.
 enrolment_key_pinned() {
   [ -f "$CONF_DIR/agent.json" ] || return 1
@@ -101,7 +101,7 @@ enrolment_key_pinned() {
 }
 
 pin_release_key() {
-  # The release key normally comes from Sentinel (at enrolment, or offered later); a key given with --release-key
+  # The release key normally comes from Sentinel (at enrollment, or offered later); a key given with --release-key
   # replaces the pinned one (after a lost key was replaced on the System page). A key file in the release folder is
   # only used when none is pinned yet. An existing pin is never changed silently.
   if [ -n "$release_key" ]; then
@@ -111,7 +111,7 @@ pin_release_key() {
       mv -f "$CONF_DIR/release-key.pub.tmp" "$CONF_DIR/release-key.pub"; fi
     echo "  Release key pinned from --release-key."
   elif [ ! -s "$CONF_DIR/release-key.pub" ] && [ -s "$SRC/install/release-key.pub" ] && ! enrolment_key_pinned; then
-    # (Not when a key was pinned at enrolment: it is in agent.json, and a key file here would take its place.)
+    # (Not when a key was pinned at enrollment: it is in agent.json, and a key file here would take its place.)
     run install -o root -g root -m 0644 "$SRC/install/release-key.pub" "$CONF_DIR/release-key.pub"
   fi
 }
@@ -231,10 +231,10 @@ if [ -z "$code" ] && [ "${SENTINEL_AGENT_CODE_STDIN:-0}" = 1 ]; then
   read -r code || true
 fi
 if [ -z "$code" ] && [ "$dry" -eq 0 ]; then
-  { read -r -s -p "One-time enrolment code from Sentinel: " code; echo; } </dev/tty
+  { read -r -s -p "One-time enrollment code from Sentinel: " code; echo; } </dev/tty
 fi
 [ "$dry" -eq 1 ] && [ -z "$code" ] && code="SNE-XXXXX-XXXXX-XXXXX-XXXXX"
-printf '%s' "$code" | grep -Eq '^SNE(-[A-Z2-9]{5}){4}$' || die "That is not a valid enrolment code (SNE-XXXXX-XXXXX-XXXXX-XXXXX)."
+printf '%s' "$code" | grep -Eq '^SNE(-[A-Z2-9]{5}){4}$' || die "That is not a valid enrollment code (SNE-XXXXX-XXXXX-XXXXX-XXXXX)."
 if [ -n "$ca" ] && [ ! -r "$ca" ] && [ "$dry" -eq 0 ]; then die "CA file not readable: $ca"; fi
 if [ -f "$CONF_DIR/agent.json" ] && [ "$dry" -eq 0 ]; then die "This machine is already enrolled. Use --upgrade, or --uninstall first."; fi
 
@@ -266,9 +266,9 @@ if [ -n "$ca" ]; then run install -o root -g sentinel-agent -m 0640 "$ca" "$CONF
 say "Enrolling with Sentinel (pins its signing key, site and client)"
 # The code is passed on stdin, never on a command line; it works once and expires in 24 hours.
 if [ "$dry" -eq 1 ]; then
-  printf '  [dry-run] runuser -u sentinel-agent -- %s %s/bin/sentinel-agent.php enrol --server %s --code-stdin --config %s/agent.json\n' "$PHP_BIN" "$APP_DIR" "$server" "$STATE_DIR"
+  printf '  [dry-run] runuser -u sentinel-agent -- %s %s/bin/sentinel-agent.php enroll --server %s --code-stdin --config %s/agent.json\n' "$PHP_BIN" "$APP_DIR" "$server" "$STATE_DIR"
 else
-  printf '%s\n' "$code" | runuser -u sentinel-agent -- "$PHP_BIN" "$APP_DIR/bin/sentinel-agent.php" enrol --server "$server" --code-stdin --config "$STATE_DIR/agent.json" ${ca:+--ca "$ca"}
+  printf '%s\n' "$code" | runuser -u sentinel-agent -- "$PHP_BIN" "$APP_DIR/bin/sentinel-agent.php" enroll --server "$server" --code-stdin --config "$STATE_DIR/agent.json" ${ca:+--ca "$ca"}
 fi
 # The agent may read its config but not change it (it holds the pinned key, site and client).
 run mv -f "$STATE_DIR/agent.json" "$CONF_DIR/agent.json"

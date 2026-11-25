@@ -150,7 +150,7 @@ final class IntegrationsController extends Controller
         $linked = (int) App::db()->query("SELECT COUNT(*) FROM source_links WHERE source = 'ninjaone'")->fetchColumn();
         if ($oldHost !== '' && $host !== $oldHost && $linked > 0) {
             // Organisation IDs belong to one NinjaOne account: links made against another one would point at the wrong data.
-            Session::flash('warning', __('The NinjaOne instance changed while {n} client(s) are linked. If this is a different NinjaOne account, unlink and link those clients again: their organisation IDs belong to the old one.', ['n' => $linked]));
+            Session::flash('warning', __('The NinjaOne instance changed while {n} client(s) are linked. If this is a different NinjaOne account, unlink and link those clients again: their organization IDs belong to the old one.', ['n' => $linked]));
         }
         $ready = App::ninjaOne() !== null;
         Session::flash($enabled && !$ready ? 'warning' : 'success', $enabled && !$ready
@@ -174,7 +174,7 @@ final class IntegrationsController extends Controller
         try {
             $count = $source->testConnection();
             $ok = true;
-            $result = __('Connected: the API app can see {n} organisation(s).', ['n' => $count]);
+            $result = __('Connected: the API app can see {n} organization(s).', ['n' => $count]);
             Session::flash('success', $result);
         } catch (InventoryException $ex) {
             $result = __('Failed: {e}', ['e' => $ex->getMessage()]);

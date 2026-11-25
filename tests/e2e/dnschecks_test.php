@@ -59,7 +59,7 @@ return [
         // Domains without a CNAME are checked but have nothing to report.
         Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM findings WHERE client_id = {$cid} AND finding_key = 'dns:axfr-open.example:takeover'")->fetchColumn());
     },
-    'only authorised names are checked, and not again within 20 hours' => function (TestContext $ctx) use ($setup): void {
+    'only authorized names are checked, and not again within 20 hours' => function (TestContext $ctx) use ($setup): void {
         $cid = $setup($ctx);
         $names = $ctx->db->query("SELECT DISTINCT name FROM domain_checks WHERE client_id = {$cid} ORDER BY name")->fetchAll(PDO::FETCH_COLUMN);
         Assert::true(!in_array('wildzone.example', $names, true), 'only names in scope are checked: ' . implode(', ', $names));
@@ -71,8 +71,8 @@ return [
         Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM findings WHERE client_id = {$cid} AND finding_key LIKE 'dns:gone-lb.takeover.example:%'")->fetchColumn(),
             'a deleted load balancer name (nobody else can claim it) is not a takeover');
         $log = (string) @file_get_contents($ctx->dnsLog ?? '');
-        Assert::notContains('AXFR takeover.example', $log, 'never a zone transfer for a domain that is not itself authorised');
-        Assert::notContains('AXFR wildzone.example', $log, '*.wildzone.example does not authorise wildzone.example itself');
+        Assert::notContains('AXFR takeover.example', $log, 'never a zone transfer for a domain that is not itself authorized');
+        Assert::notContains('AXFR wildzone.example', $log, '*.wildzone.example does not authorize wildzone.example itself');
         Assert::notContains('AXFR axfr-private.example', $log);
         $before = substr_count($log, 'AXFR axfr-open.example');
         Assert::true($before >= 1, 'the zone transfer was asked over DNS');

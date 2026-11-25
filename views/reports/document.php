@@ -193,8 +193,8 @@ footer.doc-footer .right { margin-left: auto; }
 <?php endif; ?>
 
 <h2><?= e($exec ? __('What we checked') : __('Appendix: scope and method')) ?></h2>
-<p><?= e(__('We checked the following internet-facing addresses and names, which you authorised us to test:')) ?></p>
-<p><?php if ($r['scope'] === []): ?><span class="muted"><?= e(__('No active authorisation.')) ?></span><?php else: ?><?php foreach ($r['scope'] as $s): ?><code><?= e($s) ?></code> <?php endforeach; ?><?php endif; ?></p>
+<p><?= e(__('We checked the following internet-facing addresses and names, which you authorized us to test:')) ?></p>
+<p><?php if ($r['scope'] === []): ?><span class="muted"><?= e(__('No active authorization.')) ?></span><?php else: ?><?php foreach ($r['scope'] as $s): ?><code><?= e($s) ?></code> <?php endforeach; ?><?php endif; ?></p>
 <?php if (!$exec): ?>
 <h3><?= e(__('Recent scans')) ?></h3>
 <?php if ($r['scans'] === []): ?><p class="muted"><?= e(__('No completed scans.')) ?></p><?php else: ?>

@@ -300,7 +300,7 @@ final class ScanWorker
             $client = $this->clients->find((int) $job['client_id']);
             if ($client === null || (int) $client['is_archived'] === 1 || (int) $client['scanning_paused'] === 1 || $this->scope->globallyPaused()) {
                 $this->scans->cancel((int) $job['id']);
-                $this->scans->finish((int) $job['id'], 'cancelled', ['message' => __('Cancelled because scanning was paused or the client was archived.')]);
+                $this->scans->finish((int) $job['id'], 'cancelled', ['message' => __('Canceled because scanning was paused or the client was archived.')]);
                 VerifyOutcome::recordAborted($this->db, $job, __('scanning was paused or the client was archived.'));
                 continue;
             }
@@ -334,7 +334,7 @@ final class ScanWorker
         $jobId = (int) $job['id'];
         $clientId = (int) $job['client_id'];
         if (!$this->scans->claim($jobId)) {
-            return "Job {$jobId} was taken or cancelled.";
+            return "Job {$jobId} was taken or canceled.";
         }
         if (($job['job_type'] ?? 'ports') === 'tls') {
             return $this->runTlsJob($job);
@@ -418,8 +418,8 @@ final class ScanWorker
             $hostOutOfScope = false;
             if (!$this->scope->isInScope($clientId, (string) $ip)) {
                 $why = $hostnames === []
-                    ? __('Not in an active authorisation.')
-                    : __('Address of {host}, but this address is not in an active authorisation. Add it to the scope if the client owns it.', ['host' => $hostLabel]);
+                    ? __('Not in an active authorization.')
+                    : __('Address of {host}, but this address is not in an active authorization. Add it to the scope if the client owns it.', ['host' => $hostLabel]);
                 $this->scans->logStart($jobId, $clientId, (string) $ip, $hostLabel, $portText, 'skipped_out_of_scope', $why);
                 $summary['hosts_skipped']++;
                 continue;
@@ -556,7 +556,7 @@ final class ScanWorker
         if ($e === null || (int) $e['client_id'] !== $clientId || !$engagements->isActive($eid)) {
             $summary['messages'][] = __('The engagement is not active (not approved, outside its window, or stopped).');
             $this->scans->finish($jobId, 'cancelled', $summary);
-            return "Engagement job {$jobId} cancelled: engagement not active.";
+            return "Engagement job {$jobId} canceled: engagement not active.";
         }
         $tests = $e['tests_list'];
         $ports = in_array('tcp_full', $tests, true) ? null : PortProfile::forClient($this->clients->find($clientId) ?? []);
@@ -647,7 +647,7 @@ final class ScanWorker
             unset($remaining[$ip]);
             $label = $names === [] ? null : mb_substr(implode(',', array_unique($names)), 0, 260);
             if (!$allowed($ip, $names) || !$this->scope->isInScope($clientId, $ip)) {
-                $this->scans->logStart($jobId, $clientId, $ip, $label, $portText, 'skipped_out_of_scope', __('Not an engagement target, excluded, or not in an active authorisation.'));
+                $this->scans->logStart($jobId, $clientId, $ip, $label, $portText, 'skipped_out_of_scope', __('Not an engagement target, excluded, or not in an active authorization.'));
                 $summary['hosts_skipped']++;
                 continue;
             }
@@ -746,10 +746,10 @@ final class ScanWorker
             $status = $this->scans->cancelRequested($jobId) ? 'cancelled' : 'partial';
             $summary['messages'][] = $stop;
         } elseif (!$this->scope->isInScope($clientId, $domain)) {
-            $this->scans->logStart($jobId, $clientId, 'dns', mb_substr($domain, 0, 260), '', 'skipped_out_of_scope', __('Not in an active authorisation.'));
+            $this->scans->logStart($jobId, $clientId, 'dns', mb_substr($domain, 0, 260), '', 'skipped_out_of_scope', __('Not in an active authorization.'));
             $summary['hosts_skipped']++;
             $status = 'partial';
-            $summary['messages'][] = __('{domain} is no longer in an active authorisation.', ['domain' => $domain]);
+            $summary['messages'][] = __('{domain} is no longer in an active authorization.', ['domain' => $domain]);
         } else {
             $logId = $this->scans->logStart($jobId, $clientId, 'dns', mb_substr($domain, 0, 260), '', 'running');
             $this->checkEmail($clientId, $summary, $domain);
@@ -821,7 +821,7 @@ final class ScanWorker
                 break;
             }
             if (!$this->scope->isInScope($clientId, (string) $ip)) {
-                $this->scans->logStart($jobId, $clientId, (string) $ip, null, '', 'skipped_out_of_scope', __('Not in an active authorisation.'));
+                $this->scans->logStart($jobId, $clientId, (string) $ip, null, '', 'skipped_out_of_scope', __('Not in an active authorization.'));
                 $summary['hosts_skipped']++;
                 continue;
             }
@@ -987,7 +987,7 @@ final class ScanWorker
     private function stopReason(int $jobId, int $clientId, bool $overrideWindow): ?string
     {
         if ($this->scans->cancelRequested($jobId)) {
-            return __('Cancelled by a user.');
+            return __('Canceled by a user.');
         }
         $client = $this->clients->find($clientId);
         if ($client === null || (int) $client['is_archived'] === 1 || (int) $client['scanning_paused'] === 1 || $this->scope->globallyPaused()) {

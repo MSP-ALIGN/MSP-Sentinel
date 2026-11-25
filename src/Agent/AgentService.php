@@ -253,7 +253,7 @@ final class AgentService
         $messages = array_slice(array_map(static fn ($m): string => InventoryRepository::clean($m, 300), (array) ($data['messages'] ?? [])), 0, 10);
         if ($ranges === []) {
             // Revoked (or no longer valid) authorisation: nothing from this job is stored.
-            $this->agents->finishJob((int) $job['id'], 'cancelled', ['messages' => [__('Results ignored: the internal authorisation was revoked or is no longer valid.')]]);
+            $this->agents->finishJob((int) $job['id'], 'cancelled', ['messages' => [__('Results ignored: the internal authorization was revoked or is no longer valid.')]]);
             return ['accepted' => 0, 'rejected' => count((array) ($data['hosts'] ?? [])), 'new_devices' => 0, 'status' => 'cancelled'];
         }
         $stats = ['accepted' => 0, 'rejected' => 0, 'new_devices' => 0, 'status' => $status];

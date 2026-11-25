@@ -18,10 +18,10 @@ The agent also runs [in Docker](docker-agent.md) (a container on a Linux Docker 
 
 ## Add an agent
 
-1. **Record the internal authorisation first.** On the client's **Agents** page, click **Record a new internal
-   authorisation** for the site: who at the client approved internal scanning, the dates, and the private networks
-   (for example `10.20.0.0/24`; each at most a /16). The enrolment button only appears once the site has one.
-2. Click **Create an enrolment code** for the site. The code is shown once and works once, within 24 hours.
+1. **Record the internal authorization first.** On the client's **Agents** page, click **Record a new internal
+   authorization** for the site: who at the client approved internal scanning, the dates, and the private networks
+   (for example `10.20.0.0/24`; each at most a /16). The enrollment button only appears once the site has one.
+2. Click **Create an enrollment code** for the site. The code is shown once and works once, within 24 hours.
 3. The next page shows the install command for your Sentinel address with a copy button. Run it on the machine at
    the site, for example:
 
@@ -56,7 +56,7 @@ page.
 
 1. Create an ordinary domain user for Sentinel (no admin rights), for example `svc-sentinel`.
 2. On the **Agents** page, under **Active Directory checks** for the site, enter the domain (`corp.example`), the
-   domain controller's IP address (inside the site's internal authorisation), the account and its password. Save.
+   domain controller's IP address (inside the site's internal authorization), the account and its password. Save.
    Open Sentinel through its `https://` address: your browser seals the password for that agent, so Sentinel never
    sees it.
 3. At the next full scan the agent fetches the domain controller's certificate. Check the fingerprint shown and click
@@ -71,19 +71,19 @@ agent then pins the new address at its next sign-in.
 
 - **Operating system and type:** the agent works them out from the network without logging in. Windows machines give
   their exact version and build over SMB (the same read-only handshake as nmap's ntlm-info); other devices are
-  recognised from their service banners and web pages (Linux distributions, NAS boxes, printers, firewalls,
+  recognized from their service banners and web pages (Linux distributions, NAS boxes, printers, firewalls,
   hypervisors). The result sets the device type (workstation, server or other). A few Windows builds are shared by a
   client and a server release; then server clues (a domain controller's ports, IIS, SQL Server) decide, or both names
   are shown.
 - **Same machine, new address:** a device keeps its record when DHCP gives it another address (matched by its MAC).
   An address that DHCP hands to a different machine (another MAC) gets a new record, so the new machine never
   inherits the old one's name or findings. Phones and laptops that use private (rotating) MAC addresses are
-  recognised by their address instead, so a new private MAC isn't a new device.
+  recognized by their address instead, so a new private MAC isn't a new device.
 - **One device per machine:** when NinjaOne also reports a machine the agent finds, the Devices list shows one row.
   Sentinel matches them on the strongest evidence it has, in this order: the network card's MAC address (when it
   belongs to exactly one NinjaOne device and isn't a private or shared one); then the address, but only from a
   NinjaOne device seen in the last day, only where one site's networks cover it (two sites using the same 192.168.1.x
-  range prove nothing, even after one site's authorisation lapses), and only when the name matches or the agent saw
+  range prove nothing, even after one site's authorization lapses), and only when the name matches or the agent saw
   none; then a name exactly one NinjaOne device seen in the last day has. A MAC that answers on several addresses (a
   router, firewall or VPN server) is never used to tell devices apart, and a real MAC the NinjaOne device doesn't list
   rules that device out. The device page then shows NinjaOne's OS, antivirus and patches together with the agent's open
@@ -93,7 +93,7 @@ agent then pins the new address at its next sign-in.
 ## Good to know
 
 - **Pause** on the site stops agent scans within a minute. **Revoke** stops an agent's token at once.
-- Agents only connect out, scan only the networks in the signed internal authorisation, and never run commands they
+- Agents only connect out, scan only the networks in the signed internal authorization, and never run commands they
   receive.
 - Under **Administration → System**, **Move agents** moves every agent to a new Sentinel address.
 - Scan gentleness, check-in interval, **Diagnostics** and **Restart** are set per site on the Agents page.

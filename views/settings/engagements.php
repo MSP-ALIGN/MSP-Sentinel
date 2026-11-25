@@ -12,7 +12,7 @@ use Sentinel\Core\Csrf;
     <form method="post" action="<?= e(url('/admin/settings/engagements')) ?>" autocomplete="off" novalidate>
     <div class="card-body">
         <?= Csrf::field() ?>
-        <p class="small text-body-secondary"><?= e(__('Nothing in an engagement runs before it is approved by someone who may approve engagements, after checking the client\'s signed authorisation against the scope.')) ?></p>
+        <p class="small text-body-secondary"><?= e(__('Nothing in an engagement runs before it is approved by someone who may approve engagements, after checking the client\'s signed authorization against the scope.')) ?></p>
         <div class="form-check mb-2">
             <input type="hidden" name="two_person" value="0">
             <input class="form-check-input" type="checkbox" id="two_person" name="two_person" value="1" <?= $twoPerson ? 'checked' : '' ?><?= $mayChangeTwoPerson ? '' : ' disabled' ?>>

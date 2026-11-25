@@ -95,7 +95,7 @@ return [
     'email edge cases: null MX, SPF redirect, parent DMARC, wildcard-only scope' => function (TestContext $ctx) use ($setup, $finding): void {
         $cid = $setup($ctx);
         $domains = $ctx->db->query("SELECT domain FROM email_checks WHERE client_id = {$cid}")->fetchAll(PDO::FETCH_COLUMN);
-        Assert::true(!in_array('wild.example', $domains, true), '*.wild.example does not authorise wild.example itself: ' . implode(', ', $domains));
+        Assert::true(!in_array('wild.example', $domains, true), '*.wild.example does not authorize wild.example itself: ' . implode(', ', $domains));
         Assert::same(0, (int) $ctx->db->query("SELECT has_mx FROM email_checks WHERE client_id = {$cid} AND domain = 'nullmx.example'")->fetchColumn(), 'a null MX accepts no email');
         Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM findings WHERE client_id = {$cid} AND finding_key LIKE 'email:nullmx.example:%'")->fetchColumn(), 'null MX: not judged');
         Assert::same(null, $finding($ctx, $cid, 'email:spf-redirect.example:spf_weak'), 'SPF redirect= takes the policy from the target');

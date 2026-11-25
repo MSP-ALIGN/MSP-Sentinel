@@ -56,10 +56,10 @@ $clientId = (int) $client['id'];
     </div>
     <div class="col-lg-6">
         <div class="card h-100">
-            <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('The client\'s signed authorisation')) ?></h2></div>
+            <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('The client\'s signed authorization')) ?></h2></div>
             <div class="card-body">
                 <div class="mb-3">
-                    <label for="document" class="form-label"><?= e(__('Signed authorisation (PDF, at most 10 MB)')) ?></label>
+                    <label for="document" class="form-label"><?= e(__('Signed authorization (PDF, at most 10 MB)')) ?></label>
                     <input type="file" class="form-control<?= $invalid('document') ?>" id="document" name="document" accept="application/pdf,.pdf" required>
                     <div class="form-text"><?= e(__('It should name the targets, the tests, the window and who may run them. A sample form (with an annex for pen tests) is in the documentation: docs/authorisation-form.md on GitHub.')) ?></div>
                     <?php $field = 'document'; require __DIR__ . '/../partials/field_error.php'; ?>
@@ -92,18 +92,18 @@ $clientId = (int) $client['id'];
         <div class="card">
             <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Scope')) ?></h2></div>
             <div class="card-body">
-                <p class="small text-body-secondary"><?= e(__('Every target must already be in this client\'s authorised scope, for the whole window. One per line; # starts a comment.')) ?></p>
+                <p class="small text-body-secondary"><?= e(__('Every target must already be in this client\'s authorized scope, for the whole window. One per line; # starts a comment.')) ?></p>
                 <div class="mb-3">
                     <label for="external" class="form-label"><?= e(__('External targets (public IPs, ranges, domains)')) ?></label>
                     <textarea class="form-control font-monospace<?= $invalid('external') ?>" id="external" name="external" rows="4" spellcheck="false"><?= e($val('external')) ?></textarea>
-                    <div class="form-text"><?= e(__('Authorised now: {list}', ['list' => $scope === [] ? __('nothing') : implode(', ', array_slice(array_map(static fn (array $s): string => (string) $s['value'], $scope), 0, 30))])) ?></div>
+                    <div class="form-text"><?= e(__('Authorized now: {list}', ['list' => $scope === [] ? __('nothing') : implode(', ', array_slice(array_map(static fn (array $s): string => (string) $s['value'], $scope), 0, 30))])) ?></div>
                     <?php $field = 'external'; require __DIR__ . '/../partials/field_error.php'; ?>
                 </div>
                 <?php foreach ($sites as $s): $sid = (int) $s['site']['id']; $fname = 'internal_' . $sid; ?>
                 <div class="mb-3">
                     <label for="<?= e($fname) ?>" class="form-label"><?= e(__('Internal ranges at site {s} (through its agent)', ['s' => $s['site']['name']])) ?></label>
                     <textarea class="form-control font-monospace<?= $invalid($fname) ?>" id="<?= e($fname) ?>" name="<?= e($fname) ?>" rows="2" spellcheck="false"><?= e((string) ($values['internal'][$sid] ?? '')) ?></textarea>
-                    <div class="form-text"><?= e($s['ranges'] === [] ? __('This site has no active internal authorisation.') : __('Authorised: {list} (until {d}).', ['list' => implode(', ', $s['ranges']), 'd' => $s['until']])) ?></div>
+                    <div class="form-text"><?= e($s['ranges'] === [] ? __('This site has no active internal authorization.') : __('Authorized: {list} (until {d}).', ['list' => implode(', ', $s['ranges']), 'd' => $s['until']])) ?></div>
                     <?php $field = $fname; require __DIR__ . '/../partials/field_error.php'; ?>
                 </div>
                 <?php endforeach; ?>
@@ -115,12 +115,12 @@ $clientId = (int) $client['id'];
                 </div>
                 <div class="form-check mb-3">
                     <input class="form-check-input<?= $invalid('confirm') ?>" type="checkbox" id="confirm" name="confirm" value="1" <?= $val('confirm') === '1' ? 'checked' : '' ?>>
-                    <label class="form-check-label" for="confirm"><?= e(__('The client signed the attached authorisation for these targets, tests and window.')) ?></label>
+                    <label class="form-check-label" for="confirm"><?= e(__('The client signed the attached authorization for these targets, tests and window.')) ?></label>
                     <?php $field = 'confirm'; require __DIR__ . '/../partials/field_error.php'; ?>
                 </div>
                 <div class="form-check mb-3">
                     <input class="form-check-input<?= $invalid('creds_confirm') ?>" type="checkbox" id="creds_confirm" name="creds_confirm" value="1" <?= $val('creds_confirm') === '1' ? 'checked' : '' ?>>
-                    <label class="form-check-label" for="creds_confirm"><?= e(__('Only with "Vendor default passwords": the signed authorisation explicitly allows trying vendor default passwords (in the sample form: the pen-test annex, point P3, "Tests the Client allows").')) ?></label>
+                    <label class="form-check-label" for="creds_confirm"><?= e(__('Only with "Vendor default passwords": the signed authorization explicitly allows trying vendor default passwords (in the sample form: the pen-test annex, point P3, "Tests the Client allows").')) ?></label>
                     <?php $field = 'creds_confirm'; require __DIR__ . '/../partials/field_error.php'; ?>
                 </div>
                 <button class="btn btn-primary" type="submit"><?= e(__('Create engagement (needs another admin\'s approval)')) ?></button>

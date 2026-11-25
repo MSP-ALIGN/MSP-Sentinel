@@ -23,7 +23,7 @@ report those upstream, but tell us if Sentinel is affected), and problems that n
 admin account.
 
 Only test against your own installation. Never test against someone else's Sentinel installation or any system you
-are not authorised to test.
+are not authorized to test.
 
 ## Release signing
 

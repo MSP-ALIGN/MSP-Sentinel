@@ -52,10 +52,10 @@ $setup = static function (TestContext $ctx) use ($write): int {
 $finding = static fn (TestContext $ctx, int $cid, string $key): ?array => $ctx->db->query("SELECT severity, status, finding_type, source, device_id, title, detail FROM findings WHERE client_id = {$cid} AND finding_key = " . $ctx->db->quote($key))->fetch() ?: null;
 
 return [
-    'admins link a client to an organisation; a name match is only suggested' => function (TestContext $ctx) use ($setup): void {
+    'admins link a client to an organization; a name match is only suggested' => function (TestContext $ctx) use ($setup): void {
         $cid = $setup($ctx);
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
-        Assert::contains('Link to an organisation', $ctx->clientSection($admin, (int) $cid, 'devices'));
+        Assert::contains('Link to an organization', $ctx->clientSection($admin, (int) $cid, 'devices'));
         $form = $admin->get('/clients/' . $cid . '/inventory/link?source=ninjaone')->body;
         Assert::true(preg_match('/<option value="org-101" selected>Riverbend Example Ltd \(suggested\)/', $form) === 1, 'suggested by name, ignoring "Ltd"');
         Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM source_links WHERE client_id = {$cid}")->fetchColumn(), 'nothing linked automatically');
@@ -67,7 +67,7 @@ return [
         Assert::status(403, $tech->submit('/clients/' . $cid, '/clients/' . $cid . '/inventory/link', ['source' => 'ninjaone', 'org_id' => 'org-101']));
         // Only organisations the source lists can be linked.
         $admin->submit('/clients/' . $cid . '/inventory/link?source=ninjaone', '/clients/' . $cid . '/inventory/link', ['source' => 'ninjaone', 'org_id' => 'org-999']);
-        Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM source_links WHERE client_id = {$cid}")->fetchColumn(), 'unknown organisation refused');
+        Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM source_links WHERE client_id = {$cid}")->fetchColumn(), 'unknown organization refused');
         Assert::status(404, $admin->submit('/clients/' . $cid, '/clients/' . $cid . '/inventory/link', ['source' => 'other', 'org_id' => 'org-101']), 'unknown source');
         Assert::redirect('/clients/' . $cid . '/devices', $admin->submit('/clients/' . $cid . '/inventory/link?source=ninjaone', '/clients/' . $cid . '/inventory/link', ['source' => 'ninjaone', 'org_id' => 'org-101']));
         Assert::same('Riverbend Example Ltd', (string) $ctx->db->query("SELECT org_name FROM source_links WHERE client_id = {$cid}")->fetchColumn());
@@ -86,7 +86,7 @@ return [
         Assert::same('192.0.2.10', (string) $ctx->db->query("SELECT ip_addresses FROM devices WHERE source_id = '5001'")->fetchColumn(), 'invalid addresses dropped');
         $sw = $ctx->db->query("SELECT s.name, s.product, s.cpe FROM device_software s JOIN devices d ON d.id = s.device_id WHERE d.source_id = '5001' ORDER BY s.name")->fetchAll(PDO::FETCH_UNIQUE);
         Assert::same('cpe:/a:7-zip:7-zip:19.00', $sw['7-Zip 19.00 (x64)']['cpe'], 'version from the name');
-        Assert::same('', $sw['Example Line-of-Business App']['cpe'], 'not in the catalogue: not matched');
+        Assert::same('', $sw['Example Line-of-Business App']['cpe'], 'not in the catalog: not matched');
 
         $ws = '5001';
         $os = $finding($ctx, $cid, "dev:ninjaone:{$ws}:os_unsupported");
@@ -226,7 +226,7 @@ return [
         $write($ctx);
     },
 
-    'links (1.49): re-linking a client to another organisation retires the old one\'s devices and findings (not as fixed)' => function (TestContext $ctx) use ($setup): void {
+    'links (1.49): re-linking a client to another organization retires the old one\'s devices and findings (not as fixed)' => function (TestContext $ctx) use ($setup): void {
         $setup($ctx);
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $res = $admin->submit('/clients/new', '/clients', ['name' => 'Relink Example', 'itflow_client_id' => '', 'timezone' => 'UTC', 'scan_window_start' => '00:00', 'scan_window_end' => '23:59', 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);
@@ -240,8 +240,8 @@ return [
         $fid = (int) $ctx->db->lastInsertId();
         // Re-linked to the right organisation.
         $admin->submit('/clients/' . $cid . '/inventory/link?source=ninjaone', '/clients/' . $cid . '/inventory/link', ['source' => 'ninjaone', 'org_id' => 'org-fail']);
-        Assert::same('org-fail', (string) $ctx->db->query("SELECT org_id FROM source_links WHERE client_id = {$cid}")->fetchColumn(), 'linked to the new organisation');
-        Assert::true($ctx->db->query("SELECT removed_at FROM devices WHERE id = {$dev}")->fetchColumn() !== null, 'the old organisation\'s device left the client');
+        Assert::same('org-fail', (string) $ctx->db->query("SELECT org_id FROM source_links WHERE client_id = {$cid}")->fetchColumn(), 'linked to the new organization');
+        Assert::true($ctx->db->query("SELECT removed_at FROM devices WHERE id = {$dev}")->fetchColumn() !== null, 'the old organization\'s device left the client');
         Assert::same(['resolved', 'unlinked'], array_values($ctx->db->query("SELECT status, resolved_reason FROM findings WHERE id = {$fid}")->fetch(PDO::FETCH_NUM)), 'its finding closed as unlinked, not fixed');
     },
 ];

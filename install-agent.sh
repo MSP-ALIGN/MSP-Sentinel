@@ -2,7 +2,7 @@
 # =============================================================================
 #  MSP Sentinel on-premises agent - one-line installer for Debian 13 (Debian 12 and Ubuntu 24.04 also work)
 #
-#  On the appliance at the client's site, with a one-time enrolment code from the client page in Sentinel:
+#  On the appliance at the client's site, with a one-time enrollment code from the client page in Sentinel:
 #    curl -fsSL https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install-agent.sh | sudo -E bash
 #  It asks for the Sentinel address and the code. Unattended: set SENTINEL_SERVER (https://...) and
 #  SENTINEL_CODE. SENTINEL_CA=/path/ca.pem when Sentinel's certificate is from a private CA.
@@ -11,7 +11,7 @@
 #  Upgrade later: sudo msp-sentinel-agent-update
 #
 #  What it does: installs git, fetches the release into /opt/sentinel-agent-src and runs
-#  install/agent-install.sh (unprivileged user, hardened service, enrolment that pins Sentinel's key, site
+#  install/agent-install.sh (unprivileged user, hardened service, enrollment that pins Sentinel's key, site
 #  and client). The code is passed on stdin, never on a command line.
 # =============================================================================
 set -Eeuo pipefail
@@ -41,7 +41,7 @@ fi
 code="${SENTINEL_CODE:-}"
 if [ -z "$code" ]; then
   have_tty || die "SENTINEL_CODE is required (no terminal available to ask)."
-  { read -r -s -p "One-time enrolment code: " code; echo; } </dev/tty
+  { read -r -s -p "One-time enrollment code: " code; echo; } </dev/tty
 fi
 
 apt-get update -qq
@@ -53,7 +53,7 @@ else
 fi
 cat > /usr/local/sbin/msp-sentinel-agent-update <<UPD
 #!/usr/bin/env bash
-# Updates the MSP Sentinel agent from $REPO, branch $BRANCH (enrolment is kept).
+# Updates the MSP Sentinel agent from $REPO, branch $BRANCH (enrollment is kept).
 set -Eeuo pipefail
 git -C $SRC_DIR fetch --depth 1 origin "$BRANCH"
 git -C $SRC_DIR reset --hard FETCH_HEAD

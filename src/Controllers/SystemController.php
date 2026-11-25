@@ -74,7 +74,7 @@ final class SystemController extends Controller
             // Cancel = recall: moved agents ask their original address every few hours and come back.
             $s->setSecret('agent_move', '');
             $this->audit($request, 'agent.move_cancelled');
-            Session::flash('success', __('Agent move cancelled: agents that moved come back to their original address within about 6 hours (keep it working).'));
+            Session::flash('success', __('Agent move canceled: agents that moved come back to their original address within about 6 hours (keep it working).'));
             return $back;
         }
         if ($request->input('complete') === '1' && $current['url'] !== '') {

@@ -101,7 +101,7 @@ final class SsoController extends Controller
             return $fail('state', __('That sign-in link has expired or was not started here. Try again.'));
         }
         if ($request->query('error') !== '') {
-            return $fail('microsoft:' . preg_replace('/[^a-z_]/', '', $request->query('error')), __('Microsoft sign-in was cancelled or refused.'));
+            return $fail('microsoft:' . preg_replace('/[^a-z_]/', '', $request->query('error')), __('Microsoft sign-in was canceled or refused.'));
         }
         $sso = App::entraSso();
         if ($sso === null || App::ssoRedirectUri() === '') {

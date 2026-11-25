@@ -13,7 +13,7 @@ read it. See [agent.md](agent.md#active-directory-checks-120).
 
 ## 2. Pen-test engagement mode (1.27.0, done)
 
-Time-boxed, deeper tests the client authorises in writing and a second admin approves:
+Time-boxed, deeper tests the client authorizes in writing and a second admin approves:
 
 - all TCP ports;
 - common UDP services;
@@ -26,12 +26,12 @@ stays gentle. See [engagements.md](engagements.md).
 
 Default credentials (1.29.0, done): at most three published vendor defaults per service (FTP, HTTP Basic, MySQL/MariaDB,
 PostgreSQL), each a different account and spaced, stopping at any lockout; plus databases open without a password.
-Needs an explicit tick for the signed authorisation.
+Needs an explicit tick for the signed authorization.
 
 ## 3. External attack surface additions (1.28.0, done)
 
 Subdomain takeover (DNS names pointing at unclaimed cloud services) and open DNS zone transfers, asked only of each
-authorised domain's own nameservers. Hypervisor, out-of-band (iDRAC, iLO, IPMI) and NAS admin pages are recognised,
+authorized domain's own nameservers. Hypervisor, out-of-band (iDRAC, iLO, IPMI) and NAS admin pages are recognized,
 with their ports in the default list. See the user guide, "Website and email security".
 
 ## 4. Breached credentials (1.33.0, done)

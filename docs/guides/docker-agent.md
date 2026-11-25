@@ -7,11 +7,11 @@ server that already runs Docker). It does the same internal scans as the applian
 
 - A **Linux** Docker host on the client's network (Docker Desktop on Windows or macOS can't share the host network).
 - Docker Engine with the compose plugin (`docker compose version`).
-- In Sentinel: the client's **Agents** page, with the site's **internal authorisation** recorded.
+- In Sentinel: the client's **Agents** page, with the site's **internal authorization** recorded.
 
 ## Set it up
 
-1. In Sentinel, on the client's **Agents** page, click **Create an enrolment code** for the site. Keep the page open.
+1. In Sentinel, on the client's **Agents** page, click **Create an enrollment code** for the site. Keep the page open.
 2. On the Docker host, get `docker/agent/docker-compose.yml` from the release (or the repository) into a folder of its
    own, for example `/opt/sentinel-agent`.
 3. Choose the image:
@@ -19,7 +19,7 @@ server that already runs Docker). It does the same internal scans as the applian
      publishes images. Check its signature if you like (see "Good to know").
    - **Build it yourself** from an unpacked release: `docker build -f docker/agent/Dockerfile -t msp-sentinel-agent:1.36.0 .`
      then put `SENTINEL_AGENT_IMAGE=msp-sentinel-agent` in a `.env` file next to the compose file.
-4. Enrol once. Paste the enrolment code when it asks (it isn't shown on screen), then press Enter:
+4. Enroll once. Paste the enrollment code when it asks (it isn't shown on screen), then press Enter:
 
    ```sh
    SENTINEL_SERVER=https://sentinel.msp.example docker compose --profile enrol run --rm enrol
@@ -51,8 +51,8 @@ you. **Update all agents** in Sentinel skips Docker agents and says how many nee
   state volume is writable. No update helper and nothing as root.
 - **NetBIOS name requests (UDP 137) aren't heard** in Docker (that port needs a privilege the container doesn't have).
   LLMNR requests are, so the "devices asking for names" finding still works for most networks.
-- **Two volumes hold everything:** `config` (the enrolment: keep it, it identifies the agent) and `state`. To move the
-  agent to another host, move both volumes. To enrol again, remove the `config` volume first.
+- **Two volumes hold everything:** `config` (the enrollment: keep it, it identifies the agent) and `state`. To move the
+  agent to another host, move both volumes. To enroll again, remove the `config` volume first.
 - **Status:** `docker compose run --rm agent status` checks the connection and prints the agent's key fingerprint.
   Logs: `docker compose logs -f agent`.
 - **Signed images** (when published from GitHub): `cosign verify ghcr.io/msp-align/msp-sentinel-agent:VERSION
@@ -65,7 +65,7 @@ you. **Update all agents** in Sentinel skips Docker agents and says how many nee
   ```sh
   docker compose --profile enrol run --rm -v "$PWD/ca.pem:/ca-in.pem:ro" --entrypoint cp enrol /ca-in.pem /etc/sentinel-agent/ca.pem
   SENTINEL_SERVER=https://sentinel.msp.example docker compose --profile enrol run --rm enrol \
-    enrol --server https://sentinel.msp.example --code-stdin --config /etc/sentinel-agent/agent.json \
+    enroll --server https://sentinel.msp.example --code-stdin --config /etc/sentinel-agent/agent.json \
     --state-dir /var/lib/sentinel-agent --ca /etc/sentinel-agent/ca.pem
   ```
 - **Revoking:** when Sentinel revokes the agent, the container stops and stays stopped. Remove it with

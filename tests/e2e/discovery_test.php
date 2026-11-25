@@ -93,7 +93,7 @@ return [
         $admin->submit('/clients/' . $id, '/suggestions/' . $sid . '/restore', []);
         Assert::true(isset($suggestions($ctx, $id)['gw.discovery.example']), 'restored');
     },
-    'approving suggestions creates a replacing authorisation and puts them in scope' => function (TestContext $ctx) use ($suggestions): void {
+    'approving suggestions creates a replacing authorization and puts them in scope' => function (TestContext $ctx) use ($suggestions): void {
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $id = (int) $ctx->db->query("SELECT id FROM clients WHERE name = 'Discovery Example Ltd'")->fetchColumn();
         $oldAuth = (int) $ctx->db->query("SELECT id FROM scan_authorisations WHERE client_id = {$id} AND revoked_at IS NULL")->fetchColumn();
@@ -102,7 +102,7 @@ return [
 
         $form = $admin->get('/clients/' . $id . '/authorisations/new?' . http_build_query(['suggestion' => $pick]));
         Assert::status(200, $form);
-        Assert::contains('will replace authorisation(s) #' . $oldAuth, $form->body);
+        Assert::contains('will replace authorization(s) #' . $oldAuth, $form->body);
         Assert::contains("# Current scope\ndiscovery.example\n203.0.113.10\n# Added from discovery\n", html_entity_decode($form->body));
         Assert::contains('vpn.discovery.example', $form->body);
         Assert::true((bool) preg_match('/name="approved_by_name" value=""/', $form->body), 'approver must be entered again');
@@ -113,8 +113,8 @@ return [
             'document_ref' => 'TICKET-2002', 'notes' => '', 'scope' => html_entity_decode($m[1]), 'confirm' => '1', 'replaces' => (string) $oldAuth,
         ]);
         Assert::redirect('/clients/' . $id . '/authorisations', $res);
-        Assert::contains('replaces authorisation(s) #' . $oldAuth, $ctx->clientSection($admin, (int) $id, 'authorisations'));
-        Assert::contains('Replaced by authorisation #', (string) $ctx->db->query("SELECT revoke_reason FROM scan_authorisations WHERE id = {$oldAuth}")->fetchColumn());
+        Assert::contains('replaces authorization(s) #' . $oldAuth, $ctx->clientSection($admin, (int) $id, 'authorisations'));
+        Assert::contains('Replaced by authorization #', (string) $ctx->db->query("SELECT revoke_reason FROM scan_authorisations WHERE id = {$oldAuth}")->fetchColumn());
         Assert::true(App::scope()->isInScope($id, 'vpn.discovery.example'), 'approved name now in scope');
         Assert::true(App::scope()->isInScope($id, '203.0.113.10'), 'old scope carried over');
         $accepted = $suggestions($ctx, $id, 'accepted');
@@ -129,7 +129,7 @@ return [
                         VALUES ({$id}, 'Old Example', 'Owner', '2024-01-01', '2024-01-01', '2024-12-31', 1, UTC_TIMESTAMP())");
         $expired = (int) $ctx->db->lastInsertId();
         $form = $admin->get('/clients/' . $id . '/authorisations/new?replace=1');
-        Assert::contains('will replace authorisation(s) #' . $active, $form->body);
+        Assert::contains('will replace authorization(s) #' . $active, $form->body);
         Assert::notContains('#' . $expired . '.', $form->body, 'expired one is not offered for replacing');
         $fields = ['approved_by_name' => 'Robin Example', 'approved_by_role' => 'Owner', 'approved_on' => gmdate('Y-m-d'),
             'valid_from' => gmdate('Y-m-d', time() + 86400 * 5), 'valid_until' => gmdate('Y-m-d', time() + 86400 * 100),
@@ -148,7 +148,7 @@ return [
 
         // Saving again (now without the revoked one) works and leaves the expired entry's history alone.
         Assert::redirect('/clients/' . $id . '/authorisations', $admin->post('/clients/' . $id . '/authorisations', ['valid_from' => gmdate('Y-m-d'), 'replaces' => (string) $expired] + $fields + ['_csrf' => $res->csrf()]));
-        Assert::same(null, $ctx->db->query("SELECT revoked_at FROM scan_authorisations WHERE id = {$expired}")->fetchColumn(), 'expired authorisation not rewritten');
+        Assert::same(null, $ctx->db->query("SELECT revoked_at FROM scan_authorisations WHERE id = {$expired}")->fetchColumn(), 'expired authorization not rewritten');
     },
     'an accepted suggestion comes back when it drops out of scope; archived clients are read-only' => function (TestContext $ctx): void {
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
@@ -163,7 +163,7 @@ return [
         Assert::same('pending', $ctx->db->query("SELECT status FROM target_suggestions WHERE id = {$sid}")->fetchColumn(), 'archived client: no dismissing');
         $admin->submit('/clients/' . $id, '/clients/' . $id . '/archive', ['archive' => '0']);
     },
-    'replacing is refused for another client\'s authorisation' => function (TestContext $ctx) use ($newClient): void {
+    'replacing is refused for another client\'s authorization' => function (TestContext $ctx) use ($newClient): void {
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $victim = (int) $ctx->db->query("SELECT id FROM scan_authorisations WHERE revoked_at IS NULL ORDER BY id LIMIT 1")->fetchColumn();
         $victimClient = (int) $ctx->db->query("SELECT client_id FROM scan_authorisations WHERE id = {$victim}")->fetchColumn();
@@ -175,7 +175,7 @@ return [
             'scope' => 'replaceguard.example', 'confirm' => '1', 'replaces' => (string) $victim,
         ]);
         Assert::status(400, $res);
-        Assert::same(null, $ctx->db->query("SELECT revoked_at FROM scan_authorisations WHERE id = {$victim}")->fetchColumn(), 'other client\'s authorisation untouched');
+        Assert::same(null, $ctx->db->query("SELECT revoked_at FROM scan_authorisations WHERE id = {$victim}")->fetchColumn(), 'other client\'s authorization untouched');
     },
     'permissions: technician runs and dismisses, viewer cannot, only admin approves' => function (TestContext $ctx): void {
         $id = (int) $ctx->db->query("SELECT id FROM clients WHERE name = 'Discovery Example Ltd'")->fetchColumn();
@@ -196,18 +196,18 @@ return [
         $tech = $ctx->login('dtech', 'Dtech-Pass-0001!');
         $page = $ctx->clientPages($tech, (int) $id);
         Assert::contains('Discover now', $page);
-        Assert::notContains('Add selected to a new authorisation', $page, 'technician cannot approve');
+        Assert::notContains('Add selected to a new authorization', $page, 'technician cannot approve');
         Assert::status(403, $tech->get('/clients/' . $id . '/authorisations/new?suggestion[]=' . $sid));
         Assert::redirect('/clients/' . $id . '/discovery', $tech->submit('/clients/' . $id, '/suggestions/' . $sid . '/dismiss', []));
         Assert::same('dismissed', $ctx->db->query("SELECT status FROM target_suggestions WHERE id = {$sid}")->fetchColumn());
     },
-    'discovery refuses without an active authorisation, or when paused' => function (TestContext $ctx) use ($newClient): void {
+    'discovery refuses without an active authorization, or when paused' => function (TestContext $ctx) use ($newClient): void {
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $res = $admin->submit('/clients/new', '/clients', ['name' => 'No Auth Example', 'itflow_client_id' => '', 'timezone' => 'UTC',
             'scan_window_start' => '22:00', 'scan_window_end' => '06:00', 'notes' => '']);
         $bare = (int) basename((string) $res->location());
         $admin->submit('/clients/' . $bare, '/clients/' . $bare . '/discover', []);
-        Assert::contains('no active authorisation', $ctx->clientPages($admin, (int) $bare));
+        Assert::contains('no active authorization', $ctx->clientPages($admin, (int) $bare));
 
         $id = $newClient($ctx, $admin, 'Paused Discovery Example', 'quiet.example');
         $admin->submit('/', '/scanning/pause', []);
@@ -250,7 +250,7 @@ return [
         $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
         proc_close($proc);
         Assert::contains('ok - Discovery finished', $out);
-        Assert::contains('refused - This client has no active authorisation', $out);
+        Assert::contains('refused - This client has no active authorization', $out);
         $scheduled = (int) $ctx->db->query("SELECT COUNT(*) FROM discovery_runs WHERE trigger_type = 'scheduled'")->fetchColumn();
         Assert::true($scheduled >= 3, 'scheduled runs recorded');
         Assert::true((int) $ctx->db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'discovery.run' AND username = 'cli'")->fetchColumn() >= 3, 'CLI runs audited');

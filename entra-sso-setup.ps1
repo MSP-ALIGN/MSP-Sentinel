@@ -17,7 +17,7 @@
   - adds the optional ID-token claim auth_time, so Sentinel can see when Microsoft MFA happened (and skip its own code
     only then);
   - asks only for sign-in permissions (openid, profile, email: no access to mail, files or anything else) and grants
-    them for the organisation, so users aren't asked to consent;
+    them for the organization, so users aren't asked to consent;
   - adds a client secret valid for 12 months (-SecretMonths) and sends tenant ID, client ID and secret to Sentinel with
     the one-time setup code (typed hidden). The secret is never shown or written to disk;
   - after Sentinel has saved it, removes older secrets this script made for the app (so a renewal leaves one).
@@ -166,9 +166,9 @@ try {
         } elseif ($grant['scope'] -notmatch '\bemail\b' -or $grant['scope'] -notmatch '\bprofile\b' -or $grant['scope'] -notmatch '\bopenid\b') {
             Invoke-Graph 'PATCH' "/oauth2PermissionGrants/$($grant['id'])" @{ scope = 'openid profile email' } | Out-Null
         }
-        Say 'Sign-in permissions granted for the organisation (openid, profile, email)'
+        Say 'Sign-in permissions granted for the organization (openid, profile, email)'
     } catch {
-        Write-Warning "Could not grant consent for the organisation ($($_.Exception.Message)). In the Entra admin center, open the app's API permissions and click ""Grant admin consent"", or users are asked to consent the first time."
+        Write-Warning "Could not grant consent for the organization ($($_.Exception.Message)). In the Entra admin center, open the app's API permissions and click ""Grant admin consent"", or users are asked to consent the first time."
     }
 
     # A new client secret.

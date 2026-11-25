@@ -22,14 +22,14 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
         <form method="post" action="<?= e(url('/clients/' . $cid . '/agents-update')) ?>" class="float-end ms-2" data-confirm="<?= e(__('Update every agent of this client that runs an older version to {v}?', ['v' => $agentRelease])) ?>"><?= Csrf::field() ?>
             <button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-cloud-arrow-down me-1" aria-hidden="true"></i><?= e(__('Update all agents to {v}', ['v' => $agentRelease])) ?></button></form>
         <?php endif; ?>
-        <p class="small text-body-secondary"><?= e(__('An agent is a small Linux appliance at the client\'s site. It connects out to Sentinel, scans only the internal networks approved in a signed internal authorisation, and reports devices, open services and certificates. A full scan runs weekly and a light sweep daily, inside the scan window.')) ?></p>
+        <p class="small text-body-secondary"><?= e(__('An agent is a small Linux appliance at the client\'s site. It connects out to Sentinel, scans only the internal networks approved in a signed internal authorization, and reports devices, open services and certificates. A full scan runs weekly and a light sweep daily, inside the scan window.')) ?></p>
         <?php $anyAgent = array_filter($agentSites, static fn (array $s): bool => $s['agents'] !== []) !== []; ?>
         <details class="border rounded p-2 mb-3 small" <?= $anyAgent ? '' : 'open' ?>>
             <summary class="fw-semibold"><?= e(__('How to add an agent')) ?></summary>
             <ol class="mt-2 mb-1">
-                <li><?= e(__('Record an internal authorisation for the site below: who at the client approved internal scanning, the dates, and the private networks to scan.')) ?></li>
+                <li><?= e(__('Record an internal authorization for the site below: who at the client approved internal scanning, the dates, and the private networks to scan.')) ?></li>
                 <li><?= e(__('Prepare a mini-PC or VM at the site that stays on: Debian 13 (or Debian 12 / Ubuntu 24.04), 2 CPU cores, 2 GB memory, 20 GB disk, on the internal network (a VM needs a bridged adapter, not NAT), with outbound HTTPS to Sentinel. No inbound firewall rule is needed. Or a Windows Server 2022/2025 or Windows 11 machine.')) ?></li>
-                <li><?= e(__('Click Create an enrolment code for the site (admins). The next page shows the code once, the install command for your Sentinel address with a copy button, and how to check it worked.')) ?></li>
+                <li><?= e(__('Click Create an enrollment code for the site (admins). The next page shows the code once, the install command for your Sentinel address with a copy button, and how to check it worked.')) ?></li>
                 <li><?= e(__('Run the command on the appliance and type the code when asked. The agent shows up here within a minute, and scans inside the client\'s scan window.')) ?></li>
             </ol>
             <a href="<?= e(url('/help')) ?>#on-premises-agents-internal-scans"><?= e(__('More in Help')) ?></a>
@@ -48,7 +48,7 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                 </span>
             </div>
             <div class="small mb-2">
-                <strong><?= e(__('Internal authorisation:')) ?></strong>
+                <strong><?= e(__('Internal authorization:')) ?></strong>
                 <?php if ($s['active'] === null): ?>
                     <span class="text-body-secondary"><?= e(__('none valid. Agents at this site do not scan.')) ?></span>
                 <?php else: ?>
@@ -57,12 +57,12 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                     <i class="bi bi-patch-check text-success" aria-hidden="true"></i><span class="visually-hidden"><?= e(__('signed')) ?></span>
                     <?php if (can('authorisations.manage')): ?>
                     <details class="d-inline-block ms-2"><summary class="text-danger"><?= e(__('Revoke')) ?></summary>
-                        <form method="post" data-confirm="<?= e(__('Revoke this internal authorisation? The site\'s agent stops scanning straight away and nothing internal is scanned until a new one is recorded.')) ?>" action="<?= e(url('/clients/' . $cid . '/internal-authorisations/' . (int) $s['active']['id'] . '/revoke')) ?>" class="d-flex gap-2 mt-1"><?= Csrf::field() ?>
+                        <form method="post" data-confirm="<?= e(__('Revoke this internal authorization? The site\'s agent stops scanning straight away and nothing internal is scanned until a new one is recorded.')) ?>" action="<?= e(url('/clients/' . $cid . '/internal-authorisations/' . (int) $s['active']['id'] . '/revoke')) ?>" class="d-flex gap-2 mt-1"><?= Csrf::field() ?>
                             <input class="form-control form-control-sm" name="reason" maxlength="500" placeholder="<?= e(__('Reason (required)')) ?>" required aria-label="<?= e(__('Reason')) ?>">
                             <button class="btn btn-sm btn-danger" type="submit"><?= e(__('Revoke')) ?></button></form></details>
                     <?php endif; ?>
                 <?php endif; ?>
-                <?php if (can('authorisations.manage')): ?> <a class="ms-2" href="<?= e(url('/clients/' . $cid . '/sites/' . $sid . '/internal-authorisations/new')) ?>"><?= e(__('Record a new internal authorisation')) ?></a><?php endif; ?>
+                <?php if (can('authorisations.manage')): ?> <a class="ms-2" href="<?= e(url('/clients/' . $cid . '/sites/' . $sid . '/internal-authorisations/new')) ?>"><?= e(__('Record a new internal authorization')) ?></a><?php endif; ?>
             </div>
             <div class="table-responsive">
             <table class="table table-sm small align-middle mb-2">
@@ -141,11 +141,11 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
             </form>
             <div class="d-flex flex-wrap gap-2 mb-2">
                 <?php if ($s['active'] === null): ?>
-                <span class="small text-body-secondary align-self-center"><?= e(__('Record an internal authorisation for this site first; then you can create an enrolment code.')) ?></span>
+                <span class="small text-body-secondary align-self-center"><?= e(__('Record an internal authorization for this site first; then you can create an enrollment code.')) ?></span>
                 <?php else: ?>
-                <form method="post" action="<?= e(url('/clients/' . $cid . '/sites/' . $sid . '/enrol')) ?>"><?= Csrf::field() ?><button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-key me-1" aria-hidden="true"></i><?= e(__('Create an enrolment code')) ?></button></form>
+                <form method="post" action="<?= e(url('/clients/' . $cid . '/sites/' . $sid . '/enrol')) ?>"><?= Csrf::field() ?><button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-key me-1" aria-hidden="true"></i><?= e(__('Create an enrollment code')) ?></button></form>
                 <?php endif; ?>
-                <form method="post" data-confirm="<?= e(__('Start an internal scan of this site now? Its agent scans the authorised ranges at the site\'s pace.')) ?>" action="<?= e(url('/clients/' . $cid . '/sites/' . $sid . '/scan')) ?>" class="d-flex gap-2"><?= Csrf::field() ?>
+                <form method="post" data-confirm="<?= e(__('Start an internal scan of this site now? Its agent scans the authorized ranges at the site\'s pace.')) ?>" action="<?= e(url('/clients/' . $cid . '/sites/' . $sid . '/scan')) ?>" class="d-flex gap-2"><?= Csrf::field() ?>
                     <input class="form-control form-control-sm" name="reason" maxlength="300" placeholder="<?= e(__('Reason for a scan now')) ?>" aria-label="<?= e(__('Reason for a scan now')) ?>">
                     <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-radar me-1" aria-hidden="true"></i><?= e(__('Scan now')) ?></button></form>
             </div>
@@ -196,7 +196,7 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                 <?php if (can('directory.manage')): ?>
                 <details><summary class="small"><?= e($dir === null ? __('Set up Active Directory checks') : __('Change settings or replace the password')) ?></summary>
                 <?php if ($siteAgent === null): ?>
-                    <p class="small text-body-secondary mt-2"><?= e(__('Enrol an agent for this site first: the password is sealed for that agent.')) ?></p>
+                    <p class="small text-body-secondary mt-2"><?= e(__('Enroll an agent for this site first: the password is sealed for that agent.')) ?></p>
                 <?php elseif ((string) ($siteAgent['box_key_pending'] ?? '') !== ''): ?>
                     <p class="small text-warning mt-2"><?= e(__('The agent reported a new key. Approve it (above) before setting a password: nothing is sealed to an unapproved key.')) ?></p>
                 <?php else: $nonce = bin2hex(random_bytes(16)); ?>

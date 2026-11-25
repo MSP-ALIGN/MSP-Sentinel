@@ -188,7 +188,7 @@ return [
         $results = $ctx->db->query("SELECT target, result FROM scan_log WHERE client_id = {$id} ORDER BY target")->fetchAll(PDO::FETCH_KEY_PAIR);
         Assert::same(['203.0.113.162' => 'error', '203.0.113.163' => 'error', '203.0.113.164' => 'scanned'], $results);
     },
-    'cancelling a running scan stops nmap within seconds' => function (TestContext $ctx) use ($scanClient, $job): void {
+    'canceling a running scan stops nmap within seconds' => function (TestContext $ctx) use ($scanClient, $job): void {
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $id = $scanClient($ctx, $admin, 'Slow Host Example', "203.0.113.170\n203.0.113.171");
         $admin->submit('/clients/' . $id, '/clients/' . $id . '/scan', []);
