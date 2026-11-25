@@ -172,25 +172,24 @@ function Install-Php {
     Say "PHP $v installed"
 }
 
-# Runs nmap's setup silently (/S) for at most 5 minutes. Returns nmap.exe's path when nmap was installed, or $null when
-# the setup did not finish on its own (usually Npcap's installer waiting for a click): then the setup and everything
-# it started are stopped, so the setup window can be used next without two installers running at once.
+# Runs nmap's setup silently (/S): at most 5 minutes with someone at the screen, 2 minutes without (1.56.3: RMM tools
+# time scripts out; nmap's own files take well under a minute). Returns nmap.exe's path when nmap was installed and
+# runs, or $null when the setup did not finish on its own (usually Npcap's installer waiting for a click): then the
+# setup and everything it started are stopped, so the setup window can be used next without two installers at once.
 function Install-NmapSilently([string]$exe) {
-    Say 'Trying a silent nmap install (it finishes on its own when Npcap is already installed)'
+    Say 'Trying a silent nmap install (it finishes on its own when a current Npcap is already installed)'
     $p = Start-Process -FilePath $exe -ArgumentList '/S' -PassThru
     $null = $p.Handle  # keep the process handle, or ExitCode reads as empty after WaitForExit
-    $finished = $p.WaitForExit(300000)
+    $limit = if ([Environment]::UserInteractive) { 300000 } else { 120000 }
+    $finished = $p.WaitForExit($limit)
     if (-not $finished) {
         Stop-ProcessTree $p.Id
     }
     $found = @("${env:ProgramFiles(x86)}\Nmap\nmap.exe", "$env:ProgramFiles\Nmap\nmap.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
-    if ($found) {
-        # Installed, even if Npcap's part was stopped: nmap must also run (the agent never needs Npcap).
-        & $found --version *> $null
-        if ($LASTEXITCODE -eq 0) {
-            if ($finished) { Say "nmap installed silently: $found" } else { Say "nmap installed silently (Npcap's part was skipped): $found" }
-            return $found
-        }
+    if ($found -and (Test-NmapRuns $found)) {
+        # Installed, even if Npcap's part was stopped (Zenmap and Ncat may then be missing; the agent needs neither).
+        if ($finished) { Say "nmap installed silently: $found" } else { Say "nmap installed silently (Npcap's part was skipped): $found" }
+        return $found
     }
     if ($finished) {
         Say "The silent nmap install did not leave a working nmap (exit $($p.ExitCode)); using the setup window instead."
@@ -200,11 +199,42 @@ function Install-NmapSilently([string]$exe) {
     return $null
 }
 
-# Stops a process and every process it started (children first), e.g. nmap's setup and the Npcap installer it runs.
+# Whether nmap starts and answers --version (1.56.3: never throws, also when nmap writes to stderr or can't start, which
+# with $ErrorActionPreference = 'Stop' would otherwise abort the install instead of falling back to the setup window).
+function Test-NmapRuns([string]$path) {
+    $before = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & $path --version *> $null
+        return ($LASTEXITCODE -eq 0)
+    } catch {
+        return $false
+    } finally {
+        $ErrorActionPreference = $before
+    }
+}
+
+# The processes a process started, and theirs, collected before anything is stopped. Only processes created after
+# their parent count (1.56.3): a Windows process ID can be reused, and an old orphan whose dead parent had the same ID
+# must never be taken for a child.
+function Get-ProcessTree([int]$id, [datetime]$after) {
+    $out = @()
+    foreach ($c in @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $id" -ErrorAction SilentlyContinue)) {
+        if ($c.CreationDate -ge $after) {
+            $out += [int]$c.ProcessId
+            $out += Get-ProcessTree ([int]$c.ProcessId) $c.CreationDate
+        }
+    }
+    return $out
+}
+
+# Stops a process and every process it started, e.g. nmap's setup and the Npcap installer it runs: the tree is listed
+# first, then the parent is stopped (so it starts nothing new), then the rest.
 function Stop-ProcessTree([int]$id) {
-    $children = @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $id" -ErrorAction SilentlyContinue)
-    foreach ($c in $children) { Stop-ProcessTree ([int]$c.ProcessId) }
+    $self = Get-CimInstance Win32_Process -Filter "ProcessId = $id" -ErrorAction SilentlyContinue
+    $tree = if ($self) { @(Get-ProcessTree $id $self.CreationDate) } else { @() }
     Stop-Process -Id $id -Force -ErrorAction SilentlyContinue
+    foreach ($child in $tree) { Stop-Process -Id $child -Force -ErrorAction SilentlyContinue }
 }
 
 function Install-Nmap {
@@ -230,7 +260,9 @@ function Install-Nmap {
     # Not silent: someone clicks through the setup window. Nobody can do that in a session without a desktop (an RMM
     # tool running this as SYSTEM): stop at once and say to install nmap first.
     if (-not [Environment]::UserInteractive) {
-        Fail 'nmap is not installed, and its installer needs someone at the screen. Install nmap from nmap.org first (untick Npcap), then run this again.'
+        $partial = @("${env:ProgramFiles(x86)}\Nmap\nmap.exe", "$env:ProgramFiles\Nmap\nmap.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
+        if ($partial) { Fail "nmap is installed at $partial but does not run, and its setup needs someone at the screen. Reinstall nmap from nmap.org (untick Npcap), then run this again." }
+        Fail 'nmap is not installed, and its installer needs someone at the screen (a silent install could not finish: Npcap waits for a click). Install nmap from nmap.org first (untick Npcap), then run this again.'
     }
     Say 'The nmap setup window opens now: click through it and UNTICK "Npcap" on the components page (the agent does not need it).'
     $p = Start-Process -FilePath $exe -PassThru

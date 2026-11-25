@@ -2,6 +2,14 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.56.3 (2026-11-25): Fixes from review
+
+- The Windows installer's check that the newly installed nmap runs never stops the install by mistake; it falls back
+  to nmap's setup window instead.
+- With no one at the screen (an RMM tool), the silent nmap attempt waits at most 2 minutes, and the message says
+  whether nmap is missing or installed but not working.
+- Stopping a stuck nmap setup only stops processes that setup started.
+
 ### 1.56.2 (2026-11-25): Silent nmap install on Windows where it can work
 
 - **The Windows agent installer tries a silent nmap install first.** nmap itself installs silently; only the free

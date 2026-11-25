@@ -367,6 +367,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.56.3',
+            'date' => '2026-11-25',
+            'items' => [
+                'Fixes from review: the Windows installer\'s nmap check never aborts the install by mistake; unattended runs wait at most 2 minutes for a silent nmap install and say whether nmap is missing or not working; stopping a stuck setup only stops what it started.',
+            ],
+        ],
+        [
             'version' => '1.56.2',
             'date' => '2026-11-25',
             'items' => [

@@ -106,13 +106,15 @@ folder and the files resolve to themselves (no junction, link or pipe).
   documentation says are slower.
 - **No name-poisoning check.** Windows uses the UDP 137 and 5355 ports itself, so the agent can't listen on them.
 - **Diagnostics leave out uptime and free memory.**
-- **nmap may need a click-through.** The installer first runs nmap's setup silently (at most 5 minutes). nmap
-  itself installs silently; the free edition's bundled Npcap can't, so on a machine that already has Npcap (from
-  Wireshark or an earlier nmap) it all finishes on its own. Otherwise the silent setup is stopped and nmap's setup
-  window opens and waits up to 30 minutes: click through and untick Npcap. For an unattended install on such a
-  machine (an RMM tool running as SYSTEM, with no desktop), install nmap first (`nmap-<version>-setup.exe` from
-  nmap.org, Npcap unticked); the installer then uses it and needs no clicks. Without a desktop, it stops with a
-  clear message when the silent install can't finish.
+- **nmap may need a click-through.** The installer first runs nmap's setup silently (at most 5 minutes, or 2
+  minutes with no one at the screen). nmap itself installs silently; the free edition's bundled Npcap can't, so it
+  all finishes on its own only where an Npcap at least as new as nmap's bundled one is already installed (an older
+  Npcap still asks). Otherwise the silent setup is stopped. nmap itself usually works by then (Zenmap and Ncat may
+  be missing; the agent needs neither), and the install carries on; if not, nmap's setup window opens and waits up
+  to 30 minutes: click through and untick Npcap. For an unattended install on such a machine (an RMM tool running as
+  SYSTEM, with no desktop), install nmap first (`nmap-<version>-setup.exe` from nmap.org, Npcap unticked); the
+  installer then uses it and needs no clicks. Without a desktop, it stops with a clear message when nmap can't be
+  installed silently.
 - **Not verified on Windows yet:**
   - The `sc queryex` output the update task reads is assumed to be in English.
 - **Updates use the address the agent was enrolled with.** The update task doesn't follow a move to a new Sentinel

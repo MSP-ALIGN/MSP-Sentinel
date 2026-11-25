@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.56.2](https://img.shields.io/badge/version-1.56.2-ff5a1f?style=flat-square)
+![Version 1.56.3](https://img.shields.io/badge/version-1.56.3-ff5a1f?style=flat-square)
 ![License AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,14 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.56.3 (2026-11-25): Fixes from review
+
+- The Windows installer's check that the newly installed nmap runs never stops the install by mistake; it falls back
+  to nmap's setup window instead.
+- With no one at the screen (an RMM tool), the silent nmap attempt waits at most 2 minutes, and the message says
+  whether nmap is missing or installed but not working.
+- Stopping a stuck nmap setup only stops processes that setup started.
+
 ### 1.56.2 (2026-11-25): Silent nmap install on Windows where it can work
 
 - **The Windows agent installer tries a silent nmap install first.** nmap itself installs silently; only the free
@@ -132,17 +140,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 - Correcting the ITFlow ticket template retries tickets that failed on it at the next run, instead of up to a day
   later.
 - The priority setting says plainly that a fixed priority applies to known-exploited findings too.
-
-### 1.56.0 (2026-11-25): ITFlow ticket priority and category
-
-- **One priority for every ticket.** Under **Integrations → ITFlow**, choose **Priority for Sentinel tickets**:
-  *Automatic* (as before: High, Urgent when known exploited, Medium for the weekly ticket) or Low, Medium, High or
-  Urgent for every ticket. ITFlow sets a ticket's SLA from its priority, so choosing a priority without an SLA keeps
-  SLAs off Sentinel's tickets.
-- **Category through a ticket template.** ITFlow's API can't set a category directly, so enter the number of an
-  ITFlow ticket template that has the category you want. New tickets get its category (and any tags, tasks and due
-  time); Sentinel's subject, details and priority are kept. A template ITFlow refuses is reported on the finding and
-  retried later.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 
