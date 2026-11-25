@@ -85,7 +85,7 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
                 <p class="small text-body-secondary"><?= e(__('Someone whose role can manage authorizations records the client\'s authorization first.')) ?></p>
                 <?php endif; ?>
                 <?php // 1.51: Scan now on the overview too (as the help says); the window override stays on Scans and ports. ?>
-                <?php if ($activeCount > 0 && !$archived && !$globallyPaused && can('scans.run')): ?>
+                <?php if ($activeCount > 0 && !$archived && !$globallyPaused && (int) ($client['is_demo'] ?? 0) === 0 && can('scans.run')): ?>
                 <form method="post" class="mb-2 d-flex flex-wrap gap-2 align-items-center" action="<?= e(url('/clients/' . $clientId . '/scan')) ?>" data-confirm="<?= e(__('Start a scan of this client now? Only addresses and names in its active authorization are scanned.')) ?>" novalidate>
                     <?= Csrf::field() ?>
                     <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-broadcast me-1" aria-hidden="true"></i><?= e(__('Scan now')) ?></button>
