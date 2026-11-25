@@ -390,7 +390,7 @@ return [
             $ctx->db->exec("UPDATE users SET all_clients = 0 WHERE id = {$cu}");
             $ctx->db->exec("INSERT INTO user_clients (user_id, client_id) VALUES ({$cu}, {$cid})");
         }
-        Assert::contains('Pen-test engagement approval', $admin->get('/admin/settings')->body);
+        Assert::contains('Pen-test engagements', $admin->get('/admin/settings')->body);
         $admin->submit('/admin/settings', '/admin/settings/engagements', ['two_person' => '0', 'my_password' => 'Admin-Pass-0001!']); // box unticked: the hidden 0
         Assert::same('0', $s->fresh('engagement_two_person'), 'turned off');
         Assert::true((int) $ctx->db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'settings.engagement_approval' AND username = 'admin'")->fetchColumn() >= 1, 'audited');

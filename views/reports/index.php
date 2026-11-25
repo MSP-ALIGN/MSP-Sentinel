@@ -42,7 +42,7 @@ $kindLabel = static fn (string $k): string => match ($k) { 'executive' => __('Ex
                     <option value="month"><?= e(__('Last calendar month')) ?></option>
                     <option value="90"><?= e(__('Last 90 days')) ?></option>
                 </select></div>
-            <div class="col-md-2"><button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-file-earmark-plus me-1" aria-hidden="true"></i><?= e(__('Create')) ?></button></div>
+            <div class="col-md-2"><button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-file-earmark-plus me-1" aria-hidden="true"></i><?= e(__('Create report')) ?></button></div>
         </form>
     </div>
     <?php endif; ?>

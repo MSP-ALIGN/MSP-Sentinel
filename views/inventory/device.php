@@ -33,7 +33,7 @@ $other = count($device['software']) - count($matched);
                 <?php foreach ($merged ?? [] as $m): ?>
                 <div class="alert alert-info mt-2 mb-0 py-2"><i class="bi bi-intersect me-1" aria-hidden="true"></i><?= e(__('Also found by the on-premises agent as {name} ({ip}): shown as one device ({how}).', [
                     'name' => (string) ($m['name'] ?: $m['dns_name'] ?: '?'), 'ip' => str_replace(',', ', ', (string) $m['ip_addresses']),
-                    'how' => $m['merge_state'] === 'manual' ? __('merged by an admin') : __('matched by address and name')])) ?>
+                    'how' => $m['merge_state'] === 'manual' ? __('merged by hand') : __('matched by address and name')])) ?>
                     <?php if ($canMerge): ?><form method="post" action="<?= e(url('/clients/' . (int) $client['id'] . '/devices/' . (int) $m['id'] . '/merge')) ?>" class="d-inline" data-confirm="<?= e(__('Show the agent\'s device as a separate machine? It stays separate until merged again by hand.')) ?>"><?= \Sentinel\Core\Csrf::field() ?><input type="hidden" name="target" value=""><button type="submit" class="btn btn-sm btn-link p-0 ms-1"><?= e(__('Not the same machine: split')) ?></button></form><?php endif; ?></div>
                 <?php endforeach; ?>
                 <?php if ($canMerge && ($mergeCandidates ?? []) !== []): ?>
@@ -50,7 +50,7 @@ $other = count($device['software']) - count($matched);
         <div class="card mb-3">
             <div class="card-header"><h2 class="card-title h6 mb-0"><?= e(__('Problems and findings')) ?></h2></div>
             <div class="card-body small">
-                <?php if ($issues === [] && $deviceFindings === []): ?><span class="text-body-secondary"><?= e(__('No problems found.')) ?></span><?php endif; ?>
+                <?php if ($issues === [] && $deviceFindings === []): ?><span class="text-body-secondary"><?= e(__('No findings.')) ?></span><?php endif; ?>
                 <?php foreach ($issues as $i): ?><div><?= $chip($i['severity'], $i['text']) ?><?php if ($i['detail'] !== ''): ?><span class="text-body-secondary"><?= e($i['detail']) ?></span><?php endif; ?></div><?php endforeach; ?>
                 <?php if ($deviceFindings !== []): ?><ul class="list-unstyled mt-2 mb-0"><?php foreach ($deviceFindings as $f): ?><li class="mb-1"><?= $findingSeverityBadge((string) $f['severity']) ?> <a href="<?= e(url('/findings/' . (int) $f['id'])) ?>"><?= e($f['title']) ?></a></li><?php endforeach; ?></ul><?php endif; ?>
             </div>

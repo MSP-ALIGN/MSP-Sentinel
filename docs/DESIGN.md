@@ -18,7 +18,7 @@ Sentinel's findings through the API.
 | Targets | Typed in, plus suggestions from DNS (A/MX records) and Certificate Transparency (crt.sh). **A suggestion is never scanned until an admin approves it into the client's scope.** |
 | Schedule | Scans run from Sentinel's own server: a port check weekly and certificate checks daily, inside each client's scan window. A remote scanner node can be added later. |
 | Ports | About 40 risky ports by default, editable per client (see section 6). |
-| Roles | Admin, Technician, Viewer. Local accounts with TOTP 2FA. |
+| Roles | Built-in Admin, Technician and Viewer, plus custom roles with chosen permissions and clients (1.40). Local accounts with TOTP two-factor authentication. |
 | Reports | Executive Summary and Technical Findings in v1.0, built on a shared report engine. Print-ready HTML, with server-side PDF when headless Chromium is installed. Reports carry the MSP's branding. |
 | Alerts | In-app notifications, email (a digest per scan plus an immediate email for each new FAIL) and a webhook. ITFlow tickets come in v1.x. |
 | ITFlow | Optional ITFlow client and asset ID fields only. No ITFlow API calls in v1. |

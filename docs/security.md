@@ -9,7 +9,7 @@ sign-in, patched, backed up.
   of scanning, and there is a global kill switch. Scans are gentle (TCP connect, rate-limited, in the scan window)
   and logged.
 - **Sign-in:** mandatory TOTP two-factor authentication, recovery codes stored as keyed hashes, throttling, session
-  revocation, three roles (viewer, technician, admin). Every POST is CSRF-checked; every page sends a strict
+  revocation, roles (built-in Viewer, Technician and Admin, plus your own with chosen permissions and clients). Every POST is CSRF-checked; every page sends a strict
   Content Security Policy and escapes all output.
 - **Secrets:** SMTP password, webhook addresses and the event signing secret are encrypted with libsodium using the
   app key. API tokens and recovery codes are stored only as keyed hashes. Secrets are never shown again after they

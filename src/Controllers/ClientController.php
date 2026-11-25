@@ -326,7 +326,7 @@ final class ClientController extends Controller
         $client = $this->findOr404($params);
         App::clients()->setPaused((int) $client['id'], true);
         $this->audit($request, 'scanning.client_paused', 'client', (int) $client['id'], ['reason' => mb_substr($request->input('reason'), 0, 300)]);
-        Session::flash('warning', __('Scanning paused for {name}. An admin can resume it.', ['name' => $client['name']]));
+        Session::flash('warning', __('Scanning paused for {name}. It stays paused until someone whose role can resume scanning resumes it.', ['name' => $client['name']]));
         return Response::redirect('/clients/' . (int) $client['id']);
     }
 
@@ -424,7 +424,7 @@ final class ClientController extends Controller
             }
         }
         if (!in_array($values['timezone'], \DateTimeZone::listIdentifiers(), true)) {
-            $errors['timezone'] = __('Choose a timezone from the list.');
+            $errors['timezone'] = __('Choose a time zone from the list.');
         }
         foreach (['scan_window_start', 'scan_window_end'] as $field) {
             if (!preg_match('/^([01][0-9]|2[0-3]):[0-5][0-9]$/', $values[$field])) {

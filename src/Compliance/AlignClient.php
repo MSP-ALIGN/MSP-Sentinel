@@ -131,7 +131,7 @@ final class AlignClient
     private function get(string $path, array $query): array
     {
         if (!self::validUrl($this->baseUrl, $this->allowHttp)) {
-            throw new AlignException('The MSP Align address must be an https:// address (Administration, Integrations).');
+            throw new AlignException('The MSP Align address must be an https:// address (Administration → Integrations).');
         }
         $url = rtrim($this->baseUrl, '/') . $path . ($query === [] ? '' : '?' . http_build_query($query));
         $body = '';

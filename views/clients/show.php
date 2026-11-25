@@ -15,7 +15,7 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
 ?>
 <?php if ($globallyPaused): ?><?php require __DIR__ . '/../partials/kill_switch.php'; ?><?php endif; ?>
 <?php if ((int) ($client['is_demo'] ?? 0) === 1): ?>
-<div class="alert alert-info"><i class="bi bi-easel me-1" aria-hidden="true"></i><?= e(__('Demo client: made-up data for trying Sentinel out. It is never scanned.')) ?><?php if (can('system.manage')): ?> <?= e(__('Remove all demo data under Administration, System.')) ?><?php endif; ?></div>
+<div class="alert alert-info"><i class="bi bi-easel me-1" aria-hidden="true"></i><?= e(__('Demo client: made-up data for trying Sentinel out. It is never scanned.')) ?><?php if (can('system.manage')): ?> <?= e(__('Remove all demo data under Administration → System.')) ?><?php endif; ?></div>
 <?php endif; ?>
 <?php if ($archived): ?>
 <div class="alert alert-secondary"><i class="bi bi-archive me-1" aria-hidden="true"></i><?= e(__('This client is archived. It will not be scanned.')) ?></div>
@@ -38,7 +38,7 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
             <div class="card-body">
                 <dl class="row mb-0 small">
                     <dt class="col-5"><?= e(__('ITFlow ID')) ?></dt><dd class="col-7"><?= e($client['itflow_client_id'] ?? '—') ?><?php if ((int) ($client['itflow_sync_off'] ?? 0) === 1): ?> <span class="badge text-bg-secondary"><?= e(__('Not synced')) ?></span><?php endif; ?></dd>
-                    <dt class="col-5"><?= e(__('Timezone')) ?></dt><dd class="col-7"><?= e($client['timezone']) ?></dd>
+                    <dt class="col-5"><?= e(__('Time zone')) ?></dt><dd class="col-7"><?= e($client['timezone']) ?></dd>
                     <dt class="col-5"><?= e(__('Scan window')) ?></dt><dd class="col-7"><?= e(substr((string) $client['scan_window_start'], 0, 5) . '–' . substr((string) $client['scan_window_end'], 0, 5)) ?></dd>
                     <dt class="col-5"><?= e(__('Today there')) ?></dt><dd class="col-7"><?= e($today) ?></dd>
                 </dl>
@@ -149,7 +149,7 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
             </div>
             <div class="card-body">
                 <?php if ($authorisations === []): ?>
-                <p class="text-body-secondary mb-0"><i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i><?= e(__('No authorization recorded. Sentinel will not scan anything for this client until an admin records who approved scanning and what may be scanned.')) ?></p>
+                <p class="text-body-secondary mb-0"><i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i><?= e(__('No authorization recorded. Sentinel will not scan anything for this client until someone records who approved scanning and what may be scanned.')) ?></p>
                 <?php endif; ?>
                 <?php foreach ($authorisations as $a): ?>
                 <div class="border rounded p-3 mb-3 authorisation" data-testid="authorisation-<?= e($a['id']) ?>">

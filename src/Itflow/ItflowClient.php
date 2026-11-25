@@ -453,7 +453,7 @@ final class ItflowClient
     private function request(string $path, ?array $query, ?string $json): array
     {
         if (!self::validUrl($this->baseUrl, $this->allowHttp)) {
-            throw new ItflowException('The ITFlow address must be an https:// address (Administration, Integrations).');
+            throw new ItflowException('The ITFlow address must be an https:// address (Administration → Integrations).');
         }
         $body = '';
         $ch = curl_init(rtrim($this->baseUrl, '/') . $path . ($query === null || $query === [] ? '' : '?' . http_build_query($query)));

@@ -18,9 +18,10 @@ Add a client, record what they authorized you to scan, and run the first scan.
    inside it.
 5. Optionally add extra ports to scan, ports never to scan, notes, or the ITFlow client ID. Save.
 
-Opening a client switches the left menu to that client: **Overview**, **Findings**, **External** (scans and ports,
-vulnerabilities, certificates and web, website and email), **Internal** (agents, devices) and **Manage**
-(authorizations, discovery, reports). **All clients** at the top takes you back.
+Opening a client shows its sections in the left menu: **Overview**, **Findings**, **External** (Scans and ports,
+Vulnerabilities, Certificates and web pages, Website and email), **Internal** (Agents, Devices) and **Manage**
+(Authorizations, Discovery, Pen-test engagements, Reports, Compliance). **Dashboard**, **All clients** and **All
+findings** stay at the top, and **Help** at the bottom.
 
 ## Record the authorization
 
@@ -55,7 +56,7 @@ Dismiss suggestions you don't want; they stay dismissed.
 
 ## Scan
 
-1. Open the client's **Scans** page (under External) and click **Scan now**. The scan starts when the client's scan
+1. On the client's **Overview**, click **Scan now** (it is also on **Scans and ports**, under External, with the option to run outside the window). The scan starts when the client's scan
    window opens, or within a minute or two if it is open now.
 2. Admins can tick **Run outside the window** and give a reason (it is written to the audit log).
 3. Or do nothing: the weekly scan runs by itself in the scan window.

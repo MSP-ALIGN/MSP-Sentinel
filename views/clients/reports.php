@@ -32,7 +32,7 @@ use Sentinel\Core\Csrf;
                     <option value="90"><?= e(__('Last 90 days')) ?></option>
                 </select>
             </div>
-            <div class="col-sm-3"><button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-file-earmark-plus me-1" aria-hidden="true"></i><?= e(__('Create')) ?></button></div>
+            <div class="col-sm-3"><button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-file-earmark-plus me-1" aria-hidden="true"></i><?= e(__('Create report')) ?></button></div>
         </form>
         <?php endif; ?>
         <?php if ($clientReports === []): ?>
@@ -57,7 +57,7 @@ use Sentinel\Core\Csrf;
             </div>
             <div class="col-sm-9"><label class="visually-hidden" for="report_recipients"><?= e(__('Report recipients')) ?></label>
                 <input class="form-control form-control-sm" id="report_recipients" name="report_recipients" value="<?= e(str_replace(',', ', ', (string) ($client['report_recipients'] ?? ''))) ?>" maxlength="1300" placeholder="accounts@msp.example"></div>
-            <div class="col-sm-3"><button type="submit" class="btn btn-outline-primary btn-sm w-100"><?= e(__('Save')) ?></button></div>
+            <div class="col-sm-3"><button type="submit" class="btn btn-outline-primary btn-sm w-100"><?= e(__('Save schedule')) ?></button></div>
         </form>
         <?php else: ?>
         <?= e((int) ($client['report_monthly'] ?? 0) === 1 ? __('Monthly reports are on.') : __('Monthly reports are off.')) ?>

@@ -25,7 +25,7 @@ $quick = [
     ['label' => __('Overdue'), 'n' => $fixCounts['overdue'], 'params' => ['due' => 'overdue'], 'active' => $filters['due'] === 'overdue', 'icon' => 'bi-alarm'],
     ['label' => __('Due within {d} days', ['d' => \Sentinel\Findings\FixWorkflow::DUE_SOON_DAYS]), 'n' => $fixCounts['due_soon'], 'params' => ['due' => 'soon'], 'active' => $filters['due'] === 'soon', 'icon' => 'bi-hourglass-split'],
 ];
-$typeLabels = ['port' => __('Exposed service'), 'tls' => __('Certificate'), 'web' => __('Web page'), 'vuln' => __('Vulnerability'), 'email' => __('Email security'), 'patch' => __('Missing updates'), 'device' => __('Device security'), 'directory' => __('Active Directory'), 'dns' => __('DNS'), 'breach' => __('Breached account'), 'pentest' => __('Pen test')];
+$typeLabels = ['port' => __('Exposed service'), 'tls' => __('Certificate'), 'web' => __('Web page'), 'vuln' => __('Vulnerability'), 'email' => __('Email security'), 'patch' => __('Missing updates'), 'device' => __('Device security'), 'directory' => __('Active Directory'), 'dns' => __('DNS'), 'breach' => __('Breached account'), 'pentest' => __('Pen-test engagement')];
 ?>
 <?php
 // One finding as a row (the flat list, and groups of one in the grouped list).
@@ -123,9 +123,9 @@ $flatRow = static function (array $f) use ($findingSeverityBadge, $findingStatus
         </form>
         <div class="d-flex flex-wrap gap-2 align-items-center mt-2 small" role="group" aria-label="<?= e(__('How to list findings')) ?>">
             <span class="text-body-secondary"><?= e(__('Show:')) ?></span>
-            <a class="btn btn-sm <?= $grouped ? 'btn-primary' : 'btn-outline-secondary' ?>" href="<?= e(url('/findings', $q(['view' => null, 'group' => null, 'page' => null]))) ?>"<?= $grouped ? ' aria-current="page"' : '' ?>><i class="bi bi-collection me-1" aria-hidden="true"></i><?= e(__('Grouped by issue')) ?></a>
+            <a class="btn btn-sm <?= $grouped ? 'btn-primary' : 'btn-outline-secondary' ?>" href="<?= e(url('/findings', $q(['view' => null, 'group' => null, 'page' => null]))) ?>"<?= $grouped ? ' aria-current="page"' : '' ?>><i class="bi bi-collection me-1" aria-hidden="true"></i><?= e(__('Grouped by type')) ?></a>
             <a class="btn btn-sm <?= !$grouped ? 'btn-primary' : 'btn-outline-secondary' ?>" href="<?= e(url('/findings', $q(['view' => 'flat', 'page' => null]))) ?>"<?= !$grouped ? ' aria-current="page"' : '' ?>><i class="bi bi-list-ul me-1" aria-hidden="true"></i><?= e(__('One row per target')) ?></a>
-            <?php if ($filters['group'] !== ''): ?><span class="badge text-bg-info"><?= e(__('One issue')) ?> <a class="link-light ms-1" href="<?= e(url('/findings', $q(['group' => null, 'view' => null]))) ?>"><?= e(__('clear')) ?></a></span><?php endif; ?>
+            <?php if ($filters['group'] !== ''): ?><span class="badge text-bg-info"><?= e(__('One type')) ?> <a class="link-light ms-1" href="<?= e(url('/findings', $q(['group' => null, 'view' => null]))) ?>"><?= e(__('clear')) ?></a></span><?php endif; ?>
         </div>
     </div>
     <?php if ($selectable && $rows !== []): ?>
@@ -253,7 +253,7 @@ $flatRow = static function (array $f) use ($findingSeverityBadge, $findingStatus
     </div>
     <?php if ($pages > 1): ?>
     <div class="card-footer small">
-        <?= e($grouped ? __('Page {p} of {n} ({t} issues)', ['p' => $page, 'n' => $pages, 't' => $total]) : __('Page {p} of {n} ({t} findings)', ['p' => $page, 'n' => $pages, 't' => $total])) ?>
+        <?= e($grouped ? __('Page {p} of {n} ({t} finding types)', ['p' => $page, 'n' => $pages, 't' => $total]) : __('Page {p} of {n} ({t} findings)', ['p' => $page, 'n' => $pages, 't' => $total])) ?>
         <?php if ($page > 1): ?><a class="ms-2" href="<?= e(url('/findings', $q(['page' => $page - 1]))) ?>"><?= e(__('Previous')) ?></a><?php endif; ?>
         <?php if ($page < $pages): ?><a class="ms-2" href="<?= e(url('/findings', $q(['page' => $page + 1]))) ?>"><?= e(__('Next')) ?></a><?php endif; ?>
     </div>

@@ -194,7 +194,7 @@ final class RoleController extends Controller
      */
     private function form(?array $role, array $values, array $errors, int $status = 200): Response
     {
-        $title = $role === null ? __('New role') : ($role['role_key'] !== null ? __('Built-in role: {name}', ['name' => role_label($role)]) : __('Edit role'));
+        $title = $role === null ? __('Add role') : ($role['role_key'] !== null ? __('Built-in role: {name}', ['name' => role_label($role)]) : __('Edit role'));
         return $this->page('roles/form', $title, ['role' => $role, 'values' => $values, 'errors' => $errors, 'groups' => Permissions::grouped(),
             'held' => $this->held(), 'locked' => $role === null ? null : $this->whyLocked($role)], $status);
     }

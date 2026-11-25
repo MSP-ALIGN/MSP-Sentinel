@@ -38,7 +38,7 @@ check proves them. Its companion product, **MSP Align**, plans, reports and prov
   and Active Directory weaknesses; NinjaOne adds installed software, updates, antivirus and encryption.
 - **Breached accounts:** weekly check of your clients' domains against known data breaches.
 - **Fix workflow:** triage, owners, due dates, daily reminders and *verify fix* rechecks of one finding.
-- **Pen-test engagements:** time-boxed deeper tests, approved by a second admin, with a report and a retest letter.
+- **Pen-test engagements:** time-boxed deeper tests, approved before anything runs (by a second admin unless you turn that off), with a report and a retest letter.
 - **Alerts and reports:** bell, email and Teams/Slack; branded executive and technical reports, frozen with a SHA-256.
 - **Integrations:** ITFlow (clients and tickets), MSP Align (compliance), NinjaOne (devices), API and signed events.
 - **Operations:** one-command installer, Update now, encrypted backups, health checks, audit log.
@@ -74,7 +74,7 @@ All screenshots use made-up clients and documentation addresses only.
   pause per client and per site.
 - **Signed agent jobs.** Agents scan only the networks approved for their site, checked against a signature that the
   database alone can't forge.
-- **Locked-down sign-in.** Mandatory two-factor authentication, three roles, your own password for powerful actions,
+- **Locked-down sign-in.** Mandatory two-factor authentication, built-in and custom roles (limited to chosen clients if you like), your own password for powerful actions,
   secrets encrypted at rest.
 
 More in [docs/security.md](docs/security.md) and [docs/responsible-use.md](docs/responsible-use.md). Sentinel is

@@ -13,7 +13,7 @@ read it. See [agent.md](agent.md#active-directory-checks-120).
 
 ## 2. Pen-test engagement mode (1.27.0, done)
 
-Time-boxed, deeper tests the client authorizes in writing and a second admin approves:
+Time-boxed, deeper tests the client authorizes in writing and someone else approves (a second admin, unless two-person approval is turned off):
 
 - all TCP ports;
 - common UDP services;

@@ -73,7 +73,7 @@ $now = time();
             <p class="small text-body-secondary mt-2 mb-0"><?= e($events['secret_set'] ? __('A signing secret is set. Each request carries X-Sentinel-Signature: t=<time>,v1=<HMAC-SHA256 of "time.body">.') : __('A signing secret is created when you turn events on.')) ?></p>
         </div>
         <div class="card-footer d-flex flex-wrap gap-2">
-            <button type="submit" class="btn btn-primary btn-sm"><?= e(__('Save')) ?></button>
+            <button type="submit" class="btn btn-primary btn-sm"><?= e(__('Save outbound events')) ?></button>
         </div>
     </form>
     <div class="card-body pt-0 d-flex flex-wrap gap-2">
@@ -100,7 +100,7 @@ $now = time();
 
 <div class="col-xl-5">
 <div class="card mb-3">
-    <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('New token')) ?></h2></div>
+    <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Add token')) ?></h2></div>
     <form method="post" action="<?= e(url('/admin/api/tokens')) ?>" novalidate autocomplete="off">
         <?= Csrf::field() ?>
         <div class="card-body">

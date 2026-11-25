@@ -75,7 +75,7 @@ $n = $ninja;
                       . ($it['boards_checked'] ? __('This ITFlow lists no boards (stock ITFlow), so tickets stay where ITFlow puts them.') : __('The boards are listed after Test connection or the next sync.'))
                     : __('Sentinel moves each new ticket to this board right after opening it, unassigned, so the board\'s auto-assign and notifications pick it up. If a move fails, the ticket stays on ITFlow\'s default board and the last run says so.')) ?></div>
             </div>
-            <button type="submit" class="btn btn-primary btn-sm mt-3"><?= e(__('Save')) ?></button>
+            <button type="submit" class="btn btn-primary btn-sm mt-3"><?= e(__('Save ITFlow')) ?></button>
         </form>
         <hr>
         <div class="d-flex flex-wrap align-items-center gap-2">
@@ -110,7 +110,7 @@ $n = $ninja;
         <details class="small mb-3">
             <summary><?= e(__('How to create the API app in NinjaOne')) ?></summary>
             <ol class="mt-2 mb-0">
-                <li><?= e(__('In NinjaOne, go to Administration, Apps, API, and open the Client App IDs tab. Click Add client app.')) ?></li>
+                <li><?= e(__('In NinjaOne, go to Administration → Apps → API, and open the Client App IDs tab. Click Add client app.')) ?></li>
                 <li><?= e(__('Application platform: API Services (machine-to-machine). Name: MSP Sentinel.')) ?></li>
                 <li><?= e(__('Scopes: Monitoring only (read-only). Allowed grant types: Client credentials.')) ?></li>
                 <li><?= e(__('Save, then copy the client ID and the client secret into the form below. NinjaOne shows the secret only once.')) ?></li>
@@ -140,7 +140,7 @@ $n = $ninja;
             <div class="form-check mt-3"><input class="form-check-input" type="checkbox" id="ninja-enabled" name="enabled" value="1" <?= $n['enabled'] ? 'checked' : '' ?>>
                 <label class="form-check-label" for="ninja-enabled"><?= e(__('Sync linked clients from NinjaOne')) ?></label></div>
             <div class="form-text"><?= e(__('When syncing is off, linked clients keep the devices and findings from their last sync until it is turned on again or they are unlinked.')) ?></div>
-            <button type="submit" class="btn btn-primary btn-sm mt-3"><?= e(__('Save')) ?></button>
+            <button type="submit" class="btn btn-primary btn-sm mt-3"><?= e(__('Save NinjaOne')) ?></button>
         </form>
         <hr>
         <form method="post" action="<?= e(url('/admin/integrations/ninjaone/test')) ?>" class="d-flex flex-wrap align-items-center gap-2">
@@ -190,7 +190,7 @@ $n = $ninja;
             </div>
             <div class="form-check mt-3"><input class="form-check-input" type="checkbox" id="align-enabled" name="enabled" value="1" <?= $a['enabled'] ? 'checked' : '' ?>>
                 <label class="form-check-label" for="align-enabled"><?= e(__('Show compliance from MSP Align')) ?></label></div>
-            <button type="submit" class="btn btn-primary btn-sm mt-3"><?= e(__('Save')) ?></button>
+            <button type="submit" class="btn btn-primary btn-sm mt-3"><?= e(__('Save MSP Align')) ?></button>
         </form>
         <hr>
         <form method="post" action="<?= e(url('/admin/integrations/mspalign/test')) ?>" class="d-flex flex-wrap align-items-center gap-2">
@@ -237,7 +237,7 @@ $n = $ninja;
             </div>
             <div class="form-check mt-3"><input class="form-check-input" type="checkbox" id="xon-enabled" name="enabled" value="1" <?= $br['enabled'] ? 'checked' : '' ?>>
                 <label class="form-check-label" for="xon-enabled"><?= e(__('Check weekly')) ?></label></div>
-            <button type="submit" class="btn btn-primary btn-sm mt-3"><?= e(__('Save')) ?></button>
+            <button type="submit" class="btn btn-primary btn-sm mt-3"><?= e(__('Save breach monitoring')) ?></button>
         </form>
         <hr>
         <form method="post" data-confirm="<?= e(__('Check for breached accounts now? Sentinel asks XposedOrNot once (it allows only a few checks a day).')) ?>" action="<?= e(url('/admin/integrations/breach/check')) ?>" class="d-flex flex-wrap align-items-center gap-2">
@@ -319,7 +319,7 @@ $n = $ninja;
             <div class="mt-3"><label class="form-label" for="sso-mine"><?= e(__('Your own password (to confirm)')) ?></label>
                 <input class="form-control sn-w-20" type="password" id="sso-mine" name="my_password" required autocomplete="current-password"></div>
             <div class="form-text"><?= e(__('Only an Admin who sees every client can change this. Changing the tenant clears every user\'s Microsoft link.')) ?></div>
-            <button class="btn btn-primary mt-3" type="submit"><?= e(__('Save')) ?></button>
+            <button class="btn btn-primary mt-3" type="submit"><?= e(__('Save sign-in settings')) ?></button>
         </form>
     </div>
 </div>

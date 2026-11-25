@@ -27,7 +27,7 @@ final class ScanningController extends Controller
     {
         App::settings()->set('scanning_paused', '1');
         $this->audit($request, 'scanning.global_paused', null, null, ['reason' => mb_substr($request->input('reason'), 0, 300)]);
-        Session::flash('warning', __('All scanning is paused. An admin can resume it.'));
+        Session::flash('warning', __('All scanning is paused. It stays paused until someone whose role can resume scanning resumes it.'));
         return Response::redirect('/');
     }
 

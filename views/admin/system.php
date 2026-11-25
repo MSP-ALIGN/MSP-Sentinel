@@ -95,7 +95,7 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
             <?= Csrf::field() ?>
             <div class="form-check"><input class="form-check-input" type="checkbox" id="update_check_enabled" name="update_check_enabled" value="1" <?= $updateEnabled ? 'checked' : '' ?>>
                 <label class="form-check-label" for="update_check_enabled"><?= e(__('Check for updates daily')) ?></label></div>
-            <button type="submit" class="btn btn-outline-primary btn-sm mt-1"><?= e(__('Save')) ?></button>
+            <button type="submit" class="btn btn-outline-primary btn-sm mt-1"><?= e(__('Save update checks')) ?></button>
         </form>
         <?php if ($updateEnabled): ?>
         <form method="post" action="<?= e(url('/admin/system/updates')) ?>"><?= Csrf::field() ?><input type="hidden" name="action" value="check"><button type="submit" class="btn btn-outline-secondary btn-sm"><?= e(__('Check now')) ?></button></form>
@@ -251,7 +251,7 @@ $fails = count(array_filter($checks, static fn (array $c): bool => $c['status'] 
         <form method="post" action="<?= e(url('/admin/system/backups')) ?>" class="d-flex flex-wrap align-items-center gap-2"><?= \Sentinel\Core\Csrf::field() ?>
             <div class="form-check mb-0"><input class="form-check-input" type="checkbox" id="backup_external" name="backup_external" value="1" <?= !empty($backupExternal) ? 'checked' : '' ?>>
                 <label class="form-check-label small" for="backup_external"><?= e(__('Backups are made another way (for example VM snapshots): don\'t warn or alert about Sentinel\'s own backup job')) ?></label></div>
-            <button type="submit" class="btn btn-sm btn-outline-secondary"><?= e(__('Save')) ?></button>
+            <button type="submit" class="btn btn-sm btn-outline-secondary"><?= e(__('Save backup settings')) ?></button>
         </form>
     </div>
 </div>

@@ -70,7 +70,7 @@ return [
         Assert::same(7, $daysDue($ctx, $wp), 'known exploited: 7 days');
 
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
-        Assert::contains('Due dates (fix workflow)', $admin->get('/admin/settings')->body);
+        Assert::contains('Fix due dates', $admin->get('/admin/settings')->body);
         $admin->submit('/admin/settings', '/admin/settings/due-dates', ['due_days_kev' => '0', 'due_days_fail' => '14', 'due_days_warn' => '30']);
         Assert::same('7', App::settings()->fresh('due_days_kev'), 'invalid value rejected');
         Assert::redirect('/admin/settings#due-dates', $admin->submit('/admin/settings', '/admin/settings/due-dates', ['due_days_kev' => '3', 'due_days_fail' => '10', 'due_days_warn' => '60']));

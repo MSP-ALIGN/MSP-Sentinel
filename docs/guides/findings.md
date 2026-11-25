@@ -36,7 +36,7 @@ distribution build that may already carry the fix). Sentinel never guesses a ver
   vulnerabilities in the versions found.
 - **Website and email checks**, with each scan and once a day: HTTPS, headers, cookies, a short list of commonly
   exposed files (reported only when their content proves it, and never stored), CMS and library versions, and SPF,
-  DMARC and DKIM by DNS. Results are on the client's **Website & email** page.
+  DMARC and DKIM by DNS. Results are on the client's **Website and email** page.
 - **DNS checks**, once a day: zone transfers from the domain's own nameservers, and names pointing at a cloud service
   that no longer exists (subdomain takeover). Both are Fails.
 - **Pen-test engagements**: the Fails and Warnings of an approved engagement (type **Pen test**). A retest that runs

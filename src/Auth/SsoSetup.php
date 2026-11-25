@@ -186,7 +186,7 @@ final class SsoSetup
         }
         $on = $s->fresh('sso_entra_enabled') === '1';
         return self::json(200, true, $on ? 'Saved. Sign in with Microsoft is on and now uses this app.'
-            : 'Saved. In Sentinel, open Administration > Integrations and turn on "Sign in with Microsoft".');
+            : 'Saved. In Sentinel, open Administration → Integrations and turn on "Sign in with Microsoft".');
     }
 
     /** The Admin who made the code may still change sign-in: active, every permission, every client. */

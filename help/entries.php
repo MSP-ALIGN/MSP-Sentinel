@@ -21,10 +21,10 @@ return [
             'paragraphs' => [
                 'Sentinel is installed and you have the first admin account. To get from nothing to a first report:',
                 '1. Sign in and set up two-factor authentication: scan the QR code with an authenticator app and keep the 10 recovery codes in your password manager.',
-                '2. Add a second admin: Administration → Users → Add user. Pen-test engagements must be approved by a different admin, so one admin is not enough.',
+                '2. Add a second admin: Administration → Users → Add user. It is your backup if you can\'t sign in, and pen-test engagements are approved by a different admin (unless you turn two-person approval off under Settings → Pen-test engagements).',
                 '3. Add a client: Clients → Add client.',
                 '4. Record who at the client authorized scanning, and exactly what: open the client and choose Record authorization. Nothing is scanned without it.',
-                '5. Scan: click Scan now on the client page. The scan runs in the client\'s scan window; until the first scan the client shows "Not scanned yet".',
+                '5. Scan: click Scan now on the client\'s Overview. The scan runs in the client\'s scan window; until the first scan the client shows "Not scanned yet".',
                 '6. Triage: on the client\'s Findings page, give each finding an owner, or accept the risk or mark it a false positive with a note.',
                 '7. Report: on the Reports page, create an Executive summary or a Technical findings report for the client, then print it to PDF from your browser.',
             ],
@@ -33,9 +33,9 @@ return [
             'section' => 'start',
             'title' => 'Finding your way',
             'paragraphs' => [
-                'The left menu: Dashboard (every client at a glance, ranked by risk), Clients, Findings (across all clients), Engagements (pen tests, and any waiting for your approval), Reports, Administration (admins only) and Help.',
-                'Open a client and the menu switches to that client: Overview, Findings, External (Scans & ports, Vulnerabilities, Certificates & web, Website & email), Internal (Agents, Devices) and Manage (Authorizations, Pen-test engagements, Discovery, Reports, Compliance). All clients at the top takes you back.',
-                'Administration (admins) has Overview, Users, Settings, Integrations, API, System and Audit log. The menu under your name at the top right has the same links, plus My profile and Sign out.',
+                'The left menu: Dashboard (every client at a glance, ranked by risk), Clients, Findings (across all clients), Pen-test engagements (and any waiting for your approval), Reports, Administration (admins only) and Help.',
+                'Open a client and the menu shows that client\'s sections: Overview, Findings, External (Scans and ports, Vulnerabilities, Certificates and web pages, Website and email), Internal (Agents, Devices) and Manage (Authorizations, Discovery, Pen-test engagements, Reports, Compliance). Dashboard, All clients and All findings stay at the top, Help at the bottom. Each page\'s heading is its section, with the client\'s name above it.',
+                'Administration (admins) has Overview, Users, Roles, Settings, Integrations, API, System and Audit log. The menu under your name at the top right has My profile, Administration, Help and Sign out.',
                 'The search box in the top bar finds clients, findings, hosts, devices, engagements and help topics (see "Searching and filtering"). The bell next to it shows new alerts.',
             ],
         ],
@@ -45,7 +45,7 @@ return [
             'section' => 'tasks',
             'title' => 'Scanning a client',
             'paragraphs' => [
-                'To scan a client: 1. Check it has an active authorization (Manage → Authorizations). 2. Open the client and click Scan now (Technician or Admin). 3. Follow progress on Scans & ports.',
+                'To scan a client: 1. Check it has an active authorization (Manage → Authorizations). 2. Open the client and click Scan now on its Overview (Technician or Admin). 3. Follow progress on Scans & ports.',
                 'The scan runs inside the client\'s scan window. Admins can run it outside the window by ticking the box and giving a reason, which is recorded. Every client with an active authorization is also scanned once a week.',
                 'One scan checks the open ports, then certificates, web pages, website and email security, and known vulnerabilities. Results appear under External in the client\'s menu; problems become findings. The scan log lists every host Sentinel touched or skipped, and when.',
                 'To stop: cancel the scan, or pause scanning for one client (on the client page) or for every client (on the dashboard). Scanning stops within seconds. Technicians and admins can pause; only an admin can resume. Archived clients are never scanned.',
@@ -103,7 +103,7 @@ return [
             'title' => 'Pen-test engagements',
             'paragraphs' => [
                 'An engagement is a time-boxed, deeper test that the client authorizes in writing. What it tests is under "Pen-test tests in detail".',
-                'To run one: 1. Open the client → Pen-test engagements → New engagement (Technician or Admin). 2. Enter the name, window (at most 14 days), tests, pace (gentle or normal; all ports needs normal), targets inside the authorized scope, exclusions by address or range, and upload the client\'s signed PDF. 3. Wait for a second admin to approve it. 4. Inside the window, run the external tests (from Sentinel) and the internal tests (through each site\'s agent, 1.27.0 or later). 5. Issue penetration test report.',
+                'To run one: 1. Open the client → Pen-test engagements → New engagement (Technician or Admin). 2. Enter the name, window (at most 14 days), tests, pace (gentle or normal; all ports needs normal), targets inside the authorized scope, exclusions by address or range, and upload the client\'s signed PDF. 3. Wait for it to be approved (by a second admin, unless two-person approval is turned off). 4. Inside the window, run the external tests (from Sentinel) and the internal tests (through each site\'s agent, 1.27.0 or later). 5. Issue penetration test report.',
                 'Approval: a different admin approves, with their password, after checking that the signed document matches the scope. Nothing runs before. The other admins get a notification and a banner on the dashboard, and the Engagements page lists what awaits them. An account the creator created, or whose password or 2FA the creator reset, in the last 30 days cannot approve. With only one admin, add another first, or (an Admin who holds every permission and sees every client) turn two-person approval off under Settings → Pen-test engagements: then whoever creates an engagement may approve it themselves if they may approve engagements, and the page, audit log and report say "single-person approval". Engagements created while the rule was on still need a second person.',
                 'Stop engagement (kill switch) ends it for good within a minute. Technicians and admins can stop or cancel an engagement. Demo and archived clients have no New engagement button.',
                 'Results: the engagement page lists findings with evidence and fixes. Fails and Warnings also become findings of type "Pen test" (triage, owners, due dates, groups, ITFlow tickets), unless the regular checks already raise the same problem; worth-knowing results stay in the report. For each host and test the newest engagement that ran it decides: a retest that no longer finds a problem resolves its finding; one that did not run that test, or was stopped before that host finished, leaves it open, and open ports from an all-ports test need an all-ports retest. Once the regular scan or the agent has looked again, its result decides. The masked default password stays in the pen-test report. The client\'s services and inventory are not changed. The report is branded and frozen (summary, how findings chain together, scope and authorization, method, findings, systems tested). After fixes, create a retest engagement (This is a retest of) and issue its retest letter: each earlier finding is marked fixed, still open or not retested.',
@@ -135,10 +135,10 @@ return [
             'section' => 'admin',
             'title' => 'Users and roles',
             'paragraphs' => [
-                'To add a user: Administration → Users → Add user. Choose a role (see "Roles in detail") and give a temporary password. They must change it and set up 2FA when they first sign in.',
-                'Resetting someone\'s password or 2FA, and changing their role or turning their access off, ask for your own password first. Each of these signs that user out everywhere straight away.',
+                'To add a user: Administration → Users → Add user. Choose a role (see "Roles and permissions") and give a temporary password. They must change it and set up two-factor authentication when they first sign in.',
+                'Resetting someone\'s password or two-factor authentication, and changing their role or turning their access off, ask for your own password first. Each of these signs that user out everywhere straight away.',
                 'You cannot change your own role or disable yourself, and the last active admin cannot be removed, so nobody is locked out.',
-                'Keep at least two admins: pen-test engagements need a second admin to approve them.',
+                'Keep at least two admins: nobody is locked out, and pen-test engagements need a second admin to approve them unless two-person approval is turned off.',
             ],
         ],
         [
@@ -167,7 +167,7 @@ return [
             'section' => 'admin',
             'title' => 'On-premises agents',
             'paragraphs' => [
-                'An agent is a small appliance at the client\'s site that finds the devices on the internal network, with their services, certificates and web pages. It only connects out to Sentinel. A full scan runs weekly and a light sweep daily, inside the client\'s scan window (stopped when it closes, continued in the next one); admins can also click Scan now (with a reason).',
+                'An agent is a small Linux or Windows machine (or VM) at the client\'s site that finds the devices on the internal network, with their services, certificates and web pages. It only connects out to Sentinel. A full scan runs weekly and a light sweep daily, inside the client\'s scan window (stopped when it closes, continued in the next one); admins can also click Scan now (with a reason).',
                 'To add one (admins): 1. On the client\'s Agents page, record the site\'s internal authorization: who approved it, the dates and the private networks (each at most a /16). 2. Prepare a mini-PC or VM on that network: Debian 13, Debian 12 or Ubuntu 24.04, or Windows Server 2022/2025 or Windows 11 (preview); 2 CPU cores, 2 GB memory, 20 GB disk; a VM needs a bridged adapter, not NAT; outbound HTTPS to Sentinel. 3. Click Create an enrollment code (it appears once the authorization is recorded; shown once, valid once for 24 hours). 4. Run the install command shown on the page and follow its checks.',
                 'Sentinel signs the authorization and every job; the agent checks both and refuses any target outside the signed networks. Pause on the site stops agent scans within a minute; revoking an agent stops its token at once.',
                 'On the Agents page you can also set scan gentleness per site (very gentle, gentle or faster; never beyond nmap\'s normal -T3), how often agents check in, ask for Diagnostics (versions, disk, memory, clock difference, key fingerprint) and Restart.',
@@ -324,11 +324,11 @@ return [
         ],
         [
             'section' => 'reference',
-            'title' => 'Breach monitoring details',
+            'title' => 'Breach monitoring in detail',
             'paragraphs' => [
                 'Once a week Sentinel asks XposedOrNot which addresses of your verified domains appear in known data breaches. An address goes to the client whose authorization lists its domain (exactly, or under a *. entry); other verified domains are listed on the settings card and ignored.',
                 'Each address is one finding: Fail when a breach happened in the last 12 months, Warning when all its breaches are older, with the breach names, dates and what was exposed. Passwords are never stored or shown. Addresses are masked in finding titles, alerts and chat messages, and for viewers; the full address is in the finding\'s details for technicians and admins.',
-                'An address no longer listed resolves. A failed check changes nothing and is retried after 6 hours. The client\'s Website & email page lists the breached addresses.',
+                'An address no longer listed resolves. A failed check changes nothing and is retried after 6 hours. The client\'s Website and email page lists the breached addresses.',
             ],
         ],
         [
@@ -351,7 +351,7 @@ return [
         ],
         [
             'section' => 'reference',
-            'title' => 'Signing in and 2FA details',
+            'title' => 'Signing in and two-factor authentication in detail',
             'paragraphs' => [
                 'Sign in with Microsoft: when an admin has set it up (Administration → Integrations), the sign-in page shows "Sign in with Microsoft" for your Microsoft 365 work account. Link your account once: sign in with your password and code, then My profile → enter your password → Link my Microsoft account (pick your own account: whoever owns it can sign in as you). Only linked accounts can use it (an email address alone is never enough; guests from other directories never can). Sentinel skips its own code only when Microsoft confirms MFA within the last hour. Your password keeps working too unless an admin turned password sign-in off for you.',
                 'Every account must use two-factor authentication (2FA). At first sign-in, scan the QR code with an authenticator app and enter the 6-digit code it shows.',

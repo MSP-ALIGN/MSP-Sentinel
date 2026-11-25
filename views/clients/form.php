@@ -33,7 +33,7 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
         </div>
         <div class="row g-3 mb-3">
             <div class="col-md-6">
-                <label for="timezone" class="form-label"><?= e(__('Client timezone')) ?></label>
+                <label for="timezone" class="form-label"><?= e(__('Client time zone')) ?></label>
                 <?php // Type to search the 400+ zones (1.34); the server accepts only a zone from this list. ?>
                 <input class="form-control<?= $invalid('timezone') ?>" id="timezone" name="timezone" list="timezone-list" value="<?= e($values['timezone']) ?>" required autocomplete="off" spellcheck="false" placeholder="<?= e(__('Type a city, e.g. New_York or London')) ?>">
                 <datalist id="timezone-list">
@@ -74,7 +74,7 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
         </div>
     </div>
     <div class="card-footer">
-        <button type="submit" class="btn btn-primary"><?= e($isEdit ? __('Save changes') : __('Create client')) ?></button>
+        <button type="submit" class="btn btn-primary"><?= e($isEdit ? __('Save changes') : __('Add client')) ?></button>
         <a href="<?= e($isEdit ? url('/clients/' . (int) $client['id']) : url('/clients')) ?>" class="btn btn-outline-secondary"><?= e(__('Cancel')) ?></a>
     </div>
     </form>

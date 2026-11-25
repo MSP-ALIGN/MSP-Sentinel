@@ -106,7 +106,7 @@ footer.doc-footer .right { margin-left: auto; }
     <div class="tile"><span class="n" style="color:var(--ok)"><?= (int) $c['fixed'] ?></span>&#10004; <?= e(__('fixed this period')) ?></div>
     <div class="tile"><span class="n"><?= (int) $c['certs_expiring'] ?></span><?= e(__('certificates expiring or expired')) ?></div>
 </div>
-<p class="small muted"><?= e(__('Status on {now} (last scan finished {date}). In the period: {n} new problem(s) found, {x} fixed.', ['now' => when($r['generated_at'], $rz), 'date' => when($r['last_checked'] ?? null, $rz, __('not yet')), 'n' => $c['new'], 'x' => $c['fixed']])) ?></p>
+<p class="small muted"><?= e(__('Status on {now} (last scan finished {date}). In the period: {n} new finding(s), {x} fixed.', ['now' => when($r['generated_at'], $rz), 'date' => when($r['last_checked'] ?? null, $rz, __('not yet')), 'n' => $c['new'], 'x' => $c['fixed']])) ?></p>
 
 <?php if ($exec): ?>
 <h2><?= e(__('Top risks')) ?></h2>

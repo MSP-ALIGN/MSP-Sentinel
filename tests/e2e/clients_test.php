@@ -46,7 +46,7 @@ return [
         $bad = $admin->submit('/clients/new', '/clients', ['name' => '', 'itflow_client_id' => 'abc', 'timezone' => 'Mars/Base',
             'scan_window_start' => '25:00', 'scan_window_end' => '06:00', 'notes' => '']);
         Assert::status(422, $bad);
-        foreach (['Enter a name', 'numeric ITFlow client ID', 'Choose a timezone', '24-hour time'] as $msg) {
+        foreach (['Enter a name', 'numeric ITFlow client ID', 'Choose a time zone', '24-hour time'] as $msg) {
             Assert::contains($msg, $bad->body);
         }
         $same = $admin->submit('/clients/new', '/clients', ['name' => 'Same Time Ltd', 'itflow_client_id' => '', 'timezone' => 'UTC',

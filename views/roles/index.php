@@ -7,7 +7,7 @@
 <div class="card mb-3">
     <div class="card-header d-flex align-items-center">
         <h2 class="card-title h5 mb-0"><?= e(__('Roles')) ?></h2>
-        <a href="<?= e(url('/admin/roles/new')) ?>" class="btn btn-primary btn-sm ms-auto"><i class="bi bi-plus-lg me-1" aria-hidden="true"></i><?= e(__('New role')) ?></a>
+        <a href="<?= e(url('/admin/roles/new')) ?>" class="btn btn-primary btn-sm ms-auto"><i class="bi bi-plus-lg me-1" aria-hidden="true"></i><?= e(__('Add role')) ?></a>
     </div>
     <div class="card-body pb-0">
         <p class="small text-body-secondary"><?= e(__('A role is a set of permissions; each user has one role. Viewer, Technician and Admin are built in and can\'t be changed: copy one to start your own. Everyone can see clients and their findings; permissions decide what they may change. You can only give permissions you hold yourself. Permissions marked "Near full control" reach the whole system (agent releases, updates, the API, integrations, users): give them only to people you would make Admin.')) ?></p>

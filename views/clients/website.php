@@ -29,7 +29,7 @@ $chip = static function (string $sev, string $text): string {
                 $codes = array_unique(array_merge((array) ($w['checks']['issues'] ?? []), (array) ($w['checks']['exposed'] ?? []))); ?>
             <tr>
                 <td><code><?= e(($w['scheme'] ?? 'http') . '://' . $w['ip'] . ':' . $w['port']) ?></code><?php if ($w['host_header'] !== ''): ?><br><span class="text-body-secondary"><?= e($w['host_header']) ?></span><?php endif; ?><br><span class="text-body-secondary"><?= e(__('Checked {time}', ['time' => when((string) $w['checks_at'])])) ?></span></td>
-                <td><?php if ($codes === []): ?><?= $chip('ok', __('No problems found')) ?><?php endif; ?>
+                <td><?php if ($codes === []): ?><?= $chip('ok', __('No findings')) ?><?php endif; ?>
                     <?php foreach ($codes as $code): $r = ExposureRules::websiteIssue((string) $code); ?><?= $chip($r['severity'], $r['text']) ?><?php endforeach; ?>
                     <?php $advice = (array) ($w['checks']['info'] ?? []); if ($advice !== []): ?>
                     <div class="text-body-secondary mt-1"><i class="bi bi-info-circle me-1" aria-hidden="true"></i><?= e(__('Advice')) ?>: <?= e(implode('; ', array_map(static fn ($c): string => ExposureRules::websiteIssue((string) $c)['text'], $advice))) ?></div>
@@ -68,7 +68,7 @@ $chip = static function (string $sev, string $text): string {
         <h3 class="h6 mt-3"><?= e(__('Breached accounts')) ?></h3>
         <?php $breaches ??= []; $canSeeAddresses = can('breach.addresses'); // others see masked addresses
         if ($breaches === []): ?>
-        <p class="small text-body-secondary"><?= e(__('No breached addresses known. Addresses come from breach monitoring (Administration, Integrations) for the client\'s verified domains.')) ?></p>
+        <p class="small text-body-secondary"><?= e(__('No breached addresses known. Addresses come from breach monitoring (Administration → Integrations) for the client\'s verified domains.')) ?></p>
         <?php else: ?>
         <div class="table-responsive">
         <table class="table table-sm align-middle small">
@@ -108,7 +108,7 @@ $chip = static function (string $sev, string $text): string {
                     <?php if ($st === 'open' && !empty($ns['sample'])): ?><div class="text-body-secondary text-break"><?= e(__('Names handed out include: {names}', ['names' => implode(', ', (array) $ns['sample'])])) ?></div><?php endif; ?>
                     <?php endforeach; ?>
                 <?php else: $tk = $res['finding'] ?? null; ?>
-                    <?= is_array($tk) ? $chip('fail', __('Can be taken over: {evidence}', ['evidence' => (string) ($tk['evidence'] ?? '')])) : $chip('ok', __('No problem found')) ?>
+                    <?= is_array($tk) ? $chip('fail', __('Can be taken over: {evidence}', ['evidence' => (string) ($tk['evidence'] ?? '')])) : $chip('ok', __('No finding')) ?>
                 <?php endif; ?></td>
             </tr>
             <?php endforeach; ?>

@@ -22,7 +22,7 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
         <form method="post" action="<?= e(url('/clients/' . $cid . '/agents-update')) ?>" class="float-end ms-2" data-confirm="<?= e(__('Update every agent of this client that runs an older version to {v}?', ['v' => $agentRelease])) ?>"><?= Csrf::field() ?>
             <button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-cloud-arrow-down me-1" aria-hidden="true"></i><?= e(__('Update all agents to {v}', ['v' => $agentRelease])) ?></button></form>
         <?php endif; ?>
-        <p class="small text-body-secondary"><?= e(__('An agent is a small Linux appliance at the client\'s site. It connects out to Sentinel, scans only the internal networks approved in a signed internal authorization, and reports devices, open services and certificates. A full scan runs weekly and a light sweep daily, inside the scan window.')) ?></p>
+        <p class="small text-body-secondary"><?= e(__('An agent is a small Linux or Windows machine (or VM) at the client\'s site. It connects out to Sentinel, scans only the internal networks approved in a signed internal authorization, and reports devices, open services and certificates. A full scan runs weekly and a light sweep daily, inside the scan window.')) ?></p>
         <?php $anyAgent = array_filter($agentSites, static fn (array $s): bool => $s['agents'] !== []) !== []; ?>
         <details class="border rounded p-2 mb-3 small" <?= $anyAgent ? '' : 'open' ?>>
             <summary class="fw-semibold"><?= e(__('How to add an agent')) ?></summary>
@@ -30,7 +30,7 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                 <li><?= e(__('Record an internal authorization for the site below: who at the client approved internal scanning, the dates, and the private networks to scan.')) ?></li>
                 <li><?= e(__('Prepare a mini-PC or VM at the site that stays on: Debian 13 (or Debian 12 / Ubuntu 24.04), 2 CPU cores, 2 GB memory, 20 GB disk, on the internal network (a VM needs a bridged adapter, not NAT), with outbound HTTPS to Sentinel. No inbound firewall rule is needed. Or a Windows Server 2022/2025 or Windows 11 machine.')) ?></li>
                 <li><?= e(__('Click Create an enrollment code for the site (admins). The next page shows the code once, the install command for your Sentinel address with a copy button, and how to check it worked.')) ?></li>
-                <li><?= e(__('Run the command on the appliance and type the code when asked. The agent shows up here within a minute, and scans inside the client\'s scan window.')) ?></li>
+                <li><?= e(__('Run the command on the agent host and type the code when asked. The agent shows up here within a minute, and scans inside the client\'s scan window.')) ?></li>
             </ol>
             <a href="<?= e(url('/help')) ?>#on-premises-agents-internal-scans"><?= e(__('More in Help')) ?></a>
         </details>
@@ -74,7 +74,7 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                     <td><?= e($a['name']) ?><div class="text-body-secondary"><?= e($a['last_ip']) ?></div>
                         <?php if ($a['status'] === 'active' && (string) $a['box_public_key'] !== ''): ?><div class="text-body-secondary small"><?= e(__('Key')) ?> <span class="font-monospace"><?= e(\Sentinel\AgentClient\AgentKey::fingerprint((string) $a['box_public_key'])) ?></span></div><?php endif; ?>
                         <?php if ($a['status'] === 'active' && (string) ($a['box_key_pending'] ?? '') !== ''): $pfp = \Sentinel\AgentClient\AgentKey::fingerprint((string) $a['box_key_pending']); ?>
-                        <div class="alert alert-warning small py-1 px-2 mt-1 mb-0"><?= e(__('The agent reported a NEW key {fp} ({t}). Passwords are not sealed to it until an admin approves it. Approve only if the agent was reinstalled and its status command shows this fingerprint.', ['fp' => $pfp, 't' => when($a['box_key_pending_at'])])) ?>
+                        <div class="alert alert-warning small py-1 px-2 mt-1 mb-0"><?= e(__('The agent reported a NEW key {fp} ({t}). Passwords are not sealed to it until someone approves it. Approve only if the agent was reinstalled and its status command shows this fingerprint.', ['fp' => $pfp, 't' => when($a['box_key_pending_at'])])) ?>
                             <?php if (can('agents.manage')): ?><form method="post" action="<?= e(url('/clients/' . $cid . '/agents/' . (int) $a['id'] . '/approve-key')) ?>" class="mt-1" data-confirm="<?= e(__('Approve this new agent key? Compare the fingerprint with the agent\'s status output first.')) ?>"><?= Csrf::field() ?>
                                 <input type="hidden" name="fingerprint" value="<?= e($pfp) ?>"><button class="btn btn-sm btn-outline-warning" type="submit"><?= e(__('Approve new key')) ?></button></form><?php endif; ?></div>
                         <?php endif; ?></td>
@@ -108,7 +108,7 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                 <tr><td colspan="5" class="small">
                     <details><summary><?= e(__('Diagnostics reported by the agent, {t}', ['t' => when($a['diagnostics_at'])])) ?></summary>
                     <?php $reportedFp = (string) ($diag['key_fingerprint'] ?? ''); $knownFp = (string) $a['box_public_key'] !== '' ? \Sentinel\AgentClient\AgentKey::fingerprint((string) $a['box_public_key']) : ''; ?>
-                    <?php if ($reportedFp !== '' && $knownFp !== '' && $reportedFp !== $knownFp): ?><div class="alert alert-warning py-1 px-2 my-1"><?= e(__('The key this report names is not the pinned key ({fp}). Compare on the appliance itself (status command) before approving any key.', ['fp' => $knownFp])) ?></div><?php endif; ?>
+                    <?php if ($reportedFp !== '' && $knownFp !== '' && $reportedFp !== $knownFp): ?><div class="alert alert-warning py-1 px-2 my-1"><?= e(__('The key this report names is not the pinned key ({fp}). Compare on the agent host itself (status command) before approving any key.', ['fp' => $knownFp])) ?></div><?php endif; ?>
                     <dl class="row mb-0 mt-1">
                         <?php foreach ([__('Agent version') => $diag['version'] ?? '', __('PHP') => $diag['php'] ?? '', __('System') => $diag['os'] ?? '', __('nmap') => $diag['nmap'] ?? '',
                                         __('Free disk') => isset($diag['disk_free_mb']) ? $diag['disk_free_mb'] . ' MB' : '', __('Free memory') => isset($diag['memory_mb']) ? $diag['memory_mb'] . ' MB' : '',
@@ -220,7 +220,7 @@ $jobLabel = static fn (array $j): string => match ($j['status']) {
                         <div class="form-text"><?= e(__('Sealed in your browser for this site\'s agent before it is sent. Sentinel only relays it and cannot read it; the agent keeps it sealed on the appliance.')) ?>
                             <?php if ((string) $siteAgent['box_public_key'] !== ''): ?><?= e(__('Agent key {fp}: it should match the agent\'s status output.', ['fp' => \Sentinel\AgentClient\AgentKey::fingerprint((string) $siteAgent['box_public_key'])])) ?><?php endif; ?></div></div>
                     <div class="col-md-5 d-flex align-items-end gap-2">
-                        <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-lock me-1" aria-hidden="true"></i><?= e(__('Save')) ?></button></div>
+                        <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-lock me-1" aria-hidden="true"></i><?= e(__('Save directory check')) ?></button></div>
                     <div class="col-12"><div class="alert alert-warning py-1 px-2 mb-0 d-none" data-seal-note role="status"></div></div>
                 </form>
                 <?php endif; ?>

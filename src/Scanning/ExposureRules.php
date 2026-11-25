@@ -102,8 +102,8 @@ final class ExposureRules
             'hypervisor_admin' => ['severity' => 'fail', 'text' => __('Hypervisor management page (VMware, Proxmox and similar) reachable from the internet')],
             'oob_admin' => ['severity' => 'fail', 'text' => __('Server remote management (iDRAC, iLO, IPMI) reachable from the internet')],
             'nas_admin' => ['severity' => 'fail', 'text' => __('NAS management page reachable from the internet')],
-            'vpn_portal' => ['severity' => 'warn', 'text' => __('VPN login portal exposed: make sure it is patched and uses MFA')],
-            'remote_desktop_web' => ['severity' => 'warn', 'text' => __('Remote desktop web access exposed: make sure it uses MFA')],
+            'vpn_portal' => ['severity' => 'warn', 'text' => __('VPN login portal exposed: make sure it is patched and uses two-factor authentication')],
+            'remote_desktop_web' => ['severity' => 'warn', 'text' => __('Remote desktop web access exposed: make sure it uses two-factor authentication')],
             'login_page' => ['severity' => 'info', 'text' => __('Login page')],
             default => null,
         };

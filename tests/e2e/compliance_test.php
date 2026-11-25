@@ -81,9 +81,9 @@ return [
             $i = strpos($page, '>' . $ref . '</span>');
             return $i === false ? '' : substr($page, $i, (int) strpos($page, '</tr>', $i) - $i);
         };
-        Assert::contains('1 open problem(s)', $row($page, '4.4'));
+        Assert::contains('1 open finding(s)', $row($page, '4.4'));
         Assert::contains('Remote Desktop open to the internet', $row($page, '4.4'));
-        Assert::contains('No problems found', $row($page, '3.11'));
+        Assert::contains('No findings', $row($page, '3.11'));
         Assert::contains('Checked: external scan', $row($page, '3.11'));
         Assert::contains('Not checked yet', $row($page, '9.5'));
         Assert::contains('Not checked yet', $row($page, '10.1'));

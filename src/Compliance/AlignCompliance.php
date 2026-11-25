@@ -149,7 +149,7 @@ final class AlignCompliance
                 $error = $ex->getMessage();
             }
         } elseif ($stale && $this->align === null) {
-            $error = __('MSP Align is not connected (Administration, Integrations).');
+            $error = __('MSP Align is not connected (Administration → Integrations).');
         } elseif ($stale && $recentAttempt) {
             $error = __('MSP Align could not be read a few minutes ago; Sentinel tries again in a while (or use Read again).');
         }

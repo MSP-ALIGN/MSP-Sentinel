@@ -34,7 +34,7 @@ final class ComplianceController extends Controller
         $align = App::align();
         $wanted = $request->input('align_client_id');
         if ($align === null || !ctype_digit($wanted) || strlen($wanted) > 10) {
-            Session::flash('danger', $align === null ? __('MSP Align is not connected (Administration, Integrations).') : __('Choose an MSP Align client.'));
+            Session::flash('danger', $align === null ? __('MSP Align is not connected (Administration → Integrations).') : __('Choose an MSP Align client.'));
             return $back;
         }
         try {

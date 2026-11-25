@@ -15,7 +15,7 @@ $canResume = can('scanning.resume') && $everyClient;
 <div class="alert alert-danger d-flex align-items-center flex-wrap gap-2" role="status">
     <i class="bi bi-pause-circle-fill" aria-hidden="true"></i>
     <strong><?= e(__('All scanning is paused.')) ?></strong>
-    <span><?= e(__('Nothing will be scanned until an admin resumes it.')) ?></span>
+    <span><?= e(__('Nothing will be scanned until scanning is resumed.')) ?></span>
     <?php if ($canResume): ?>
     <form method="post" action="<?= e(url('/scanning/resume')) ?>" class="ms-auto" data-confirm="<?= e(__('Resume scanning for all clients?')) ?>">
         <?= Csrf::field() ?>

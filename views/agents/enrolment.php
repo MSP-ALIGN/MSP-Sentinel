@@ -31,7 +31,7 @@ $cmd = static function (string $id, string $text): string {
             <button type="button" class="btn btn-sm btn-outline-secondary" data-copy="enrol-code" data-copied="<?= e(__('Copied')) ?>"><i class="bi bi-clipboard me-1" aria-hidden="true"></i><?= e(__('Copy')) ?></button>
         </div>
 
-        <h3 class="h6"><?= e(__('1. Prepare the appliance')) ?></h3>
+        <h3 class="h6"><?= e(__('1. Prepare the agent host')) ?></h3>
         <ul class="small">
             <li><?= e(__('A small mini-PC or virtual machine that stays on: Debian 13 (recommended), Debian 12 or Ubuntu 24.04 LTS, freshly installed, 64-bit. 2 CPU cores, 2 GB of memory and 20 GB of disk are plenty.')) ?>
                 <?= e(__('Or a Windows machine that stays on: Windows Server 2022 or 2025, or Windows 11 (64-bit).')) ?></li>
@@ -41,31 +41,31 @@ $cmd = static function (string $id, string $text): string {
         </ul>
 
         <h3 class="h6"><?= e(__('2. Install')) ?></h3>
-        <p class="small mb-1"><strong><?= e(__('One-line install (the appliance can reach GitHub):')) ?></strong> <?= e(__('paste this into the appliance\'s shell; it asks for the enrollment code.')) ?></p>
+        <p class="small mb-1"><strong><?= e(__('One-line install (the agent host can reach GitHub):')) ?></strong> <?= e(__('paste this into the agent host\'s shell; it asks for the enrollment code.')) ?></p>
         <?= $cmd('cmd-oneline', $oneLine) ?>
-        <p class="small mb-1"><strong><?= e(__('Or from the release archive (no GitHub access needed):')) ?></strong> <?= e(__('copy the Sentinel release archive (the same file you installed Sentinel from) to the appliance, unpack it, and run in the unpacked folder (it asks for the enrollment code):')) ?></p>
+        <p class="small mb-1"><strong><?= e(__('Or from the release archive (no GitHub access needed):')) ?></strong> <?= e(__('copy the Sentinel release archive (the same file you installed Sentinel from) to the agent host, unpack it, and run in the unpacked folder (it asks for the enrollment code):')) ?></p>
         <?= $cmd('cmd-archive', $fromArchive) ?>
         <p class="small mb-1"><strong><?= e(__('Or on Windows:')) ?></strong> <?= e(__('paste this into PowerShell opened with Run as administrator; it asks for the enrollment code. It installs PHP and nmap (without Npcap: scans are TCP connect scans, slower than on Linux), and the agent as the "MSP Sentinel Agent" service running under its own low-privilege account.')) ?></p>
         <?= $cmd('cmd-windows', $windows) ?>
         <?php if ($serverUrl === ''): ?><div class="small text-warning mb-2"><?= e(__('Set app.public_url in the config so these commands show your address.')) ?></div><?php endif; ?>
-        <p class="small"><?= e(__('The code is typed at the prompt, not put on the command line, so it stays out of the shell history. If Sentinel uses a certificate from a private certificate authority, copy the CA certificate (PEM) to the appliance and add SENTINEL_CA=/path/ca.pem after sudo (one-line install), --ca /path/ca.pem (archive install) or -Ca C:\path\ca.pem (Windows). Add --dry-run to the archive install to see every step first.')) ?></p>
+        <p class="small"><?= e(__('The code is typed at the prompt, not put on the command line, so it stays out of the shell history. If Sentinel uses a certificate from a private certificate authority, copy the CA certificate (PEM) to the agent host and add SENTINEL_CA=/path/ca.pem after sudo (one-line install), --ca /path/ca.pem (archive install) or -Ca C:\path\ca.pem (Windows). Add --dry-run to the archive install to see every step first.')) ?></p>
 
         <h3 class="h6"><?= e(__('3. Check it worked')) ?></h3>
         <ul class="small">
             <li><?= e(__('The installer ends with "Enrolled as agent #…". The agent shows up on this client\'s Agents page within a minute, as online.')) ?></li>
             <?php if ($releaseKeyFp !== ''): ?>
-            <li><?= e(__('The installer prints "Release key pinned from Sentinel: …". It must be {fp} (the release key on Administration, System): agents install only updates signed with it.', ['fp' => $releaseKeyFp])) ?></li>
+            <li><?= e(__('The installer prints "Release key pinned from Sentinel: …". It must be {fp} (the release key on Administration → System): agents install only updates signed with it.', ['fp' => $releaseKeyFp])) ?></li>
             <?php else: ?>
-            <li><?= e(__('No release key exists yet: create one on Administration, System, so this agent can be updated from Sentinel (it is offered at its next check-in).')) ?></li>
+            <li><?= e(__('No release key exists yet: create one on Administration → System, so this agent can be updated from Sentinel (it is offered at its next check-in).')) ?></li>
             <?php endif; ?>
-            <li><?= e(__('On the appliance:')) ?> <code>systemctl status sentinel-agent</code> <?= e(__('(running), and')) ?> <code>journalctl -u sentinel-agent -e</code> <?= e(__('for its log.')) ?>
+            <li><?= e(__('On the agent host:')) ?> <code>systemctl status sentinel-agent</code> <?= e(__('(running), and')) ?> <code>journalctl -u sentinel-agent -e</code> <?= e(__('for its log.')) ?>
                 <?= e(__('On Windows: the "MSP Sentinel Agent" service in services.msc, and its log in C:\ProgramData\MSP Sentinel Agent\logs.')) ?></li>
         </ul>
 
         <h3 class="h6"><?= e(__('If something goes wrong')) ?></h3>
         <ul class="small">
             <li><?= e(__('"Enrollment refused": the code was already used or is older than 24 hours. Create a new code and run the installer again.')) ?></li>
-            <li><?= e(__('Cannot connect, or a certificate error: from the appliance, try curl -I {server}. Check DNS, the firewall\'s outbound rules and any proxy; with a private certificate authority, give its certificate as described above.', ['server' => $server])) ?></li>
+            <li><?= e(__('Cannot connect, or a certificate error: from the agent host, try curl -I {server}. Check DNS, the firewall\'s outbound rules and any proxy; with a private certificate authority, give its certificate as described above.', ['server' => $server])) ?></li>
             <li><?= e(__('Online but no scans: check the internal authorization, the scan window and the pause switches for the client and site. Scan now (with a reason) starts one at once.')) ?></li>
             <li><?= e(__('Diagnostics on the Agents page shows the agent\'s versions, disk, memory and clock difference without logging in to it.')) ?></li>
         </ul>

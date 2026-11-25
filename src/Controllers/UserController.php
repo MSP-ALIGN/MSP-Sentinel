@@ -303,7 +303,7 @@ final class UserController extends Controller
         }
         App::users()->resetTotp($id, Passwords::hash($password));
         $this->audit($request, 'user.2fa_reset', 'user', $id, ['password_reset' => true]);
-        Session::flash('success', __('Two-factor authentication reset for {name}. Give them the new temporary password directly. They will change it and set up 2FA again at next sign-in.', ['name' => $target['username']]));
+        Session::flash('success', __('Two-factor authentication reset for {name}. Give them the new temporary password directly. They will change it and set up two-factor authentication again at next sign-in.', ['name' => $target['username']]));
         return Response::redirect('/users/' . $id);
     }
 
