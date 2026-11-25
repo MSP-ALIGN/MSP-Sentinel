@@ -140,6 +140,7 @@ return [
         $r = $sync->syncClient($cid, 'ninjaone');
         Assert::same('ok', $r['status'], $r['message']);
         Assert::same(4, (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE client_id = {$cid} AND removed_at IS NULL")->fetchColumn());
+        Assert::same('00:1b:21:3a:4f:11', (string) $ctx->db->query("SELECT mac_addresses FROM devices WHERE client_id = {$cid} AND source_id = '11'")->fetchColumn(), 'MAC addresses normalised, junk dropped (1.50)');
         // Missing updates count from when Sentinel first saw them: 40 days later they are late.
         $ctx->db->exec("UPDATE device_patches p JOIN devices d ON d.id = p.device_id SET p.first_seen = UTC_TIMESTAMP() - INTERVAL 40 DAY WHERE d.client_id = {$cid}");
         $r = $sync->syncClient($cid, 'ninjaone');

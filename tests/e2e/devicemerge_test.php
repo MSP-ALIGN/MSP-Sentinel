@@ -150,4 +150,52 @@ return [
         Assert::same('SRV-NB', (string) $ctx->db->query("SELECT name FROM devices WHERE id = {$nameless}")->fetchColumn(), 'the NetBIOS name replaces the bare address');
         $ctx->db->exec("UPDATE clients SET is_archived = 1 WHERE id IN ({$cid}, {$other})");
     },
+
+    'merged devices (1.50): MAC first; stale addresses, ranges two sites share and other names prove nothing; a unique name does' => function (TestContext $ctx): void {
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $res = $admin->submit('/clients/new', '/clients', ['name' => 'Merge Rules Example', 'itflow_client_id' => '', 'timezone' => 'UTC', 'scan_window_start' => '00:00',
+            'scan_window_end' => '23:59', 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);
+        $cid = (int) basename((string) $res->location());
+        $siteA = (int) $ctx->db->query("SELECT id FROM sites WHERE client_id = {$cid} AND is_default = 1")->fetchColumn();
+        $ctx->db->exec("INSERT INTO sites (client_id, name, is_default, created_at, updated_at) VALUES ({$cid}, 'Second office', 0, UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+        $siteB = (int) $ctx->db->lastInsertId();
+        $auth = static function (int $site, string $ranges) use ($ctx, $cid): void {
+            $ctx->db->prepare("INSERT INTO internal_authorisations (client_id, site_id, approved_by_name, approved_by_role, approved_on, valid_from, valid_until, ranges, signed_payload, signature, recorded_by, created_at)
+                               VALUES (:c, :s, 'Robin Example', 'Owner', UTC_DATE(), UTC_DATE(), UTC_DATE() + INTERVAL 300 DAY, :r, '', '', 1, UTC_TIMESTAMP())")
+                ->execute(['c' => $cid, 's' => $site, 'r' => $ranges]);
+        };
+        $auth($siteA, "10.94.0.0/24\n10.95.0.0/24");
+        $auth($siteB, '10.95.0.0/24'); // both offices use 10.95.0.0/24
+        $add = static function (string $source, string $sid, string $name, string $ip, string $mac = '', string $macs = '', ?string $contact = 'now') use ($ctx, $cid, $siteA): int {
+            $ctx->db->prepare("INSERT INTO devices (client_id, site_id, source, source_id, name, dns_name, device_class, os_name, ip_addresses, mac, mac_addresses, last_contact, first_seen, last_seen)
+                               VALUES (:c, :s, :src, :sid, :n, '', 'workstation', '', :ip, :mac, :macs, :lc, UTC_TIMESTAMP(), UTC_TIMESTAMP())")
+                ->execute(['c' => $cid, 's' => $siteA, 'src' => $source, 'sid' => $sid, 'n' => $name, 'ip' => $ip, 'mac' => $mac, 'macs' => $macs,
+                           'lc' => $contact === 'now' ? gmdate('Y-m-d H:i:s') : $contact]);
+            return (int) $ctx->db->lastInsertId();
+        };
+        $into = static fn (int $id): ?int => ($v = $ctx->db->query("SELECT merged_into FROM devices WHERE id = {$id}")->fetchColumn()) === null ? null : (int) $v;
+        // 1. MAC: same machine at another address under another name.
+        $byMacN = $add('ninjaone', 'rules-1', 'LAPTOP-KIM', '10.94.0.11', '', '00:1b:21:aa:00:01,00:1b:21:aa:00:02');
+        $byMacA = $add('agent', 'rules-a1', '10.94.0.99', '10.94.0.99', '00:1b:21:aa:00:02');
+        // 2a. Stale: NinjaOne's last address for a PC offline for three days.
+        $staleN = $add('ninjaone', 'rules-2', 'OLD-PC', '10.94.0.30', '', '', gmdate('Y-m-d H:i:s', time() - 3 * 86400));
+        $staleA = $add('agent', 'rules-a2', '10.94.0.30', '10.94.0.30');
+        // 2b. An address in a range both offices use: the address alone can't tell the offices apart.
+        $sharedN = $add('ninjaone', 'rules-3', 'BRANCH-PC', '10.95.0.40');
+        $sharedA = $add('agent', 'rules-a3', '10.95.0.40', '10.95.0.40');
+        // 3. Name: exactly one inventory device is called SRV-DB; the agent sees it at another address.
+        $nameN = $add('ninjaone', 'rules-4', 'SRV-DB', '10.94.0.50');
+        $nameA = $add('agent', 'rules-a4', 'srv-db.corp.example', '10.94.0.51');
+        App::inventory()->refreshMerges($cid);
+        Assert::same($byMacN, $into($byMacA), 'matched by MAC');
+        Assert::same(null, $into($staleA), 'a stale address is not matched');
+        Assert::same(null, $into($sharedA), 'an address two sites share is not matched on its own');
+        Assert::same($nameN, $into($nameA), 'a unique name is matched');
+        // A private MAC proves nothing.
+        $privA = $add('agent', 'rules-a5', '10.94.0.98', '10.94.0.98', '02:1b:21:aa:00:01');
+        $ctx->db->exec("UPDATE devices SET mac_addresses = '02:1b:21:aa:00:01' WHERE id = {$nameN}");
+        App::inventory()->refreshMerges($cid);
+        Assert::same(null, $into($privA), 'a private MAC is not matched');
+        Assert::true($staleN > 0 && $sharedN > 0, 'fixtures made');
+    },
 ];

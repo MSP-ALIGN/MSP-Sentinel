@@ -2,6 +2,20 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.50.0 (2026-11-25): The right device, one certificate finding, tidy tickets
+
+- **Matching agents to NinjaOne devices.** Sentinel now uses the strongest evidence first: the network card's MAC
+  address (NinjaOne's MACs now come over), then the address, then the name. An address only counts when the NinjaOne
+  device was seen in the last day and only one site's networks cover it, so two clients both on 192.168.1.x, or a
+  stale address, never join the wrong machines. A machine an agent saw without a name can still be matched by MAC.
+- **Routers and firewalls.** A MAC that answers on several addresses is no longer used to tell devices apart, so
+  each address stays its own device instead of overwriting one record.
+- **One certificate finding.** A certificate that expires soon and then expires is the same finding: it moves from
+  Warning to Fail and keeps its owner, history and ticket, instead of closing as "fixed" and opening a new one.
+  Existing findings are moved to the new form on upgrade.
+- **Archived clients' tickets.** When a client is archived in Sentinel, each of its open ITFlow tickets gets one note
+  saying it is no longer followed. If the client is restored while a problem is still open, a new ticket is opened.
+
 ### 1.49.1 (2026-11-25): Fixes from review
 
 - **Platform limits only for real operating systems.** NVD labels such as "node.js" or "WordPress", and other

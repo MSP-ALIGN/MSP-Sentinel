@@ -33,7 +33,8 @@ final class Guidance
         $key = (string) $f['finding_key'];
         return match ((string) $f['finding_type']) {
             'port' => self::port((int) substr($key, (int) strrpos($key, ':') + 1)),
-            'tls' => self::tls(substr($key, (int) strrpos($key, ':') + 1)),
+            // One validity finding for expiring and expired (1.50): its severity says which.
+            'tls' => self::tls(($c = substr($key, (int) strrpos($key, ':') + 1)) === 'cert_validity' ? (($f['severity'] ?? '') === 'fail' ? 'cert_expired' : 'cert_expiring') : $c),
             'web' => self::web(substr($key, (int) strrpos($key, ':') + 1)),
             'vuln' => self::vuln($vuln),
             'email' => self::email(substr($key, (int) strrpos($key, ':') + 1)),

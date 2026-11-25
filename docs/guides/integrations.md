@@ -55,6 +55,9 @@ What happens next:
   Sentinel rechecks it: gone closes the finding; still there reopens the ticket (or opens a new one, since ITFlow
   can't reopen a closed ticket). Without a clear answer within 10 days, Sentinel stops waiting and says so on the
   finding.
+- **Archived clients**: when a client is archived in Sentinel, each of its open tickets gets one note saying Sentinel
+  no longer follows it, so nothing is left hanging silently. Resolve them in ITFlow when they are dealt with. If the
+  client is restored while a problem is still open, Sentinel opens a new ticket for it.
 - No backlog: a client linked to ITFlow later (by hand or by name), or restored from the archive, gets tickets only
   for findings from then on. Breached email addresses are masked in tickets, as in alerts.
 - A ticket ITFlow refuses is retried later and the reason shows on the finding. Every change is in the audit log as
@@ -93,6 +96,8 @@ unknown and is never a finding.
   offline, or a report came back empty), Sentinel keeps the last known state, so findings don't close and reopen.
 - **CVEs for the right platform.** A CVE NVD limits to some operating systems (for example Chrome on Android) is
   reported only on devices running them.
+- **MAC addresses** of each device's network cards come over too, so an agent's device is matched to the right
+  NinjaOne device even when addresses are reused (see Agents).
 - **Linking another organisation** to a client unlinks the old one first: its devices leave the client and their
   findings close as "unlinked" (not as fixed).
 

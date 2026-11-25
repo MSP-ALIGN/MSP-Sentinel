@@ -115,6 +115,7 @@ final class ItflowTickets
                 $this->settlePending();
                 $this->releaseOrphans();
                 $this->twoWay();
+                $this->archivedClients();
                 $this->kevNotes();
                 $this->findingTickets();
                 $this->weeklyTickets();
@@ -815,6 +816,38 @@ final class ItflowTickets
             'false_positive' => '<p><strong>Marked as a false positive in Sentinel.</strong></p>' . $reason,
             default => '<p>Closed in Sentinel.</p>',
         };
+    }
+
+    /**
+     * Tickets of clients archived in Sentinel (1.50): each still-followed one gets one note saying Sentinel no longer
+     * follows it (the client is archived, so it is not scanned), instead of being left without a word. The row and its
+     * members are set to 'gone' (no longer followed); if the client is restored while the problem is still open,
+     * findingTickets keeps the old row in the history and opens a new ticket, as for a ticket deleted in ITFlow.
+     * Untrusted: ITFlow's answers (only compared with 'open'). Archived clients are never scanned or ticketed otherwise.
+     */
+    private function archivedClients(): void
+    {
+        $rows = $this->db->query("SELECT t.id AS row_id, t.itflow_ticket_id, c.itflow_client_id FROM itflow_tickets t
+                                  JOIN clients c ON c.id = t.client_id AND c.is_archived = 1 AND c.is_demo = 0 AND c.itflow_client_id IS NOT NULL AND c.itflow_sync_off = 0
+                                  WHERE t.kind = 'finding' AND t.itflow_ticket_id > 0 AND t.state IN ('open', 'sentinel_resolved', 'awaiting_check') LIMIT 50")->fetchAll();
+        foreach ($rows as $r) {
+            if ($this->budget <= 0) {
+                return;
+            }
+            try {
+                if ($this->itflow->ticketStatus((int) $r['itflow_ticket_id']) === 'open') {
+                    $this->itflow->addNote((int) $r['itflow_client_id'], (int) $r['itflow_ticket_id'],
+                        '<p><strong>The client was archived in Sentinel</strong>, so it is no longer scanned and Sentinel no longer follows this ticket. Resolve it here when it is dealt with. If the client is restored, Sentinel opens a new ticket for anything still open.</p>');
+                    $this->budget--;
+                    $this->n['notes']++;
+                }
+                $this->setRow((int) $r['row_id'], ['state' => 'gone', 'last_note_at' => $this->dbNow()]);
+                $this->db->prepare("UPDATE itflow_tickets SET state = 'gone' WHERE kind = 'member' AND parent_id = :p AND state = 'open'")->execute(['p' => $r['row_id']]);
+            } catch (ItflowException $ex) {
+                $this->setRow((int) $r['row_id'], ['last_error' => mb_substr($ex->getMessage(), 0, 255)]);
+                $this->skip($ex);
+            }
+        }
     }
 
     /**

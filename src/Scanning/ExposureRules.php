@@ -37,9 +37,10 @@ final class ExposureRules
         if ($tls['not_after'] !== null) {
             $left = (int) floor((strtotime($tls['not_after'] . ' UTC') - $now) / 86400);
             if ($left < 0) {
-                $issues[] = ['severity' => 'fail', 'code' => 'cert_expired', 'text' => __('Certificate expired {n} day(s) ago', ['n' => -$left])];
+                // Titles without a day count (1.50): a title that changes every day splits the group and churns lists.
+                $issues[] = ['severity' => 'fail', 'code' => 'cert_expired', 'text' => __('Certificate expired')];
             } elseif ($left <= self::EXPIRY_WARN_DAYS) {
-                $issues[] = ['severity' => 'warn', 'code' => 'cert_expiring', 'text' => __('Certificate expires in {n} day(s)', ['n' => $left])];
+                $issues[] = ['severity' => 'warn', 'code' => 'cert_expiring', 'text' => __('Certificate expires soon')];
             }
         }
         if ($tls['not_before'] !== null && strtotime($tls['not_before'] . ' UTC') > $now) {

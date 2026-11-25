@@ -61,7 +61,7 @@ final class ReportBuilder
         $new = array_filter($all, static fn (array $f): bool => $f['first_seen'] >= $start && $f['first_seen'] <= $periodEnd);
         $fails = array_values(array_filter($open, static fn (array $f): bool => $f['severity'] === 'fail'));
         $warns = array_values(array_filter($open, static fn (array $f): bool => $f['severity'] === 'warn'));
-        $certs = array_filter($open, static fn (array $f): bool => $f['finding_type'] === 'tls' && (str_ends_with((string) $f['finding_key'], ':cert_expiring') || str_ends_with((string) $f['finding_key'], ':cert_expired')));
+        $certs = array_filter($open, static fn (array $f): bool => $f['finding_type'] === 'tls' && (str_ends_with((string) $f['finding_key'], ':cert_validity') || str_ends_with((string) $f['finding_key'], ':cert_expiring') || str_ends_with((string) $f['finding_key'], ':cert_expired')));
 
         [$level, $reason] = match (true) {
             $fails !== [] => ['risk', __('{n} serious problem(s) need fixing now.', ['n' => count($fails)])],

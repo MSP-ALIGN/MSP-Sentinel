@@ -260,10 +260,13 @@ final class FindingsEngine
                     continue;
                 }
                 $target = $t['ip'] . ':' . $t['port'] . ($t['sni'] !== '' ? ' (' . $t['sni'] . ')' : '');
-                $add("tls:{$t['ip']}:{$t['port']}:{$t['sni']}:{$issue['code']}", [
+                // Expiring and expired are one finding (1.50, key code "cert_validity") that escalates from Warning to Fail
+                // on the day, keeping its triage, owner and ticket, instead of one resolving and another opening.
+                $code = in_array($issue['code'], ['cert_expiring', 'cert_expired'], true) ? 'cert_validity' : $issue['code'];
+                $add("tls:{$t['ip']}:{$t['port']}:{$t['sni']}:{$code}", [
                     'type' => 'tls', 'severity' => $issue['severity'], 'title' => $issue['text'],
                     'detail' => __('Certificate {cn} issued by {issuer}, valid until {until} UTC.', ['cn' => $t['subject_cn'] ?: '?', 'issuer' => $t['issuer'] ?: '?', 'until' => $t['not_after'] ?? '?']),
-                    'target' => $target, 'evidence' => $issue['code'] . '|' . $t['subject_cn'] . '|' . $t['not_after'], 'asset_id' => (int) $t['asset_id'],
+                    'target' => $target, 'evidence' => $code . '|' . $t['subject_cn'] . '|' . $t['not_after'], 'asset_id' => (int) $t['asset_id'],
                 ]);
             }
         }

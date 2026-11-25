@@ -363,6 +363,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.50.0',
+            'date' => '2026-11-25',
+            'items' => [
+                'Agents and NinjaOne devices are matched by MAC address first, then by an address only one site uses and that NinjaOne saw recently, then by a unique name, so shared ranges and stale addresses never join the wrong machines; a MAC on several addresses (a router) no longer merges them; an expiring certificate that expires stays one finding (Warning to Fail) with its owner and ticket; archived clients\' open ITFlow tickets get a note that they are no longer followed.',
+            ],
+        ],
+        [
             'version' => '1.49.1',
             'date' => '2026-11-25',
             'items' => [

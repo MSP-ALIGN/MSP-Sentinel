@@ -80,8 +80,11 @@ agent then pins the new address at its next sign-in.
   inherits the old one's name or findings. Phones and laptops that use private (rotating) MAC addresses are
   recognised by their address instead, so a new private MAC isn't a new device.
 - **One device per machine:** when NinjaOne also reports a machine the agent finds, the Devices list shows one row.
-  They are matched when the agent's address belongs to exactly one NinjaOne device and the name matches (or the agent
-  saw no name). The device page then shows NinjaOne's OS, antivirus and patches together with the agent's open
+  Sentinel matches them on the strongest evidence it has, in this order: the network card's MAC address (when it
+  belongs to exactly one NinjaOne device and isn't a private or shared one); then the address, but only from a
+  NinjaOne device seen in the last day, only where one site's networks cover it (two sites using the same 192.168.1.x
+  range prove nothing), and only when the name matches or the agent saw none; then a name exactly one NinjaOne device
+  has. A MAC that answers on several addresses (a router or firewall) is never used to tell devices apart. The device page then shows NinjaOne's OS, antivirus and patches together with the agent's open
   services, certificates and findings. Admins can **split** a wrong match, or **merge** an agent device into a NinjaOne
   device by hand (on the agent device's page). Nothing is deleted either way.
 

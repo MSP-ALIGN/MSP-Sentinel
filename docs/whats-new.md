@@ -2,6 +2,16 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.48.1 (2026-11-24): Time zone fixes from review
+
+- **Everything in your time.** The activity feeds on the dashboard and client overview, the certificate "Checked"
+  times, and the dates in reports (first seen, fixed, decided) now use your time zone, or the client's in reports,
+  like the rest.
+- **The button says what it does.** After a Settings save that failed (for example a bad source address), the "move
+  clients still on UTC" button named the time zone just typed, but moved clients to the saved one. It now names the
+  saved one.
+- Time zone names that PHP knows by an older alias are accepted, and stored times in ISO format are shown converted.
+
 ### 1.48.0 (2026-11-24): Times in your time zone
 
 - **Your time, everywhere.** Under **Administration → Settings → General**, choose your time zone (for example

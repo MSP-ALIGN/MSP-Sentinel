@@ -792,6 +792,22 @@ return [
         Assert::true($ctx->db->query("SELECT itflow_resumed_at FROM clients WHERE id = {$late}")->fetchColumn() !== null, 'linking records when tickets start');
         App::itflowTickets()->run();
         Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM itflow_tickets WHERE client_id = {$late}")->fetchColumn(), 'no backlog of old Fails');
+        // 1.50: a client archived in Sentinel: its open ticket gets one note and is no longer followed; restored, a new ticket.
+        $arch = $add('port:203.0.113.94:21', 'port', 'FTP open to the internet', 'Port 21 open.', '203.0.113.94:21');
+        App::itflowTickets()->run();
+        $at = (int) $ctx->db->query("SELECT itflow_ticket_id FROM itflow_tickets WHERE finding_id = {$arch}")->fetchColumn();
+        Assert::true($at > 0, 'ticket opened before archiving');
+        $admin->submit('/clients/' . $cid, '/clients/' . $cid . '/archive', ['archive' => '1']);
+        App::itflowTickets()->run();
+        App::itflowTickets()->run();
+        $archNotes = array_filter($sent()['replies'], static fn (array $r): bool => (int) $r['ticket_id'] === $at && str_contains((string) $r['ticket_reply'], 'archived in Sentinel'));
+        Assert::same(1, count($archNotes), 'one note, not one per run');
+        Assert::same('gone', $ctx->db->query("SELECT state FROM itflow_tickets WHERE itflow_ticket_id = {$at}")->fetchColumn(), 'no longer followed');
+        $admin->submit('/clients/' . $cid, '/clients/' . $cid . '/archive', ['archive' => '0']);
+        App::itflowTickets()->run();
+        $newT = (int) $ctx->db->query("SELECT itflow_ticket_id FROM itflow_tickets WHERE finding_id = {$arch}")->fetchColumn();
+        Assert::true($newT > $at, 'restored with the problem still open: a new ticket');
+        Assert::same(1, (int) $ctx->db->query("SELECT COUNT(*) FROM itflow_tickets WHERE history_finding_id = {$arch} AND itflow_ticket_id = {$at}")->fetchColumn(), 'the old ticket kept in the history');
         // Off again for later tests.
         $admin->submit('/admin/integrations', '/admin/integrations/itflow', ['url' => $base($ctx), 'api_key' => $key, 'enabled' => '0']);
     },

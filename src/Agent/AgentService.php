@@ -261,6 +261,20 @@ final class AgentService
         $knownIps = $this->knownElsewhereIps($clientId);
         $new = [];
         $hosts = array_slice(array_values(array_filter((array) ($data['hosts'] ?? []), 'is_array')), 0, self::MAX_HOSTS);
+        // One MAC on several addresses in this upload (a Wi-Fi extender's MAC-NAT, proxy ARP, a host with many
+        // addresses; 1.50): that MAC identifies none of them, so each is kept by its address instead of one record
+        // flipping between them.
+        $macIps = [];
+        foreach ($hosts as $h) {
+            $m = self::mac((string) ($h['mac'] ?? ''));
+            if ($m !== '') {
+                $macIps[$m][(string) ($h['ip'] ?? '')] = true;
+            }
+        }
+        foreach ($hosts as &$h) {
+            $h['_shared_mac'] = count($macIps[self::mac((string) ($h['mac'] ?? ''))] ?? []) > 1;
+        }
+        unset($h);
         foreach (array_chunk($hosts, self::BATCH) as $batch) {
             $this->db->beginTransaction();
             try {
@@ -468,7 +482,7 @@ final class AgentService
         $existing = null;
         // A private ("locally administered") MAC, as phones and laptops rotate per network (1.49.1), identifies
         // nothing for long: such hosts are matched by address, as before, so each rotation isn't a new device.
-        $idMac = self::randomMac($mac) ? '' : $mac;
+        $idMac = self::randomMac($mac) || ($h['_shared_mac'] ?? false) === true ? '' : $mac;
         if ($idMac !== '') {
             $byMac = $this->db->prepare("SELECT id FROM devices WHERE source = 'agent' AND site_id = :s AND mac = :m ORDER BY last_seen DESC LIMIT 1");
             $byMac->execute(['s' => $siteId, 'm' => $idMac]);

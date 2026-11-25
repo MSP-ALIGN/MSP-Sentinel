@@ -56,11 +56,19 @@ return [
         Assert::same(['203.0.113.180:443' => 'vpn_portal', '203.0.113.180:80' => null, '203.0.113.181:443' => 'firewall_admin', '203.0.113.182:8443' => 'device_admin'], $web);
 
         $page = $ctx->clientPages($admin, (int) $id);
-        foreach (['Self-signed certificate', 'Still accepts TLS 1.0', 'Weak key (RSA 1024 bits)', 'Certificate expires in', 'Certificate does not match the name portal.tlscheck.example',
+        foreach (['Self-signed certificate', 'Still accepts TLS 1.0', 'Weak key (RSA 1024 bits)', 'Certificate expires soon', 'Certificate does not match the name portal.tlscheck.example',
                   'Firewall admin page reachable from the internet', 'VPN login portal exposed', 'Device management page reachable', 'Welcome to Example Co'] as $text) {
             Assert::contains($text, $page);
         }
         Assert::contains('Certs ≤ 14 days', $admin->get('/')->body);
+        // 1.50: the expiring certificate becomes expired: the same finding escalates (Warning to Fail), not a new one.
+        $before = $ctx->db->query("SELECT id, severity FROM findings WHERE client_id = {$id} AND finding_key LIKE 'tls:%:cert_validity' AND status = 'open'")->fetch();
+        Assert::true($before !== false && $before['severity'] === 'warn', 'one validity finding, a Warning while it expires soon');
+        $ctx->db->exec("UPDATE tls_endpoints t JOIN assets a ON a.id = t.asset_id SET t.not_after = UTC_TIMESTAMP() - INTERVAL 1 DAY
+                        WHERE a.client_id = {$id} AND t.not_after > UTC_TIMESTAMP() AND t.not_after < UTC_TIMESTAMP() + INTERVAL 30 DAY");
+        \Sentinel\Core\App::findingsEngine()->refreshClient((int) $id);
+        $after = $ctx->db->query("SELECT id, severity, status, title FROM findings WHERE id = " . (int) $before['id'])->fetch();
+        Assert::same(['fail', 'open', 'Certificate expired'], [$after['severity'], $after['status'], $after['title']], 'escalated in place');
         Assert::true((int) $ctx->db->query("SELECT COUNT(*) FROM scan_log WHERE job_id = {$jobId} AND result = 'checked'")->fetchColumn() === 3, 'endpoint checks logged per host');
     },
     'the daily job re-checks known endpoints and skips anything out of scope' => function (TestContext $ctx): void {

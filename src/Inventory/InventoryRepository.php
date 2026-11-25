@@ -66,11 +66,12 @@ final class InventoryRepository
             }
             $softwareLeft = self::MAX_SOFTWARE_TOTAL;
             $upDevice = $this->db->prepare(
-                'INSERT INTO devices (client_id, source, source_id, name, dns_name, device_class, os_name, os_build, os_release, ip_addresses, last_contact,
+                'INSERT INTO devices (client_id, source, source_id, name, dns_name, device_class, os_name, os_build, os_release, ip_addresses, mac_addresses, last_contact,
                                       av_product, av_state, av_definitions, encryption, first_seen, last_seen, removed_at)
-                 VALUES (:c, :s, :sid, :n, :dns, :cls, :os, :b, :r, :ip, :lc, :avp, :avs, :avd, :enc, UTC_TIMESTAMP(), UTC_TIMESTAMP(), NULL)
+                 VALUES (:c, :s, :sid, :n, :dns, :cls, :os, :b, :r, :ip, :macs, :lc, :avp, :avs, :avd, :enc, UTC_TIMESTAMP(), UTC_TIMESTAMP(), NULL)
                  ON DUPLICATE KEY UPDATE client_id = VALUES(client_id), name = VALUES(name), dns_name = VALUES(dns_name), device_class = VALUES(device_class),
                     os_name = VALUES(os_name), os_build = VALUES(os_build), os_release = VALUES(os_release), ip_addresses = VALUES(ip_addresses),
+                    mac_addresses = IF(VALUES(mac_addresses) = \'\', mac_addresses, VALUES(mac_addresses)),
                     last_contact = VALUES(last_contact),
                     av_product = IF(VALUES(av_state) = \'\', av_product, VALUES(av_product)), av_definitions = IF(VALUES(av_state) = \'\', av_definitions, VALUES(av_definitions)),
                     av_state = IF(VALUES(av_state) = \'\', av_state, VALUES(av_state)),
@@ -104,6 +105,7 @@ final class InventoryRepository
                     'cls' => in_array($d['device_class'] ?? '', ['workstation', 'server'], true) ? $d['device_class'] : 'other',
                     'os' => self::clean(($d['os_name'] ?? ''), 255), 'b' => self::clean(($d['os_build'] ?? ''), 64), 'r' => self::clean(($d['os_release'] ?? ''), 64),
                     'ip' => implode(',', $ips), 'lc' => $lc,
+                    'macs' => mb_substr(implode(',', array_filter((array) ($d['mac_addresses'] ?? []), static fn ($m): bool => is_string($m) && preg_match('/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/', $m) === 1)), 0, 500),
                     'avp' => self::clean(($d['av_product'] ?? ''), 200), 'avs' => in_array($d['av_state'] ?? '', ['on', 'off', 'missing'], true) ? $d['av_state'] : '',
                     'avd' => in_array($d['av_definitions'] ?? '', ['current', 'outdated'], true) ? $d['av_definitions'] : '',
                     'enc' => in_array($d['encryption'] ?? '', ['on', 'off'], true) ? $d['encryption'] : '',
@@ -244,11 +246,15 @@ final class InventoryRepository
     }
 
     /**
-     * Match the agent's devices to the inventory source's (1.38): an agent device whose IP address belongs to exactly
-     * one active inventory device of the client, and whose name matches it (or that has no name), is the same machine
-     * and is merged into it ('auto'). A match that no longer holds is undone. Devices an admin merged ('manual') or
-     * split ('split') are left as they are. Nothing is deleted: lists show one row, the device page combines both.
-     * Returns how many changed.
+     * Match the agent's devices to the inventory source's (1.38; stricter evidence in 1.50). An agent device is the
+     * same machine as one active inventory device of the client, in this order of evidence:
+     *  1. MAC: the agent saw a real (not private, not shared) MAC that the inventory device reports;
+     *  2. address: the agent's address belongs to exactly one inventory device seen in the last day or with no known
+     *     last contact (an offline PC's last address proves nothing), the names match or the agent saw no name, and no other site of the client
+     *     covers that address (two offices often use the same range, so the address alone can't tell them apart);
+     *  3. name: exactly one inventory device has the agent's host name.
+     * A match that no longer holds is undone. Devices an admin merged ('manual') or split ('split') are left as they
+     * are. Nothing is deleted: lists show one row, the device page combines both. Returns how many changed.
      */
     public function refreshMerges(int $clientId): int
     {
@@ -260,19 +266,55 @@ final class InventoryRepository
                                         WHERE a.client_id = :c AND a.merged_into IS NOT NULL
                                           AND (t.id IS NULL OR t.removed_at IS NOT NULL OR t.client_id <> a.client_id OR t.source = 'agent' OR t.merged_into IS NOT NULL)");
         $released->execute(['c' => $clientId]);
-        $others = $this->db->prepare("SELECT id, name, dns_name, ip_addresses FROM devices WHERE client_id = :c AND source <> 'agent' AND removed_at IS NULL AND merged_into IS NULL");
+        $others = $this->db->prepare("SELECT id, name, dns_name, ip_addresses, mac_addresses, (last_contact IS NULL OR last_contact > UTC_TIMESTAMP() - INTERVAL 1 DAY) AS fresh
+                                      FROM devices WHERE client_id = :c AND source <> 'agent' AND removed_at IS NULL AND merged_into IS NULL");
         $others->execute(['c' => $clientId]);
         $byIp = [];
+        $byMac = [];
+        $byName = [];
         $names = [];
         foreach ($others->fetchAll() as $o) {
-            $names[(int) $o['id']] = array_filter([$short((string) $o['name']), $short((string) $o['dns_name'])]);
+            $id = (int) $o['id'];
+            $names[$id] = array_filter([$short((string) $o['name']), $short((string) $o['dns_name'])]);
+            foreach (array_unique($names[$id]) as $n) {
+                $byName[$n][$id] = true;
+            }
+            foreach (array_filter(explode(',', (string) $o['mac_addresses'])) as $mac) {
+                $byMac[$mac][$id] = true;
+            }
+            if ((int) $o['fresh'] !== 1) {
+                continue; // not seen in the last day: its addresses may belong to someone else by now
+            }
             foreach (explode(',', (string) $o['ip_addresses']) as $ip) {
                 if (($ip = trim($ip)) !== '') {
-                    $byIp[$ip][(int) $o['id']] = true;
+                    $byIp[$ip][$id] = true;
                 }
             }
         }
-        $agents = $this->db->prepare("SELECT id, name, dns_name, ip_addresses, merged_into, merge_state FROM devices WHERE client_id = :c AND source = 'agent' AND removed_at IS NULL");
+        // The client's sites and the internal ranges each covers (active authorisations).
+        $siteRanges = [];
+        $auths = $this->db->prepare('SELECT site_id, ranges FROM internal_authorisations WHERE client_id = :c AND revoked_at IS NULL AND valid_until >= UTC_DATE()');
+        $auths->execute(['c' => $clientId]);
+        foreach ($auths->fetchAll() as $row) {
+            foreach (preg_split('/[\s,]+/', (string) $row['ranges']) ?: [] as $cidr) {
+                if ($cidr !== '') {
+                    $siteRanges[(int) $row['site_id']][] = $cidr;
+                }
+            }
+        }
+        $sitesCovering = static function (string $ip) use ($siteRanges): int {
+            $n = 0;
+            foreach ($siteRanges as $cidrs) {
+                foreach ($cidrs as $cidr) {
+                    if (\Sentinel\Agent\InternalRanges::within($ip, $cidr)) {
+                        $n++;
+                        break;
+                    }
+                }
+            }
+            return $n;
+        };
+        $agents = $this->db->prepare("SELECT id, name, dns_name, ip_addresses, mac, merged_into, merge_state FROM devices WHERE client_id = :c AND source = 'agent' AND removed_at IS NULL");
         $agents->execute(['c' => $clientId]);
         $set = $this->db->prepare('UPDATE devices SET merged_into = :t, merge_state = :s WHERE id = :id');
         $changed = 0;
@@ -280,22 +322,43 @@ final class InventoryRepository
             if (in_array($a['merge_state'], ['manual', 'split'], true)) {
                 continue;
             }
-            $candidates = [];
-            foreach (explode(',', (string) $a['ip_addresses']) as $ip) {
-                $candidates += $byIp[trim($ip)] ?? [];
-            }
             // The agent stores the address as the name when a device has no host name: that is no name (1.39).
+            $ips = array_values(array_filter(array_map('trim', explode(',', (string) $a['ip_addresses']))));
             $ownName = (string) $a['name'];
-            if ($ownName !== '' && in_array($ownName, array_map('trim', explode(',', (string) $a['ip_addresses'])), true)) {
+            if ($ownName !== '' && in_array($ownName, $ips, true)) {
                 $ownName = '';
             }
-            $own = array_filter([$short($ownName), $short((string) $a['dns_name'])]);
+            $own = array_values(array_unique(array_filter([$short($ownName), $short((string) $a['dns_name'])])));
             $target = null;
-            if (count($candidates) === 1) {
-                $id = (int) array_key_first($candidates);
-                // A different name on the same address is not proof (a reused address): only a matching or missing name.
-                if ($own === [] || array_intersect($own, $names[$id] ?? []) !== []) {
-                    $target = $id;
+            // 1. MAC (a private, locally administered MAC identifies nothing).
+            $mac = (string) $a['mac'];
+            if ($mac !== '' && !(ctype_xdigit($mac[1] ?? '') && (hexdec($mac[1]) & 2) === 2) && count($byMac[$mac] ?? []) === 1) {
+                $target = (int) array_key_first($byMac[$mac]);
+            }
+            // 2. Address, with the name check, among devices seen lately, only where one site covers the address.
+            if ($target === null) {
+                $candidates = [];
+                foreach ($ips as $ip) {
+                    if ($sitesCovering($ip) <= 1) {
+                        $candidates += $byIp[$ip] ?? [];
+                    }
+                }
+                if (count($candidates) === 1) {
+                    $id = (int) array_key_first($candidates);
+                    // A different name on the same address is not proof (a reused address): only a matching or missing name.
+                    if ($own === [] || array_intersect($own, $names[$id] ?? []) !== []) {
+                        $target = $id;
+                    }
+                }
+            }
+            // 3. Name: exactly one inventory device has it.
+            if ($target === null && $own !== []) {
+                $byOwn = [];
+                foreach ($own as $n) {
+                    $byOwn += $byName[$n] ?? [];
+                }
+                if (count($byOwn) === 1) {
+                    $target = (int) array_key_first($byOwn);
                 }
             }
             if ($target !== ($a['merged_into'] !== null ? (int) $a['merged_into'] : null)) {

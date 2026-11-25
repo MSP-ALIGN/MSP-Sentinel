@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.49.1](https://img.shields.io/badge/version-1.49.1-ff5a1f?style=flat-square)
+![Version 1.50.0](https://img.shields.io/badge/version-1.50.0-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,20 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.50.0 (2026-11-25): The right device, one certificate finding, tidy tickets
+
+- **Matching agents to NinjaOne devices.** Sentinel now uses the strongest evidence first: the network card's MAC
+  address (NinjaOne's MACs now come over), then the address, then the name. An address only counts when the NinjaOne
+  device was seen in the last day and only one site's networks cover it, so two clients both on 192.168.1.x, or a
+  stale address, never join the wrong machines. A machine an agent saw without a name can still be matched by MAC.
+- **Routers and firewalls.** A MAC that answers on several addresses is no longer used to tell devices apart, so
+  each address stays its own device instead of overwriting one record.
+- **One certificate finding.** A certificate that expires soon and then expires is the same finding: it moves from
+  Warning to Fail and keeps its owner, history and ticket, instead of closing as "fixed" and opening a new one.
+  Existing findings are moved to the new form on upgrade.
+- **Archived clients' tickets.** When a client is archived in Sentinel, each of its open ITFlow tickets gets one note
+  saying it is no longer followed. If the client is restored while a problem is still open, a new ticket is opened.
+
 ### 1.49.1 (2026-11-25): Fixes from review
 
 - **Platform limits only for real operating systems.** NVD labels such as "node.js" or "WordPress", and other
@@ -155,16 +169,6 @@ From a full review of how devices, findings, alerts and tickets fit together.
 - **Honest tickets.** When Sentinel stops tracking a problem without seeing it fixed (device gone, source unlinked),
   the ticket gets a note saying so and stays open, instead of "Verified fixed". A ticket interrupted before it was
   opened is retried instead of blocking. Breached email addresses are masked in tickets, as in alerts.
-
-### 1.48.1 (2026-11-24): Time zone fixes from review
-
-- **Everything in your time.** The activity feeds on the dashboard and client overview, the certificate "Checked"
-  times, and the dates in reports (first seen, fixed, decided) now use your time zone, or the client's in reports,
-  like the rest.
-- **The button says what it does.** After a Settings save that failed (for example a bad source address), the "move
-  clients still on UTC" button named the time zone just typed, but moved clients to the saved one. It now names the
-  saved one.
-- Time zone names that PHP knows by an older alias are accepted, and stored times in ISO format are shown converted.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

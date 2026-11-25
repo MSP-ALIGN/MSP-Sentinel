@@ -157,6 +157,11 @@ final class NinjaOneSource implements InventorySource
                     'os_build' => self::str($os['buildNumber'] ?? ''),
                     'os_release' => self::str($os['releaseId'] ?? ''),
                     'ip_addresses' => array_values(array_filter(array_map([self::class, 'str'], is_array($d['ipAddresses'] ?? null) ? $d['ipAddresses'] : []))),
+                    // MAC addresses (1.50): matched against the agent's devices first. Normalised; anything else dropped.
+                    'mac_addresses' => array_values(array_unique(array_filter(array_map(static function ($m): string {
+                        $hex = strtolower((string) preg_replace('/[^0-9A-Fa-f]/', '', is_string($m) ? $m : ''));
+                        return strlen($hex) === 12 && $hex !== '000000000000' ? implode(':', str_split($hex, 2)) : '';
+                    }, is_array($d['macAddresses'] ?? null) ? array_slice($d['macAddresses'], 0, 20) : [])))),
                     'last_contact' => is_numeric($d['lastContact'] ?? null) ? (int) $d['lastContact'] : null,
                     'av_product' => '', 'av_state' => '', 'av_definitions' => '', 'encryption' => '',
                     'software' => [], 'patches' => [],

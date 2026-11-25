@@ -306,6 +306,10 @@ return [
         $sweep([['ip' => '10.90.0.50', 'mac' => '3a:11:22:33:44:01', 'hostname' => 'phone.example']]);
         $sweep([['ip' => '10.90.0.50', 'mac' => '3a:99:88:77:66:02', 'hostname' => 'phone.example']]);
         Assert::same(1, (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE source = 'agent' AND site_id = {$site} AND ip_addresses = '10.90.0.50'")->fetchColumn(), 'private MACs: one record by address');
+        // 1.50: one MAC on two addresses in one upload (a Wi-Fi extender): two records by address, not one flipping.
+        $sweep([['ip' => '10.90.0.60', 'mac' => '00:1b:21:00:00:60', 'hostname' => 'tv.example'], ['ip' => '10.90.0.61', 'mac' => '00:1b:21:00:00:60', 'hostname' => 'speaker.example']]);
+        $sweep([['ip' => '10.90.0.60', 'mac' => '00:1b:21:00:00:60', 'hostname' => 'tv.example'], ['ip' => '10.90.0.61', 'mac' => '00:1b:21:00:00:60', 'hostname' => 'speaker.example']]);
+        Assert::same(2, (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE source = 'agent' AND site_id = {$site} AND ip_addresses IN ('10.90.0.60', '10.90.0.61')")->fetchColumn(), 'a shared MAC: one record per address');
         // A host without a MAC (routed subnet) is still found by its address.
         $sweep([['ip' => '10.90.0.45', 'hostname' => 'routed.example']]);
         $sweep([['ip' => '10.90.0.45']]);
