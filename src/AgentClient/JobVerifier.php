@@ -88,31 +88,31 @@ final class JobVerifier
         }
         $auth = $job['authorisation'] ?? null;
         if (!is_array($auth) || !is_string($auth['payload'] ?? null) || !is_string($auth['signature'] ?? null) || !Signer::verify($auth['payload'], $auth['signature'], $this->publicKey)) {
-            return 'authorisation not signed by the server';
+            return 'authorization not signed by the server';
         }
         $a = json_decode($auth['payload'], true);
         if (!is_array($a) || ($a['type'] ?? null) !== 'internal_authorisation' || ($a['v'] ?? null) !== 1 || ($a['site_id'] ?? null) !== $this->siteId || ($a['client_id'] ?? null) !== $this->clientId) {
-            return 'authorisation is not for this site';
+            return 'authorization is not for this site';
         }
         try {
             $today = (new \DateTimeImmutable('@' . $now))->setTimezone(new \DateTimeZone((string) ($a['timezone'] ?? 'UTC')))->format('Y-m-d');
         } catch (\Throwable) {
-            return 'authorisation has an invalid time zone';
+            return 'authorization has an invalid time zone';
         }
         if (!is_string($a['valid_from'] ?? null) || !is_string($a['valid_until'] ?? null) || $today < $a['valid_from'] || $today > $a['valid_until']) {
-            return 'authorisation is not valid today';
+            return 'authorization is not valid today';
         }
         $ranges = [];
         foreach ((array) ($a['ranges'] ?? []) as $r) {
             $p = is_string($r) ? InternalRanges::parse($r) : ['error' => 'x'];
             if (!isset($p['cidr']) || $p['cidr'] !== $r) {
-                return 'authorisation contains a range that is not a private network';
+                return 'authorization contains a range that is not a private network';
             }
             $ranges[] = $r;
         }
         $targets = array_values(array_filter((array) ($job['targets'] ?? []), 'is_string'));
         if ($ranges === [] || $targets === [] || count($targets) !== count((array) ($job['targets'] ?? [])) || !InternalRanges::allWithin($targets, $ranges)) {
-            return 'targets outside the signed authorisation';
+            return 'targets outside the signed authorization';
         }
         foreach ($targets as $t) {
             if (!isset(InternalRanges::parse($t)['cidr'])) {
@@ -199,7 +199,7 @@ final class JobVerifier
                 return 'invalid directory settings';
             }
             if (filter_var($d['dc_ip'], FILTER_VALIDATE_IP) === false || !isset(InternalRanges::parse($d['dc_ip'])['cidr']) || !InternalRanges::allWithin([$d['dc_ip']], $ranges)) {
-                return 'domain controller outside the signed authorisation';
+                return 'domain controller outside the signed authorization';
             }
             $directory = ['domain' => $d['domain'], 'dc_ip' => $d['dc_ip'], 'cert_trusted' => $d['cert_trusted']];
         }

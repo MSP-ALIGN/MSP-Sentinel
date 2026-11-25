@@ -136,14 +136,22 @@ final class FindingsEngine
                     $stats['reopened']++;
                     $stats['reopened_ids'][] = $id;
                 }
+                // 1.50.1: a Warning accepted or marked false positive that becomes a Fail (an expiring certificate that
+                // expired) needs attention again: the decision was about the Warning.
+                $escalated = $row['severity'] === 'warn' && $issue['severity'] === 'fail';
+                if ($escalated && in_array($newStatus, ['accepted', 'false_positive'], true)) {
+                    $this->event($id, 'reopened', null, __('Reopened: it was a Warning when marked {status}, and it is now a Fail.', ['status' => $newStatus]));
+                    $newStatus = 'open';
+                    $stats['reopened']++;
+                }
                 if ($row['severity'] !== $issue['severity']) {
                     $this->event($id, 'severity_changed', null, __('Severity changed from {old} to {new}.', ['old' => $row['severity'], 'new' => $issue['severity']]));
                     if ($issue['severity'] === 'fail' && $newStatus === 'open') {
                         $stats['escalated_ids'][] = $id; // an open Warning became a Fail: alert like a new Fail
                     }
                 }
-                if ($newStatus === 'open' && $status !== 'open' && (int) ($row['due_custom'] ?? 0) === 1) {
-                    $this->event($id, 'due_changed', null, __('Due date follows the policy again (the finding came back).'));
+                if ($newStatus === 'open' && ($status !== 'open' || $escalated) && (int) ($row['due_custom'] ?? 0) === 1) {
+                    $this->event($id, 'due_changed', null, $status !== 'open' ? __('Due date follows the policy again (the finding came back).') : __('Due date follows the policy again (it became a Fail).'));
                 }
                 $update->execute([
                     'sev' => $issue['severity'], 't' => $issue['title'], 'd' => $issue['detail'], 'tg' => $issue['target'], 'ev' => $issue['evidence'],
@@ -153,10 +161,16 @@ final class FindingsEngine
                     'reap' => $status === 'resolved' ? 1 : 0, 'inc' => $status === 'resolved' || $newStatus !== $status ? 1 : 0, 'id' => $id,
                     // Seen again after being resolved, or a false positive whose evidence changed: a new problem, so a new
                     // fix deadline starts now (and an admin-set date no longer applies; the history says so below).
-                    'reopen' => $reopen = ($newStatus === 'open' && $status !== 'open') ? 1 : 0, 'reopen2' => $reopen,
+                    // A Warning that became a Fail starts the Fail's deadline now too (1.50.1), and so counts as new for
+                    // ITFlow tickets on clients linked after the Warning first appeared.
+                    'reopen' => $reopen = (($newStatus === 'open' && $status !== 'open') || ($escalated && $newStatus === 'open')) ? 1 : 0, 'reopen2' => $reopen,
                 ]);
             }
-            $resolve = $this->db->prepare("UPDATE findings SET resolved_from = status, status = 'resolved', resolved_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP() WHERE id = :id");
+            $resolve = $this->db->prepare("UPDATE findings SET resolved_from = status, status = 'resolved', resolved_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP(), resolved_reason = :why WHERE id = :id");
+            // Devices their source no longer reports (1.49): their findings close, but that is not a fix.
+            $goneStmt = $this->db->prepare('SELECT id FROM devices WHERE client_id = :c AND removed_at IS NOT NULL');
+            $goneStmt->execute(['c' => $clientId]);
+            $goneDevices = array_fill_keys(array_map('intval', $goneStmt->fetchAll(PDO::FETCH_COLUMN)), true);
             foreach ($existing as $key => $row) {
                 if (isset($current[$key]) || $row['status'] === 'resolved') {
                     continue;
@@ -168,8 +182,9 @@ final class FindingsEngine
                     && str_starts_with((string) $row['finding_key'], 'devvuln:')) {
                     continue; // installed software was updated and its new version has no data yet
                 }
-                $resolve->execute(['id' => $row['id']]);
-                $this->event((int) $row['id'], 'resolved', null, __('No longer seen by the latest checks.'));
+                $gone = $row['device_id'] !== null && isset($goneDevices[(int) $row['device_id']]);
+                $resolve->execute(['id' => $row['id'], 'why' => $gone ? 'gone' : '']);
+                $this->event((int) $row['id'], 'resolved', null, $gone ? __('Closed because the device is no longer reported by its source (not a confirmed fix).') : __('No longer seen by the latest checks.'));
                 $stats['resolved']++;
                 $stats['resolved_ids'][] = (int) $row['id'];
             }
@@ -255,10 +270,13 @@ final class FindingsEngine
                     continue;
                 }
                 $target = $t['ip'] . ':' . $t['port'] . ($t['sni'] !== '' ? ' (' . $t['sni'] . ')' : '');
-                $add("tls:{$t['ip']}:{$t['port']}:{$t['sni']}:{$issue['code']}", [
+                // Expiring and expired are one finding (1.50, key code "cert_validity") that escalates from Warning to Fail
+                // on the day, keeping its triage, owner and ticket, instead of one resolving and another opening.
+                $code = in_array($issue['code'], ['cert_expiring', 'cert_expired'], true) ? 'cert_validity' : $issue['code'];
+                $add("tls:{$t['ip']}:{$t['port']}:{$t['sni']}:{$code}", [
                     'type' => 'tls', 'severity' => $issue['severity'], 'title' => $issue['text'],
                     'detail' => __('Certificate {cn} issued by {issuer}, valid until {until} UTC.', ['cn' => $t['subject_cn'] ?: '?', 'issuer' => $t['issuer'] ?: '?', 'until' => $t['not_after'] ?? '?']),
-                    'target' => $target, 'evidence' => $issue['code'] . '|' . $t['subject_cn'] . '|' . $t['not_after'], 'asset_id' => (int) $t['asset_id'],
+                    'target' => $target, 'evidence' => $code . '|' . $t['subject_cn'] . '|' . $t['not_after'], 'asset_id' => (int) $t['asset_id'],
                 ]);
             }
         }

@@ -20,7 +20,7 @@ return [
         // A page size of 2 makes every list (organisations, devices, cursor reports) take several pages.
         $src = new NinjaOneSource('app.ninjarmm.com', 'test-client', 'test-secret-value', $base($ctx), 2);
         $orgs = $src->organisations();
-        Assert::same(['900', '901', '902'], array_column($orgs, 'id'), 'all organisations, across pages (until an empty page)');
+        Assert::same(['900', '901', '902'], array_column($orgs, 'id'), 'all organizations, across pages (until an empty page)');
         Assert::same('Harbour Example Ltd', $orgs[1]['name']);
 
         $snap = $src->snapshot('901');
@@ -87,7 +87,7 @@ return [
         } catch (InventoryException) {
             $badOrg = true;
         }
-        Assert::true($badOrg, 'organisation IDs are digits only (they go into the device filter)');
+        Assert::true($badOrg, 'organization IDs are digits only (they go into the device filter)');
     },
     'Integrations page: admins save NinjaOne settings, the secret is encrypted and never shown, test connection works' => function (TestContext $ctx): void {
         if ((int) $ctx->db->query("SELECT COUNT(*) FROM users WHERE username = 'intech'")->fetchColumn() === 0) {
@@ -116,7 +116,7 @@ return [
         Assert::notContains('test-secret-value', $audit, 'secret never audited');
 
         $admin->submit('/admin/integrations', '/admin/integrations/ninjaone/test', []);
-        Assert::contains('Connected: the API app can see 3 organisation(s)', $admin->get('/admin/integrations')->body);
+        Assert::contains('Connected: the API app can see 3 organization(s)', $admin->get('/admin/integrations')->body);
         // Saving again with the secret field empty keeps the saved secret.
         $admin->submit('/admin/integrations', '/admin/integrations/ninjaone', ['host' => 'app.ninjarmm.com', 'client_id' => 'test-client', 'client_secret' => '', 'enabled' => '1']);
         Assert::same('test-secret-value', App::settings()->getSecret('ninjaone_client_secret'));
@@ -140,6 +140,7 @@ return [
         $r = $sync->syncClient($cid, 'ninjaone');
         Assert::same('ok', $r['status'], $r['message']);
         Assert::same(4, (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE client_id = {$cid} AND removed_at IS NULL")->fetchColumn());
+        Assert::same('00:1b:21:3a:4f:11,00:1b:21:3a:4f:13', (string) $ctx->db->query("SELECT mac_addresses FROM devices WHERE client_id = {$cid} AND source_id = '11'")->fetchColumn(), 'MAC addresses normalized, junk, multicast and labels dropped, dotted form read (1.50.1)');
         // Missing updates count from when Sentinel first saw them: 40 days later they are late.
         $ctx->db->exec("UPDATE device_patches p JOIN devices d ON d.id = p.device_id SET p.first_seen = UTC_TIMESTAMP() - INTERVAL 40 DAY WHERE d.client_id = {$cid}");
         $r = $sync->syncClient($cid, 'ninjaone');
@@ -152,10 +153,65 @@ return [
         $devices = $ctx->clientSection($admin, $cid, 'devices');
         Assert::contains('HARBOUR-LT-01', $devices);
         Assert::notContains('<script>alert(1)', $ctx->clientSection($admin, $cid, 'devices') . $admin->get('/clients/' . $cid . '/devices/' . (int) $ctx->db->query("SELECT id FROM devices WHERE client_id = {$cid} AND source_id = '13'")->fetchColumn())->body, 'escaped');
+        // 1.49: an organisation whose antivirus report is empty: its online workstation is unknown, not "no antivirus".
+        $res = $admin->submit('/clients/new', '/clients', ['name' => 'Quay Ninja Example', 'itflow_client_id' => '', 'timezone' => 'UTC', 'scan_window_start' => '00:00', 'scan_window_end' => '23:59', 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);
+        $quay = (int) basename((string) $res->location());
+        $ctx->db->prepare("INSERT INTO source_links (client_id, source, org_id, org_name, linked_by, linked_at) VALUES (:c, 'ninjaone', '902', 'Quay Example Inc', 1, UTC_TIMESTAMP())")->execute(['c' => $quay]);
+        Assert::same('ok', $sync->syncClient($quay, 'ninjaone')['status']);
+        Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM findings WHERE client_id = {$quay} AND finding_key LIKE '%av_missing'")->fetchColumn(), 'empty antivirus report: no "no antivirus" findings');
         // A failing organisation keeps the devices it had (nothing is removed on a failed sync).
         $ctx->db->prepare("UPDATE source_links SET org_id = '900' WHERE client_id = :c")->execute(['c' => $cid]);
         $r = $sync->syncClient($cid, 'ninjaone');
         Assert::true($r['status'] !== 'ok', 'failed sync reported');
         Assert::same(4, (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE client_id = {$cid} AND removed_at IS NULL")->fetchColumn(), 'devices kept');
+    },
+    'RMM registry (1.52): sources come from one list, share one form, save and test; a client has one RMM at a time' => function (TestContext $ctx): void {
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        Assert::same(['ninjaone'], array_keys(\Sentinel\Inventory\Sources::types()), 'NinjaOne is registered');
+        Assert::same(null, \Sentinel\Inventory\Sources::type('nonsense'), 'unknown names are not');
+        // The generic card, save and test (same URL, settings and audit entry as before 1.52).
+        $page = $admin->get('/admin/integrations')->body;
+        foreach (['id="ninjaone"', 'id="ninjaone-host"', 'name="client_secret"', 'list="ninjaone-host-list"', 'A client can be linked to one RMM at a time.'] as $text) {
+            Assert::contains($text, $page);
+        }
+        $admin->submit('/admin/integrations', '/admin/integrations/ninjaone', ['host' => 'app.ninjarmm.com', 'client_id' => 'test-client', 'client_secret' => 'test-secret-value', 'enabled' => '1']);
+        Assert::same(['app.ninjarmm.com', 'test-client', '1'], [App::settings()->fresh('ninjaone_host'), App::settings()->fresh('ninjaone_client_id'), App::settings()->fresh('ninjaone_enabled')], 'saved');
+        Assert::true((int) $ctx->db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'settings.ninjaone_updated'")->fetchColumn() > 0, 'audited as before');
+        $admin->submit('/admin/integrations', '/admin/integrations/ninjaone/test', []);
+        Assert::contains('Connected', App::settings()->fresh('ninjaone_test_result'));
+        Assert::contains('NinjaOne on', $admin->get('/admin')->body, 'admin overview names the connected RMM');
+        Assert::status(404, $admin->post('/admin/integrations/otherrmm', ['_csrf' => $admin->get('/admin/integrations')->csrf()]), 'no route for a source that is not registered');
+        // One RMM per client (checked under a lock in setLink, 1.52.1): a client linked to NinjaOne can't be linked to another RMM.
+        $res = $admin->submit('/clients/new', '/clients', ['name' => 'One RMM Example', 'itflow_client_id' => '', 'timezone' => 'UTC', 'scan_window_start' => '00:00', 'scan_window_end' => '23:59', 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);
+        $cid = (int) basename((string) $res->location());
+        App::inventory()->setLink($cid, 'ninjaone', '901', 'Harbour Example Ltd', 1);
+        $refused = false;
+        try {
+            App::inventory()->setLink($cid, 'otherrmm', 'x1', 'Other RMM Org', 1);
+        } catch (\UnexpectedValueException) {
+            $refused = true;
+        }
+        Assert::true($refused, 'a second RMM is refused');
+        Assert::same('ninjaone', (string) (App::inventory()->otherLink($cid, 'otherrmm')['source'] ?? ''), 'the other link is named');
+        // A link of a source that is no longer registered never blocks a client.
+        $ctx->db->prepare("INSERT INTO source_links (client_id, source, org_id, org_name, linked_by, linked_at) VALUES (:c, 'retiredrmm', 'r1', 'Retired Org', 1, UTC_TIMESTAMP())")->execute(['c' => $cid]);
+        Assert::same(['ninjaone'], array_keys(App::inventory()->linksFor($cid)), 'unregistered links ignored');
+        Assert::same(null, App::inventory()->otherLink($cid, 'ninjaone'));
+        // Off again: the link stays visible with Unlink (1.52.1), and unlinking works although NinjaOne is off.
+        $admin->submit('/admin/integrations', '/admin/integrations/ninjaone', ['host' => '', 'client_id' => '', 'clear_client_secret' => '1', 'enabled' => '0']);
+        Assert::same(['', '0'], [App::settings()->fresh('ninjaone_host'), App::settings()->fresh('ninjaone_enabled')], 'cleared');
+        Assert::same('', (string) $ctx->db->query("SELECT value FROM settings WHERE name = 'ninjaone_client_secret'")->fetchColumn(), 'secret removed');
+        $devices = $admin->get('/clients/' . $cid . '/devices')->body;
+        // In the suite a fixture source stands in for NinjaOne on the page, so the "turned off" row is checked by rendering the view.
+        $html = \Sentinel\Core\View::render('clients/devices', ['client' => ['id' => $cid], 'inventorySources' => [], 'inventoryLinks' => [],
+            'clientLinks' => App::inventory()->linksFor($cid), 'devices' => [], 'deviceTotal' => 0, 'devicePatches' => [], 'currentUser' => null], null);
+        Assert::contains('this RMM is turned off', $html, 'a link to an RMM that is off is still shown');
+        Assert::contains('NinjaOne:', $html);
+        Assert::contains('name="source" value="ninjaone"', $devices, 'with Unlink');
+        $admin->submit('/clients/' . $cid . '/devices', '/clients/' . $cid . '/inventory/unlink', ['source' => 'ninjaone']);
+        Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM source_links WHERE client_id = {$cid} AND source = 'ninjaone'")->fetchColumn(), 'unlinked while off');
+        Assert::status(404, $admin->post('/clients/' . $cid . '/inventory/unlink', ['_csrf' => $admin->get('/')->csrf(), 'source' => 'retiredrmm']), 'only registered sources');
+        $ctx->db->exec("DELETE FROM source_links WHERE client_id = {$cid}");
+        $ctx->db->exec("UPDATE clients SET is_archived = 1 WHERE id = {$cid}");
     },
 ];

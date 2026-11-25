@@ -41,6 +41,15 @@ abstract class Controller
                 }
             }
         }
+        // A finding's or report's own page keeps its client's menu too (1.51). The controller has already checked the
+        // user may see it (and so its client); the client is looked up by the record's own client ID.
+        $detail = ['findings/show' => ['finding', 'findings'], 'reports/show' => ['report', 'reports']][$template] ?? null;
+        if (!isset($data['clientNav']) && $detail !== null && (int) ($data[$detail[0]]['client_id'] ?? 0) > 0) {
+            $client = App::clients()->find((int) $data[$detail[0]]['client_id']);
+            if ($client !== null) {
+                $data['clientNav'] = ClientController::nav($client, $detail[1], App::findings()->counts((int) $client['id']));
+            }
+        }
         $html = View::render($template, $data + [
             'title' => $title,
             'currentUser' => $user === null ? null : UserRepository::publicFields($user),

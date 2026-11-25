@@ -149,7 +149,7 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
                 <?= Csrf::field() ?>
                 <label for="reset_2fa_password" class="form-label small"><?= e(__('New temporary password (required)')) ?></label>
                 <input type="password" class="form-control form-control-sm mb-2" id="reset_2fa_password" name="password" required autocomplete="new-password" minlength="<?= e(Passwords::MIN_LENGTH) ?>">
-                <div class="form-text mb-2"><?= e(__('The password is replaced too, so nobody who knows the old one can set up 2FA in the user\'s place. Give it to the user directly.')) ?></div>
+                <div class="form-text mb-2"><?= e(__('The password is replaced too, so nobody who knows the old one can set up two-factor authentication in the user\'s place. Give it to the user directly.')) ?></div>
                 <label for="reset_2fa_mine" class="form-label small "><?= e(__('Your own password (to confirm)')) ?></label>
             <input type="password" class="form-control form-control-sm" id="reset_2fa_mine" name="my_password" required autocomplete="current-password"><div class="mb-2"></div>
                 <button type="submit" class="btn btn-outline-danger btn-sm"><?= e(__('Reset two-factor authentication')) ?></button>

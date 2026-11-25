@@ -17,7 +17,7 @@
                 <th scope="col"><?= e(__('Role')) ?></th>
                 <th scope="col"><?= e(__('Clients')) ?></th>
                 <th scope="col"><?= e(__('Status')) ?></th>
-                <th scope="col"><?= e(__('2FA')) ?></th>
+                <th scope="col"><?= e(__('Two-factor')) ?></th>
                 <th scope="col"><?= e(__('Last sign-in')) ?></th>
             </tr>
             </thead>

@@ -44,12 +44,12 @@ return [
         Assert::same('2001:db8::5', ReportBuilder::assetOf('2001:db8::5:443'));
         Assert::same('2001:db8::5', ReportBuilder::assetOf('https://[2001:db8::5]:443'));
     },
-    'trend chart is escaped and readable without colour' => function (TestContext $ctx): void {
+    'trend chart is escaped and readable without color' => function (TestContext $ctx): void {
         $svg = ReportRenderer::trendChart([['label' => '<b>Jan</b>', 'fail' => 3, 'warn' => 5], ['label' => 'Now', 'fail' => 1, 'warn' => 2]]);
         Assert::contains('&lt;b&gt;Jan&lt;/b&gt;', $svg);
         Assert::contains('stroke-dasharray', $svg, 'warnings dashed');
         Assert::contains('<rect', $svg, 'different marker shapes');
-        Assert::contains('>5</text>', $svg, 'values labelled');
+        Assert::contains('>5</text>', $svg, 'values labeled');
         Assert::contains('role="img"', $svg);
         Assert::contains('<circle', ReportRenderer::trendChart([['label' => 'Now', 'fail' => 0, 'warn' => 0]]), 'single point works');
     },
@@ -67,7 +67,7 @@ return [
         Assert::same(['2026-02-14', '2026-03-15'], ReportController::period('30', $now));
         Assert::same(['2025-12-16', '2026-03-15'], ReportController::period('90', $now));
     },
-    'email attachments are base64 parts with sanitised names' => function (TestContext $ctx): void {
+    'email attachments are base64 parts with sanitized names' => function (TestContext $ctx): void {
         $msg = SmtpMailer::buildMessage('s@msp.example', ['a@msp.example'], 'Reports', 'See attached.',
             [['name' => "../evil\"\r\nX-Injected: 1.html", 'type' => 'text/html', 'content' => "<p>Report</p>\r\n.\r\n"], ['name' => 'r.csv', 'type' => 'bad type', 'content' => 'a,b']]);
         Assert::contains('multipart/mixed; boundary="=_sentinel_', $msg);

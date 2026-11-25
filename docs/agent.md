@@ -9,20 +9,20 @@ services and versions, certificates and web pages, and reports them to Sentinel,
 
 - **Outbound only.** The agent connects out to Sentinel over HTTPS. Nothing at the site needs an inbound firewall
   rule, and Sentinel never connects to the agent.
-- **Approved networks only.** An admin records an *internal authorisation* for the site: who at the client approved
+- **Approved networks only.** An admin records an *internal authorization* for the site: who at the client approved
   scanning, the dates, and exactly which internal networks (private addresses only: 10.x, 172.16-31.x, 192.168.x and
   IPv6 fc00::/7; each at most a /16, at most four /16 in total). Sentinel signs it with a key derived from the config
   file's app key, which is not in the database.
-- **Signed jobs.** Every job carries the signed authorisation and is itself signed. When it enrolled, the agent pinned
+- **Signed jobs.** Every job carries the signed authorization and is itself signed. When it enrolled, the agent pinned
   Sentinel's key and the site and client it belongs to. It runs a job only if both signatures check out, the job is
-  for this agent, site and client, has not run before, has not expired, the authorisation is valid today, and every
+  for this agent, site and client, has not run before, has not expired, the authorization is valid today, and every
   target is inside the signed networks. So someone who could change Sentinel's database but not its config file can't
   make an agent scan networks that were never approved for its site.
-- **Limit: revoking.** Revoking an authorisation is recorded in the database (not signed): it stops new jobs and
+- **Limit: revoking.** Revoking an authorization is recorded in the database (not signed): it stops new jobs and
   running scans, and their results are ignored. Someone who can change the database could undo a revocation, and the
-  agent would again accept jobs for those (once approved) networks until the authorisation's end date. Keep end dates
+  agent would again accept jobs for those (once approved) networks until the authorization's end date. Keep end dates
   short, protect the database like the rest of the server, and revoke the agent too if you need to be sure.
-- **Results checked again.** Sentinel ignores reported devices outside the authorisation.
+- **Results checked again.** Sentinel ignores reported devices outside the authorization.
 - **No remote control.** The agent runs scans and returns results. It never runs commands it receives, and it has
   no shell access for anyone.
 - **Gentle and unprivileged.** Discovery and port scans are TCP connect scans with nmap at slow timing and a rate
@@ -49,11 +49,11 @@ results are kept on the appliance and sent again until Sentinel accepts them.
 
 ## Install
 
-1. On the client page, under **On-premises agents**, record an internal authorisation for the site.
-2. Click **Create an enrolment code** (admins). The code is shown once and works once, within 24 hours.
+1. On the client page, under **On-premises agents**, record an internal authorization for the site.
+2. Click **Create an enrollment code** (admins). The code is shown once and works once, within 24 hours.
    The page after it has everything for the install: the code with a copy button, the commands with your Sentinel
    address filled in (`app.public_url`), how to check the result, and troubleshooting. It also warns when the site
-   has no internal authorisation valid today (the agent would enrol but not scan).
+   has no internal authorization valid today (the agent would enroll but not scan).
 3. Prepare the appliance: a mini-PC or VM that stays on, Debian 13 (or Debian 12 / Ubuntu 24.04 LTS), 64-bit; 2 CPU
    cores, 2 GB memory and 20 GB disk are plenty. It must sit on the internal network it scans (a VM needs a bridged
    adapter / external virtual switch, not NAT), ideally with a fixed address or DHCP reservation, and reach Sentinel
@@ -80,7 +80,7 @@ results are kept on the appliance and sent again until Sentinel accepts them.
    is only readable by the agent; only `/var/lib/sentinel-agent` (job history, results waiting to be sent) is writable.
 4. The agent appears on the client page within a minute.
 
-Upgrade: unpack the new release on the appliance and run `sudo ./install/agent-install.sh --upgrade` (the enrolment
+Upgrade: unpack the new release on the appliance and run `sudo ./install/agent-install.sh --upgrade` (the enrollment
 is kept). Remove: `sudo ./install/agent-install.sh --uninstall`, and revoke the agent on the client page.
 
 ## Operations
@@ -89,8 +89,8 @@ is kept). Remove: `sudo ./install/agent-install.sh --uninstall`, and revoke the 
 - Updates: the agent does not update itself. Unpack a new release on the appliance and run the installer with
   `--upgrade`.
 - An agent that was revoked stops and is not restarted by systemd.
-- If a job is refused, the log says why (for example "targets outside the signed authorisation" or "job expired").
-  Check the internal authorisation's dates and networks, and the appliance's clock.
+- If a job is refused, the log says why (for example "targets outside the signed authorization" or "job expired").
+  Check the internal authorization's dates and networks, and the appliance's clock.
 - The agent's clock should be correct (NTP): jobs carry an expiry time.
 - Files in `/var/lib/sentinel-agent` (the only folder the service may write): `state.json` (jobs already run),
   `agent-key.pem` (the agent's private key for sealed passwords; never leaves the appliance) and
@@ -99,7 +99,7 @@ is kept). Remove: `sudo ./install/agent-install.sh --uninstall`, and revoke the 
 
 ## Managing agents from Sentinel (1.21)
 
-After the one-time install with an enrolment code, these are set on the client's **Agents** page (admins):
+After the one-time install with an enrollment code, these are set on the client's **Agents** page (admins):
 
 - **Scan gentleness** per site, part of each signed job (the agent accepts only these three; nothing faster than
   `-T3` can be asked for):
@@ -132,7 +132,7 @@ password** (moving every agent is too powerful for a stolen session alone).
   times per move, 10 minutes apart; scans go on in between).
 - **Each agent first asks the new address to prove it is this Sentinel, without sending it anything secret** (not
   even its token): the new address must return a signature over a random challenge, the agent and *that address*,
-  made with the server key the agent pinned at enrolment. Sentinel only signs for the address an admin set, so a host
+  made with the server key the agent pinned at enrollment. Sentinel only signs for the address an admin set, so a host
   that relays the challenge to the real Sentinel gets no signature for its own address. A wrong address gets only the
   challenge; the System page shows "not moved" with the reason.
 - The agent keeps the new address (and CA) in its state folder, written for this agent and pinned key only: its
@@ -142,7 +142,7 @@ password** (moving every agent is too powerful for a stolen session alone).
   tells Sentinel there. After probation the move is permanent: an outage (or a refusal from a misrouted proxy) at the
   new address doesn't strand agents at an old one.
 - **Recall:** while moved, an agent asks its configured (original) address every 6 hours which address to use (a signed
-  answer). If the move was cancelled or changed, it goes back. So keep the old address working (or pointing at this
+  answer). If the move was canceled or changed, it goes back. So keep the old address working (or pointing at this
   Sentinel): it is how Sentinel can always reach its agents again.
 - The System page lists each agent: moved, waiting, not moved (why), or needing version 1.23.1 first. When every agent
   has moved, press **Move complete**: no more agents are asked, and moved agents stay (recall keeps confirming the new
@@ -156,7 +156,7 @@ new address uses the same private CA as before, the agent uses its configured CA
 Limit: anyone who can sign in as an admin (password and second factor), or who can write to the database AND reach the
 web interface (by resetting an admin's password), can set a move to a host they control. The new address still has
 to prove itself for that address, and the backstop is recall: as long as the original address answers for this
-Sentinel, cancelling the move brings agents back. Protect admin accounts, the database and the config file like the
+Sentinel, canceling the move brings agents back. Protect admin accounts, the database and the config file like the
 rest of the server.
 
 ## Updates from Sentinel (1.22)
@@ -168,7 +168,7 @@ page, or **Update all agents** under Administration → System. An agent updates
 vouch for code. What that protects, and what it doesn't, is under "What the release key protects" below.
 
 1. The agent downloads the release from Sentinel (client sites need no access to GitHub) and checks it against the
-   release public key it pinned (`/etc/sentinel-agent/release-key.pub`, else the key pinned at enrolment in the
+   release public key it pinned (`/etc/sentinel-agent/release-key.pub`, else the key pinned at enrollment in the
    root-owned `agent.json`; an update never changes it): the signature, that it is the version asked for and newer than its own, and every file's SHA-256.
 2. It stages the files in its state folder and asks the root update helper (`sentinel-agent-update.path` starts
    `agent-update-runner.php`) to install them. The agent itself can't change its code.
@@ -221,7 +221,7 @@ holds the private key.
    the release's own folders and file types are listed: files of other types or outside those folders (a backup, a
    dump) never are. A stray file of a release type inside a release folder (say `src/extra.php`) would be, which is
    one more reason to compare the hash and look over the list.
-3. **Agents learn the public key from Sentinel, once**: new agents at enrolment (the installer prints its fingerprint:
+3. **Agents learn the public key from Sentinel, once**: new agents at enrollment (the installer prints its fingerprint:
    compare it with the System page); agents enrolled before (1.24.0 or later) at their next check-in, through the root
    update helper, which pins it only when the agent has no key yet. A pinned key never changes without its own
    signature. The System page lists agents that have no key yet.
@@ -252,7 +252,7 @@ with no key yet would take it.
 - An agent that has pinned a key installs only code signed with it. Someone who takes over Sentinel (or its database)
   can't change that key on the agent or get other code installed there, as long as they don't have your key file
   and its password.
-- An agent with **no key yet** trusts the first key Sentinel gives it (at enrolment, or the offer to older agents).
+- An agent with **no key yet** trusts the first key Sentinel gives it (at enrollment, or the offer to older agents).
   If Sentinel is taken over before then, that could be the attacker's key. Create the release key soon after
   installing Sentinel, and check the fingerprint the agent installer prints against the System page.
 - **Signing and rotating happen in a page Sentinel serves.** If the Sentinel server itself were taken over, its
@@ -300,7 +300,7 @@ for first. Nothing is changed in the directory, and nothing that could log in (n
 1. Create an ordinary domain user for Sentinel (no admin rights; members of Domain Users can read everything the checks
    need), for example `svc-sentinel`.
 2. Under **Active Directory checks**, enter the domain (`corp.example`), the domain controller's IP address (it must be
-   inside the site's internal authorisation), the account (`svc-sentinel@corp.example` or `CORP\svc-sentinel`) and its
+   inside the site's internal authorization), the account (`svc-sentinel@corp.example` or `CORP\svc-sentinel`) and its
    password, and click **Save**.
 3. At the next full scan the agent fetches the domain controller's certificate and stops: the page shows its
    fingerprint. Check it, and click **Trust this certificate**. From the next full scan the agent signs in and reads.
@@ -349,7 +349,7 @@ Each finding lists up to 25 account or computer names (the agent sends up to 200
 and computers that haven't signed in for 90 days are left out. "Admin" means `adminCount` set (protected groups) or
 a direct member of Domain Admins.
 
-Domain Admins is found by its well-known SID, so localised names work, and members through their primary group
+Domain Admins is found by its well-known SID, so localized names work, and members through their primary group
 count too.
 
 **Not covered (yet):** only the one domain controller entered is checked for LDAP signing; LDAPS channel binding is
@@ -369,6 +369,6 @@ During each full scan the agent listens for 2 minutes for LLMNR (UDP 5355) and N
 requests (broadcast NetBIOS name queries only: node-status queries from inventory tools don't count, and neither does
 the appliance itself). Devices that send them fall back to these protocols when DNS has no answer, so a poisoning tool (Responder
 and the like) on the network could answer instead and capture their users' password hashes. The agent only listens:
-it never answers or sends anything. Devices heard (inside the site's authorisation only) become one Fail finding,
+it never answers or sends anything. Devices heard (inside the site's authorization only) become one Fail finding,
 with their names when the agent knows them. Devices only send these now and then, so the finding closes after three
 quiet listens in a row. It works without the Active Directory checks.

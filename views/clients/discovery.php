@@ -30,7 +30,7 @@ $runBadges = [
         <?php endif; ?>
     </div>
     <div class="card-body">
-        <p class="small text-body-secondary"><?= e(__('Sentinel looks up DNS records, public certificate logs and reverse DNS for this client\'s domains and addresses. This is passive: nothing connects to the client\'s systems. Found names are only suggestions. Nothing is scanned until an admin adds them to an authorisation.')) ?></p>
+        <p class="small text-body-secondary"><?= e(__('Sentinel looks up DNS records, public certificate logs and reverse DNS for this client\'s domains and addresses. This is passive: nothing connects to the client\'s systems. Found names are only suggestions. Nothing is scanned until an admin adds them to an authorization.')) ?></p>
 
         <?php if ($lastRun !== null): ?>
         <?php [$rc, $ri, $rl] = $runBadges[$lastRun['status']] ?? $runBadges['failed']; $sum = $lastRun['summary']; ?>
@@ -92,8 +92,8 @@ $runBadges = [
             </table>
             </div>
             <?php if (can('authorisations.manage')): ?>
-            <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-file-earmark-plus me-1" aria-hidden="true"></i><?= e(__('Add selected to a new authorisation')) ?></button>
-            <span class="small text-body-secondary ms-2"><?= e(__('Opens the authorisation form with the current scope plus your selection. The client must approve the additions.')) ?></span>
+            <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-file-earmark-plus me-1" aria-hidden="true"></i><?= e(__('Add selected to a new authorization')) ?></button>
+            <span class="small text-body-secondary ms-2"><?= e(__('Opens the authorization form with the current scope plus your selection. The client must approve the additions.')) ?></span>
             <?php endif; ?>
         </form>
         <?php if (can('scans.run')): ?>

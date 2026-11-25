@@ -38,7 +38,7 @@ final class AgentController extends Controller
     {
         [$client, $site] = $this->clientSite($params);
         $today = ScopeService::today((string) $client['timezone']);
-        return $this->page('agents/authorisation', __('Internal authorisation for {site}', ['site' => $site['name']]), [
+        return $this->page('agents/authorisation', __('Internal authorization for {site}', ['site' => $site['name']]), [
             'client' => $client, 'site' => $site, 'errors' => [],
             'values' => ['approved_by_name' => '', 'approved_by_role' => '', 'approved_on' => $today, 'valid_from' => $today,
                          'valid_until' => (new DateTimeImmutable($today))->modify('+1 year')->format('Y-m-d'), 'document_ref' => '', 'notes' => '', 'ranges' => '', 'confirm' => ''],
@@ -50,7 +50,7 @@ final class AgentController extends Controller
     {
         [$client, $site] = $this->clientSite($params);
         if ((int) $client['is_archived'] === 1) {
-            Session::flash('danger', __('Restore the client before recording a new authorisation.'));
+            Session::flash('danger', __('Restore the client before recording a new authorization.'));
             return Response::redirect('/clients/' . (int) $client['id'] . '/agents');
         }
         $today = ScopeService::today((string) $client['timezone']);
@@ -78,7 +78,7 @@ final class AgentController extends Controller
             if ($values['valid_until'] < $values['valid_from']) {
                 $errors['valid_until'] = __('The end date must be on or after the start date.');
             } elseif ($values['valid_until'] > (new DateTimeImmutable($values['valid_from']))->modify('+2 years')->format('Y-m-d')) {
-                $errors['valid_until'] = __('An authorisation can be valid for at most 2 years. Ask the client to renew it after that.');
+                $errors['valid_until'] = __('An authorization can be valid for at most 2 years. Ask the client to renew it after that.');
             } elseif ($values['valid_until'] < $today) {
                 $errors['valid_until'] = __('The end date is in the past.');
             }
@@ -99,12 +99,12 @@ final class AgentController extends Controller
             $errors['confirm'] = __('Confirm that the client approved scanning these internal networks.');
         }
         if ($errors !== []) {
-            return $this->page('agents/authorisation', __('Internal authorisation for {site}', ['site' => $site['name']]), ['client' => $client, 'site' => $site, 'errors' => $errors, 'values' => $values], 422);
+            return $this->page('agents/authorisation', __('Internal authorization for {site}', ['site' => $site['name']]), ['client' => $client, 'site' => $site, 'errors' => $errors, 'values' => $values], 422);
         }
         $id = App::agents()->createAuthorisation((int) $client['id'], (int) $site['id'], (string) $client['timezone'], $values, $parsed['ranges'], (int) $this->user()['id']);
         $this->audit($request, 'internal_authorisation.created', 'internal_authorisation', $id, ['client_id' => (int) $client['id'], 'site_id' => (int) $site['id'],
             'ranges' => $parsed['ranges'], 'valid_from' => $values['valid_from'], 'valid_until' => $values['valid_until'], 'approved_by' => $values['approved_by_name']]);
-        Session::flash('success', __('Internal authorisation recorded and signed. Agents at this site may now scan these networks.'));
+        Session::flash('success', __('Internal authorization recorded and signed. Agents at this site may now scan these networks.'));
         return Response::redirect('/clients/' . (int) $client['id'] . '/agents');
     }
 
@@ -125,7 +125,7 @@ final class AgentController extends Controller
         }
         App::agents()->revokeAuthorisation($id, (int) $this->user()['id'], $reason);
         $this->audit($request, 'internal_authorisation.revoked', 'internal_authorisation', $id, ['client_id' => (int) $client['id'], 'reason' => mb_substr($reason, 0, 300)]);
-        Session::flash('warning', __('Authorisation revoked. Running agent scans under it stop at their next check-in.'));
+        Session::flash('warning', __('Authorization revoked. Running agent scans under it stop at their next check-in.'));
         return Response::redirect('/clients/' . (int) $client['id'] . '/agents');
     }
 
@@ -139,14 +139,14 @@ final class AgentController extends Controller
         // An agent without an internal authorisation could never scan: record the authorisation first (1.34; the page
         // shows the button only then, and this keeps the server consistent with it).
         if (App::agents()->activeAuthorisation((int) $site['id'], \Sentinel\Scope\ScopeService::today((string) $client['timezone'])) === null) {
-            Session::flash('warning', __('Record an internal authorisation for {site} first; then create the enrolment code.', ['site' => $site['name']]));
+            Session::flash('warning', __('Record an internal authorization for {site} first; then create the enrollment code.', ['site' => $site['name']]));
             return Response::redirect('/clients/' . (int) $client['id'] . '/agents');
         }
         $code = App::agents()->createEnrolment((int) $client['id'], (int) $site['id'], (int) $this->user()['id']);
         $this->audit($request, 'agent.enrolment_created', 'site', (int) $site['id'], ['client_id' => (int) $client['id']]);
         $url = rtrim((string) App::config()->get('app.public_url', ''), '/');
         $releaseKey = App::agentRelease()->publicKey();
-        return $this->page('agents/enrolment', __('Enrol an agent for {site}', ['site' => $site['name']]), [
+        return $this->page('agents/enrolment', __('Enroll an agent for {site}', ['site' => $site['name']]), [
             'client' => $client, 'site' => $site, 'code' => $code, 'serverUrl' => $url,
             // Shown so the installer's output can be compared with it ('' when no release key exists yet).
             'releaseKeyFp' => $releaseKey !== '' ? \Sentinel\System\ReleaseManifest::keyFingerprint($releaseKey) : '',
@@ -330,7 +330,7 @@ final class AgentController extends Controller
             (int) ($client['is_demo'] ?? 0) === 1 => __('This is a demo client with made-up data: it is never scanned.'),
             (int) $client['scanning_paused'] === 1 || (int) $site['scanning_paused'] === 1 || App::scope()->globallyPaused() => __('Scanning is paused.'),
             $agentId === 0 => __('This site has no active agent.'),
-            $auth === null => __('This site has no valid internal authorisation.'),
+            $auth === null => __('This site has no valid internal authorization.'),
             App::agents()->openJobs((int) $site['id']) > 0 => __('An agent scan for this site is already waiting or running.'),
             $reason === '' || mb_strlen($reason) > 300 => __('Give a reason (up to 300 characters).'),
             default => null,

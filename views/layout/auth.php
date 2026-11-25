@@ -32,7 +32,7 @@ $product = App::productName();
             <?= $content ?>
         </div>
     </div>
-    <p class="text-center text-body-secondary auth-warning mt-3"><i class="bi bi-shield-lock me-1" aria-hidden="true"></i><?= e(__('Authorised users only. Activity is logged.')) ?></p>
+    <p class="text-center text-body-secondary auth-warning mt-3"><i class="bi bi-shield-lock me-1" aria-hidden="true"></i><?= e(__('Authorized users only. Activity is logged.')) ?></p>
 </div>
 <script src="<?= e(asset('vendor/bootstrap/bootstrap.bundle.min.js')) ?>"></script>
 <script src="<?= e(asset('vendor/qrcode/qrcode.js')) ?>"></script>

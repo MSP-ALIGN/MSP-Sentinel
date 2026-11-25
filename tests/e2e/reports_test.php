@@ -154,7 +154,7 @@ return [
         $admin->upload('/admin/settings', '/admin/branding', $fields, 'brand_logo', $dir . '/fake.png', 'image/png');
         Assert::contains('PNG or JPEG image', $admin->get('/admin/settings')->body, 'a non-image is refused');
         $admin->submit('/admin/settings', '/admin/branding', ['brand_color' => 'red;}body{display:none'] + $fields);
-        Assert::contains('The colour must look like', $admin->get('/admin/settings')->body);
+        Assert::contains('The color must look like', $admin->get('/admin/settings')->body);
 
         $admin->upload('/admin/settings', '/admin/branding', $fields, 'brand_logo', $dir . '/logo.png', 'image/png');
         $hash = App::settings()->fresh('brand_logo');

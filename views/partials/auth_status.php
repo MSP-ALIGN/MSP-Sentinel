@@ -8,7 +8,7 @@ $badges = [
     'scheduled' => ['text-bg-info', 'bi-calendar-event', __('Starts later')],
     'expired' => ['text-bg-warning', 'bi-calendar-x', __('Expired')],
     'revoked' => ['text-bg-secondary', 'bi-x-circle', __('Revoked')],
-    'none' => ['text-bg-danger', 'bi-exclamation-triangle', __('No authorisation')],
+    'none' => ['text-bg-danger', 'bi-exclamation-triangle', __('No authorization')],
 ];
 [$badgeClass, $badgeIcon, $badgeLabel] = $badges[$status] ?? $badges['none'];
 ?>

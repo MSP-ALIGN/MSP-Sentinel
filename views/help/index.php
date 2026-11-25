@@ -49,6 +49,8 @@ $releases = $entries['releases'] ?? [];
                 <h2 class="h4 mb-3" id="<?= e($s['id']) ?>-title"><i class="bi <?= e($s['icon']) ?> me-2" aria-hidden="true"></i><?= e($s['title']) ?></h2>
                 <?php foreach ($grouped[$key] as $topic): ?>
                 <div data-filter-item id="<?= e($slug((string) $topic['title'])) ?>" class="card mb-3">
+                    <?php // Anchors of earlier titles (1.51.1), so old links and bookmarks still land on the topic. ?>
+                    <?php foreach ((array) ($topic['old_anchors'] ?? []) as $old): ?><span id="<?= e($slug((string) $old)) ?>"></span><?php endforeach; ?>
                     <div class="card-header"><h3 class="card-title h5 mb-0"><?= e($topic['title']) ?></h3></div>
                     <div class="card-body">
                         <?php foreach ($topic['paragraphs'] as $paragraph): ?>

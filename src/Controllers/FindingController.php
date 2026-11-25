@@ -256,7 +256,7 @@ final class FindingController extends Controller
             (int) ($client['is_demo'] ?? 0) === 1 => __('This is a demo client with made-up data: it is never scanned.'),
             (int) $client['scanning_paused'] === 1 || App::scope()->globallyPaused() => __('Scanning is paused, so nothing can be rechecked.'),
             $target === null => __('This finding can\'t be rechecked on its own. Run a scan of the client instead.'),
-            !App::scope()->isInScope($clientId, $target['kind'] === 'email' ? $target['domain'] : $target['ip']) => __('This target is no longer in an active authorisation, so it can\'t be rechecked.'),
+            !App::scope()->isInScope($clientId, $target['kind'] === 'email' ? $target['domain'] : $target['ip']) => __('This target is no longer in an active authorization, so it can\'t be rechecked.'),
             $target['kind'] === 'endpoint' && !in_array($target['port'], PortProfile::forClient($client), true) => __('Port {port} is no longer in this client\'s scan profile, so it can\'t be rechecked.', ['port' => $target['port']]),
             $finding['verify_status'] !== null && in_array($finding['verify_status'], ['queued', 'running'], true) => __('A recheck of this finding is already waiting or running.'),
             $finding['verify_requested_at'] !== null && strtotime($finding['verify_requested_at'] . ' UTC') > time() - self::VERIFY_INTERVAL => __('This finding was rechecked less than 10 minutes ago. Try again later.'),

@@ -36,7 +36,7 @@ $dcSetup = static function (TestContext $ctx): array {
     }
     $site = (int) $ctx->db->query("SELECT id FROM sites WHERE client_id = {$cid} AND is_default = 1")->fetchColumn();
     $pdf = dirname($ctx->configPath) . '/signed-authorisation.pdf';
-    file_put_contents($pdf, "%PDF-1.4\n% made-up signed authorisation for the test suite\n%%EOF\n");
+    file_put_contents($pdf, "%PDF-1.4\n% made-up signed authorization for the test suite\n%%EOF\n");
     return [$cid, $site, $pdf];
 };
 $dcFields = static fn (int $site, array $over = []): array => $over + [
@@ -49,7 +49,7 @@ $attempts = static fn (TestContext $ctx): array => array_values(array_filter(arr
     is_file(dirname($ctx->nmapLog) . '/creds-attempts.log') ? (file(dirname($ctx->nmapLog) . '/creds-attempts.log', FILE_IGNORE_NEW_LINES) ?: []) : [])));
 
 return [
-    'default passwords: only with the explicit authorisation tick' => function (TestContext $ctx) use ($dcSetup, $dcFields, $dcLast): void {
+    'default passwords: only with the explicit authorization tick' => function (TestContext $ctx) use ($dcSetup, $dcFields, $dcLast): void {
         [$cid, $site, $pdf] = $dcSetup($ctx);
         $tech = $ctx->login('dctech', 'Dctech-Pass-0001!');
         $before = $dcLast($ctx, $cid);
@@ -140,7 +140,7 @@ return [
         if (!is_file($dir . '/agent.json')) {
             preg_match('/SNE(-[A-Z2-9]{5}){4}/', $admin->submit('/clients/' . $cid, '/clients/' . $cid . '/sites/' . $site . '/enrol', [])->body, $m);
             [$code, $out] = $ctx->cli('bin/sentinel-agent.php', ['enrol', '--server', $ctx->baseUrl, '--code', $m[0] ?? 'missing', '--config', $dir . '/agent.json']);
-            Assert::same(0, $code, 'enrol: ' . $out);
+            Assert::same(0, $code, 'enroll: ' . $out);
             $app = require $ctx->configPath;
             $c = json_decode((string) file_get_contents($dir . '/agent.json'), true);
             $c['nmap_path'] = $app['testing']['agent_nmap_path'];
@@ -174,7 +174,7 @@ return [
         Assert::contains('A vendor default password works on PostgreSQL (user &quot;postgres&quot;)', $page);
         Assert::contains('MongoDB lets anyone in without a password', $page);
         Assert::contains('Memcached lets anyone in without a password', $page);
-        Assert::contains('FTP signalled a lockout or block', $page);
+        Assert::contains('FTP signaled a lockout or block', $page);
         Assert::notContains('Redis lets anyone in', $page, 'Redis with a password is fine');
     },
 ];

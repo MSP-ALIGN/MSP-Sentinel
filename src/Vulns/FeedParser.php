@@ -25,7 +25,10 @@ final class FeedParser
      *
      * @param array<mixed> $page Decoded JSON.
      * @param string|null $productPrefix vendor:product prefix that must be marked vulnerable.
-     * @return array{total:int, cves:list<array{cve_id:string,summary:string,cvss_score:?float,cvss_severity:string,cvss_version:string,published:?string,last_modified:?string}>}
+     * Each CVE also gets 'platforms' (1.49): the operating systems the product is only vulnerable on (e.g. Chrome
+     * "running on" Android), or [] when it is vulnerable whatever it runs on. See platformsFor().
+     *
+     * @return array{total:int, cves:list<array{cve_id:string,summary:string,cvss_score:?float,cvss_severity:string,cvss_version:string,published:?string,last_modified:?string,platforms:list<string>}>}
      */
     public static function nvdPage(array $page, ?string $productPrefix = null): array
     {
@@ -57,6 +60,7 @@ final class FeedParser
                 'cvss_version' => $version,
                 'published' => self::date($cve['published'] ?? null),
                 'last_modified' => self::dateTime($cve['lastModified'] ?? null),
+                'platforms' => $productPrefix !== null ? self::platformsFor((array) ($cve['configurations'] ?? []), $productPrefix) : [],
             ];
         }
         return ['total' => max(0, (int) ($page['totalResults'] ?? 0)), 'cves' => $out];
@@ -90,6 +94,144 @@ final class FeedParser
             }
         }
         return false;
+    }
+
+    /**
+     * The platforms (OS families) a product is only vulnerable on, from NVD's configurations (1.49). NVD writes
+     * "Chrome on Android" as a configuration with operator AND: one node marks the product vulnerable, another lists
+     * the OS it runs on (vulnerable: false). The product's own CPE can also name a platform in its target_sw field.
+     * Returns [] as soon as ONE configuration marks the product vulnerable without such a limit (vulnerable
+     * everywhere), else the families of every limit found (windows, macos, linux, android, ios, chromeos, or another
+     * NVD OS product name). Untrusted JSON: only strings are read; anything odd counts as "no limit" (the old,
+     * stricter behaviour), never as a reason to drop a CVE.
+     *
+     * @param array<mixed> $configurations
+     * @return list<string>
+     */
+    public static function platformsFor(array $configurations, string $productPrefix): array
+    {
+        $prefix = strtolower($productPrefix);
+        $limits = [];
+        $found = false;
+        foreach (array_slice($configurations, 0, 500) as $conf) {
+            if (!is_array($conf)) {
+                continue;
+            }
+            $nodes = array_values(array_filter((array) ($conf['nodes'] ?? []), 'is_array'));
+            // A negated node ("NOT running on ...", 1.49.1) can't be read as a positive limit: no limit, as before.
+            foreach ($nodes as $node) {
+                if (($node['negate'] ?? false) === true) {
+                    $hasProduct = false;
+                    foreach ($nodes as $n2) {
+                        foreach ((array) ($n2['cpeMatch'] ?? []) as $m) {
+                            $hasProduct = $hasProduct || (is_array($m) && ($m['vulnerable'] ?? false) === true && is_string($m['criteria'] ?? null) && str_starts_with(strtolower($m['criteria']), $prefix));
+                        }
+                    }
+                    if ($hasProduct) {
+                        return [];
+                    }
+                }
+            }
+            $here = [];      // limits from this configuration
+            $vulnHere = false;
+            $targetLimited = true; // every vulnerable product match here names a platform in target_sw
+            foreach ($nodes as $node) {
+                foreach ((array) ($node['cpeMatch'] ?? []) as $m) {
+                    if (!is_array($m) || !is_string($m['criteria'] ?? null)) {
+                        continue;
+                    }
+                    $crit = strtolower($m['criteria']);
+                    if (($m['vulnerable'] ?? false) === true && str_starts_with($crit, $prefix)) {
+                        $vulnHere = true;
+                        $target = self::cpeFields($crit)[10] ?? '*';
+                        // Only an operating system counts as a limit (1.49.1): "node.js" or "wordpress" is the
+                        // software it runs in, not an OS, so it limits nothing.
+                        $family = ($target === '*' || $target === '-' || $target === '') ? '' : self::platformFamily('', $target);
+                        if ($family === '') {
+                            $targetLimited = false;
+                        } else {
+                            $here[$family] = true;
+                        }
+                    }
+                }
+            }
+            if (!$vulnHere) {
+                continue;
+            }
+            $found = true;
+            if (strtoupper((string) ($conf['operator'] ?? '')) === 'AND' && count($nodes) > 1) {
+                $os = [];
+                foreach ($nodes as $node) {
+                    foreach ((array) ($node['cpeMatch'] ?? []) as $m) {
+                        if (is_array($m) && ($m['vulnerable'] ?? false) !== true && is_string($m['criteria'] ?? null)
+                            && str_starts_with(strtolower($m['criteria']), 'cpe:2.3:o:')) {
+                            $f = self::cpeFields(strtolower($m['criteria']));
+                            $os[self::platformFamily($f[3] ?? '', $f[4] ?? '')] = true;
+                        }
+                    }
+                }
+                // An OS this code doesn't know as a family counts as "no limit" (never a reason to drop a CVE).
+                if ($os !== [] && !isset($os[''])) {
+                    $limits += $os;
+                    continue;
+                }
+            }
+            if (!$targetLimited) {
+                return []; // vulnerable whatever it runs on
+            }
+            $limits += $here;
+        }
+        if (!$found) {
+            return [];
+        }
+        $out = array_keys($limits);
+        sort($out);
+        return $out;
+    }
+
+    /**
+     * An NVD OS product (vendor and product) or target_sw value as a platform family: windows, macos, linux, android,
+     * ios or chromeos, or '' for anything else (1.49.1: only known operating systems limit a CVE; "node.js", a CMS or
+     * another vendor's "ios" limit nothing).
+     */
+    public static function platformFamily(string $vendor, string $name): string
+    {
+        $v = strtolower(trim($vendor));
+        $n = strtolower(trim($name));
+        return match (true) {
+            $n === '' => '',
+            str_starts_with($n, 'windows') => 'windows',
+            str_starts_with($n, 'mac_os') || in_array($n, ['macos', 'macosx', 'mac'], true) => 'macos',
+            in_array($n, ['iphone_os', 'ipados'], true) || ($n === 'ios' && in_array($v, ['', 'apple'], true)) => 'ios',
+            $n === 'android' => 'android',
+            in_array($n, ['chrome_os', 'chromeos'], true) => 'chromeos',
+            str_contains($n, 'linux') || in_array($n, ['ubuntu', 'debian', 'fedora', 'centos', 'rhel', 'suse'], true) => 'linux',
+            default => '',
+        };
+    }
+
+    /** The fields of a CPE 2.3 string, honouring backslash-escaped colons inside a field (1.49.1). @return list<string> */
+    private static function cpeFields(string $cpe): array
+    {
+        return preg_split('/(?<!\\\\):/', $cpe) ?: [];
+    }
+
+    /**
+     * The platform family of a device's operating system name (as an inventory source reports it), or '' when unknown.
+     */
+    public static function osFamily(string $osName): string
+    {
+        $n = strtolower($osName);
+        return match (true) {
+            $n === '' => '',
+            str_contains($n, 'windows') => 'windows',
+            str_contains($n, 'ipados') || (preg_match('/\\bios\\b/', $n) === 1 && preg_match('/cisco|ios[ -]?x[er]|\\bnx-os/', $n) !== 1) => 'ios',
+            str_contains($n, 'macos') || str_contains($n, 'mac os') || preg_match('/\\bos x\\b/', $n) === 1 => 'macos',
+            str_contains($n, 'android') => 'android',
+            str_contains($n, 'chrome os') || str_contains($n, 'chromeos') => 'chromeos',
+            preg_match('/linux|ubuntu|debian|centos|red hat|rhel|fedora|suse|rocky|alma/', $n) === 1 => 'linux',
+            default => '',
+        };
     }
 
     /**

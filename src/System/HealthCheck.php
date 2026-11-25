@@ -111,7 +111,7 @@ final class HealthCheck
             $last = $feeds[$feed] ?? null;
             $old = $last === null ? null : time() - (int) strtotime($last . ' UTC');
             $add('feed_' . $feed, __('{feed} feed', ['feed' => $name]), $old !== null && $old <= 2 * 86400 ? 'ok' : 'warn',
-                $old === null ? __('Not downloaded yet. It starts automatically within a few minutes of installing (or use Refresh now under Administration, Settings, Vulnerability data). If it stays like this, check /var/log/msp-sentinel/feeds.log.') : __('Last refreshed {n} hour(s) ago.', ['n' => intdiv($old, 3600)]));
+                $old === null ? __('Not downloaded yet. It starts automatically within a few minutes of installing (or use Refresh now under Administration → Settings → Vulnerability data). If it stays like this, check /var/log/msp-sentinel/feeds.log.') : __('Last refreshed {n} hour(s) ago.', ['n' => intdiv($old, 3600)]));
         }
         });
 

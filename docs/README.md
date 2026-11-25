@@ -1,6 +1,8 @@
 # Start here
 
-New to MSP Sentinel? Follow these steps on your first day. Each one links to a short guide.
+New to MSP Sentinel? Follow these steps on your first day. Each one links to a short guide. The dashboard shows the
+same steps as a **Getting started** checklist (to whoever manages settings), ticked off as you go; **Hide checklist**
+hides it for everyone.
 
 ## Your first day
 
@@ -14,10 +16,10 @@ New to MSP Sentinel? Follow these steps on your first day. Each one links to a s
    clients start in it (each user can pick their own under **My profile**).
 5. **Add a client.** Give it a name, its time zone and a scan window (when scans may run). See
    [Your first client](guides/first-client.md#add-the-client).
-6. **Record the client's authorisation.** Enter who approved scanning, the dates and exactly which addresses and
-   domains. Nothing is scanned without it. See [Your first client](guides/first-client.md#record-the-authorisation)
-   and the [authorisation form](authorisation-form.md) template.
-7. **Scan.** Press **Scan now**, or let the weekly scan run in the client's window. See
+6. **Record the client's authorization.** Enter who approved scanning, the dates and exactly which addresses and
+   domains. Nothing is scanned without it. See [Your first client](guides/first-client.md#record-the-authorization)
+   and the [authorization form](authorisation-form.md) template.
+7. **Scan.** Press **Scan now** on the client's **Overview**, or let the weekly scan run in the client's window. See
    [Your first client](guides/first-client.md#scan).
 8. **Read and triage the findings.** Fix what matters first; accept a risk or mark a false positive with a note. See
    [Findings](guides/findings.md).
@@ -28,12 +30,12 @@ New to MSP Sentinel? Follow these steps on your first day. Each one links to a s
 
 | Guide | What it covers |
 |---|---|
-| [Your first client](guides/first-client.md) | Add a client, scan window, authorisation, discovery, first scan |
+| [Your first client](guides/first-client.md) | Add a client, scan window, authorization, discovery, first scan |
 | [Findings](guides/findings.md) | Fail and Warning, triage, owners and due dates, verify fix, grades |
 | [Search](guides/search.md) | The top-bar search and the filters on each list |
 | [Reports](guides/reports.md) | Executive and technical reports, monthly reports, PDF and CSV |
 | [Pen-test engagements](guides/engagements.md) | Create, approve, run, stop, report and retest |
-| [On-premises agents](guides/agents.md) | Internal scans, enrolment, updates, Active Directory checks |
+| [On-premises agents](guides/agents.md) | Internal scans, enrollment, updates, Active Directory checks |
 | [Agent in Docker](guides/docker-agent.md) | Run the agent as a container on a Linux Docker host |
 | [Agent on Proxmox](guides/proxmox-agent.md) | Run the agent in a Proxmox LXC container |
 | [Integrations](guides/integrations.md) | ITFlow, MSP Align, NinjaOne, breach monitoring, API and events |
@@ -56,9 +58,9 @@ The same help is built into the app: **Help** in the menu, with a "What's new" p
 | [Windows agent](windows-agent.md) | The Windows agent (preview) |
 | [Pen-test engagements](engagements.md) | Every engagement test, rule and finding in detail |
 | [API](api.md) | Tokens, endpoints, signed outbound events |
-| [Authorisation form](authorisation-form.md) | A template for the client's written approval (external, internal, engagements) |
+| [Authorization form](authorisation-form.md) | A template for the client's written approval (external, internal, engagements) |
 | [Security](security.md) | What Sentinel protects, and your hardening checklist |
-| [Responsible use](responsible-use.md) | Authorisation, gentle scanning, honest reporting |
+| [Responsible use](responsible-use.md) | Authorization, gentle scanning, honest reporting |
 | [Design](DESIGN.md) | How Sentinel is built |
 | [Roadmap](ROADMAP.md), [security roadmap](ROADMAP-security.md), [ITFlow roadmap](ROADMAP-itflow.md) | What comes next |
 | [Contributing](../CONTRIBUTING.md) and [security policy](../SECURITY.md) | How to contribute, how to report a vulnerability |

@@ -5,10 +5,10 @@ fixes, a retest letter. Every test, rule and finding is described in the [engage
 
 ## Before you start
 
-- The client must have an active authorisation covering the targets (and, for internal tests, the site an internal
-  authorisation and an agent on version 1.27.0 or later). An engagement never widens what may be tested.
-- You need the client's **signed authorisation as a PDF** (at most 10 MB) naming the targets, tests, window and who
-  may run them. The [authorisation form](../authorisation-form.md#annex-penetration-test-engagement) has an annex for it.
+- The client must have an active authorization covering the targets (and, for internal tests, the site an internal
+  authorization and an agent on version 1.27.0 or later). An engagement never widens what may be tested.
+- You need the client's **signed authorization as a PDF** (at most 10 MB) naming the targets, tests, window and who
+  may run them. The [authorization form](../authorisation-form.md#annex-penetration-test-engagement) has an annex for it.
 - You need **two people who may approve engagements** (Admins, or a role with **Approve pen-test engagements**): a
   different person approves each engagement.
 
@@ -50,7 +50,7 @@ Pausing all scanning, or the client, stops engagements too. Before approval, **C
 ## Issue the report and the retest letter
 
 1. When the tests are done, click **Issue penetration test report**. It is a frozen, branded report (summary, how the
-   findings chain together, scope and authorisation, method, findings, systems tested, limitations). Download it as
+   findings chain together, scope and authorization, method, findings, systems tested, limitations). Download it as
    HTML (print to PDF) or the findings as CSV.
 2. After the client has fixed things, create a new engagement and choose **This is a retest of** the earlier one. It
    needs its own signed PDF, window and approval.
@@ -72,7 +72,7 @@ Pausing all scanning, or the client, stops engagements too. Before approval, **C
   comes back after you fix something.
 - A working vendor default password shows the account and service in the finding; the masked password stays in the
   pen-test report. Pen-test findings aren't linked to a device or host page; they are on the client's Findings page.
-- Cancelled engagements, and engagements never approved, never create findings. The client's services, certificates
+- Canceled engagements, and engagements never approved, never create findings. The client's services, certificates
   and device inventory are still not changed by an engagement.
 
 ## Good to know
@@ -81,5 +81,5 @@ Pausing all scanning, or the client, stops engagements too. Before approval, **C
   two-factor authentication the creator reset, in the last 30 days.
 - Never done: password guessing beyond the short vendor default list, SSH, Windows or Remote Desktop logins,
   exploits, denial of service, or anything that changes the systems tested.
-- Every step is audited: created, approved, started, stopped, cancelled, report issued.
+- Every step is audited: created, approved, started, stopped, canceled, report issued.
 - Where a regulator or insurer requires an independent third-party test, an engagement doesn't replace it.

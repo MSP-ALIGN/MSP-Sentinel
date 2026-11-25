@@ -7,7 +7,7 @@ use Sentinel\Core\Csrf;
 use Sentinel\Findings\FixWorkflow;
 ?>
 <div class="card">
-    <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Due dates (fix workflow)')) ?></h2></div>
+    <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Fix due dates')) ?></h2></div>
     <form method="post" action="<?= e(url('/admin/settings/due-dates')) ?>" novalidate>
     <div class="card-body">
         <?= Csrf::field() ?>

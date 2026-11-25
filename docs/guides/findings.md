@@ -18,6 +18,9 @@ Read what Sentinel found, decide what to do with each finding, and get it fixed 
    - **Warning**: fix soon. For example a certificate expiring within 14 days, old TLS versions, an exposed VPN
      portal, missing HSTS or Content-Security-Policy, missing SPF or DMARC, or a confirmed high-severity
      vulnerability.
+   - A certificate that expires soon and then expires stays **one finding**: it moves from Warning to Fail, keeping
+     its owner, history and ticket. If the Warning was accepted or marked a false positive, it opens again as a Fail
+     with a new deadline: the decision was about the Warning.
    - **Info** items are shown on the client's pages but are not findings.
 3. Use the filters (client, status, grade, type, owner, due) and the quick links **Assigned to me**, **Overdue** and
    **Due soon**. To find one finding by text, see [Search](search.md).
@@ -29,11 +32,11 @@ distribution build that may already carry the fix). Sentinel never guesses a ver
 
 ## Where findings come from
 
-- **Scans** of the authorised addresses: open services, certificates, exposed admin pages and portals, and
+- **Scans** of the authorized addresses: open services, certificates, exposed admin pages and portals, and
   vulnerabilities in the versions found.
 - **Website and email checks**, with each scan and once a day: HTTPS, headers, cookies, a short list of commonly
   exposed files (reported only when their content proves it, and never stored), CMS and library versions, and SPF,
-  DMARC and DKIM by DNS. Results are on the client's **Website & email** page.
+  DMARC and DKIM by DNS. Results are on the client's **Website and email** page.
 - **DNS checks**, once a day: zone transfers from the domain's own nameservers, and names pointing at a cloud service
   that no longer exists (subdomain takeover). Both are Fails.
 - **Pen-test engagements**: the Fails and Warnings of an approved engagement (type **Pen test**). A retest that runs
@@ -88,7 +91,7 @@ Owners get one daily reminder of their overdue findings and those due within 2 d
 
 ## Good to know
 
-- A recheck only runs while the target is in an active authorisation and scanning isn't paused, at most once every 10
+- A recheck only runs while the target is in an active authorization and scanning isn't paused, at most once every 10
   minutes per finding.
 - Accepted risks and false positives never cause alerts and don't count towards the risk score or report totals;
   reports list them in their own section with their notes.

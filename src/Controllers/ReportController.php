@@ -204,7 +204,7 @@ final class ReportController extends Controller
             $errors[] = __('The company name can be up to 100 characters.');
         }
         if (!preg_match('/^#[0-9a-f]{6}$/', $v['brand_color'])) {
-            $errors[] = __('The colour must look like #1f4e79.');
+            $errors[] = __('The color must look like #1f4e79.');
         }
         if (!mb_check_encoding($v['brand_footer'], 'UTF-8') || mb_strlen($v['brand_footer']) > 500 || preg_match('/[\x00-\x09\x0B-\x1F\x7F]/u', $v['brand_footer'])) {
             $errors[] = __('The footer can be up to 500 characters.');

@@ -81,7 +81,7 @@ final class InventorySync
             $ids = $this->db->prepare("SELECT id FROM findings WHERE client_id = :c AND source = :s AND status <> 'resolved'");
             $ids->execute(['c' => $clientId, 's' => $sourceName]);
             $resolved = array_map('intval', $ids->fetchAll(PDO::FETCH_COLUMN));
-            $res = $this->db->prepare("UPDATE findings SET resolved_from = status, status = 'resolved', resolved_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP() WHERE id = :id");
+            $res = $this->db->prepare("UPDATE findings SET resolved_from = status, status = 'resolved', resolved_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP(), resolved_reason = 'unlinked' WHERE id = :id");
             $ev = $this->db->prepare("INSERT INTO finding_events (finding_id, event, user_id, note, created_at) VALUES (:f, 'resolved', :u, :n, UTC_TIMESTAMP())");
             foreach ($resolved as $id) {
                 $res->execute(['id' => $id]);

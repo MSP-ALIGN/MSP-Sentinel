@@ -36,7 +36,7 @@ $smbSetup = static function (TestContext $ctx): array {
     }
     $site = (int) $ctx->db->query("SELECT id FROM sites WHERE client_id = {$cid} AND is_default = 1")->fetchColumn();
     $pdf = dirname($ctx->configPath) . '/signed-authorisation.pdf';
-    file_put_contents($pdf, "%PDF-1.4\n% made-up signed authorisation for the test suite\n%%EOF\n");
+    file_put_contents($pdf, "%PDF-1.4\n% made-up signed authorization for the test suite\n%%EOF\n");
     return [$cid, $site, $pdf];
 };
 $smbFields = static fn (int $site, array $over = []): array => $over + [
@@ -104,7 +104,7 @@ return [
         if (!is_file($dir . '/agent.json')) {
             preg_match('/SNE(-[A-Z2-9]{5}){4}/', $admin->submit('/clients/' . $cid, '/clients/' . $cid . '/sites/' . $site . '/enrol', [])->body, $m);
             [$code, $out] = $ctx->cli('bin/sentinel-agent.php', ['enrol', '--server', $ctx->baseUrl, '--code', $m[0] ?? 'missing', '--config', $dir . '/agent.json']);
-            Assert::same(0, $code, 'enrol: ' . $out);
+            Assert::same(0, $code, 'enroll: ' . $out);
             $app = require $ctx->configPath;
             $c = json_decode((string) file_get_contents($dir . '/agent.json'), true);
             $c['nmap_path'] = $app['testing']['agent_nmap_path'];

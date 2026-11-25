@@ -32,7 +32,7 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
         <div class="mb-3">
             <label for="source_url" class="form-label"><?= e(__('Source code address')) ?></label>
             <input type="url" class="form-control<?= $invalid('source_url') ?>" id="source_url" name="source_url" value="<?= e($values['source_url']) ?>" maxlength="255" required>
-            <div class="form-text"><?= e(__('The AGPL-3.0 licence requires that users can get the source code of the version you run. If you change the code, point this at your copy.')) ?></div>
+            <div class="form-text"><?= e(__('The AGPL-3.0 license requires that users can get the source code of the version you run. If you change the code, point this at your copy.')) ?></div>
             <?php $field = 'source_url'; require __DIR__ . '/../partials/field_error.php'; ?>
         </div>
         <div class="mb-3">

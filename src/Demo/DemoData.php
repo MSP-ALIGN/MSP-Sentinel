@@ -206,7 +206,7 @@ final class DemoData
             'approved_by_name' => $spec['approver'][0], 'approved_by_role' => $spec['approver'][1],
             'approved_on' => gmdate('Y-m-d', strtotime('-100 days')), 'valid_from' => gmdate('Y-m-d', strtotime('-100 days')),
             'valid_until' => gmdate('Y-m-d', strtotime($spec['valid_until'])), 'document_ref' => 'DEMO-' . strtoupper(substr($spec['domain'], 0, 4)) . '-001',
-            'notes' => 'Made-up authorisation for the demo data.',
+            'notes' => 'Made-up authorization for the demo data.',
         ], $entries, $this->userId);
 
         foreach ($spec['hosts'] as $host) {
@@ -325,7 +325,7 @@ final class DemoData
         $authId = App::agents()->createAuthorisation($clientId, $siteId, $spec['timezone'], [
             'approved_by_name' => $spec['approver'][0], 'approved_by_role' => $spec['approver'][1], 'approved_on' => gmdate('Y-m-d', strtotime('-60 days')),
             'valid_from' => gmdate('Y-m-d', strtotime('-60 days')), 'valid_until' => gmdate('Y-m-d', strtotime('+305 days')),
-            'document_ref' => 'DEMO-INT-001', 'notes' => 'Made-up internal authorisation for the demo data.',
+            'document_ref' => 'DEMO-INT-001', 'notes' => 'Made-up internal authorization for the demo data.',
         ], [$a['range']], $this->userId);
         $code = App::agents()->createEnrolment($clientId, $siteId, $this->userId);
         $enrolled = App::agents()->enrol($code, $a['hostname'], App::version(), $a['ip']) ?? throw new \RuntimeException('Could not create the demo agent.');

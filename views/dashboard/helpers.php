@@ -24,7 +24,7 @@ $duration ??= static function (int $seconds): string {
 $eventWord ??= static fn (string $k): string => [
     'opened' => __('New'), 'reopened' => __('Back'), 'resolved' => __('Resolved'), 'triaged_accepted' => __('Accepted'),
     'triaged_false_positive' => __('False positive'), 'triaged_open' => __('Reopened'), 'scan_done' => __('Scan done'),
-    'scan_partial' => __('Scan partial'), 'scan_failed' => __('Scan failed'), 'scan_cancelled' => __('Scan cancelled'),
+    'scan_partial' => __('Scan partial'), 'scan_failed' => __('Scan failed'), 'scan_cancelled' => __('Scan canceled'),
 ][$k] ?? $k;
 $eventClass ??= static fn (string $k, ?string $sev): string => match (true) {
     $k === 'resolved' => 'ev-ok', $k === 'scan_failed' => 'ev-bad', str_starts_with($k, 'scan_') => 'ev-scan',

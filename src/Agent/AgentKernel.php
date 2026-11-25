@@ -123,7 +123,7 @@ final class AgentKernel
         $limiter = App::limiter();
         $bucket = 'agent-enrol:' . $request->ip();
         if ($limiter->tooMany($bucket, 10, 3600)) {
-            return ApiKernel::error(429, 'Too many enrolment attempts. Try again later.')->header('Retry-After', '3600');
+            return ApiKernel::error(429, 'Too many enrollment attempts. Try again later.')->header('Retry-After', '3600');
         }
         $body = self::body(65536);
         if ($body === null || !is_string($body['code'] ?? null)) {
@@ -132,7 +132,7 @@ final class AgentKernel
         $result = App::agents()->enrol($body['code'], self::short($body['hostname'] ?? '', 255), self::short($body['version'] ?? '', 20), $request->ip());
         if ($result === null) {
             $limiter->hit($bucket);
-            return ApiKernel::error(403, 'The enrolment code is unknown, already used or expired. Create a new one in Sentinel.');
+            return ApiKernel::error(403, 'The enrollment code is unknown, already used or expired. Create a new one in Sentinel.');
         }
         App::audit()->log('agent.enrolled', null, null, 'agent', $result['agent_id'], ['client_id' => $result['client_id'], 'site_id' => $result['site_id']], $request->ip());
         // The agent pins the key, its site and its client: it refuses jobs for any other site or client.
@@ -275,8 +275,8 @@ final class AgentKernel
                 $signed = App::agentService()->signedJob($job, $agent);
                 if ($signed === null) {
                     App::agents()->finishJob((int) $job['id'], 'cancelled', ['messages' => [$job['kind'] === 'engagement'
-                        ? __('Cancelled: the engagement is no longer active (stopped, or its window ended), or the site has no valid internal authorisation.')
-                        : __('Cancelled: the site has no valid internal authorisation any more.')]]);
+                        ? __('Canceled: the engagement is no longer active (stopped, or its window ended), or the site has no valid internal authorization.')
+                        : __('Canceled: the site has no valid internal authorization any more.')]]);
                     continue;
                 }
                 App::agents()->markSent((int) $job['id']);
@@ -305,7 +305,7 @@ final class AgentKernel
         }
         // Claim the job first: a second upload of the same results (a retry) is answered 409 and not processed twice.
         if (!App::agents()->claimIngest($jobId)) {
-            return ApiKernel::error(409, 'This job is already finished, cancelled or expired.');
+            return ApiKernel::error(409, 'This job is already finished, canceled or expired.');
         }
         set_time_limit(900);
         try {

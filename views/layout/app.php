@@ -1,7 +1,8 @@
 <?php
 /**
  * Main signed-in layout (AdminLTE 4).
- * Expects: $title, $content (already rendered HTML from a view), $currentUser (public fields).
+ * Expects: $title, $content (already rendered HTML from a view), $currentUser (public fields); optional $clientNav
+ * (ClientController::nav): the client menu, and the client name above the heading and in the browser tab (1.51).
  * Security: $content is trusted rendered output. Every other value is escaped.
  */
 
@@ -55,7 +56,8 @@ try {
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title><?= e($title ?? '') ?> · <?= e($product) ?></title>
+    <?php // Inside a client the tab reads "Client · Page" (1.51), so several open clients can be told apart. ?>
+    <title><?= isset($clientNav['name']) && ($title ?? '') !== $clientNav['name'] ? e($clientNav['name']) . ' · ' : '' ?><?= e($title ?? '') ?> · <?= e($product) ?></title>
     <link rel="stylesheet" href="<?= e(asset('vendor/bootstrap-icons/bootstrap-icons.min.css')) ?>">
     <link rel="icon" href="<?= e(asset('img/favicon.svg')) ?>" type="image/svg+xml">
     <link rel="stylesheet" href="<?= e(asset('vendor/adminlte/adminlte.min.css')) ?>">
@@ -109,12 +111,9 @@ try {
                     <ul class="dropdown-menu dropdown-menu-end">
                         <li><a class="dropdown-item" href="<?= e(url('/profile')) ?>"><i class="bi bi-person me-2" aria-hidden="true"></i><?= e(__('My profile')) ?></a></li>
                         <?php if ($isAdmin): ?>
-                        <li><hr class="dropdown-divider"></li>
-                        <li><h6 class="dropdown-header"><?= e(__('Administration')) ?></h6></li>
-                        <?php foreach ($adminItems as [$href, $icon, $label, $need]): ?>
-                        <li><a class="dropdown-item" href="<?= e(url($href)) ?>"><i class="bi <?= e($icon) ?> me-2" aria-hidden="true"></i><?= e($label) ?></a></li>
-                        <?php endforeach; ?>
+                        <li><a class="dropdown-item" href="<?= e(url('/admin')) ?>"><i class="bi bi-gear me-2" aria-hidden="true"></i><?= e(__('Administration')) ?></a></li>
                         <?php endif; ?>
+                        <li><a class="dropdown-item" href="<?= e(url('/help')) ?>"><i class="bi bi-question-circle me-2" aria-hidden="true"></i><?= e(__('Help')) ?></a></li>
                         <li><hr class="dropdown-divider"></li>
                         <li>
                             <form method="post" action="<?= e(url('/logout')) ?>" class="px-0">
@@ -144,16 +143,18 @@ try {
                     <?php foreach ($adminItems as [$href, $icon, $label]): ?>
                     <?= $navItem($href, $icon, $label) ?>
                     <?php endforeach; ?>
-                    <li class="nav-header"><?= e(__('LEAVE')) ?></li>
+                    <li class="nav-header"><?= e(mb_strtoupper(__('More'))) ?></li>
                     <li class="nav-item"><a href="<?= e(url('/')) ?>" class="nav-link admin-exit"><i class="nav-icon bi bi-arrow-left-circle" aria-hidden="true"></i><p><?= e(__('Back to Sentinel')) ?></p></a></li>
                     <?= $navItem('/help', 'bi-question-circle', __('Help')) ?>
                 </ul>
             </nav>
             <?php elseif (isset($clientNav) && is_array($clientNav)): ?>
-            <?php // A client's own menu (ClientController::nav): its sections, with the way back to all clients. ?>
-            <nav class="mt-2" aria-label="<?= e(__('Client menu')) ?>">
+            <?php // A client's own menu (ClientController::nav): its sections, with the main pages kept above (1.51) and Help below. ?>
+            <nav class="mt-2" aria-label="<?= e(__('Main menu')) ?>">
                 <ul class="nav sidebar-menu flex-column">
+                    <?= $navItem('/', 'bi-speedometer2', __('Dashboard')) ?>
                     <li class="nav-item"><a href="<?= e(url('/clients')) ?>" class="nav-link admin-exit"><i class="nav-icon bi bi-arrow-left-circle" aria-hidden="true"></i><p><?= e(__('All clients')) ?></p></a></li>
+                    <?= $navItem('/findings', 'bi-exclamation-diamond', __('All findings')) ?>
                 </ul>
             </nav>
             <div class="client-mode" title="<?= e($clientNav['name']) ?>"><i class="bi bi-building" aria-hidden="true"></i><span><?= e($clientNav['name']) ?></span>
@@ -168,6 +169,8 @@ try {
                         <i class="nav-icon bi <?= e($it['icon']) ?>" aria-hidden="true"></i><p><?= e($it['label']) ?><?php if (($it['badge'] ?? 0) > 0): ?> <span class="badge text-bg-danger ms-1"><?= (int) $it['badge'] ?></span><?php endif; ?></p></a></li>
                     <?php endforeach; ?>
                     <?php endforeach; ?>
+                    <li class="nav-header"><?= e(mb_strtoupper(__('Support'))) ?></li>
+                    <?= $navItem('/help', 'bi-question-circle', __('Help')) ?>
                 </ul>
             </nav>
             <?php else: ?>
@@ -176,13 +179,12 @@ try {
                     <?= $navItem('/', 'bi-speedometer2', __('Dashboard')) ?>
                     <?= $navItem('/clients', 'bi-building', __('Clients')) ?>
                     <?= $navItem('/findings', 'bi-exclamation-diamond', __('Findings')) ?>
-                    <?= $navItem('/engagements', 'bi-crosshair', __('Engagements')) ?>
+                    <?= $navItem('/engagements', 'bi-crosshair', __('Pen-test engagements')) ?>
                     <?= $navItem('/reports', 'bi-file-earmark-text', __('Reports')) ?>
+                    <li class="nav-header"><?= e(mb_strtoupper(__('More'))) ?></li>
                     <?php if ($isAdmin): ?>
-                    <li class="nav-header"><?= e(__('ADMINISTRATION')) ?></li>
                     <?= $navItem('/admin', 'bi-gear', __('Administration')) ?>
                     <?php endif; ?>
-                    <li class="nav-header"><?= e(__('SUPPORT')) ?></li>
                     <?= $navItem('/help', 'bi-question-circle', __('Help')) ?>
                 </ul>
             </nav>
@@ -193,6 +195,7 @@ try {
     <main class="app-main">
         <div class="app-content-header">
             <div class="container-fluid">
+                <?php if (isset($clientNav['name']) && ($title ?? '') !== $clientNav['name']): ?><div class="small text-body-secondary"><i class="bi bi-building me-1" aria-hidden="true"></i><?= e($clientNav['name']) ?></div><?php endif; ?>
                 <h1 class="h3 mb-0"><?= e($title ?? '') ?></h1>
             </div>
         </div>

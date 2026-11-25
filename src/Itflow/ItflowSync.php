@@ -34,14 +34,14 @@ final class ItflowSync
     public const INTERVAL_MINUTES = 15;
 
     public function __construct(private readonly PDO $db, private readonly Settings $settings, private readonly Audit $audit,
-        private readonly ?ItflowClient $itflow, private readonly ?\Sentinel\Compliance\AlignClient $align = null)
+        private readonly ?\Sentinel\Psa\ClientDirectory $psa, private readonly ?\Sentinel\Compliance\AlignClient $align = null)
     {
     }
 
     /** Sync when due (worker). Returns the summary, or null when nothing ran. */
     public function syncIfDue(): ?string
     {
-        if ($this->itflow === null || $this->settings->fresh('itflow_enabled') !== '1') {
+        if ($this->psa === null || $this->settings->fresh('itflow_enabled') !== '1') {
             return null;
         }
         $last = $this->settings->fresh('itflow_last_sync');
@@ -56,7 +56,7 @@ final class ItflowSync
      */
     public function sync(): string
     {
-        if ($this->itflow === null) {
+        if ($this->psa === null) {
             return 'ITFlow is not connected.';
         }
         $lock = $this->db->quote('msp_sentinel_itflow_' . substr(hash('sha256', (string) $this->db->query('SELECT DATABASE()')->fetchColumn()), 0, 16));
@@ -66,23 +66,26 @@ final class ItflowSync
         try {
             $this->settings->set('itflow_last_sync', gmdate('Y-m-d H:i:s'));
             try {
-                $clients = $this->itflow->clients();
+                $clients = $this->psa->clients();
                 // Only clients with the chosen tag (1.45): the others are treated as archived in ITFlow, so they are
                 // never added, and linked ones are archived here (and restored when the tag comes back). A tag that
                 // can't be read stops the sync with nothing changed: never "everyone" or "no one" by mistake.
                 $tagNote = '';
                 if ($this->settings->get('itflow_tag_filter') === '1') {
                     $tag = $this->settings->get('itflow_tag_name');
-                    $ids = $this->itflow->taggedClientIds($tag);
+                    if (!$this->psa instanceof \Sentinel\Psa\ClientTags) {
+                        throw new \Sentinel\Psa\PsaException('This ticketing system has no client tags, so the tag filter can\'t be used. Turn it off.', \Sentinel\Psa\PsaException::KIND_REFUSED);
+                    }
+                    $ids = $this->psa->taggedClientIds($tag);
                     if ($ids === null) {
                         // A missing tag (a typo, or renamed in ITFlow) would archive every client: stop instead.
-                        throw new ItflowException('ITFlow has no client tag named "' . $tag . '", so nothing was changed. Create the tag in ITFlow or fix the name.', ItflowException::KIND_REFUSED);
+                        throw new \Sentinel\Psa\PsaException('ITFlow has no client tag named "' . $tag . '", so nothing was changed. Create the tag in ITFlow or fix the name.', \Sentinel\Psa\PsaException::KIND_REFUSED);
                     }
                     $tagged = array_flip($ids);
                     $taggedCount = count(array_intersect_key($tagged, array_flip(array_column($clients, 'id'))));
                     if ($taggedCount === 0) {
                         // Nobody tagged would archive every linked client in one run (1.45.1): stop instead.
-                        throw new ItflowException('No ITFlow client the key can see has the "' . $tag . '" tag, so nothing was changed. Tag the clients to sync in ITFlow first.', ItflowException::KIND_REFUSED);
+                        throw new \Sentinel\Psa\PsaException('No ITFlow client the key can see has the "' . $tag . '" tag, so nothing was changed. Tag the clients to sync in ITFlow first.', \Sentinel\Psa\PsaException::KIND_REFUSED);
                     }
                     $tagNote = ' ' . sprintf('%d tagged "%s".', $taggedCount, $tag);
                     foreach ($clients as &$c) {
@@ -101,13 +104,13 @@ final class ItflowSync
                 }
                 $ok = true;
                 // Keep the board list fresh for the Integrations page (1.44.1); a board problem never fails the sync.
-                if ($this->settings->get('itflow_tickets_enabled') === '1') {
+                if ($this->settings->get('tickets_enabled') === '1' && $this->psa instanceof \Sentinel\Psa\TicketBoards) {
                     try {
-                        $this->itflow->refreshBoards($this->settings);
-                    } catch (ItflowException) {
+                        $this->psa->refreshBoards($this->settings);
+                    } catch (\Sentinel\Psa\PsaException) {
                     }
                 }
-            } catch (ItflowException $ex) {
+            } catch (\Sentinel\Psa\PsaException $ex) {
                 $summary = 'Failed: ' . $ex->getMessage();
                 $ok = false;
             } catch (\Throwable $ex) {
@@ -135,9 +138,13 @@ final class ItflowSync
     public function syncClients(array $clients): array
     {
         $s = ['seen' => count($clients), 'created' => 0, 'linked' => 0, 'renamed' => 0, 'archived' => 0, 'restored' => 0, 'conflicts' => 0];
-        $byItflow = $this->db->prepare('SELECT * FROM clients WHERE itflow_client_id = :i AND is_demo = 0 ORDER BY id LIMIT 1');
+        // Matched by the link (psa_client_links, 1.54); the PSA's client ID is compared as text.
+        $byItflow = $this->db->prepare("SELECT c.*, l.external_id AS itflow_client_id FROM clients c
+                                        JOIN psa_client_links l ON l.client_id = c.id AND l.provider = 'itflow' AND l.external_id = :i
+                                        WHERE c.is_demo = 0 ORDER BY c.id LIMIT 1");
         // Same name (MariaDB's comparison: case and accents ignored), not archived, not yet linked to ITFlow.
-        $byName = $this->db->prepare('SELECT * FROM clients WHERE name = :n AND itflow_client_id IS NULL AND is_demo = 0 AND is_archived = 0 AND itflow_sync_off = 0 LIMIT 1');
+        $byName = $this->db->prepare("SELECT * FROM clients c WHERE c.name = :n AND c.is_demo = 0 AND c.is_archived = 0 AND c.itflow_sync_off = 0
+                                      AND NOT EXISTS (SELECT 1 FROM psa_client_links l WHERE l.client_id = c.id AND l.provider = 'itflow') LIMIT 1");
         // A client set to "Don't sync with ITFlow" with that name (1.45.1): neither linked nor doubled by a new client.
         $offName = $this->db->prepare('SELECT COUNT(*) FROM clients WHERE name = :n AND itflow_sync_off = 1 AND is_demo = 0');
         foreach ($clients as $c) {
@@ -147,8 +154,9 @@ final class ItflowSync
             }
             try {
                 $this->syncOne($c, $name, $s, $byItflow, $byName, $offName);
-            } catch (\PDOException $ex) {
-                // e.g. someone created a client with this name at the same moment: count it, carry on with the rest
+            } catch (\PDOException|\DomainException $ex) {
+                // e.g. someone created a client with this name at the same moment, or the ITFlow client is linked to another
+                // (e.g. demo) client (1.54.1): count it, carry on with the rest
                 error_log('[msp-sentinel] ITFlow sync, client ' . $c['id'] . ': ' . $ex->getMessage());
                 $s['conflicts']++;
             }
@@ -164,7 +172,7 @@ final class ItflowSync
      */
     private function syncOne(array $c, string $name, array &$s, \PDOStatement $byItflow, \PDOStatement $byName, \PDOStatement $offName): void
     {
-        $byItflow->execute(['i' => $c['id']]);
+        $byItflow->execute(['i' => (string) $c['id']]);
         $mine = $byItflow->fetch();
         if ($mine === false) {
             if ($c['archived']) {
@@ -177,7 +185,17 @@ final class ItflowSync
             $byName->execute(['n' => $name]);
             $same = $byName->fetch();
             if ($same !== false) {
-                $this->db->prepare('UPDATE clients SET itflow_client_id = :i, updated_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['i' => $c['id'], 'id' => $same['id']]);
+                // Linked by name (1.49): only findings from now on get ITFlow tickets, not months of old ones.
+                // The link and "tickets from now on" together (1.54.1), so a broken run never links without the latter.
+                $this->db->beginTransaction();
+                try {
+                    $this->db->prepare('UPDATE clients SET itflow_resumed_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['id' => $same['id']]);
+                    (new \Sentinel\Psa\ClientLinks($this->db))->set((int) $same['id'], 'itflow', (string) $c['id']);
+                    $this->db->commit();
+                } catch (\Throwable $ex) {
+                    $this->db->rollBack();
+                    throw $ex;
+                }
                 $this->log('client.itflow_linked', (int) $same['id'], ['itflow_client_id' => $c['id']]);
                 $s['linked']++;
                 $mine = $same + ['itflow_client_id' => $c['id']];
@@ -210,7 +228,7 @@ final class ItflowSync
             $this->log('client.archived', $id, ['reason' => ($c['untagged'] ?? false) ? 'no "' . $this->settings->get('itflow_tag_name') . '" tag in ITFlow' : 'archived in ITFlow']);
             $s['archived']++;
         } elseif (!$c['archived'] && (int) $mine['is_archived'] === 1 && (int) ($mine['itflow_archived'] ?? 0) === 1) {
-            $this->db->prepare('UPDATE clients SET is_archived = 0, itflow_archived = 0, updated_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['id' => $id]);
+            $this->db->prepare('UPDATE clients SET is_archived = 0, itflow_archived = 0, itflow_resumed_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['id' => $id]);
             $this->log('client.restored', $id, ['reason' => 'unarchived or tagged in ITFlow']);
             $s['restored']++;
         }
@@ -239,11 +257,12 @@ final class ItflowSync
         }
         $byPsa = array_diff_key($byPsa, $dupes); // an ITFlow ID on two MSP Align clients: link neither
         $n = 0;
-        $rows = $this->db->query('SELECT id, itflow_client_id FROM clients WHERE itflow_client_id IS NOT NULL AND align_client_id IS NULL AND is_demo = 0 AND is_archived = 0 AND itflow_sync_off = 0')->fetchAll();
+        $rows = $this->db->query("SELECT c.id, l.external_id AS itflow_client_id FROM clients c JOIN psa_client_links l ON l.client_id = c.id AND l.provider = 'itflow'
+                                  WHERE c.align_client_id IS NULL AND c.is_demo = 0 AND c.is_archived = 0 AND c.itflow_sync_off = 0")->fetchAll();
         // An MSP Align client already linked to a Sentinel client is never linked to a second one (1.42.2).
         $used = array_flip(array_map('intval', $this->db->query('SELECT align_client_id FROM clients WHERE align_client_id IS NOT NULL')->fetchAll(\PDO::FETCH_COLUMN)));
         foreach ($rows as $r) {
-            $a = $byPsa[(int) $r['itflow_client_id']] ?? null;
+            $a = $byPsa[(int) $r['itflow_client_id']] ?? null; // ITFlow IDs are whole numbers, as MSP Align reports them
             if ($a !== null && !isset($used[(int) $a['id']])) {
                 $used[(int) $a['id']] = true;
                 $this->db->prepare('UPDATE clients SET align_client_id = :a, align_client_name = :n, updated_at = UTC_TIMESTAMP() WHERE id = :id')
@@ -263,8 +282,9 @@ final class ItflowSync
             $this->db->prepare(
                 "INSERT INTO clients (name, itflow_client_id, timezone, scan_window_start, scan_window_end, notes, ports_extra, ports_excluded, created_by, created_at, updated_at)
                  VALUES (:n, :i, :tz, '22:00:00', '06:00:00', :notes, '', '', NULL, UTC_TIMESTAMP(), UTC_TIMESTAMP())"
-            )->execute(['n' => $name, 'i' => $itflowId, 'tz' => self::orgZone($this->settings), 'notes' => 'Created from ITFlow (client #' . $itflowId . '). Not scanned until its authorisation is recorded.']);
+            )->execute(['n' => $name, 'i' => $itflowId, 'tz' => self::orgZone($this->settings), 'notes' => 'Created from ITFlow (client #' . $itflowId . '). Not scanned until its authorization is recorded.']);
             $id = (int) $this->db->lastInsertId();
+            (new \Sentinel\Psa\ClientLinks($this->db))->set($id, 'itflow', (string) $itflowId);
             $this->db->prepare("INSERT INTO sites (client_id, name, is_default, created_at, updated_at) VALUES (:c, 'Main site', 1, UTC_TIMESTAMP(), UTC_TIMESTAMP())")->execute(['c' => $id]);
             $this->db->commit();
         } catch (\Throwable $ex) {

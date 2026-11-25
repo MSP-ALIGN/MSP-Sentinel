@@ -30,14 +30,14 @@ $statusBadge = ['met' => ['success', __('Met')], 'partial' => ['warning', __('Pa
     <div class="card-body">
     <?php if (!$alignOn && !$linked): ?>
         <p class="mb-0 text-body-secondary"><?= e(can('integrations.link')
-            ? __('Connect MSP Align under Administration, Integrations to see this client\'s compliance frameworks here, with Sentinel\'s findings matched to their controls.')
-            : __('Compliance frameworks appear here once an admin connects MSP Align.')) ?></p>
+            ? __('Connect MSP Align under Administration → Integrations to see this client\'s compliance frameworks here, with Sentinel\'s findings matched to their controls.')
+            : __('Compliance frameworks appear here once MSP Align is connected (Administration → Integrations).')) ?></p>
     <?php elseif (!$linked): ?>
         <p class="small"><?= e(__('Link this client to its MSP Align client to see its compliance frameworks here.')) ?></p>
         <?php if ($alignClients['error'] !== ''): ?>
         <div class="alert alert-danger py-2 small"><?= e($alignClients['error']) ?></div>
         <?php elseif (!can('integrations.link')): ?>
-        <p class="small text-body-secondary mb-0"><?= e(__('An admin can link it.')) ?></p>
+        <p class="small text-body-secondary mb-0"><?= e(__('Someone whose role can link integrations can link it.')) ?></p>
         <?php elseif ($archived || (int) ($client['is_demo'] ?? 0) === 1): ?>
         <p class="small text-body-secondary mb-0"><?= e(__('Archived and demo clients can\'t be linked.')) ?></p>
         <?php else: ?>
@@ -69,7 +69,7 @@ $statusBadge = ['met' => ['success', __('Met')], 'partial' => ['warning', __('Pa
             <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
                 <h3 class="h6 mb-0"><?= e($f['framework']) ?></h3>
                 <span class="badge text-bg-light border"><?= e(__('MSP Align score {p}%', ['p' => $f['score']])) ?></span>
-                <?php if ($f['issues'] > 0): ?><span class="badge text-bg-danger"><?= e(__('{n} control(s) with open problems', ['n' => $f['issues']])) ?></span><?php endif; ?>
+                <?php if ($f['issues'] > 0): ?><span class="badge text-bg-danger"><?= e(__('{n} control(s) with open findings', ['n' => $f['issues']])) ?></span><?php endif; ?>
                 <?php $alignBase = rtrim(\Sentinel\Core\App::settings()->get('mspalign_url'), '/') . '/'; // only links into the configured MSP Align ?>
                 <?php if ($f['url'] !== '' && preg_match('#^https?://#', $f['url']) === 1 && str_starts_with($f['url'], $alignBase)): ?>
                 <a class="small ms-auto" href="<?= e($f['url']) ?>" rel="noopener noreferrer" target="_blank"><?= e(__('Open in MSP Align')) ?> <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></a>
@@ -88,7 +88,7 @@ $statusBadge = ['met' => ['success', __('Met')], 'partial' => ['warning', __('Pa
                     <td><span class="badge text-bg-<?= e($bc) ?>"><?= e($bl) ?></span></td>
                     <td class="small">
                         <?php if ($c['sentinel'] === 'issues'): ?>
-                        <span class="badge text-bg-danger"><i class="bi bi-x-octagon me-1" aria-hidden="true"></i><?= e(__('{n} open problem(s)', ['n' => $c['finding_count']])) ?></span>
+                        <span class="badge text-bg-danger"><i class="bi bi-x-octagon me-1" aria-hidden="true"></i><?= e(__('{n} open finding(s)', ['n' => $c['finding_count']])) ?></span>
                         <ul class="mb-0 ps-3 mt-1">
                             <?php foreach ($c['findings'] as $fd): ?>
                             <li><a href="<?= e(url('/findings/' . $fd['id'])) ?>"><?= e($fd['title']) ?></a> <span class="text-body-secondary"><?= e($fd['target']) ?></span></li>
@@ -96,7 +96,7 @@ $statusBadge = ['met' => ['success', __('Met')], 'partial' => ['warning', __('Pa
                             <?php if ($c['finding_count'] > count($c['findings'])): ?><li class="text-body-secondary"><?= e(__('and {n} more', ['n' => $c['finding_count'] - count($c['findings'])])) ?></li><?php endif; ?>
                         </ul>
                         <?php elseif ($c['sentinel'] === 'clear'): ?>
-                        <span class="badge text-bg-success"><i class="bi bi-check-circle me-1" aria-hidden="true"></i><?= e(__('No problems found')) ?></span>
+                        <span class="badge text-bg-success"><i class="bi bi-check-circle me-1" aria-hidden="true"></i><?= e(__('No findings')) ?></span>
                         <span class="text-body-secondary"><?= e(__('Checked: {list}', ['list' => implode(', ', $c['areas'])])) ?></span>
                         <?php else: ?>
                         <span class="badge text-bg-light border"><?= e(__('Not checked yet')) ?></span>

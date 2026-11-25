@@ -7,12 +7,12 @@
 use Sentinel\Core\Csrf;
 ?>
 <div class="card">
-    <div class="card-header d-flex align-items-center gap-2"><h2 class="card-title h5 mb-0"><?= e(__('Pen-test engagement approval')) ?></h2>
+    <div class="card-header d-flex align-items-center gap-2"><h2 class="card-title h5 mb-0"><?= e(__('Pen-test engagements')) ?></h2>
         <span class="badge <?= $twoPerson ? 'text-bg-success' : 'text-bg-warning' ?>"><?= e($twoPerson ? __('Two people') : __('One person')) ?></span></div>
     <form method="post" action="<?= e(url('/admin/settings/engagements')) ?>" autocomplete="off" novalidate>
     <div class="card-body">
         <?= Csrf::field() ?>
-        <p class="small text-body-secondary"><?= e(__('Nothing in an engagement runs before it is approved by someone who may approve engagements, after checking the client\'s signed authorisation against the scope.')) ?></p>
+        <p class="small text-body-secondary"><?= e(__('Nothing in an engagement runs before it is approved by someone who may approve engagements, after checking the client\'s signed authorization against the scope.')) ?></p>
         <div class="form-check mb-2">
             <input type="hidden" name="two_person" value="0">
             <input class="form-check-input" type="checkbox" id="two_person" name="two_person" value="1" <?= $twoPerson ? 'checked' : '' ?><?= $mayChangeTwoPerson ? '' : ' disabled' ?>>
@@ -27,6 +27,6 @@ use Sentinel\Core\Csrf;
         <p class="small text-body-secondary mb-0"><?= e(__('Only an Admin who holds every permission and sees every client can change this.')) ?></p>
         <?php endif; ?>
     </div>
-    <?php if ($mayChangeTwoPerson): ?><div class="card-footer"><button type="submit" class="btn btn-primary btn-sm"><?= e(__('Save')) ?></button></div><?php endif; ?>
+    <?php if ($mayChangeTwoPerson): ?><div class="card-footer"><button type="submit" class="btn btn-primary btn-sm"><?= e(__('Save engagement approval')) ?></button></div><?php endif; ?>
     </form>
 </div>

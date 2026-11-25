@@ -24,7 +24,7 @@ The **ITFlow client ID** is the shared key: Sentinel stores it on each client, a
 - Administration → Integrations → ITFlow: address, API key (encrypted), Test connection, Sync now.
 - Every 15 minutes Sentinel reads ITFlow's clients:
   - A new ITFlow client becomes a Sentinel client with its ITFlow ID. It is **not scanned** until someone records
-    its written authorisation (the authorised-to-scan rule never changes).
+    its written authorization (the authorized-to-scan rule never changes).
   - An existing Sentinel client with the same name and no ITFlow ID is linked instead of duplicated.
   - A name change in ITFlow is applied in Sentinel.
   - Archived in ITFlow → archived in Sentinel (scanning stops, history kept); unarchived in ITFlow → restored, but

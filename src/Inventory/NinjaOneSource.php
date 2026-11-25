@@ -87,11 +87,11 @@ final class NinjaOneSource implements InventorySource
         // Until an empty page (not a short one: the server may cap pageSize below what was asked).
         for ($page = 0; ; $page++) {
             if ($page >= self::MAX_PAGES) {
-                throw new InventoryException('NinjaOne returned more organisations than Sentinel reads in one go.');
+                throw new InventoryException('NinjaOne returned more organizations than Sentinel reads in one go.');
             }
             $rows = $this->getJson('/v2/organizations', ['pageSize' => $this->pageSize] + ($after === null ? [] : ['after' => $after]));
             if (!array_is_list($rows)) {
-                throw new InventoryException('NinjaOne returned an unexpected organisation list.');
+                throw new InventoryException('NinjaOne returned an unexpected organization list.');
             }
             $before = $after;
             foreach ($rows as $o) {
@@ -107,10 +107,7 @@ final class NinjaOneSource implements InventorySource
         return array_values($out);
     }
 
-    /**
-     * For "Test connection": signs in and lists organisations. Returns how many organisations the app can see;
-     * throws InventoryException with NinjaOne's reason otherwise.
-     */
+    /** {@inheritDoc} Gets an access token and lists the organizations; NinjaOne's reason is in the exception. */
     public function testConnection(): int
     {
         $this->accessToken();
@@ -121,7 +118,7 @@ final class NinjaOneSource implements InventorySource
     public function snapshot(string $orgId): array
     {
         if (!ctype_digit($orgId) || strlen($orgId) > 10) {
-            throw new InventoryException('Not a NinjaOne organisation ID.');
+            throw new InventoryException('Not a NinjaOne organization ID.');
         }
         $df = 'org = ' . $orgId;
 
@@ -157,6 +154,9 @@ final class NinjaOneSource implements InventorySource
                     'os_build' => self::str($os['buildNumber'] ?? ''),
                     'os_release' => self::str($os['releaseId'] ?? ''),
                     'ip_addresses' => array_values(array_filter(array_map([self::class, 'str'], is_array($d['ipAddresses'] ?? null) ? $d['ipAddresses'] : []))),
+                    // MAC addresses (1.50): matched against the agent's devices first. Normalised; anything else dropped.
+                    'mac_addresses' => array_values(array_unique(array_filter(array_map([self::class, 'mac'],
+                        is_array($d['macAddresses'] ?? null) ? array_slice($d['macAddresses'], 0, 20) : [])))),
                     'last_contact' => is_numeric($d['lastContact'] ?? null) ? (int) $d['lastContact'] : null,
                     'av_product' => '', 'av_state' => '', 'av_definitions' => '', 'encryption' => '',
                     'software' => [], 'patches' => [],
@@ -235,8 +235,9 @@ final class NinjaOneSource implements InventorySource
         });
         // "Missing" only for a Windows workstation the report lists nothing for, that was online in the last week and
         // whose inventory has arrived (installed software): a new or long-offline device is unknown, not unprotected.
+        // An antivirus report with no rows at all (1.49) is a gap in the data, not proof that nothing has antivirus.
         foreach ($devices as $id => &$d) {
-            if (!isset($avSeen[$id]) && $d['node_class'] === 'WINDOWS_WORKSTATION' && $d['software'] !== []
+            if ($avSeen !== [] && !isset($avSeen[$id]) && $d['node_class'] === 'WINDOWS_WORKSTATION' && $d['software'] !== []
                 && $d['last_contact'] !== null && $d['last_contact'] > time() - 7 * 86400) {
                 $d['av_state'] = 'missing';
             }
@@ -409,6 +410,25 @@ final class NinjaOneSource implements InventorySource
             throw new InventoryException(strlen($body) > self::MAX_BYTES ? 'NinjaOne sent more data than Sentinel accepts in one answer.' : 'Could not reach NinjaOne: ' . mb_substr($err, 0, 200));
         }
         return [$status, $body];
+    }
+
+    /**
+     * One MAC address from NinjaOne, normalised to lower case with colons, or '' (1.50; stricter in 1.50.1). Untrusted
+     * input: only the usual written forms are accepted (six pairs with ':' or '-' or none, or Cisco's three dotted
+     * groups), so a label that happens to contain twelve hex digits is not read as a MAC. All-zero and group
+     * (multicast and broadcast) addresses identify no machine and are dropped.
+     */
+    private static function mac(mixed $m): string
+    {
+        $m = is_string($m) ? trim($m) : '';
+        if (preg_match('/^[0-9a-f]{2}([:-]?)[0-9a-f]{2}(\1[0-9a-f]{2}){4}$/i', $m) !== 1 && preg_match('/^[0-9a-f]{4}\.[0-9a-f]{4}\.[0-9a-f]{4}$/i', $m) !== 1) {
+            return '';
+        }
+        $hex = strtolower((string) preg_replace('/[^0-9a-f]/i', '', $m));
+        if ($hex === '000000000000' || (hexdec($hex[1]) & 1) === 1) {
+            return ''; // all zero, or the group bit (multicast; broadcast ff:ff:... included)
+        }
+        return implode(':', str_split($hex, 2));
     }
 
     /** A scalar from the API as a trimmed string ('' for anything else). */

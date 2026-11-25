@@ -70,7 +70,7 @@ return [
                 implode("\n", array_map(static fn (int $i): string => "h{$i}.client.example", range(1, 5)));
         Assert::true(count($p->parseLines($many)['errors']) === 1, 'more than 256 entries refused');
     },
-    'authorisation status follows dates and revocation' => function (TestContext $ctx): void {
+    'authorization status follows dates and revocation' => function (TestContext $ctx): void {
         $a = ['revoked_at' => null, 'valid_from' => '2026-01-01', 'valid_until' => '2026-12-31'];
         Assert::same('scheduled', ScopeService::status($a, '2025-12-31'));
         Assert::same('active', ScopeService::status($a, '2026-01-01'));

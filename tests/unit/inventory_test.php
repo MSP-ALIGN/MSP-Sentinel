@@ -15,7 +15,7 @@ use Sentinel\Tests\Assert;
 use Sentinel\Tests\TestContext;
 
 return [
-    'software catalogue: anchored names, clean versions, nothing guessed' => function (TestContext $ctx): void {
+    'software catalog: anchored names, clean versions, nothing guessed' => function (TestContext $ctx): void {
         Assert::same(['product' => 'Google Chrome', 'cpe' => 'cpe:/a:google:chrome:120.0.6099.130'], SoftwareCatalog::identify('Google Chrome', '120.0.6099.130'));
         Assert::same('cpe:/a:mozilla:firefox:121.0', SoftwareCatalog::identify('Mozilla Firefox (x64 en-US)', '121.0')['cpe'] ?? null);
         Assert::same('cpe:/a:mozilla:firefox_esr:115.6.0', SoftwareCatalog::identify('Mozilla Firefox 115.6.0 ESR (x64 en-US)', '115.6.0')['cpe'] ?? null, 'ESR is its own product');
@@ -29,7 +29,7 @@ return [
                   ['Adobe Acrobat 2020', '20.005.30636'], ['Adobe Acrobat Reader 2017', '17.011.30204'], ['Microsoft Edge My', '120.0'], ['TeamViewer QS', '15.1']] as [$n, $v]) {
             Assert::same(null, SoftwareCatalog::identify($n, $v), 'not matched: ' . $n . ' ' . $v);
         }
-        Assert::true(SoftwareCatalog::known('WinSCP 6.1.2') && !SoftwareCatalog::known('Example App'), 'catalogue membership');
+        Assert::true(SoftwareCatalog::known('WinSCP 6.1.2') && !SoftwareCatalog::known('Example App'), 'catalog membership');
     },
     'Windows end of support by build and edition' => function (TestContext $ctx): void {
         Assert::same('2025-10-14', OsLifecycle::endOfSupport('Windows 10 Professional Edition', '19045'));

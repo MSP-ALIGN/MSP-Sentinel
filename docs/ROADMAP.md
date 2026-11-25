@@ -61,7 +61,7 @@ A small **collector** installed at each client site. It can see inside the netwo
 
 **How it works (safe by design):**
 - **Outbound only.** The agent connects out to Sentinel over HTTPS. The client's firewall needs no inbound rules.
-- **Enrolment:** an admin creates a one-time enrolment code for a site. The agent then exchanges it for its own key.
+- **Enrollment:** an admin creates a one-time enrollment code for a site. The agent then exchanges it for its own key.
   Each agent can be revoked on its own.
 - **Signed jobs.** Sentinel signs every job, and the signed job includes its scope. The agent checks the signature
   and the scope itself before scanning. Even a compromised Sentinel database can't make an agent scan outside its
@@ -107,7 +107,7 @@ A small **collector** installed at each client site. It can see inside the netwo
 Until this phase ships, Sentinel is called **vulnerability scanning**, never pen testing.
 
 **Engagements come first. Nothing runs without one.** Each engagement records:
-- the client, and a **signed authorisation document** (uploaded, plus the signer's name and role and the date)
+- the client, and a **signed authorization document** (uploaded, plus the signer's name and role and the date)
 - an exact scope (IPs, domains and sites), plus explicit exclusions
 - a time window. Testing outside it is refused.
 - a **second person** who approves the engagement before it can start (two-person rule)
@@ -127,8 +127,8 @@ Until this phase ships, Sentinel is called **vulnerability scanning**, never pen
    - internal tests through the agent
 3. **v3.2, controlled exploitation:**
    - only vetted modules, only inside an approved engagement and window
-   - each module is labelled with its risk (for example "may crash the service") and needs explicit opt-in
-4. **Pen-test report:** an executive summary, the engagement scope and authorisation, a methodology section, attack
+   - each module is labeled with its risk (for example "may crash the service") and needs explicit opt-in
+4. **Pen-test report:** an executive summary, the engagement scope and authorization, a methodology section, attack
    paths, findings with evidence (screenshots and request/response excerpts with secrets redacted), the fixes, and a
    **retest workflow** that issues a retest letter once fixes are verified.
 
@@ -158,7 +158,7 @@ One report engine serves every phase, so all reports look and read the same.
 | Penetration Test Report and Retest Letter | Client, auditors | v3.x |
 
 Each report is a frozen snapshot that never changes after it's issued, carries the MSP's branding, prints cleanly,
-and never shows severity by colour alone.
+and never shows severity by color alone.
 
 ## Built into v1.0 now, so later phases don't need a rewrite
 
@@ -180,7 +180,7 @@ These cost little in v1.0 and avoid redesigning later:
 
 ## Principles for every phase
 
-- Authorised targets only. Scope is checked when the job is scheduled and again right before the scan.
+- Authorized targets only. Scope is checked when the job is scheduled and again right before the scan.
 - Gentle by default, run only inside each client's scan window.
 - Honest findings: show the "last checked" date, keep confirmed and possible separate, and never guess.
 - Prefer mature open-source engines, and check each one's license before bundling anything.

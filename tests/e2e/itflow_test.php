@@ -53,7 +53,7 @@ return [
         Assert::contains('ITFlow refused the API key', $admin->get('/admin/integrations')->body);
         $admin->submit('/admin/integrations', '/admin/integrations/itflow', ['url' => $base($ctx), 'api_key' => $key, 'enabled' => '1']);
     },
-    'ITFlow sync: new clients are added (never scanned without authorisation), same names linked, archives followed' => function (TestContext $ctx) use ($setItflow, $alignBase): void {
+    'ITFlow sync: new clients are added (never scanned without authorization), same names linked, archives followed' => function (TestContext $ctx) use ($setItflow, $alignBase): void {
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $mk = static function (string $name) use ($admin): int {
             $res = $admin->submit('/clients/new', '/clients', ['name' => $name, 'itflow_client_id' => '', 'timezone' => 'UTC', 'scan_window_start' => '00:00', 'scan_window_end' => '23:59', 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);
@@ -61,7 +61,7 @@ return [
         };
         $lighthouse = $mk('lighthouse example'); // same name in another case: linked, not duplicated
         $dock = $mk('Dock Example');
-        $ctx->db->exec("UPDATE clients SET itflow_client_id = 899 WHERE id = {$dock}"); // already linked to another ITFlow client
+        (new \Sentinel\Psa\ClientLinks($ctx->db))->set($dock, 'itflow', '899'); // already linked to another ITFlow client
         $setItflow($ctx, [[801, 'Lighthouse Example'], [802, 'Pier Example Co'], [803, 'Gone Example', '2026-01-01 00:00:00'], [804, 'Dock Example'], [805, "Bad\u{202E}Name\x07 Example"]]);
         // MSP Align connected too: ITFlow client 802 is MSP Align client 502 (psa_id 802).
         $admin->submit('/admin/integrations', '/admin/integrations/mspalign', ['url' => $alignBase($ctx), 'api_key' => 'msa_TESTKEY1_' . str_repeat('a', 32), 'enabled' => '1']);
@@ -74,8 +74,8 @@ return [
         Assert::same($lighthouse, (int) $c(801)['id'], 'linked by name');
         $pier = $c(802);
         Assert::same('Pier Example Co', $pier['name']);
-        Assert::same(0, (int) $ctx->db->query('SELECT COUNT(*) FROM scan_authorisations WHERE client_id = ' . (int) $pier['id'])->fetchColumn(), 'no authorisation: never scanned');
-        Assert::contains('Not scanned until its authorisation is recorded', (string) $pier['notes']);
+        Assert::same(0, (int) $ctx->db->query('SELECT COUNT(*) FROM scan_authorisations WHERE client_id = ' . (int) $pier['id'])->fetchColumn(), 'no authorization: never scanned');
+        Assert::contains('Not scanned until its authorization is recorded', (string) $pier['notes']);
         Assert::same(1, (int) $ctx->db->query('SELECT COUNT(*) FROM sites WHERE client_id = ' . (int) $pier['id'])->fetchColumn(), 'default site');
         Assert::same(502, (int) $pier['align_client_id'], 'linked to MSP Align by ITFlow ID');
         Assert::same([], $c(803), 'already archived in ITFlow: not created');
@@ -185,7 +185,7 @@ return [
         $before = count($sent()['tickets']);
         App::itflowTickets()->run();
         Assert::same($before, count($sent()['tickets']), 'no new Warnings: no weekly ticket');
-        $finding('email:ticket.example:spf_weak', 'warn', 'SPF does not reject unauthorised senders', 'ticket.example');
+        $finding('email:ticket.example:spf_weak', 'warn', 'SPF does not reject unauthorized senders', 'ticket.example');
         App::itflowTickets()->run();
         Assert::same($before + 1, count($sent()['tickets']), 'new Warning a week later: weekly ticket');
         // Archived clients get no tickets; a failing ITFlow is reported.
@@ -197,7 +197,7 @@ return [
         App::settings()->setSecret('itflow_api_key', 'wrong-key-0123456789abcdef');
         Assert::contains('Stopped: ITFlow refused', App::itflowTickets()->run());
         App::settings()->set('itflow_enabled', '0');
-        App::settings()->set('itflow_tickets_enabled', '0');
+        App::settings()->set('tickets_enabled', '0');
     },
     'ITFlow two-way: fixed in Sentinel resolves the ticket; closed in ITFlow rechecks, then reopens or replaces' => function (TestContext $ctx) use ($base, $setItflow, $key): void {
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
@@ -415,7 +415,7 @@ return [
         Assert::same('open', $row($f3)['state']);
         $ctx->db->exec("UPDATE clients SET is_demo = 0, is_archived = 1 WHERE id = {$cid2}");
         App::settings()->set('itflow_enabled', '0');
-        App::settings()->set('itflow_tickets_enabled', '0');
+        App::settings()->set('tickets_enabled', '0');
         @unlink($dir . '/nmap-closed.json');
     },
     'ITFlow: one ticket per issue; it follows every target, resolves when all are fixed, and moves on when replaced' => function (TestContext $ctx) use ($base, $setItflow, $key): void {
@@ -604,7 +604,7 @@ return [
         $summary = App::itflowTickets()->run();
         Assert::same($tickets + 2, count($sent()['tickets']), 'ticket kept when the move is refused');
         Assert::contains('stayed on the default board', $summary);
-        Assert::same('0', App::settings()->fresh('itflow_tickets_last_ok'), 'the run is flagged');
+        Assert::same('0', App::settings()->fresh('tickets_last_ok'), 'the run is flagged');
         @unlink($failFile);
     },
 
@@ -691,13 +691,13 @@ return [
         @unlink($failFile);
         $setTags([860, 861, 864]);
         // A new ITFlow client with the name of a left-out client is neither linked nor doubled.
-        $ctx->db->exec("UPDATE clients SET itflow_client_id = NULL WHERE id = {$left}");
+        (new \Sentinel\Psa\ClientLinks($ctx->db))->set($left, 'itflow', null);
         $setItflow($ctx, [[860, 'Tagged Example One'], [861, 'Untagged Example Two'], [864, 'New Tagged Example'], [865, 'left out example three']]);
         $setTags([860, 861, 864, 865]);
         App::itflowSync()->sync();
         Assert::same([], $c(865), 'not linked to, nor doubled beside, a left-out client');
         Assert::same(1, (int) $ctx->db->query("SELECT COUNT(*) FROM clients WHERE name LIKE 'Left Out Example Three%'")->fetchColumn());
-        $ctx->db->exec("UPDATE clients SET itflow_client_id = 862 WHERE id = {$left}");
+        (new \Sentinel\Psa\ClientLinks($ctx->db))->set($left, 'itflow', '862');
         $setItflow($ctx, [[860, 'Tagged Example One'], [861, 'Untagged Example Two'], [862, 'Renamed In ITFlow Three'], [864, 'New Tagged Example']]);
         $setTags([860, 861, 864]);
         // Tickets: none for the left-out client, as before for the others.
@@ -730,5 +730,85 @@ return [
         // Off again for later tests.
         $admin->submit('/admin/integrations', '/admin/integrations/itflow', ['url' => $base($ctx), 'api_key' => $key, 'enabled' => '0', 'tag_name' => 'Sentinel']);
         @unlink($tagsFile);
+    },
+
+    'ITFlow (1.49): honest notes for non-fixes, interrupted rows retried, breached addresses masked, no backlog on linking' => function (TestContext $ctx) use ($base, $setItflow, $key): void {
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $dir = dirname($ctx->feedsLog);
+        @unlink($dir . '/itflow-tickets.json');
+        @unlink($dir . '/itflow-fail.json');
+        $setItflow($ctx, [[870, 'Honest Example Ltd']]);
+        $form = ['url' => $base($ctx), 'api_key' => $key, 'enabled' => '1', 'tickets' => '1', 'board' => '0'];
+        $admin->submit('/admin/integrations', '/admin/integrations/itflow', $form);
+        App::itflowSync()->sync();
+        $cid = (int) $ctx->db->query('SELECT id FROM clients WHERE itflow_client_id = 870')->fetchColumn();
+        $sent = static fn (): array => json_decode((string) @file_get_contents($dir . '/itflow-tickets.json'), true) ?: ['tickets' => [], 'replies' => []];
+        $add = static function (string $key, string $type, string $title, string $detail, string $target) use ($ctx, $cid): int {
+            $ctx->db->prepare("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, detail, target, evidence, status, first_seen, last_seen, opened_at, due_at)
+                               VALUES (:c, :k, :t, 'fail', :ti, :d, :tg, 'x', 'open', UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP() + INTERVAL 1 SECOND, UTC_TIMESTAMP() + INTERVAL 14 DAY)")
+                ->execute(['c' => $cid, 'k' => $key, 't' => $type, 'ti' => $title, 'd' => $detail, 'tg' => $target]);
+            return (int) $ctx->db->lastInsertId();
+        };
+        // A device finding whose device leaves the inventory source: a note, the ticket stays open.
+        $gone = $add('dev:ninjaone:9901:av_off', 'device', 'Antivirus or EDR is turned off', 'Off.', 'HONEST-LT-01');
+        App::itflowTickets()->run();
+        $ticket = (int) $ctx->db->query("SELECT itflow_ticket_id FROM itflow_tickets WHERE finding_id = {$gone}")->fetchColumn();
+        Assert::true($ticket > 0, 'ticket opened');
+        $ctx->db->exec("UPDATE findings SET status = 'resolved', resolved_at = UTC_TIMESTAMP(), resolved_reason = 'gone' WHERE id = {$gone}");
+        App::itflowTickets()->run();
+        $mine = array_values(array_filter($sent()['tickets'], static fn (array $t): bool => (int) $t['id'] === $ticket));
+        Assert::same('open', $mine[0]['status'] ?? null, 'not resolved: nothing was confirmed fixed');
+        $notes = implode("\n", array_column(array_filter($sent()['replies'], static fn (array $r): bool => (int) $r['ticket_id'] === $ticket), 'ticket_reply'));
+        Assert::contains('not confirmed fixed', $notes);
+        Assert::notContains('Verified fixed', $notes);
+        // A real fix still resolves its ticket with "Verified fixed".
+        $fixed = $add('port:203.0.113.91:3389', 'port', 'Remote Desktop open', 'Port 3389 open.', '203.0.113.91:3389');
+        App::itflowTickets()->run();
+        $t2 = (int) $ctx->db->query("SELECT itflow_ticket_id FROM itflow_tickets WHERE finding_id = {$fixed}")->fetchColumn();
+        $ctx->db->exec("UPDATE findings SET status = 'resolved', resolved_at = UTC_TIMESTAMP(), resolved_reason = '' WHERE id = {$fixed}");
+        App::itflowTickets()->run();
+        $mine = array_values(array_filter($sent()['tickets'], static fn (array $t): bool => (int) $t['id'] === $t2));
+        Assert::same('resolved', $mine[0]['status'] ?? null, 'a confirmed fix resolves the ticket');
+        // A row a run left before it got as far as opening the ticket (no marker): retried, not stuck.
+        $stuck = $add('port:203.0.113.92:445', 'port', 'SMB open to the internet', 'Port 445 open.', '203.0.113.92:445');
+        $ctx->db->exec("INSERT INTO itflow_tickets (client_id, kind, finding_id, itflow_ticket_id, severity_at_open, kev_noted, state, created_at)
+                        VALUES ({$cid}, 'finding', {$stuck}, 0, 'fail', 0, 'pending', UTC_TIMESTAMP() - INTERVAL 1 HOUR)");
+        App::itflowTickets()->run();
+        Assert::true((int) $ctx->db->query("SELECT MAX(itflow_ticket_id) FROM itflow_tickets WHERE finding_id = {$stuck}")->fetchColumn() > 0, 'the interrupted row got its ticket');
+        // Breached addresses are masked in the ticket, as in alerts.
+        $breach = $add('breach:pat.lee@honest.example', 'breach', 'p***@honest.example appeared in 1 data breach(es)', 'pat.lee@honest.example: Example Breach (2026-10)', 'p***@honest.example');
+        App::itflowTickets()->run();
+        $bt = (int) $ctx->db->query("SELECT itflow_ticket_id FROM itflow_tickets WHERE finding_id = {$breach}")->fetchColumn();
+        $body = (string) (array_values(array_filter($sent()['tickets'], static fn (array $t): bool => (int) $t['id'] === $bt))[0]['ticket_details'] ?? '');
+        Assert::true($body !== '' && !str_contains($body, 'pat.lee@honest.example'), 'full address not in the ticket');
+        // An existing client linked to ITFlow later: its old Fails get no tickets (no backlog), new ones do.
+        $res = $admin->submit('/clients/new', '/clients', ['name' => 'Linked Later Example', 'itflow_client_id' => '', 'timezone' => 'UTC', 'scan_window_start' => '00:00', 'scan_window_end' => '23:59', 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);
+        $late = (int) basename((string) $res->location());
+        $ctx->db->exec("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, detail, target, evidence, status, first_seen, last_seen, opened_at, due_at)
+                        VALUES ({$late}, 'port:203.0.113.93:23', 'port', 'fail', 'Telnet open', 'Port 23 open.', '203.0.113.93:23', 'x', 'open', UTC_TIMESTAMP() - INTERVAL 5 DAY, UTC_TIMESTAMP(), UTC_TIMESTAMP() - INTERVAL 5 DAY, UTC_TIMESTAMP())");
+        $setItflow($ctx, [[870, 'Honest Example Ltd'], [871, 'Linked Later Example']]);
+        $admin->submit('/clients/' . $late . '/edit', '/clients/' . $late, ['name' => 'Linked Later Example', 'itflow_client_id' => '871', 'timezone' => 'UTC',
+            'scan_window_start' => '00:00', 'scan_window_end' => '23:59', 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);
+        Assert::true($ctx->db->query("SELECT itflow_resumed_at FROM clients WHERE id = {$late}")->fetchColumn() !== null, 'linking records when tickets start');
+        App::itflowTickets()->run();
+        Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM itflow_tickets WHERE client_id = {$late}")->fetchColumn(), 'no backlog of old Fails');
+        // 1.50: a client archived in Sentinel: its open ticket gets one note and is no longer followed; restored, a new ticket.
+        $arch = $add('port:203.0.113.94:21', 'port', 'FTP open to the internet', 'Port 21 open.', '203.0.113.94:21');
+        App::itflowTickets()->run();
+        $at = (int) $ctx->db->query("SELECT itflow_ticket_id FROM itflow_tickets WHERE finding_id = {$arch}")->fetchColumn();
+        Assert::true($at > 0, 'ticket opened before archiving');
+        $admin->submit('/clients/' . $cid, '/clients/' . $cid . '/archive', ['archive' => '1']);
+        App::itflowTickets()->run();
+        App::itflowTickets()->run();
+        $archNotes = array_filter($sent()['replies'], static fn (array $r): bool => (int) $r['ticket_id'] === $at && str_contains((string) $r['ticket_reply'], 'archived in Sentinel'));
+        Assert::same(1, count($archNotes), 'one note, not one per run');
+        Assert::same('gone', $ctx->db->query("SELECT state FROM itflow_tickets WHERE itflow_ticket_id = {$at}")->fetchColumn(), 'no longer followed');
+        $admin->submit('/clients/' . $cid, '/clients/' . $cid . '/archive', ['archive' => '0']);
+        App::itflowTickets()->run();
+        $newT = (int) $ctx->db->query("SELECT itflow_ticket_id FROM itflow_tickets WHERE finding_id = {$arch}")->fetchColumn();
+        Assert::true($newT > $at, 'restored with the problem still open: a new ticket');
+        Assert::same(1, (int) $ctx->db->query("SELECT COUNT(*) FROM itflow_tickets WHERE history_finding_id = {$arch} AND itflow_ticket_id = {$at}")->fetchColumn(), 'the old ticket kept in the history');
+        // Off again for later tests.
+        $admin->submit('/admin/integrations', '/admin/integrations/itflow', ['url' => $base($ctx), 'api_key' => $key, 'enabled' => '0']);
     },
 ];

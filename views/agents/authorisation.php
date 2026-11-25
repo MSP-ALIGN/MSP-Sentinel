@@ -9,11 +9,11 @@ use Sentinel\Core\Csrf;
 $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' : '';
 ?>
 <div class="card">
-    <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Internal authorisation: {client}, {site}', ['client' => $client['name'], 'site' => $site['name']])) ?></h2></div>
+    <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Internal authorization: {client}, {site}', ['client' => $client['name'], 'site' => $site['name']])) ?></h2></div>
     <form method="post" action="<?= e(url('/clients/' . (int) $client['id'] . '/sites/' . (int) $site['id'] . '/internal-authorisations')) ?>" novalidate>
     <div class="card-body">
         <?= Csrf::field() ?>
-        <p class="small text-body-secondary"><?= e(__('Record who at the client approved scanning their internal networks, for how long, and exactly which networks. Sentinel signs this authorisation; agents refuse to scan anything outside it.')) ?></p>
+        <p class="small text-body-secondary"><?= e(__('Record who at the client approved scanning their internal networks, for how long, and exactly which networks. Sentinel signs this authorization; agents refuse to scan anything outside it.')) ?></p>
         <div class="row g-3">
             <?php foreach (['approved_by_name' => __('Approved by (name)'), 'approved_by_role' => __('Their role')] as $f => $label): ?>
             <div class="col-md-6"><label class="form-label" for="<?= e($f) ?>"><?= e($label) ?></label>

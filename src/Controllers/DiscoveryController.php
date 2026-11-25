@@ -76,7 +76,7 @@ final class DiscoveryController extends Controller
             return Response::redirect('/clients/' . $clientId . '/discovery');
         }
         if ($suggestion['status'] === 'accepted') {
-            Session::flash('info', __('This suggestion is already part of an authorisation.'));
+            Session::flash('info', __('This suggestion is already part of an authorization.'));
             return Response::redirect('/clients/' . $clientId . '/discovery');
         }
         App::suggestions()->setStatus((int) $suggestion['id'], $status, (int) $this->user()['id']);

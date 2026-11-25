@@ -2,6 +2,182 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.54.0 (2026-11-25): Client links ready for other ticketing systems
+
+Nothing changes in how ITFlow works.
+
+- **Client links in their own table.** The link between a Sentinel client and its client in the ticketing system now
+  lives in one place that also fits systems with text IDs. Existing ITFlow links are copied over on upgrade. The ticket
+  rules and the client sync read it from there.
+- **Nothing breaks.** The ITFlow client ID on each client stays and is kept in step, so the REST API
+  (`itflow_client_id`), MSP Align matching and the client form work as before. A ticketing-system client can still be
+  linked to only one Sentinel client.
+
+### 1.53.1 (2026-11-25): Fixes from review
+
+- When a ticketing system can't look a ticket up after an unclear answer, the "check for a duplicate" warning is also
+  in the finding's history, where technicians see it. (ITFlow can look tickets up, so this doesn't affect it.)
+- The ITFlow connection is read once per run; tests of the ticketing layer no longer touch other clients.
+
+### 1.53.0 (2026-11-25): Ready for more ticketing systems
+
+The next step towards working with ticketing systems besides ITFlow. Nothing changes in how ITFlow works.
+
+- **One ticketing layer.** Opening, following, resolving and reopening tickets, and the client sync, now go through a
+  general ticketing layer, with ITFlow as its first system. Another PSA can be added later without touching the ticket
+  rules (one ticket per issue, two-way status, rechecks, the weekly Warnings ticket).
+- **Adapts to what a PSA can do.** A PSA that can reopen closed tickets gets them reopened instead of replaced. One
+  that can't look a ticket up again after an unclear answer gets it opened again, with a note to check for a
+  duplicate. ITFlow keeps its current behavior on both.
+- Service boards and the client tag filter are used only with PSAs that have them.
+
+### 1.52.1 (2026-11-25): Fixes from review
+
+- A client linked to an RMM that is later turned off is never stuck: the Devices page still shows that link, and it
+  can be unlinked. Links to an RMM Sentinel no longer supports never block a client.
+- Two admins linking the same client to two RMMs at the same moment can't both succeed.
+- Small safeguards for adding RMMs later (setting names, removing saved secrets).
+
+### 1.52.0 (2026-11-25): Ready for more RMMs
+
+The first step towards working with other RMMs and ticketing systems besides NinjaOne and ITFlow. Nothing changes in
+how NinjaOne works.
+
+- **One list of RMMs.** Each RMM Sentinel can connect to is described in one place: its settings, how they are
+  checked, its setup steps and how to connect. The Integrations page draws its card, and saves and tests it, from that
+  description, so adding another RMM later needs no new pages. NinjaOne keeps the same settings, address and audit
+  entries.
+- **One RMM per client.** A client is linked to one RMM at a time, so the same machines never come in twice with
+  duplicate findings. Linking a client already linked elsewhere is refused with the reason.
+- The Administration overview names the connected RMMs, and a client's Devices page no longer assumes NinjaOne.
+
+### 1.51.1 (2026-11-25): Fixes from review
+
+- The Getting started checklist can only be hidden by someone who sees every client, like other organization-wide
+  settings.
+- Links and bookmarks to the three help topics renamed in 1.51.0 still land on them.
+- The Authorizations page loads only what it shows, and the dashboard checks the checklist once per page.
+
+### 1.51.0 (2026-11-25): Easier to find your way, one vocabulary, US spelling
+
+- **Main pages stay in reach.** Inside a client, the menu keeps Dashboard, All clients, All findings and Help.
+  Finding and report pages keep their client's menu.
+- **One name per page.** Each client page's heading is its section, with the client's name above it, and the browser
+  tab reads "Client · Section". Menu labels match the headings ("Scans and ports", "Certificates and web pages",
+  "Website and email"); Discovery sits next to Authorizations.
+- **Getting started checklist** on the dashboard for whoever manages settings: time zone, a second admin, alerts,
+  the first client, its authorization and the first scan, ticked off from what Sentinel already holds. One click hides
+  it for everyone.
+- **Scan now on the client's Overview**, where the help always said it was. The Authorizations page also lists each
+  site's internal authorization, and the authorization form explains Change scope / renew.
+- **Administration**: one entry in the user menu; the overview has a Roles card and complete descriptions; the API
+  page has an API reference button. The engagements list can start a new engagement for a chosen client.
+- **One vocabulary**: "finding", "agent host", "two-factor authentication", "Pen-test engagements", "Time zone";
+  every Save button says what it saves, and new records use "Add". Text no longer assumes "an admin" where a role
+  permission decides.
+- **US spelling** throughout the interface, help and docs (authorization, organization, enrollment, canceled).
+  Web addresses, API fields and settings keep their names, so links, bookmarks and integrations keep working. The
+  agent accepts `enroll` as well as `enrol`.
+
+### 1.50.1 (2026-11-25): Fixes from review
+
+- **Safer device matching.** A MAC several agent devices share (a router or VPN server answering for others) no longer
+  joins them all to one NinjaOne device. A real MAC the NinjaOne device doesn't list rules it out, a name only
+  matches a device NinjaOne saw in the last day, and an address range two sites use stays ambiguous after one site's
+  authorization lapses.
+- **Certificate findings keep their decisions.** The upgrade moves the evidence to the new form too, so false
+  positives and accepted findings don't reopen. Where an endpoint had both an old "expired" and an "expires soon"
+  finding, the open one is kept, and an open one combined into another closes with an honest ticket note instead of
+  "Verified fixed".
+- **An accepted Warning that becomes a Fail opens again** (an accepted "expires soon" certificate that expires), with
+  a Fail deadline from that day.
+- **Archived clients' tickets**: only open tickets get the note; a note ITFlow refuses no longer retries every run.
+- NinjaOne MAC addresses are read only in their usual written forms; multicast and broadcast addresses are dropped.
+
+### 1.50.0 (2026-11-25): The right device, one certificate finding, tidy tickets
+
+- **Matching agents to NinjaOne devices.** Sentinel now uses the strongest evidence first: the network card's MAC
+  address (NinjaOne's MACs now come over), then the address, then the name. An address only counts when the NinjaOne
+  device was seen in the last day and only one site's networks cover it, so two clients both on 192.168.1.x, or a
+  stale address, never join the wrong machines. A machine an agent saw without a name can still be matched by MAC.
+- **Routers and firewalls.** A MAC that answers on several addresses is no longer used to tell devices apart, so
+  each address stays its own device instead of overwriting one record.
+- **One certificate finding.** A certificate that expires soon and then expires is the same finding: it moves from
+  Warning to Fail and keeps its owner, history and ticket, instead of closing as "fixed" and opening a new one.
+  Existing findings are moved to the new form on upgrade.
+- **Archived clients' tickets.** When a client is archived in Sentinel, each of its open ITFlow tickets gets one note
+  saying it is no longer followed. If the client is restored while a problem is still open, a new ticket is opened.
+
+### 1.49.1 (2026-11-25): Fixes from review
+
+- **Platform limits only for real operating systems.** NVD labels such as "node.js" or "WordPress", and other
+  vendors' "IOS", no longer hide CVEs; Linux distributions (Debian, Ubuntu, Red Hat) count as Linux; NVD's "not on
+  this platform" is never read as "only on it"; a CVE listed without a limit by any NVD answer keeps no limit.
+  "Cisco IOS XE" is no longer read as macOS, and iPadOS counts as iOS.
+- **Private MAC addresses.** Phones and laptops that rotate private MACs are recognized by their address, so each
+  rotation isn't a new device and a new-device alert.
+- **Gentler refresh.** The one-off refresh of cached vulnerability data (for platform limits) takes at most 50
+  products per run, after the regular work, so a feeds run never stalls on it.
+- **Clearer tickets.** Ticket history no longer says "confirmed fixed" when Sentinel stopped tracking a problem
+  without a fix, and a ticket left open that way says "seen again" when the problem returns.
+- **First sync as usual.** A newly linked source alerts and opens tickets normally from its first sync (the planned
+  first-import summary was dropped: you're setting the client up and expect that data).
+- A program list without any usable entry no longer clears a device's software; a re-link that loses a race says
+  so plainly; the "alerts paused" notice says where the rest are.
+
+### 1.49.0 (2026-11-25): Accurate data, calmer alerts and tickets
+
+From a full review of how devices, findings, alerts and tickets fit together.
+
+- **CVEs for the right platform.** NVD limits some CVEs to an operating system (for example Chrome "running on"
+  Android or macOS). These are now reported only on devices running it, and never as confirmed when the OS is
+  unknown. This removes many of the extra CVEs a NinjaOne connection brought onto Windows PCs. Cached NVD answers are
+  fetched again in the background to pick this up.
+- **Unknown is not fixed.** A device NinjaOne says nothing about in a sync (offline, or a report came back empty)
+  keeps its last known antivirus, encryption and software, so its findings no longer close and reopen with a new
+  due date, alert and ticket. An empty antivirus report never marks every PC as having no antivirus.
+- **The right device.** An address DHCP gives to a different machine no longer carries over the old device's record,
+  name and findings. Re-linking a client to another NinjaOne organisation retires the old organisation's devices.
+- **No floods.** One run sends at most 60 immediate Fail alerts across clients (for example after new vulnerability
+  data), then one notice. Linking a client to ITFlow, or restoring it, no longer opens tickets for months of old
+  findings.
+- **Honest tickets.** When Sentinel stops tracking a problem without seeing it fixed (device gone, source unlinked),
+  the ticket gets a note saying so and stays open, instead of "Verified fixed". A ticket interrupted before it was
+  opened is retried instead of blocking. Breached email addresses are masked in tickets, as in alerts.
+
+### 1.48.1 (2026-11-24): Time zone fixes from review
+
+- **Everything in your time.** The activity feeds on the dashboard and client overview, the certificate "Checked"
+  times, and the dates in reports (first seen, fixed, decided) now use your time zone, or the client's in reports,
+  like the rest.
+- **The button says what it does.** After a Settings save that failed (for example a bad source address), the "move
+  clients still on UTC" button named the time zone just typed, but moved clients to the saved one. It now names the
+  saved one.
+- Time zone names that PHP knows by an older alias are accepted, and stored times in ISO format are shown converted.
+
+### 1.48.0 (2026-11-24): Times in your time zone
+
+- **Your time, everywhere.** Under **Administration → Settings → General**, choose your time zone (for example
+  America/Los_Angeles). Every time in Sentinel (scans, findings, notifications, the audit log, agents, integrations)
+  is then shown in it and labelled, for example `2026-11-24 13:33 PST`. Each user can pick their own under **My
+  profile → Time zone**.
+- **New clients start in it,** also those added from ITFlow. Clients still on UTC are listed on the Settings page,
+  with a button that moves them to your time zone (their scan window times stay the same numbers, now read as local
+  time). It's audited.
+- **Reports** show times in their client's time zone, labelled.
+- **Still UTC underneath.** Sentinel keeps storing and comparing times in UTC, so daylight-saving changes never
+  shift a scan, and the logs, agents and API agree. Leave the server's own clock on UTC.
+
+### 1.47.2 (2026-11-24): Windows agent scans start
+
+- **"Could not start nmap" on Windows is fixed.** The agent asked Windows to read nmap's input from `/dev/null`,
+  which only exists on Linux, so every scan failed before it began. It now uses Windows' null device, gives nmap the
+  environment Windows networking needs (without `SystemRoot`, Winsock can't start), and collects nmap's output in
+  private temporary files, because PHP can't read process pipes on Windows without blocking. The stop check, kill
+  switch and time limits keep working during a scan. Linux agents and Sentinel's own scans are unchanged.
+- To get the fix, upgrade the Windows agent: run the install command again with `-Upgrade`, or send a signed remote
+  update from the agent's page.
+
 ### 1.47.1 (2026-11-24): Engagement approval fixes from review
 
 - **Back on means back on.** Approving checks the setting again in the same database statement, so turning

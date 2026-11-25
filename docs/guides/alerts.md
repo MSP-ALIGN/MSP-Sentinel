@@ -50,6 +50,9 @@ Only alert summaries and links are sent, never scan details.
 ## Good to know
 
 - Accepted risks and false positives never cause alerts.
+- **No floods.** One run sends at most 60 immediate Fail alerts across all clients (for example after new
+  vulnerability data), then one "alerts paused" notice; the rest are on the Findings page and in each client's
+  summary.
 - The SMTP password and the webhook address are stored encrypted and never shown again. Leave the field empty to keep
   the saved value, or tick **Remove the saved password** / **Remove the saved address**.
 - **Changing the mail server clears the saved SMTP password.** Enter it again for the new server.

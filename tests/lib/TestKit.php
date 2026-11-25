@@ -361,11 +361,11 @@ final class TestContext
         if ($res->location() === '/2fa/setup') {
             $page = $client->get('/2fa/setup');
             if (!preg_match('/data-testid="totp-secret">([A-Z2-7 ]+)</', $page->body, $m)) {
-                throw new AssertionFailed('No TOTP secret on the enrolment page');
+                throw new AssertionFailed('No TOTP secret on the enrollment page');
             }
             $this->secrets[$username] = str_replace(' ', '', $m[1]);
             $res = $client->post('/2fa/setup', ['_csrf' => $page->csrf(), 'code' => $this->totp($username)]);
-            Assert::redirect('/recovery-codes', $res, 'enrolment for ' . $username);
+            Assert::redirect('/recovery-codes', $res, 'enrollment for ' . $username);
             $client->get('/recovery-codes');
             return $client;
         }

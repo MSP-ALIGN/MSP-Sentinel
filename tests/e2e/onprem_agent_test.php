@@ -43,7 +43,7 @@ $setup = static function (TestContext $ctx) use ($agentDir, $runAgent, $namePort
     @mkdir($agentDir($ctx), 0700, true);
     [$code, $out] = $runAgent($ctx, ['enrol', '--server', $ctx->baseUrl, '--code', $m[0] ?? 'missing']);
     if ($code !== 0) {
-        throw new RuntimeException('Agent enrolment failed: ' . $out);
+        throw new RuntimeException('Agent enrollment failed: ' . $out);
     }
     // Test-only agent settings: the fake nmap and the mock services (honoured only with SENTINEL_TEST_MODE=1).
     $app = require $ctx->configPath;
@@ -62,7 +62,7 @@ $scanNow = static function (TestContext $ctx, int $cid, int $site): int {
 };
 
 return [
-    'internal authorisations: private ranges only, signed, admin-only' => function (TestContext $ctx) use ($setup): void {
+    'internal authorizations: private ranges only, signed, admin-only' => function (TestContext $ctx) use ($setup): void {
         [$cid, $site] = $setup($ctx);
         $a = $ctx->db->query("SELECT * FROM internal_authorisations WHERE site_id = {$site}")->fetch();
         Assert::same("10.90.0.0/24", $a['ranges']);
@@ -79,15 +79,15 @@ return [
         }
         $tech = $ctx->login('agtech', 'Agtech-Pass-0001!');
         Assert::status(403, $tech->get('/clients/' . $cid . '/sites/' . $site . '/internal-authorisations/new'));
-        Assert::status(403, $tech->submit('/clients/' . $cid, '/clients/' . $cid . '/sites/' . $site . '/enrol', []), 'only admins create enrolment codes');
+        Assert::status(403, $tech->submit('/clients/' . $cid, '/clients/' . $cid . '/sites/' . $site . '/enrol', []), 'only admins create enrollment codes');
         Assert::contains('10.90.0.0/24', $ctx->clientSection($admin, (int) $cid, 'agents'));
     },
-    'enrolment: one-time code, token stored hashed, server key pinned' => function (TestContext $ctx) use ($setup, $agentDir): void {
+    'enrollment: one-time code, token stored hashed, server key pinned' => function (TestContext $ctx) use ($setup, $agentDir): void {
         [$cid, $site] = $setup($ctx);
         // A site without an internal authorisation gets no enrolment code (the agent could never scan).
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
-        $admin->submit('/clients/' . $cid, '/clients/' . $cid . '/sites', ['name' => 'Unauthorised Annex', 'itflow_location_id' => '']);
-        $bare = (int) $ctx->db->query("SELECT id FROM sites WHERE client_id = {$cid} AND name = 'Unauthorised Annex'")->fetchColumn();
+        $admin->submit('/clients/' . $cid, '/clients/' . $cid . '/sites', ['name' => 'Unauthorized Annex', 'itflow_location_id' => '']);
+        $bare = (int) $ctx->db->query("SELECT id FROM sites WHERE client_id = {$cid} AND name = 'Unauthorized Annex'")->fetchColumn();
         $before = (int) $ctx->db->query('SELECT COUNT(*) FROM agent_enrolments')->fetchColumn();
         Assert::redirect('/clients/' . $cid . '/agents', $admin->submit('/clients/' . $cid, '/clients/' . $cid . '/sites/' . $bare . '/enrol', []));
         Assert::same($before, (int) $ctx->db->query('SELECT COUNT(*) FROM agent_enrolments')->fetchColumn(), 'no code created');
@@ -117,7 +117,7 @@ return [
         Assert::contains('data-copy="cmd-windows"', $page);
         Assert::contains('Check it worked', $page);
         Assert::notContains('--code ' . ($m[0] ?? 'missing'), $page, 'the code is never put on a command line');
-        Assert::notContains('no internal authorisation valid today', $page, 'this site has one');
+        Assert::notContains('no internal authorization valid today', $page, 'this site has one');
         // A site without an authorisation: no code at all (1.34; earlier the page only warned).
         $res = $admin->submit('/clients/new', '/clients', ['name' => 'Unapproved Example', 'itflow_client_id' => '', 'timezone' => 'UTC', 'scan_window_start' => '00:00',
             'scan_window_end' => '23:59', 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);
@@ -177,7 +177,7 @@ return [
         Assert::contains('replay', $out, 'replay refused');
         $ctx->db->exec("UPDATE agent_jobs SET status = 'done' WHERE id = {$job}");
     },
-    'scope is enforced by server and agent: out-of-range results, tampered authorisations, forged jobs' => function (TestContext $ctx) use ($setup, $agentDir): void {
+    'scope is enforced by server and agent: out-of-range results, tampered authorizations, forged jobs' => function (TestContext $ctx) use ($setup, $agentDir): void {
         [$cid, $site] = $setup($ctx);
         $config = json_decode((string) file_get_contents($agentDir($ctx) . '/agent.json'), true);
         $agentId = (int) $config['agent_id'];
@@ -206,14 +206,14 @@ return [
         $other = \Sentinel\Agent\Signer::fromAppKey(random_bytes(32))->sign($base);
         Assert::same('bad signature', $v->verify($other['payload'], $other['signature'], []));
         $wide = $signer->sign(['targets' => ['10.90.0.0/16']] + $base);
-        Assert::same('targets outside the signed authorisation', $v->verify($wide['payload'], $wide['signature'], []));
+        Assert::same('targets outside the signed authorization', $v->verify($wide['payload'], $wide['signature'], []));
         $forOther = $signer->sign(['agent_id' => $agentId + 1] + $base);
         Assert::same('job is for another agent', $v->verify($forOther['payload'], $forOther['signature'], []));
         $old = $signer->sign(['expires_at' => gmdate('Y-m-d\TH:i:s\Z', time() - 60)] + $base);
         Assert::same('job expired', $v->verify($old['payload'], $old['signature'], []));
         $fakeAuth = \Sentinel\Agent\Signer::fromAppKey(random_bytes(32))->sign(json_decode($a['signed_payload'], true));
         $forged = $signer->sign(['authorisation' => $fakeAuth] + $base);
-        Assert::same('authorisation not signed by the server', $v->verify($forged['payload'], $forged['signature'], []));
+        Assert::same('authorization not signed by the server', $v->verify($forged['payload'], $forged['signature'], []));
         // Another client's site, with its own validly signed authorisation: refused by the server and by the agent.
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $res = $admin->submit('/clients/new', '/clients', ['name' => 'Inlet Example', 'itflow_client_id' => '', 'timezone' => 'UTC', 'scan_window_start' => '00:00', 'scan_window_end' => '23:59', 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);
@@ -273,6 +273,47 @@ return [
         Assert::same('cancelled', $r['status'] ?? null);
         Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE source_id = '{$site}:10.90.0.77'")->fetchColumn(), 'nothing stored after revocation');
         $ctx->db->exec("UPDATE internal_authorisations SET revoked_at = NULL WHERE id = {$auth}");
+    },
+    'devices (1.49): an address DHCP gives to another machine never carries the old one\'s record over' => function (TestContext $ctx) use ($setup, $agentDir): void {
+        [$cid, $site] = $setup($ctx);
+        $config = json_decode((string) file_get_contents($agentDir($ctx) . '/agent.json'), true);
+        $agentId = (int) $config['agent_id'];
+        $auth = (int) $ctx->db->query("SELECT id FROM internal_authorisations WHERE site_id = {$site}")->fetchColumn();
+        $ctx->db->exec("UPDATE agent_jobs SET status = 'done' WHERE site_id = {$site} AND status IN ('queued','sent')");
+        $sweep = static function (array $hosts) use ($ctx, $agentId, $cid, $site, $auth, $config): void {
+            $job = App::agents()->queueJob($agentId, $cid, $site, $auth, 'light', 'manual', null, [], 12);
+            App::agents()->markSent($job);
+            Assert::status(200, $ctx->api('POST', '/agent/v1/jobs/' . $job . '/results', $config['token'], ['status' => 'done', 'hosts' => $hosts]));
+        };
+        $dev = static fn (string $mac): array => $ctx->db->query("SELECT id, name, ip_addresses, source_id FROM devices WHERE source = 'agent' AND site_id = {$site} AND mac = '{$mac}'")->fetch() ?: [];
+        // A laptop at .31.
+        $sweep([['ip' => '10.90.0.31', 'mac' => '00:1b:21:00:00:31', 'hostname' => 'laptop-a.example']]);
+        $laptop = $dev('00:1b:21:00:00:31');
+        Assert::same('10.90.0.31', $laptop['ip_addresses'] ?? null);
+        // DHCP: a printer (no name) gets .31, the laptop moves to .39.
+        $sweep([['ip' => '10.90.0.31', 'mac' => '00:1b:21:00:00:32'], ['ip' => '10.90.0.39', 'mac' => '00:1b:21:00:00:31', 'hostname' => 'laptop-a.example']]);
+        $after = $dev('00:1b:21:00:00:31');
+        $printer = $dev('00:1b:21:00:00:32');
+        Assert::same([(int) $laptop['id'], '10.90.0.39', 'laptop-a.example'], [(int) $after['id'], $after['ip_addresses'], $after['name']], 'the laptop keeps its record at its new address');
+        Assert::true($printer !== [] && (int) $printer['id'] !== (int) $laptop['id'], 'the printer gets its own record');
+        Assert::same('10.90.0.31', $printer['name'], 'not named after the laptop');
+        Assert::same($site . ':mac:00:1b:21:00:00:32', $printer['source_id'], 'keyed by its MAC (the address was first used by the laptop)');
+        // The other order (printer reported first, laptop not yet moved in this sweep): the same result.
+        $sweep([['ip' => '10.90.0.31', 'mac' => '00:1b:21:00:00:32']]);
+        Assert::same((int) $printer['id'], (int) $dev('00:1b:21:00:00:32')['id'], 'the printer is found again by its MAC');
+        Assert::same('laptop-a.example', $dev('00:1b:21:00:00:31')['name'], 'the laptop untouched');
+        // 1.49.1: a phone rotating private (locally administered) MACs at one address stays one device.
+        $sweep([['ip' => '10.90.0.50', 'mac' => '3a:11:22:33:44:01', 'hostname' => 'phone.example']]);
+        $sweep([['ip' => '10.90.0.50', 'mac' => '3a:99:88:77:66:02', 'hostname' => 'phone.example']]);
+        Assert::same(1, (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE source = 'agent' AND site_id = {$site} AND ip_addresses = '10.90.0.50'")->fetchColumn(), 'private MACs: one record by address');
+        // 1.50: one MAC on two addresses in one upload (a Wi-Fi extender): two records by address, not one flipping.
+        $sweep([['ip' => '10.90.0.60', 'mac' => '00:1b:21:00:00:60', 'hostname' => 'tv.example'], ['ip' => '10.90.0.61', 'mac' => '00:1b:21:00:00:60', 'hostname' => 'speaker.example']]);
+        $sweep([['ip' => '10.90.0.60', 'mac' => '00:1b:21:00:00:60', 'hostname' => 'tv.example'], ['ip' => '10.90.0.61', 'mac' => '00:1b:21:00:00:60', 'hostname' => 'speaker.example']]);
+        Assert::same(2, (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE source = 'agent' AND site_id = {$site} AND ip_addresses IN ('10.90.0.60', '10.90.0.61')")->fetchColumn(), 'a shared MAC: one record per address');
+        // A host without a MAC (routed subnet) is still found by its address.
+        $sweep([['ip' => '10.90.0.45', 'hostname' => 'routed.example']]);
+        $sweep([['ip' => '10.90.0.45']]);
+        Assert::same(1, (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE source = 'agent' AND site_id = {$site} AND ip_addresses = '10.90.0.45'")->fetchColumn(), 'no MAC: one record by address');
     },
     'kill switch and revocation stop the agent' => function (TestContext $ctx) use ($setup, $agentDir, $runAgent): void {
         [$cid, $site] = $setup($ctx);

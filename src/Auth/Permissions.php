@@ -32,10 +32,10 @@ final class Permissions
      */
     public const ALL = [
         'clients.manage' => ['clients', 'Manage clients', 'Add, edit and archive clients and their sites.'],
-        'authorisations.manage' => ['clients', 'Manage authorisations', 'Record and revoke what may be scanned: external scope and internal (site) authorisations.'],
+        'authorisations.manage' => ['clients', 'Manage authorizations', 'Record and revoke what may be scanned: external scope and internal (site) authorizations.'],
         'scanning.pause' => ['clients', 'Pause scanning', 'Pause all scanning, a client or a site (the kill switch).'],
         'scanning.resume' => ['clients', 'Resume scanning', 'Resume scanning after a pause.'],
-        'integrations.link' => ['clients', 'Link clients to integrations', 'Link or unlink a client to its NinjaOne organisation and MSP Align client.'],
+        'integrations.link' => ['clients', 'Link clients to integrations', 'Link or unlink a client to its NinjaOne organization and MSP Align client.'],
 
         'scans.run' => ['scanning', 'Run scans and discovery', 'Scan now, run discovery, dismiss or restore suggestions, cancel scans, sync inventory and refresh compliance.'],
         'scans.outside_window' => ['scanning', 'Scan outside the scan window', 'Start scans and fix checks at any time, not only in the client\'s scan window.'],
@@ -53,7 +53,7 @@ final class Permissions
         'engagements.run' => ['engagements', 'Run pen-test engagements', 'Create, run, stop and cancel engagements, download the signed document, and issue the report.'],
         'engagements.approve' => ['engagements', 'Approve pen-test engagements', 'Approve another person\'s engagement (never your own).'],
 
-        'agents.manage' => ['agents', 'Manage agents', 'Enrol, approve, update, restart and revoke agents, change site agent settings, run diagnostics and scan a site now.'],
+        'agents.manage' => ['agents', 'Manage agents', 'Enroll, approve, update, restart and revoke agents, change site agent settings, run diagnostics and scan a site now.'],
         'directory.manage' => ['agents', 'Manage directory checks', 'Set, trust and remove the Active Directory account the agents use.'],
         'devices.merge' => ['agents', 'Merge devices', 'Merge or split devices that the agent and an inventory source both report.'],
 

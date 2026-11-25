@@ -136,7 +136,7 @@ return [
         $ctx->db->exec("UPDATE scan_authorisations SET valid_until = UTC_DATE() - INTERVAL 1 DAY WHERE client_id = {$cid}");
         $brData($ctx, [['carol@sub.branch.example', 'sub.branch.example', 'OldLeak']]);
         App::breachMonitor()->run();
-        Assert::same('open', ($finding($ctx, $cid, 'alice@breachco.example') ?: [])['status'] ?? null, 'not removed while the authorisation is expired');
+        Assert::same('open', ($finding($ctx, $cid, 'alice@breachco.example') ?: [])['status'] ?? null, 'not removed while the authorization is expired');
         $ctx->db->exec("UPDATE scan_authorisations SET valid_until = UTC_DATE() + INTERVAL 200 DAY WHERE client_id = {$cid}");
         App::settings()->set('breach_enabled', '0');
         Assert::same(null, App::breachMonitor()->runIfDue(), 'off: never runs');

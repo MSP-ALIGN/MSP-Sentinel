@@ -37,9 +37,10 @@ final class ExposureRules
         if ($tls['not_after'] !== null) {
             $left = (int) floor((strtotime($tls['not_after'] . ' UTC') - $now) / 86400);
             if ($left < 0) {
-                $issues[] = ['severity' => 'fail', 'code' => 'cert_expired', 'text' => __('Certificate expired {n} day(s) ago', ['n' => -$left])];
+                // Titles without a day count (1.50): a title that changes every day splits the group and churns lists.
+                $issues[] = ['severity' => 'fail', 'code' => 'cert_expired', 'text' => __('Certificate expired')];
             } elseif ($left <= self::EXPIRY_WARN_DAYS) {
-                $issues[] = ['severity' => 'warn', 'code' => 'cert_expiring', 'text' => __('Certificate expires in {n} day(s)', ['n' => $left])];
+                $issues[] = ['severity' => 'warn', 'code' => 'cert_expiring', 'text' => __('Certificate expires soon')];
             }
         }
         if ($tls['not_before'] !== null && strtotime($tls['not_before'] . ' UTC') > $now) {
@@ -101,8 +102,8 @@ final class ExposureRules
             'hypervisor_admin' => ['severity' => 'fail', 'text' => __('Hypervisor management page (VMware, Proxmox and similar) reachable from the internet')],
             'oob_admin' => ['severity' => 'fail', 'text' => __('Server remote management (iDRAC, iLO, IPMI) reachable from the internet')],
             'nas_admin' => ['severity' => 'fail', 'text' => __('NAS management page reachable from the internet')],
-            'vpn_portal' => ['severity' => 'warn', 'text' => __('VPN login portal exposed: make sure it is patched and uses MFA')],
-            'remote_desktop_web' => ['severity' => 'warn', 'text' => __('Remote desktop web access exposed: make sure it uses MFA')],
+            'vpn_portal' => ['severity' => 'warn', 'text' => __('VPN login portal exposed: make sure it is patched and uses two-factor authentication')],
+            'remote_desktop_web' => ['severity' => 'warn', 'text' => __('Remote desktop web access exposed: make sure it uses two-factor authentication')],
             'login_page' => ['severity' => 'info', 'text' => __('Login page')],
             default => null,
         };
@@ -148,7 +149,7 @@ final class ExposureRules
         return match ($code) {
             'spf_pass_all' => ['severity' => 'fail', 'text' => __('SPF lets anyone send email as this domain (+all)')],
             'spf_missing' => ['severity' => 'warn', 'text' => __('No SPF record')],
-            'spf_weak' => ['severity' => 'warn', 'text' => __('SPF does not reject unauthorised senders')],
+            'spf_weak' => ['severity' => 'warn', 'text' => __('SPF does not reject unauthorized senders')],
             'spf_multiple' => ['severity' => 'warn', 'text' => __('More than one SPF record (receivers treat this as an error)')],
             'dmarc_missing' => ['severity' => 'warn', 'text' => __('No DMARC record for this domain')],
             'dmarc_weak' => ['severity' => 'warn', 'text' => __('DMARC policy not enforced (p=none)')],

@@ -1,6 +1,6 @@
 # Pen-test engagements (1.27)
 
-An engagement is a time-boxed, deeper test that a client authorises in writing. It ends with a penetration test
+An engagement is a time-boxed, deeper test that a client authorizes in writing. It ends with a penetration test
 report and, after the fixes, a retest letter. Day-to-day scanning stays gentle; only an approved engagement tests
 harder, and only inside its window.
 
@@ -14,7 +14,7 @@ Chosen per engagement, from a fixed list:
 | Common UDP services | One read-only request each: SNMP's default communities, NTP (an ordinary time request), SSDP/UPnP discovery. |
 | nmap's "safe" scripts | Details of each service. Excluded: vulnerability checks (some send attack-like requests), and anything that broadcasts, contacts third parties, guesses passwords, may crash a service, exploits, fuzzes or checks for malware. |
 | Anonymous access | Anonymous FTP login (lists the top folder), NFS exports, and SMB file shares (1.30). Read only. For SMB, Sentinel's own check signs in anonymously, with no username, so no account can be locked. It reads the share list, then opens each disk share's top folder for listing only and counts the items in it: it never opens a file, never goes into a subfolder and never writes. Only share names and counts are kept, never file names. (nmap's share script isn't used: it writes and deletes a test file in every share.) Agents need version 1.30.0 for the SMB part. |
-| Vendor default passwords (1.29) | Needs a second tick: the signed authorisation must allow it explicitly (annex P3). At most three published vendor defaults per service, on FTP, web admin pages that ask for a Basic login, MySQL/MariaDB and PostgreSQL. No username is ever tried twice on one host (whatever the port or service), so no account sees more than one failed attempt. Attempts on a host run one at a time, 5 seconds apart, and stop at the first success, at any lockout or block, or after 10 minutes per host. Windows services are never tried: IIS, WinRM/HTTP.sys and IIS FTP are skipped, and so is any web page that also offers Windows sign-in (Negotiate/NTLM), because its Basic login checks directory accounts. Running the tests again in the same engagement doesn't try again (the earlier result stands); a retest tries only the accounts that worked before, once each. A device reachable both from the internet and inside the network is tested from both sides (different addresses): list it in one place only if that matters. A login that works is closed at once; nothing is read. Also checks, without guessing, whether Redis, MongoDB, Elasticsearch/OpenSearch and Memcached answer with no password at all. Only services the port scan found are tried, so tick all ports to cover unusual ports. Agents need version 1.29.1. |
+| Vendor default passwords (1.29) | Needs a second tick: the signed authorization must allow it explicitly (annex P3). At most three published vendor defaults per service, on FTP, web admin pages that ask for a Basic login, MySQL/MariaDB and PostgreSQL. No username is ever tried twice on one host (whatever the port or service), so no account sees more than one failed attempt. Attempts on a host run one at a time, 5 seconds apart, and stop at the first success, at any lockout or block, or after 10 minutes per host. Windows services are never tried: IIS, WinRM/HTTP.sys and IIS FTP are skipped, and so is any web page that also offers Windows sign-in (Negotiate/NTLM), because its Basic login checks directory accounts. Running the tests again in the same engagement doesn't try again (the earlier result stands); a retest tries only the accounts that worked before, once each. A device reachable both from the internet and inside the network is tested from both sides (different addresses): list it in one place only if that matters. A login that works is closed at once; nothing is read. Also checks, without guessing, whether Redis, MongoDB, Elasticsearch/OpenSearch and Memcached answer with no password at all. Only services the port scan found are tried, so tick all ports to cover unusual ports. Agents need version 1.29.1. |
 
 Pace, per engagement: gentle (the same as day-to-day scans) or normal (nmap `-T3`, at most 200 packets a second).
 Nothing faster exists. All 65,535 ports need the normal pace: at the gentle pace one host would take about 7 hours.
@@ -29,13 +29,13 @@ Nothing faster exists. All 65,535 ports need the normal pace: at the gentle pace
 
 ## The rules
 
-- **Inside the authorised scope only.** External targets must already be in the client's active "authorised to scan"
-  scope, and internal ranges inside the site's active internal authorisation. This is checked when the engagement is
+- **Inside the authorized scope only.** External targets must already be in the client's active "authorized to scan"
+  scope, and internal ranges inside the site's active internal authorization. This is checked when the engagement is
   created (for today and the window's last day), and again live for every host while it is tested. An engagement adds
   consent to test harder; it never widens what may be tested.
 - **Exclusions are never touched.** They are given as IP addresses or ranges (not names): fragile or third-party
   systems. Agents leave them out of the discovery sweep too.
-- **The client's signed authorisation** is attached as a PDF when the engagement is created. Sentinel keeps it as a
+- **The client's signed authorization** is attached as a PDF when the engagement is created. Sentinel keeps it as a
   download (never shown in the browser) and records its SHA-256 in the report. A template is in
   [authorisation-form.md](authorisation-form.md#annex-penetration-test-engagement).
 - **Two people (by default).** A technician or admin creates it; a different admin approves it, with their password.
@@ -52,9 +52,9 @@ Nothing faster exists. All 65,535 ports need the normal pace: at the gentle pace
   and also on their own at the window's end, even if they can't reach Sentinel. The global and per-client pause
   switches stop engagements too.
 - **Checked all the way.** Every host is checked right before and while it is tested: the engagement must be active,
-  the host must be a target and not excluded, and it must be in the live authorised scope. Agents check the signed
+  the host must be a target and not excluded, and it must be in the live authorized scope. Agents check the signed
   job again.
-- **Everything is audited:** created, approved, started, stopped, cancelled, report issued.
+- **Everything is audited:** created, approved, started, stopped, canceled, report issued.
 
 ## How to run one
 
@@ -77,7 +77,7 @@ Nothing faster exists. All 65,535 ports need the normal pace: at the gentle pace
 5. **Issue penetration test report.** The report is a frozen copy with your branding. It contains:
    - a summary and rating;
    - how the findings chain together;
-   - scope and authorisation;
+   - scope and authorization;
    - the method, and what was never done;
    - every finding with its evidence and fix;
    - the systems tested;
@@ -88,7 +88,7 @@ Nothing faster exists. All 65,535 ports need the normal pace: at the gentle pace
 ## Retests
 
 When the client has fixed things, create a new engagement and choose **This is a retest of** the earlier one. It has
-its own signed authorisation and window. Run its tests and click **Issue retest letter**. Each Fail and Warning of the
+its own signed authorization and window. Run its tests and click **Issue retest letter**. Each Fail and Warning of the
 earlier report is then marked:
 
 - **fixed**: the finding is gone, its host was tested to the end, and the retest ran the same test (for open ports:
@@ -103,7 +103,7 @@ earlier report is then marked:
 |---|---|
 | **Fail** | A file share readable without a password; the share list handed out to anyone from the internet; a vendor default password that works (the evidence shows the username; the password only masked, like a•••n); a database open without a password; anonymous FTP login; SMBv1; NFS exports open to everyone; SNMP's default "private" community; SNMP "public" from the internet; Telnet; high-risk services (RDP, SMB, databases, WinRM and others) reachable from the internet |
 | **Warning** | The share list handed out to anyone inside the network; Memcached open without a password inside the network; SMB signing not required; NFS exports listed to anyone; SNMP "public" inside the network; plain FTP; VNC; UPnP/SSDP answering from the internet |
-| **Info** | Other services found, NTP, a service that signalled a lockout during the default-password test (testing stopped there) |
+| **Info** | Other services found, NTP, a service that signaled a lockout during the default-password test (testing stopped there) |
 
 ## Limits
 

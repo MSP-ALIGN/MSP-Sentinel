@@ -14,7 +14,7 @@ $stateBadge = [
     EngagementRepository::STATE_ACTIVE => ['text-bg-danger', __('Active: testing allowed')],
     EngagementRepository::STATE_ENDED => ['text-bg-secondary', __('Ended')],
     EngagementRepository::STATE_STOPPED => ['text-bg-dark', __('Stopped')],
-    EngagementRepository::STATE_CANCELLED => ['text-bg-light border', __('Cancelled')],
+    EngagementRepository::STATE_CANCELLED => ['text-bg-light border', __('Canceled')],
 ];
 ?>
 <div class="card mt-3" id="engagements">
@@ -29,7 +29,7 @@ $stateBadge = [
         <?php endif; ?>
     </div>
     <div class="card-body">
-        <p class="small text-body-secondary"><?= e(__('An engagement is a time-boxed, deeper test the client signed for: all ports, common UDP services, service scripts and anonymous-access checks, on targets already in its authorised scope. A different admin approves it before anything runs, and it can be stopped at any moment. Day-to-day scans stay gentle.')) ?></p>
+        <p class="small text-body-secondary"><?= e(__('An engagement is a time-boxed, deeper test the client signed for: all ports, common UDP services, service scripts and anonymous-access checks, on targets already in its authorized scope. A different admin approves it before anything runs, and it can be stopped at any moment. Day-to-day scans stay gentle.')) ?></p>
         <?php if ($engagements === []): ?>
         <p class="text-body-secondary mb-0"><?= e(__('No engagements yet.')) ?></p>
         <?php else: ?>

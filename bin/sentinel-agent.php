@@ -69,7 +69,7 @@ $load = static function () use ($configFile): array {
     $data = is_readable($configFile) ? json_decode((string) file_get_contents($configFile), true) : null;
     if (!is_array($data) || !is_string($data['server'] ?? null) || !is_string($data['token'] ?? null) || !is_int($data['agent_id'] ?? null) || !is_string($data['server_public_key'] ?? null)
         || !is_int($data['site_id'] ?? null) || !is_int($data['client_id'] ?? null)) {
-        fwrite(STDERR, "No valid agent config at {$configFile}. Enrol first: sentinel-agent.php enrol --server URL --code CODE\n");
+        fwrite(STDERR, "No valid agent config at {$configFile}. Enroll first: sentinel-agent.php enroll --server URL --code CODE\n");
         exit(1);
     }
     return $data;
@@ -93,13 +93,14 @@ switch ($command) {
         fwrite(STDOUT, 'selfcheck ok ' . Runner::version() . "\n");
         exit(0);
     case 'enrol':
+    case 'enroll': // US spelling (1.51); 'enrol' stays for older installers
         $server = is_string($opts['server'] ?? null) ? rtrim($opts['server'], '/') : '';
         // --code-stdin: piped by the installers, or typed (docker compose run): then it is asked for without echo, so the
         // one-time code doesn't stay on the screen or in the scrollback (1.36.1). stty is a fixed command, no input.
         $readCode = static function (): string {
             $tty = function_exists('posix_isatty') && posix_isatty(STDIN);
             if ($tty) {
-                fwrite(STDERR, 'Enrolment code (not shown): ');
+                fwrite(STDERR, 'Enrollment code (not shown): ');
                 @shell_exec('stty -echo 2>/dev/null');
             }
             $line = trim((string) fgets(STDIN, 200));
@@ -111,11 +112,11 @@ switch ($command) {
         };
         $code = is_string($opts['code'] ?? null) ? $opts['code'] : (isset($opts['code-stdin']) ? $readCode() : '');
         if ($server === '' || $code === '') {
-            fwrite(STDERR, "Usage: sentinel-agent.php enrol --server https://sentinel.example --code SNE-XXXXX-XXXXX-XXXXX-XXXXX\n");
+            fwrite(STDERR, "Usage: sentinel-agent.php enroll --server https://sentinel.example --code SNE-XXXXX-XXXXX-XXXXX-XXXXX\n");
             exit(2);
         }
         if (is_file($configFile)) {
-            fwrite(STDERR, "{$configFile} already exists: this agent is enrolled. Remove the file first to enrol again.\n");
+            fwrite(STDERR, "{$configFile} already exists: this agent is enrolled. Remove the file first to enroll again.\n");
             exit(1);
         }
         $ca = is_string($opts['ca'] ?? null) ? $opts['ca'] : null;
@@ -126,7 +127,7 @@ switch ($command) {
             exit(1);
         }
         if ($res['status'] !== 201 || !is_string($res['data']['token'] ?? null) || !is_int($res['data']['site_id'] ?? null) || !is_int($res['data']['client_id'] ?? null)) {
-            fwrite(STDERR, 'Enrolment refused: ' . (string) ($res['data']['error']['message'] ?? 'HTTP ' . $res['status']) . "\n");
+            fwrite(STDERR, 'Enrollment refused: ' . (string) ($res['data']['error']['message'] ?? 'HTTP ' . $res['status']) . "\n");
             exit(1);
         }
         $config = ['server' => $server, 'agent_id' => (int) $res['data']['agent_id'], 'site_id' => $res['data']['site_id'], 'client_id' => $res['data']['client_id'],
@@ -230,6 +231,6 @@ switch ($command) {
         exit(0);
 
     default:
-        fwrite(STDOUT, "MSP Sentinel agent\n  enrol --server URL --code CODE [--config FILE] [--ca FILE]\n  run [--config FILE] [--once]\n  status [--config FILE]\n");
+        fwrite(STDOUT, "MSP Sentinel agent\n  enroll --server URL --code CODE [--config FILE] [--ca FILE]\n  run [--config FILE] [--once]\n  status [--config FILE]\n");
         exit($command === 'help' ? 0 : 2);
 }

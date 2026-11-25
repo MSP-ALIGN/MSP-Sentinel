@@ -31,7 +31,7 @@ return [
             Assert::redirect('/login', $c->get($path), $path);
         }
         Assert::redirect('/login', $c->get('/login/2fa'), '2FA page without password step');
-        Assert::redirect('/login', $c->get('/2fa/setup'), 'enrol page without password step');
+        Assert::redirect('/login', $c->get('/2fa/setup'), 'enroll page without password step');
     },
     'wrong password and unknown user get the same generic message' => function (TestContext $ctx): void {
         $c = $ctx->client();
@@ -48,7 +48,7 @@ return [
         Assert::status(400, $c->post('/login', ['username' => 'admin', 'password' => 'Admin-Pass-0001!']), 'missing token');
         Assert::status(400, $c->post('/login', ['username' => 'admin', 'password' => 'Admin-Pass-0001!', '_csrf' => str_repeat('a', 64)]), 'wrong token');
     },
-    'first sign-in forces 2FA enrolment and shows recovery codes once' => function (TestContext $ctx): void {
+    'first sign-in forces 2FA enrollment and shows recovery codes once' => function (TestContext $ctx): void {
         $c = $ctx->client();
         $res = $c->submit('/login', '/login', ['username' => 'admin', 'password' => 'Admin-Pass-0001!']);
         Assert::redirect('/2fa/setup', $res);
@@ -61,7 +61,7 @@ return [
         $ctx->secrets['admin'] = str_replace(' ', '', $m[1]);
 
         $wrong = $c->post('/2fa/setup', ['_csrf' => $page->csrf(), 'code' => '000000' === $ctx->totp('admin') ? '111111' : '000000']);
-        Assert::status(422, $wrong, 'wrong enrolment code');
+        Assert::status(422, $wrong, 'wrong enrollment code');
 
         $res = $c->post('/2fa/setup', ['_csrf' => $wrong->csrf(), 'code' => $ctx->totp('admin')]);
         Assert::redirect('/recovery-codes', $res);
@@ -71,7 +71,7 @@ return [
         Assert::same(10, count($cm[1]), 'ten recovery codes');
         $ctx->secrets['admin-recovery'] = implode(',', $cm[1]);
         Assert::redirect('/profile', $c->get('/recovery-codes'), 'codes are shown only once');
-        Assert::status(200, $c->get('/'), 'dashboard after enrolment');
+        Assert::status(200, $c->get('/'), 'dashboard after enrollment');
     },
     'secrets are stored encrypted or hashed, never in plain text' => function (TestContext $ctx): void {
         $row = $ctx->db->query("SELECT totp_secret_enc FROM users WHERE username = 'admin'")->fetch();

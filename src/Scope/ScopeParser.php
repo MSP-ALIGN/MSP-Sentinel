@@ -111,7 +111,7 @@ final class ScopeParser
             $errors[] = __('Enter at least one IP address, range or domain.');
         }
         if (count($entries) > self::MAX_ENTRIES) {
-            $errors[] = __('At most {n} entries per authorisation. Split large scopes into several authorisations.', ['n' => self::MAX_ENTRIES]);
+            $errors[] = __('At most {n} entries per authorization. Split large scopes into several authorizations.', ['n' => self::MAX_ENTRIES]);
         }
         return ['entries' => $entries, 'errors' => $errors];
     }
@@ -179,12 +179,12 @@ final class ScopeParser
             return __('This is an internal or reserved domain, not a public one.');
         }
         if (self::isPublicSuffix($host)) {
-            return __('This is a shared public suffix (like co.uk or github.io), not a single organisation\'s domain. List the client\'s own names under it instead.');
+            return __('This is a shared public suffix (like co.uk or github.io), not a single organization\'s domain. List the client\'s own names under it instead.');
         }
         // A wildcard under a shared platform (*.s3.amazonaws.com, *.region.cloudapp.azure.com) would take in other
         // customers' names; only exact names (the client's own app.azurewebsites.net) are accepted there (1.34 audit).
         if ($wildcard && self::underPublicSuffix($host)) {
-            return __('A wildcard under a shared platform domain would include other organisations\' names. List the client\'s own names under it one by one instead.');
+            return __('A wildcard under a shared platform domain would include other organizations\' names. List the client\'s own names under it one by one instead.');
         }
         if (!$this->allowDocumentation) {
             $lastTwo = implode('.', array_slice($labels, -2));

@@ -62,7 +62,7 @@ final class AuthorisationRepository
                  WHERE id = :id AND client_id = :c AND revoked_at IS NULL'
             );
             foreach ($replaceIds as $replaceId) {
-                $revoke->execute(['u' => $userId, 'r' => 'Replaced by authorisation #' . $id, 'id' => $replaceId, 'c' => $clientId]);
+                $revoke->execute(['u' => $userId, 'r' => 'Replaced by authorization #' . $id, 'id' => $replaceId, 'c' => $clientId]);
             }
             $this->db->commit();
             return $id;

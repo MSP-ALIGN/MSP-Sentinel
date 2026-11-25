@@ -102,8 +102,8 @@ return [
         $bulk($admin, $vuln, ['action' => 'due', 'due_date' => $due, 'note' => 'Agreed with the client']);
         // Verify fix: each finding's own checks apply (no authorisation for these addresses: nothing queued, and why).
         $res = $bulk($tech, $vuln, ['action' => 'verify']);
-        Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM scan_jobs WHERE client_id = {$cid} AND job_type = 'verify'")->fetchColumn(), 'nothing outside the authorisation');
-        Assert::contains('no longer in an active authorisation', $tech->get('/findings?view=flat')->body, 'the reason is shown');
+        Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM scan_jobs WHERE client_id = {$cid} AND job_type = 'verify'")->fetchColumn(), 'nothing outside the authorization');
+        Assert::contains('no longer in an active authorization', $tech->get('/findings?view=flat')->body, 'the reason is shown');
         // Garbage IDs and too many are refused.
         $bulk($tech, ['abc', '-1'], ['action' => 'assign', 'assignee' => 'me']);
         Assert::contains('Choose findings and an action', $tech->get('/findings?view=flat')->body);

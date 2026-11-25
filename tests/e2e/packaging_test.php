@@ -105,7 +105,7 @@ return [
         exec('bash ' . escapeshellarg($root . '/install/agent-install.sh') . ' --dry-run --skip-os-check --server https://sentinel.example --code ' . $code . ' 2>&1', $lines, $rc);
         $out = implode("\n", $lines);
         Assert::same(0, $rc, $out);
-        foreach (['php8.4-cli', 'nmap', 'useradd --system', 'runuser -u sentinel-agent', 'sentinel-agent.php enrol', 'systemctl enable --now sentinel-agent'] as $step) {
+        foreach (['php8.4-cli', 'nmap', 'useradd --system', 'runuser -u sentinel-agent', 'sentinel-agent.php enroll', 'systemctl enable --now sentinel-agent'] as $step) {
             Assert::contains($step, $out);
         }
         Assert::notContains('LXC container detected', $out, 'a machine or VM gets no container step');
@@ -156,7 +156,7 @@ return [
         $up = implode("\n", $lu);
         Assert::same(0, $codeU, $up);
         Assert::true(strpos($up, 'cron.paused') < strpos($up, 'backup.php') && strpos($up, 'backup.php') < strpos($up, 'rsync -a --delete'), 'jobs stopped, then backup, then code');
-        Assert::contains('backup.env', $up, 'pre-upgrade backup honours encryption settings');
+        Assert::contains('backup.env', $up, 'pre-upgrade backup honors encryption settings');
         exec('bash ' . escapeshellarg($root . '/install/install.sh') . ' --dry-run --skip-os-check --domain "bad domain;rm" 2>&1', $l2, $code2);
         Assert::same(1, $code2, 'invalid domain refused');
         exec('bash ' . escapeshellarg($root . '/install/install.sh') . ' --dry-run --skip-os-check --domain sentinel.example --certbot 2>&1', $l3, $code3);
@@ -298,7 +298,7 @@ return [
             exec('rm -rf ' . escapeshellarg($base));
         }
     },
-    'Proxmox helper: unprivileged Debian 13 container with nesting, strict input checks, no enrolment code' => function (TestContext $ctx): void {
+    'Proxmox helper: unprivileged Debian 13 container with nesting, strict input checks, no enrollment code' => function (TestContext $ctx): void {
         $script = escapeshellarg(dirname(__DIR__, 2) . '/install/proxmox-agent-ct.sh');
         exec('bash ' . $script . ' --dry-run --bridge vmbr1 --vlan 20 --ip 10.0.20.50/24 --gw 10.0.20.1 --ctid 120 2>&1', $l, $rc);
         $out = implode("\n", $l);
@@ -306,7 +306,7 @@ return [
         foreach (['pct create 120', '--unprivileged 1', '--features nesting=1', 'bridge=vmbr1,ip=10.0.20.50/24,gw=10.0.20.1,tag=20', '--onboot 1', 'pct start 120', 'pct enter 120'] as $needle) {
             Assert::contains($needle, $out);
         }
-        Assert::notContains('--code', $out, 'the enrolment code is never passed on the host');
+        Assert::notContains('--code', $out, 'the enrollment code is never passed on the host');
         foreach (["--bridge 'vmbr0;rm'", '--bridge vmbr0 --vlan 5000', '--bridge vmbr0 --ctid 12', '--bridge vmbr0 --ip 10.0.0.5', "--bridge vmbr0 --hostname 'a b'", '--bridge vmbr0 --memory 64', "--bridge vmbr0 --gw '1.2.3.4,bridge=vmbr9'", '--bridge vmbr0 --ip 999.1.1.1/24 --gw 10.0.0.1', ''] as $bad) {
             exec('bash ' . $script . ' --dry-run ' . $bad . ' 2>&1', $o, $c);
             Assert::true($c !== 0, 'refused: ' . ($bad === '' ? '(no bridge)' : $bad));

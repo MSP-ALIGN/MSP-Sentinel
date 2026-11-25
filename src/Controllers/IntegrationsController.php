@@ -12,18 +12,19 @@ use Sentinel\Core\Session;
 use Sentinel\Compliance\AlignClient;
 use Sentinel\Compliance\AlignException;
 use Sentinel\Inventory\InventoryException;
-use Sentinel\Inventory\NinjaOneSource;
+use Sentinel\Inventory\SourceType;
+use Sentinel\Inventory\Sources;
 
 /**
- * Administration > Integrations: outside systems Sentinel works with: ITFlow (clients sync from it; tickets follow in
- * later phases), NinjaOne (read-only inventory) and MSP Align (read-only compliance, shown on each client's Compliance
- * page).
+ * Administration → Integrations: outside systems Sentinel works with: ITFlow (clients and tickets), the inventory
+ * sources (RMMs such as NinjaOne, read-only; one generic form, save and test for every registered source since 1.52),
+ * MSP Align (read-only compliance), breach monitoring and Sign in with Microsoft.
  *
  * Every route is admin-only (src/routes.php) and every POST is CSRF-checked (App::dispatch).
  *
- * Untrusted input: the form fields. The instance must be a *.ninjarmm.com host name (so the secret can only
- * be sent to NinjaOne), the client ID is limited in length and characters, and the secret is stored encrypted
- * with the app key, never shown again, never logged or audited (only "changed" or "cleared").
+ * Untrusted input: the form fields. Each inventory source's SourceType checks its own fields (e.g. NinjaOne's instance
+ * must be a *.ninjarmm.com host name, so the secret can only be sent to NinjaOne). Secrets are stored encrypted with the
+ * app key, never shown again, never logged or audited (only "changed" or "cleared").
  */
 final class IntegrationsController extends Controller
 {
@@ -32,15 +33,7 @@ final class IntegrationsController extends Controller
     {
         $s = App::settings();
         return $this->page('admin/integrations', __('Integrations'), [
-            'ninja' => [
-                'enabled' => $s->get('ninjaone_enabled') === '1',
-                'host' => $s->get('ninjaone_host'),
-                'client_id' => $s->get('ninjaone_client_id'),
-                'has_secret' => $s->getSecret('ninjaone_client_secret') !== '',
-                'tested_at' => $s->get('ninjaone_tested_at'),
-                'test_result' => $s->get('ninjaone_test_result'),
-                'linked' => (int) App::db()->query("SELECT COUNT(*) FROM source_links WHERE source = 'ninjaone'")->fetchColumn(),
-            ],
+            'inventoryTypes' => self::inventoryCards(),
             'itflow' => [
                 'enabled' => $s->get('itflow_enabled') === '1',
                 'url' => $s->get('itflow_url'),
@@ -51,7 +44,7 @@ final class IntegrationsController extends Controller
                 'last_result' => $s->get('itflow_last_result'),
                 'last_ok' => $s->get('itflow_last_ok') !== '0',
                 'linked' => (int) App::db()->query('SELECT COUNT(*) FROM clients WHERE itflow_client_id IS NOT NULL AND is_demo = 0')->fetchColumn(),
-                'tickets' => $s->get('itflow_tickets_enabled') === '1',
+                'tickets' => $s->get('tickets_enabled') === '1',
                 'tag_filter' => $s->get('itflow_tag_filter') === '1',
                 'tag_name' => $s->get('itflow_tag_name'),
                 'sync_off' => (int) App::db()->query('SELECT COUNT(*) FROM clients WHERE itflow_sync_off = 1 AND is_demo = 0')->fetchColumn(),
@@ -63,9 +56,9 @@ final class IntegrationsController extends Controller
                     return is_array($c) ? array_values(array_filter($c, static fn ($b): bool => is_array($b) && is_int($b['id'] ?? null) && is_string($b['name'] ?? null))) : null;
                 })(),
                 'boards_checked' => $s->get('itflow_boards_cache') !== '',
-                'tickets_last_run' => $s->get('itflow_tickets_last_run'),
-                'tickets_last_result' => $s->get('itflow_tickets_last_result'),
-                'tickets_last_ok' => $s->get('itflow_tickets_last_ok') !== '0',
+                'tickets_last_run' => $s->get('tickets_last_run'),
+                'tickets_last_result' => $s->get('tickets_last_result'),
+                'tickets_last_ok' => $s->get('tickets_last_ok') !== '0',
                 'tickets_total' => (int) App::db()->query('SELECT COUNT(*) FROM itflow_tickets')->fetchColumn(),
             ],
             'sso' => [
@@ -106,66 +99,128 @@ final class IntegrationsController extends Controller
         ]);
     }
 
-    /** POST /admin/integrations/ninjaone: save the NinjaOne settings. */
-    public function saveNinjaOne(Request $request): Response
+    /**
+     * Each registered inventory source for its card: label, fields with their saved values (secrets only as "saved"),
+     * on/off, last test and how many clients are linked.
+     *
+     * @return list<array<string,mixed>>
+     */
+    private static function inventoryCards(): array
     {
-        $back = Response::redirect('/admin/integrations#ninjaone');
         $s = App::settings();
-        $host = strtolower(trim($request->input('host')));
-        $host = (string) preg_replace('#^https?://|/.*$#', '', $host); // a pasted URL becomes its host name
-        $clientId = trim($request->input('client_id'));
-        $enabled = $request->input('enabled') === '1';
-        if ($host !== '' && !NinjaOneSource::validHost($host)) {
-            Session::flash('danger', __('The NinjaOne instance must be the address you sign in at, ending in .ninjarmm.com (for example app.ninjarmm.com or eu.ninjarmm.com).'));
-            return $back;
-        }
-        if ($clientId !== '' && preg_match('/^[A-Za-z0-9._~-]{4,200}$/', $clientId) !== 1) {
-            Session::flash('danger', __('The client ID has unexpected characters. Copy it again from NinjaOne.'));
-            return $back;
-        }
-        $oldHost = $s->get('ninjaone_host');
-        $changed = [];
-        foreach (['ninjaone_host' => $host, 'ninjaone_client_id' => $clientId, 'ninjaone_enabled' => $enabled ? '1' : '0'] as $key => $value) {
-            if ($s->get($key) !== $value) {
-                $s->set($key, $value);
-                $changed[$key] = $key === 'ninjaone_enabled' ? $enabled : $value;
+        $count = App::db()->prepare('SELECT COUNT(*) FROM source_links WHERE source = :s');
+        $cards = [];
+        foreach (Sources::types() as $name => $type) {
+            $fields = [];
+            foreach ($type->fields() as $f) {
+                $key = $name . '_' . $f['key'];
+                $fields[] = $f + ['value' => $f['secret'] ? '' : $s->get($key), 'saved' => $f['secret'] ? $s->getSecret($key) !== '' : $s->get($key) !== ''];
             }
+            $count->execute(['s' => $name]);
+            $cards[] = ['name' => $name, 'label' => $type->label(), 'intro' => $type->intro(), 'steps' => $type->setupSteps(), 'fields' => $fields,
+                'enabled' => $s->get($name . '_enabled') === '1', 'ready' => App::inventorySource($name) !== null,
+                'tested_at' => $s->get($name . '_tested_at'), 'test_result' => $s->get($name . '_test_result'), 'linked' => (int) $count->fetchColumn()];
         }
-        $secret = $request->raw('client_secret');
-        if ($request->input('clear_secret') === '1') {
-            $s->setSecret('ninjaone_client_secret', '');
-            $changed['ninjaone_client_secret'] = 'cleared';
-        } elseif ($secret !== '') {
-            if (strlen($secret) > 500 || preg_match('/[\x00-\x1F\x7F]/', $secret) === 1) {
-                Session::flash('danger', __('The client secret has unexpected characters. Copy it again from NinjaOne.'));
+        return $cards;
+    }
+
+    /**
+     * The registered source a /admin/integrations/{name}[/test] route is for (routes are added per registered name, so
+     * the name comes from the router's own path), or 404.
+     */
+    private static function typeFromPath(Request $request): SourceType
+    {
+        $parts = explode('/', trim($request->path, '/'));
+        return Sources::type($parts[2] ?? '') ?? throw new HttpException(404);
+    }
+
+    /**
+     * POST /admin/integrations/{name}: save an inventory source's settings (1.52: one action for every registered
+     * source; for NinjaOne the same URL, settings, messages and audit entry as before). Every non-empty value must pass
+     * the source's own check before anything is saved; an empty secret keeps the saved one unless "remove" is ticked.
+     */
+    public function saveInventory(Request $request): Response
+    {
+        $type = self::typeFromPath($request);
+        $name = $type->name();
+        $back = Response::redirect('/admin/integrations#' . $name);
+        $s = App::settings();
+        $plain = ['enabled' => $request->input('enabled') === '1' ? '1' : '0'];
+        $secrets = [];
+        foreach ($type->fields() as $f) {
+            $raw = $f['secret'] ? $request->raw($f['key']) : $request->input($f['key']);
+            $value = $type->normalise($f['key'], $raw);
+            if ($value !== '' && ($error = $type->validate($f['key'], $value)) !== null) {
+                Session::flash('danger', $error);
                 return $back;
             }
-            $s->setSecret('ninjaone_client_secret', $secret);
-            $changed['ninjaone_client_secret'] = 'changed';
+            if ($f['secret']) {
+                // "clear_secret" is the field's name from before 1.52, honored only for a source with one secret (1.52.1).
+                $oneSecret = count(array_filter($type->fields(), static fn (array $x): bool => $x['secret'])) === 1;
+                if ($request->input('clear_' . $f['key']) === '1' || ($oneSecret && $request->input('clear_secret') === '1')) {
+                    $secrets[$f['key']] = '';
+                } elseif ($value !== '') {
+                    $secrets[$f['key']] = $value;
+                }
+            } else {
+                $plain[$f['key']] = $value;
+            }
+        }
+        // A changed account field (e.g. the instance) while clients are linked: their organization IDs may belong to the old account.
+        $accountChanged = [];
+        foreach ($type->fields() as $f) {
+            $old = $s->get($name . '_' . $f['key']);
+            if (($f['account'] ?? false) && !$f['secret'] && $old !== '' && $old !== $plain[$f['key']]) {
+                $accountChanged[] = mb_strtolower($f['label']);
+            }
+        }
+        $changed = [];
+        foreach ($plain as $key => $value) {
+            if ($s->get($name . '_' . $key) !== $value) {
+                $s->set($name . '_' . $key, $value);
+                $changed[$name . '_' . $key] = $key === 'enabled' ? $value === '1' : $value;
+            }
+        }
+        foreach ($secrets as $key => $value) {
+            $s->setSecret($name . '_' . $key, $value);
+            $changed[$name . '_' . $key] = $value === '' ? 'cleared' : 'changed'; // never the secret itself
         }
         if ($changed !== []) {
-            $s->set('ninjaone_test_result', ''); // an old test result no longer says anything
-            $this->audit($request, 'settings.ninjaone_updated', null, null, ['changed' => $changed]);
+            $s->set($name . '_test_result', ''); // an old test result no longer says anything
+            $this->audit($request, 'settings.' . $name . '_updated', null, null, ['changed' => $changed]);
         }
-        $linked = (int) App::db()->query("SELECT COUNT(*) FROM source_links WHERE source = 'ninjaone'")->fetchColumn();
-        if ($oldHost !== '' && $host !== $oldHost && $linked > 0) {
-            // Organisation IDs belong to one NinjaOne account: links made against another one would point at the wrong data.
-            Session::flash('warning', __('The NinjaOne instance changed while {n} client(s) are linked. If this is a different NinjaOne account, unlink and link those clients again: their organisation IDs belong to the old one.', ['n' => $linked]));
+        $count = App::db()->prepare('SELECT COUNT(*) FROM source_links WHERE source = :s');
+        $count->execute(['s' => $name]);
+        $linked = (int) $count->fetchColumn();
+        if ($accountChanged !== [] && $linked > 0) {
+            Session::flash('warning', __('The {source} {field} changed while {n} client(s) are linked. If this is a different {source} account, unlink and link those clients again: their organization IDs belong to the old one.',
+                ['source' => $type->label(), 'field' => implode(', ', $accountChanged), 'n' => $linked]));
         }
-        $ready = App::ninjaOne() !== null;
+        $enabled = $plain['enabled'] === '1';
+        $ready = App::inventorySource($name) !== null;
         Session::flash($enabled && !$ready ? 'warning' : 'success', $enabled && !$ready
-            ? __('Saved, but NinjaOne needs the instance, client ID and client secret before it can sync.')
-            : __('NinjaOne settings saved.'));
+            ? __('Saved, but {source} needs {fields} before it can sync.', ['source' => $type->label(), 'fields' => self::fieldList($type)])
+            : __('{source} settings saved.', ['source' => $type->label()]));
         return $back;
     }
 
-    /** POST /admin/integrations/ninjaone/test: sign in and count organisations (no data is stored). */
-    public function testNinjaOne(Request $request): Response
+    /** A source's field labels as one phrase: "Instance, Client ID and Client secret". */
+    private static function fieldList(SourceType $type): string
     {
-        $back = Response::redirect('/admin/integrations#ninjaone');
-        $source = App::ninjaOne();
+        $labels = array_map(static fn (array $f): string => $f['label'], $type->fields());
+        $last = array_pop($labels);
+        return $labels === [] ? (string) $last : __('{list} and {last}', ['list' => implode(', ', $labels), 'last' => (string) $last]);
+    }
+
+    /** POST /admin/integrations/{name}/test: sign in to an inventory source and count organizations (nothing is stored but the result). */
+    public function testInventory(Request $request): Response
+    {
+        $type = self::typeFromPath($request);
+        $name = $type->name();
+        $back = Response::redirect('/admin/integrations#' . $name);
+        $source = App::inventorySource($name);
         if ($source === null) {
-            Session::flash('warning', __('Fill in the instance, client ID and client secret first.'));
+            Session::flash('warning', __('Fill in {fields} first.', ['fields' => self::fieldList($type)]));
             return $back;
         }
         @set_time_limit(60);
@@ -174,15 +229,15 @@ final class IntegrationsController extends Controller
         try {
             $count = $source->testConnection();
             $ok = true;
-            $result = __('Connected: the API app can see {n} organisation(s).', ['n' => $count]);
+            $result = __('Connected: the API app can see {n} organization(s).', ['n' => $count]);
             Session::flash('success', $result);
         } catch (InventoryException $ex) {
             $result = __('Failed: {e}', ['e' => $ex->getMessage()]);
             Session::flash('danger', $result);
         }
-        $s->set('ninjaone_tested_at', gmdate('Y-m-d H:i:s'));
-        $s->set('ninjaone_test_result', mb_substr($result, 0, 500));
-        $this->audit($request, 'settings.ninjaone_tested', null, null, ['ok' => $ok]);
+        $s->set($name . '_tested_at', gmdate('Y-m-d H:i:s'));
+        $s->set($name . '_test_result', mb_substr($result, 0, 500));
+        $this->audit($request, 'settings.' . $name . '_tested', null, null, ['ok' => $ok]);
         return $back;
     }
 
@@ -448,9 +503,9 @@ final class IntegrationsController extends Controller
             $changed['itflow_api_key'] = 'cleared (address changed)';
         }
         $tickets = $request->input('tickets') === '1';
-        if ($tickets && $s->get('itflow_tickets_enabled') !== '1') {
-            $s->set('itflow_tickets_since', gmdate('Y-m-d H:i:s')); // only findings from now on (no flood when turning it on)
-            $s->set('itflow_tickets_weekly_since', gmdate('Y-m-d H:i:s'));
+        if ($tickets && $s->get('tickets_enabled') !== '1') {
+            $s->set('tickets_since', gmdate('Y-m-d H:i:s')); // only findings from now on (no flood when turning it on)
+            $s->set('tickets_weekly_since', gmdate('Y-m-d H:i:s'));
         }
         // The board for new tickets (1.44): '' = the one named Alerts, '0' = ITFlow's default, else a board ID. Untrusted.
         $board = $request->input('board');
@@ -461,11 +516,11 @@ final class IntegrationsController extends Controller
             $s->set('itflow_board', $board);
             $changed['itflow_board'] = $board;
         }
-        foreach (['itflow_url' => $url, 'itflow_enabled' => $enabled ? '1' : '0', 'itflow_tickets_enabled' => $tickets ? '1' : '0',
+        foreach (['itflow_url' => $url, 'itflow_enabled' => $enabled ? '1' : '0', 'tickets_enabled' => $tickets ? '1' : '0',
                   'itflow_tag_filter' => $tagFilter ? '1' : '0', 'itflow_tag_name' => $tagName] as $key => $value) {
             if ($s->get($key) !== $value) {
                 $s->set($key, $value);
-                $changed[$key] = in_array($key, ['itflow_enabled', 'itflow_tickets_enabled', 'itflow_tag_filter'], true) ? $value === '1' : $value;
+                $changed[$key] = in_array($key, ['itflow_enabled', 'tickets_enabled', 'itflow_tag_filter'], true) ? $value === '1' : $value;
             }
         }
         if ($request->input('clear_key') === '1') {
@@ -538,17 +593,17 @@ final class IntegrationsController extends Controller
     /**
      * POST /admin/integrations/itflow/tickets: open due tickets now; with existing=1 first include the open Fail findings
      * that were there before tickets were turned on (the rest follow every 5 minutes, MAX_PER_RUN at a time). Weekly
-     * Warnings tickets keep their own start (itflow_tickets_weekly_since), so this never sends every client one.
+     * Warnings tickets keep their own start (tickets_weekly_since), so this never sends every client one.
      */
     public function ticketsItflow(Request $request): Response
     {
         $back = Response::redirect('/admin/integrations#itflow');
-        if (App::itflow() === null || App::settings()->get('itflow_tickets_enabled') !== '1') {
+        if (App::itflow() === null || App::settings()->get('tickets_enabled') !== '1') {
             Session::flash('warning', __('Turn on ITFlow tickets and save first.'));
             return $back;
         }
         if ($request->input('existing') === '1') {
-            App::settings()->set('itflow_tickets_since', '2000-01-01 00:00:00');
+            App::settings()->set('tickets_since', '2000-01-01 00:00:00');
             $this->audit($request, 'itflow.tickets_for_existing');
         }
         @set_time_limit(120);

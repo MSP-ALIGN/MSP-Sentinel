@@ -78,6 +78,8 @@ final class ClientRepository
                 'pe' => $v['ports_extra'], 'px' => $v['ports_excluded'], 'so' => $v['itflow_sync_off'] ? 1 : 0, 'uid' => $userId,
             ]);
             $id = (int) $this->db->lastInsertId();
+            // The ticketing-system link (1.54), kept in step with the column written above.
+            (new \Sentinel\Psa\ClientLinks($this->db))->set($id, 'itflow', $v['itflow_client_id'] === null ? null : (string) $v['itflow_client_id']);
             $this->db->prepare(
                 "INSERT INTO sites (client_id, name, is_default, created_at, updated_at) VALUES (:c, 'Main site', 1, UTC_TIMESTAMP(), UTC_TIMESTAMP())"
             )->execute(['c' => $id]);
@@ -90,22 +92,38 @@ final class ClientRepository
     }
 
     /**
-     * Update a client's details. MariaDB applies SET from left to right, so itflow_resumed_at (1.45.1: when "Don't sync
-     * with ITFlow" is turned off) is worked out from the old itflow_sync_off before that column changes.
+     * Update a client's details. MariaDB applies SET from left to right, so itflow_resumed_at is worked out first, from
+     * the old values: it is set when "Don't sync with ITFlow" is turned off (1.45.1) or the client is linked to an ITFlow
+     * client (another, or for the first time; 1.49), so only findings from then on get tickets, not a backlog.
      *
      * @param array{name:string,itflow_client_id:?int,timezone:string,scan_window_start:string,scan_window_end:string,notes:string,ports_extra:string,ports_excluded:string,itflow_sync_off:int} $v Validated values.
      */
     public function update(int $id, array $v): void
     {
+        $this->db->beginTransaction(); // the client and its ticketing-system link change together (1.54)
+        try {
+            $this->updateRow($id, $v);
+            (new \Sentinel\Psa\ClientLinks($this->db))->set($id, 'itflow', $v['itflow_client_id'] === null ? null : (string) $v['itflow_client_id']);
+            $this->db->commit();
+        } catch (\Throwable $ex) {
+            $this->db->rollBack();
+            throw $ex;
+        }
+    }
+
+    /** @param array<string,mixed> $v as update() */
+    private function updateRow(int $id, array $v): void
+    {
         $stmt = $this->db->prepare(
-            'UPDATE clients SET name = :n, itflow_client_id = :it, timezone = :tz, scan_window_start = :ws, scan_window_end = :we,
-                    notes = :notes, ports_extra = :pe, ports_excluded = :px,
-                    itflow_resumed_at = IF(itflow_sync_off = 1 AND :so2 = 0, UTC_TIMESTAMP(), itflow_resumed_at), itflow_sync_off = :so, updated_at = UTC_TIMESTAMP() WHERE id = :id'
+            'UPDATE clients SET
+                    itflow_resumed_at = IF((itflow_sync_off = 1 AND :so2 = 0) OR (:it2 IS NOT NULL AND NOT (itflow_client_id <=> :it3)), UTC_TIMESTAMP(), itflow_resumed_at),
+                    name = :n, itflow_client_id = :it, timezone = :tz, scan_window_start = :ws, scan_window_end = :we,
+                    notes = :notes, ports_extra = :pe, ports_excluded = :px, itflow_sync_off = :so, updated_at = UTC_TIMESTAMP() WHERE id = :id'
         );
         $stmt->execute([
             'n' => $v['name'], 'it' => $v['itflow_client_id'], 'tz' => $v['timezone'],
             'ws' => $v['scan_window_start'], 'we' => $v['scan_window_end'], 'notes' => $v['notes'],
-            'pe' => $v['ports_extra'], 'px' => $v['ports_excluded'], 'so' => $v['itflow_sync_off'] ? 1 : 0, 'so2' => $v['itflow_sync_off'] ? 1 : 0, 'id' => $id,
+            'pe' => $v['ports_extra'], 'px' => $v['ports_excluded'], 'so' => $v['itflow_sync_off'] ? 1 : 0, 'so2' => $v['itflow_sync_off'] ? 1 : 0, 'it2' => $v['itflow_client_id'], 'it3' => $v['itflow_client_id'], 'id' => $id,
         ]);
     }
 
@@ -113,8 +131,9 @@ final class ClientRepository
     public function setArchived(int $id, bool $archived): void
     {
         // An admin's choice: from now on the ITFlow sync never undoes it (itflow_archived marks only the sync's own archives).
-        $this->db->prepare('UPDATE clients SET is_archived = :a, itflow_archived = 0, updated_at = UTC_TIMESTAMP() WHERE id = :id')
-            ->execute(['a' => $archived ? 1 : 0, 'id' => $id]);
+        // Restored (1.49): ITFlow tickets only for findings from now on, not those from while it was archived.
+        $this->db->prepare('UPDATE clients SET itflow_resumed_at = IF(is_archived = 1 AND :a2 = 0, UTC_TIMESTAMP(), itflow_resumed_at), is_archived = :a, itflow_archived = 0, updated_at = UTC_TIMESTAMP() WHERE id = :id')
+            ->execute(['a' => $archived ? 1 : 0, 'a2' => $archived ? 1 : 0, 'id' => $id]);
     }
 
     /** Pause or resume scanning for one client (per-client kill switch). */

@@ -37,7 +37,7 @@ $engSetup = static function (TestContext $ctx): array {
     }
     $site = (int) $ctx->db->query("SELECT id FROM sites WHERE client_id = {$cid} AND is_default = 1")->fetchColumn();
     $pdf = dirname($ctx->configPath) . '/signed-authorisation.pdf';
-    file_put_contents($pdf, "%PDF-1.4\n% made-up signed authorisation for the test suite\n%%EOF\n");
+    file_put_contents($pdf, "%PDF-1.4\n% made-up signed authorization for the test suite\n%%EOF\n");
     return [$cid, $site, $pdf];
 };
 /** The form fields of a valid engagement (window: an hour ago until tomorrow, in UTC as the client is). */
@@ -50,7 +50,7 @@ $fields = static fn (int $site, array $over = []): array => $over + [
 $lastId = static fn (TestContext $ctx, int $cid): int => (int) $ctx->db->query("SELECT MAX(id) FROM engagements WHERE client_id = {$cid}")->fetchColumn();
 
 return [
-    'engagements: only inside the authorised scope, with a signed PDF; roles enforced' => function (TestContext $ctx) use ($engSetup, $fields, $lastId): void {
+    'engagements: only inside the authorized scope, with a signed PDF; roles enforced' => function (TestContext $ctx) use ($engSetup, $fields, $lastId): void {
         [$cid, $site, $pdf] = $engSetup($ctx);
         $tech = $ctx->login('engtech', 'Engtech-Pass-0001!');
         $viewer = $ctx->login('engviewer', 'Engviewer-Pass-0001!');
@@ -153,13 +153,13 @@ return [
         $c = $lastId($ctx, $cid);
         $tech->post('/engagements/' . $c . '/cancel', ['_csrf' => $tech->get('/engagements/' . $c)->csrf()]);
         Assert::same(ER::STATE_CANCELLED, ER::state(App::engagements()->find($c), gmdate('Y-m-d H:i:s')));
-        Assert::true(!(App::engagements()->cancel($later)), 'an approved one cannot be cancelled, only stopped');
+        Assert::true(!(App::engagements()->cancel($later)), 'an approved one cannot be canceled, only stopped');
         $audit = implode("\n", $ctx->db->query("SELECT action FROM audit_log WHERE action LIKE 'engagement.%'")->fetchAll(PDO::FETCH_COLUMN));
         foreach (['engagement.created', 'engagement.approved', 'engagement.stopped', 'engagement.cancelled'] as $a) {
             Assert::contains($a, $audit);
         }
     },
-    'engagements: external tests run only while active, scan deeper with the fixed scripts, honour exclusions and stop' => function (TestContext $ctx) use ($engSetup, $fields, $lastId): void {
+    'engagements: external tests run only while active, scan deeper with the fixed scripts, honor exclusions and stop' => function (TestContext $ctx) use ($engSetup, $fields, $lastId): void {
         [$cid, $site, $pdf] = $engSetup($ctx);
         $admin2 = $ctx->login('engadmin2', 'Engadmin2-Pass-0001!');
         $tech = $ctx->login('engtech', 'Engtech-Pass-0001!');
@@ -217,7 +217,7 @@ return [
         if (!is_file($dir . '/agent.json')) {
             preg_match('/SNE(-[A-Z2-9]{5}){4}/', $admin->submit('/clients/' . $cid, '/clients/' . $cid . '/sites/' . $site . '/enrol', [])->body, $m);
             [$code, $out] = $ctx->cli('bin/sentinel-agent.php', ['enrol', '--server', $ctx->baseUrl, '--code', $m[0] ?? 'missing', '--config', $dir . '/agent.json']);
-            Assert::same(0, $code, 'enrol: ' . $out);
+            Assert::same(0, $code, 'enroll: ' . $out);
             $app = require $ctx->configPath;
             $c = json_decode((string) file_get_contents($dir . '/agent.json'), true);
             $c['nmap_path'] = $app['testing']['agent_nmap_path'];
@@ -280,7 +280,7 @@ return [
         $reports = App::reports()->forEngagement($id);
         Assert::same('pentest', $reports[0]['kind'] ?? null, 'issued');
         $report = App::reports()->find((int) $reports[0]['id']);
-        foreach (['Penetration test report', 'Scope and authorisation', 'Anonymous FTP login is allowed', 'Robin Example', hash_file('sha256', $pdf), 'Never done: password guessing'] as $want) {
+        foreach (['Penetration test report', 'Scope and authorization', 'Anonymous FTP login is allowed', 'Robin Example', hash_file('sha256', $pdf), 'Never done: password guessing'] as $want) {
             Assert::contains($want, (string) $report['html'], $want);
         }
         Assert::contains('Penetration test report', $tech->get('/reports/' . (int) $reports[0]['id'])->body);
@@ -390,7 +390,7 @@ return [
             $ctx->db->exec("UPDATE users SET all_clients = 0 WHERE id = {$cu}");
             $ctx->db->exec("INSERT INTO user_clients (user_id, client_id) VALUES ({$cu}, {$cid})");
         }
-        Assert::contains('Pen-test engagement approval', $admin->get('/admin/settings')->body);
+        Assert::contains('Pen-test engagements', $admin->get('/admin/settings')->body);
         $admin->submit('/admin/settings', '/admin/settings/engagements', ['two_person' => '0', 'my_password' => 'Admin-Pass-0001!']); // box unticked: the hidden 0
         Assert::same('0', $s->fresh('engagement_two_person'), 'turned off');
         Assert::true((int) $ctx->db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'settings.engagement_approval' AND username = 'admin'")->fetchColumn() >= 1, 'audited');

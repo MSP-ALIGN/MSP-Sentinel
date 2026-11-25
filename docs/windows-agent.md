@@ -4,15 +4,15 @@ The on-premises agent will also run natively on Windows, for client sites withou
 agent program (PHP) with a small platform layer; jobs, signatures, scans, results, updates and moves work as on
 Linux.
 
-**Status: preview.** The agent program, the update task and the enrolment page are built and tested by the test suite
+**Status: preview.** The agent program, the update task and the enrollment page are built and tested by the test suite
 (which runs on Linux with the Windows platform forced). The PowerShell installer could not be run where it was
 written: test it on a Windows Server 2022/2025 or Windows 11 machine before using it at a client.
 
 ## Install
 
-1. On the client's Agents page, record an internal authorisation and click **Create an enrolment code**.
+1. On the client's Agents page, record an internal authorization and click **Create an enrollment code**.
 2. On the Windows machine, open PowerShell with **Run as administrator** and paste the Windows command shown on the
-   enrolment page:
+   enrollment page:
 
    ```powershell
    [Net.ServicePointManager]::SecurityProtocol = 'Tls12'; & ([scriptblock]::Create((Invoke-RestMethod https://raw.githubusercontent.com/MSP-ALIGN/MSP-Sentinel/main/install-agent.ps1))) -Server https://sentinel.msp.example
@@ -22,7 +22,7 @@ written: test it on a Windows Server 2022/2025 or Windows 11 machine before usin
 3. The agent appears on the Agents page within a minute. The service is **MSP Sentinel Agent** (services.msc), and
    its log is in `C:\ProgramData\MSP Sentinel Agent\logs`.
 
-Upgrade by hand: run the same command with `-Upgrade`; it keeps the enrolment. Remove: `-Uninstall`, and revoke the
+Upgrade by hand: run the same command with `-Upgrade`; it keeps the enrollment. Remove: `-Uninstall`, and revoke the
 agent in Sentinel. Give the release key by hand: `-Upgrade -ReleaseKey BASE64KEY`.
 
 What the installer checks before it runs anything:
@@ -42,15 +42,15 @@ Remote updates afterwards are checked with the pinned release key.
 - **Windows Server 2022 and 2025, and Windows 11** (64-bit).
 - **No Npcap.** nmap runs unprivileged TCP connect scans (`-sT --unprivileged`, discovery with TCP connect pings), as
   the Linux agent already does. Npcap is not needed or used. The free Npcap can't be installed unattended, and
-  bundling it needs a paid licence. Scans on Windows are slower, because Windows' connect calls are slower.
-- **A real Windows service through WinSW** (MIT licence; the .NET Framework build, its SHA-256 pinned in the
+  bundling it needs a paid license. Scans on Windows are slower, because Windows' connect calls are slower.
+- **A real Windows service through WinSW** (MIT license; the .NET Framework build, its SHA-256 pinned in the
   installer). It runs under its own virtual service account (`NT SERVICE\SentinelAgent`, no password, not an
   administrator) and restarts on failure. Its privileges are limited to SeChangeNotifyPrivilege and
   SeCreateGlobalPrivilege (`sc privs`). By default every service can impersonate clients, which known tools turn into
   SYSTEM.
-- **A one-line PowerShell install** (as administrator) that asks for the enrolment code, downloads PHP (windows.php.net,
+- **A one-line PowerShell install** (as administrator) that asks for the enrollment code, downloads PHP (windows.php.net,
   NTS x64) and nmap (nmap.org), checks them against the SHA-256 their sites publish, installs WinSW (SHA-256 pinned)
-  and the agent, sets permissions, and enrols.
+  and the agent, sets permissions, and enrolls.
 - **Updates through a SYSTEM scheduled task**, the Windows twin of the Linux root update helper.
 
 ## How it stays safe on Windows

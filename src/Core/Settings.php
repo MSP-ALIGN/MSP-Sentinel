@@ -28,6 +28,8 @@ final class Settings
         'source_url' => 'https://github.com/msp-align/msp-sentinel',
         // Global kill switch: '1' stops all scanning straight away. Technicians and admins can pause; only admins resume.
         'scanning_paused' => '0',
+        // The dashboard's first-run checklist (1.51): '1' once someone who manages settings hides it.
+        'setup_checklist_hidden' => '0',
         // Alerts (step 8). Secrets (smtp_password, webhook_url) are stored encrypted: see setSecret().
         'email_enabled' => '0',
         'smtp_host' => '',
@@ -90,8 +92,8 @@ final class Settings
         'itflow_last_result' => '',
         'itflow_last_ok' => '',
         // ITFlow tickets from findings (ItflowTickets): on/off, from when, and the last run.
-        'itflow_tickets_enabled' => '0',
-        'itflow_tickets_since' => '', 'itflow_tickets_weekly_since' => '',
+        'tickets_enabled' => '0',
+        'tickets_since' => '', 'tickets_weekly_since' => '',
         // Moving agents to a new Sentinel address: ONE value in SECRETS (agent_move, JSON url/ca/requested_at), encrypted
         // and authenticated with the app key from the config file, so a database write alone can't set a move.
         'agent_move' => '',
@@ -100,9 +102,9 @@ final class Settings
         // app key, so a database write alone can't plant a release key agents would trust. The private key stays in the
         // admin's file.
         'release_key' => '',
-        'itflow_tickets_last_run' => '',
-        'itflow_tickets_last_result' => '',
-        'itflow_tickets_last_ok' => '',
+        'tickets_last_run' => '',
+        'tickets_last_result' => '',
+        'tickets_last_ok' => '',
         // Breach monitoring (1.33, XposedOrNot): on/off, the last weekly check and its result, verified domains in no
         // client's register. The API key is in xon_api_key (SECRETS).
         'breach_enabled' => '0',

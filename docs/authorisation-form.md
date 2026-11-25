@@ -1,13 +1,13 @@
-# Sample: authorisation for security scanning
+# Sample: authorization for security scanning
 
 *A starting point only. It is not legal advice: have it checked for your country and your contracts. Replace
-everything in [brackets]. Keep the signed copy; record its reference in Sentinel's "authorised to scan" register.*
+everything in [brackets]. Keep the signed copy; record its reference in Sentinel's "authorized to scan" register.*
 
 ---
 
 **Between:** [MSP name] ("the Provider") and [Client legal name] ("the Client").
 
-**1. What the Client authorises.** The Client authorises the Provider to run automated, non-intrusive security
+**1. What the Client authorizes.** The Client authorizes the Provider to run automated, non-intrusive security
 checks from the internet against the systems listed below, using MSP Sentinel, between [start date] and
 [end date].
 
@@ -47,7 +47,7 @@ Signed for the Provider: ____________________ Name / role: ______________ Date: 
 
 ## Annex: internal networks (only if an on-premises agent is installed)
 
-**A1. Site and networks.** The Client authorises scanning of these internal networks at [site name, address] by a
+**A1. Site and networks.** The Client authorizes scanning of these internal networks at [site name, address] by a
 small scanning device ("agent") installed by the Provider:
 
 | Network | Description |
@@ -72,7 +72,7 @@ Signed for the Client: ______________________ Name / role: ______________ Date: 
 ## Annex: penetration test engagement
 
 Use this annex for each engagement (a time-boxed, deeper test). Attach the signed copy to the engagement in Sentinel.
-It only covers systems already in the authorised scope above.
+It only covers systems already in the authorized scope above.
 
 **P1. Engagement.** [Name, e.g. "Annual test 2027"]. Testing may run from [date and time] to [date and time]
 ([timezone]), at most 14 days.

@@ -19,7 +19,7 @@ $feedOk = static fn (?int $age): bool => $age !== null && $age <= 2 * 86400;
     <span class="ops-chip <?= $feedOk($o['feed_age']['kev']) && $feedOk($o['feed_age']['epss']) ? 'is-ok' : 'is-warn' ?>"><i class="bi bi-database-down" aria-hidden="true"></i><?= e(__('Threat feeds')) ?> <b><?= e($ago($o['feed_age']['kev'])) ?></b></span>
     <span class="ops-chip <?= $o['running'] > 0 ? 'is-live' : '' ?>"><i class="bi bi-radar" aria-hidden="true"></i><?= e(__('{r} running · {q} queued', ['r' => $o['running'], 'q' => $o['queued']])) ?></span>
     <span class="ops-chip"><i class="bi bi-clock" aria-hidden="true"></i><?= e($o['paused'] ? __('Scan windows on hold (paused)') : ($o['windows_open'] > 0 ? __('{n} scan window(s) open', ['n' => $o['windows_open']]) : ($o['next_window'] !== null ? __('Next window: {c} in {t}', ['c' => $o['next_window']['client'], 't' => $duration($o['next_window']['in'])]) : __('No scan windows')))) ?></span>
-    <span class="ops-chip <?= $d['authorisations']['ending'] > 0 ? 'is-warn' : '' ?>"><i class="bi bi-file-earmark-check" aria-hidden="true"></i><?= e(__('{a} active scan authorisations', ['a' => $d['authorisations']['active']])) ?><?= $d['authorisations']['ending'] > 0 ? ' · ' . e(__('{n} ending within 30 days', ['n' => $d['authorisations']['ending']])) : '' ?></span>
+    <span class="ops-chip <?= $d['authorisations']['ending'] > 0 ? 'is-warn' : '' ?>"><i class="bi bi-file-earmark-check" aria-hidden="true"></i><?= e(__('{a} active scan authorizations', ['a' => $d['authorisations']['active']])) ?><?= $d['authorisations']['ending'] > 0 ? ' · ' . e(__('{n} ending within 30 days', ['n' => $d['authorisations']['ending']])) : '' ?></span>
     <span class="ops-time ms-auto"><?= e(__('Updated {t}', ['t' => (new DateTimeImmutable('now', display_zone()))->format('H:i:s T')])) ?></span>
 </div>
 
@@ -29,7 +29,7 @@ $feedOk = static fn (?int $age): bool => $age !== null && $age <= 2 * 86400;
         <?php if ($worst === null): ?>
         <p class="hud-empty"><?= e(__('No clients yet.')) ?>
             <?php if (can('clients.manage')): ?><a class="btn btn-primary btn-sm ms-1" href="<?= e(url('/clients/new')) ?>"><i class="bi bi-plus-lg me-1" aria-hidden="true"></i><?= e(__('Add your first client')) ?></a>
-            <?php else: ?><?= e(__('An admin adds clients.')) ?><?php endif; ?></p>
+            <?php else: ?><?= e(__('Someone whose role can manage clients adds them.')) ?><?php endif; ?></p>
         <?php else: ?>
         <?= Svg::gauge($worst['score'], $worst['level'], __('Highest client risk')) ?>
         <p class="gauge-level level-<?= e($worst['level']) ?>"><i class="bi <?= e($levelIcon($worst['level'])) ?>" aria-hidden="true"></i> <?= e($levelWord($worst['level'])) ?></p>

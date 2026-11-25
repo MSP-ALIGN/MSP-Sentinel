@@ -37,6 +37,10 @@ final class InventoryController extends Controller
             return Response::redirect('/clients/' . (int) $client['id'] . '/devices');
         }
         [$name, $source] = $this->source($request->query('source'));
+        if (($other = App::inventory()->otherLink((int) $client['id'], $name)) !== null) {
+            Session::flash('warning', self::oneRmmMessage((string) $other['source']));
+            return Response::redirect('/clients/' . (int) $client['id'] . '/devices');
+        }
         $orgs = [];
         $error = '';
         try {
@@ -49,6 +53,13 @@ final class InventoryController extends Controller
             'client' => $client, 'sourceName' => $name, 'sourceLabel' => $source->label(), 'orgs' => $orgs, 'error' => $error,
             'suggested' => self::suggest((string) $client['name'], $orgs), 'link' => App::inventory()->link((int) $client['id'], $name),
         ]);
+    }
+
+    /** Why a client already linked to another RMM can't be linked here (1.52), naming that RMM. */
+    private static function oneRmmMessage(string $otherSource): string
+    {
+        $label = \Sentinel\Inventory\Sources::type($otherSource)?->label() ?? $otherSource;
+        return __('This client is already linked to {source}. A client is linked to one RMM at a time, so its machines don\'t come in twice: unlink it there first.', ['source' => $label]);
     }
 
     /** POST /clients/{id}/inventory/link (admins). */
@@ -64,6 +75,10 @@ final class InventoryController extends Controller
             return Response::redirect('/clients/' . (int) $client['id'] . '/devices');
         }
         [$name, $source] = $this->source($request->input('source'));
+        if (($other = App::inventory()->otherLink((int) $client['id'], $name)) !== null) {
+            Session::flash('warning', self::oneRmmMessage((string) $other['source']));
+            return Response::redirect('/clients/' . (int) $client['id'] . '/devices');
+        }
         $orgId = $request->input('org_id');
         try {
             $orgs = $source->organisations();
@@ -78,13 +93,31 @@ final class InventoryController extends Controller
             }
         }
         if ($org === null) {
-            Session::flash('danger', __('Choose an organisation from the list.'));
+            Session::flash('danger', __('Choose an organization from the list.'));
             return Response::redirect('/clients/' . (int) $client['id'] . '/inventory/link?source=' . rawurlencode($name));
+        }
+        if (App::inventory()->orgLinkedElsewhere($name, $org['id'], (int) $client['id'])) {
+            Session::flash('danger', __('This organization is already linked to another client.'));
+            return Response::redirect('/clients/' . (int) $client['id'] . '/inventory/link?source=' . rawurlencode($name));
+        }
+        // Another organisation than before (1.49): unlink the old one first, so its devices and their findings leave this
+        // client (closed as "unlinked", not as fixed) instead of staying for good.
+        $previous = App::inventory()->link((int) $client['id'], $name);
+        if ($previous !== null && (string) $previous['org_id'] !== $org['id']) {
+            App::inventorySync()->unlink((int) $client['id'], $name, (int) $this->user()['id']);
+            $this->audit($request, 'inventory.unlinked', 'client', (int) $client['id'], ['source' => $name, 'org_id' => mb_substr((string) $previous['org_id'], 0, 64), 'reason' => 'relinked']);
         }
         try {
             App::inventory()->setLink((int) $client['id'], $name, $org['id'], $org['name'], (int) $this->user()['id']);
+        } catch (\UnexpectedValueException) {
+            // Linked to another RMM in the meantime (1.52.1).
+            Session::flash('warning', __('This client was just linked to another RMM, so it was not linked here. A client is linked to one RMM at a time.'));
+            return Response::redirect('/clients/' . (int) $client['id'] . '/devices');
         } catch (\DomainException) {
-            Session::flash('danger', __('This organisation is already linked to another client.'));
+            // Someone linked that organisation elsewhere in the meantime (1.49.1): say plainly if the old link is gone too.
+            Session::flash('danger', $previous !== null && (string) $previous['org_id'] !== $org['id']
+                ? __('This organization was just linked to another client, so it could not be linked here. The previous organization was unlinked: link the right one again.')
+                : __('This organization is already linked to another client.'));
             return Response::redirect('/clients/' . (int) $client['id'] . '/inventory/link?source=' . rawurlencode($name));
         }
         $this->audit($request, 'inventory.linked', 'client', (int) $client['id'], ['source' => $name, 'org_id' => mb_substr($org['id'], 0, 64), 'org_name' => mb_substr($org['name'], 0, 200)]);
@@ -96,7 +129,11 @@ final class InventoryController extends Controller
     public function unlink(Request $request, array $params): Response
     {
         $client = $this->client($params);
-        [$name] = $this->source($request->input('source'));
+        // Any registered RMM, also one turned off (1.52.1), so a link to it can always be removed.
+        $name = $request->input('source');
+        if (\Sentinel\Inventory\Sources::type($name) === null) {
+            throw new HttpException(404);
+        }
         if (App::inventory()->link((int) $client['id'], $name) !== null) {
             App::inventorySync()->unlink((int) $client['id'], $name, (int) $this->user()['id']);
             $this->audit($request, 'inventory.unlinked', 'client', (int) $client['id'], ['source' => $name]);

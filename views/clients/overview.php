@@ -34,7 +34,7 @@ $w = $ov['window'];
         <?php endif; ?>
     </section>
     <section class="hud hud-trend" aria-labelledby="h-c-trend">
-        <h2 id="h-c-trend" class="hud-title"><?= e(__('Open problems, last 90 days')) ?></h2>
+        <h2 id="h-c-trend" class="hud-title"><?= e(__('Open findings, last 90 days')) ?></h2>
         <?php if (count($ov['trend']) < 2): ?>
         <p class="trend-note"><i class="bi bi-graph-up" aria-hidden="true"></i><?= e(__('The trend builds up day by day: check back tomorrow.')) ?></p>
         <?php else: ?>

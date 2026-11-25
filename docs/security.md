@@ -5,11 +5,11 @@ sign-in, patched, backed up.
 
 ## What Sentinel does for you
 
-- **Authorised targets only:** every scan target is checked against an active, approved authorisation at the moment
+- **Authorized targets only:** every scan target is checked against an active, approved authorization at the moment
   of scanning, and there is a global kill switch. Scans are gentle (TCP connect, rate-limited, in the scan window)
   and logged.
 - **Sign-in:** mandatory TOTP two-factor authentication, recovery codes stored as keyed hashes, throttling, session
-  revocation, three roles (viewer, technician, admin). Every POST is CSRF-checked; every page sends a strict
+  revocation, roles (built-in Viewer, Technician and Admin, plus your own with chosen permissions and clients). Every POST is CSRF-checked; every page sends a strict
   Content Security Policy and escapes all output.
 - **Secrets:** SMTP password, webhook addresses and the event signing secret are encrypted with libsodium using the
   app key. API tokens and recovery codes are stored only as keyed hashes. Secrets are never shown again after they
@@ -19,9 +19,9 @@ sign-in, patched, backed up.
 - **API:** bearer tokens only (no cookies), limited to chosen clients, expiring, optional IP allowlist, rate-limited;
   writes are opt-in and audited.
 - **Reports:** frozen with a SHA-256, served with a policy that allows no scripts.
-- **On-premises agents:** outbound-only; scan only networks in a signed internal authorisation (Ed25519, key derived
+- **On-premises agents:** outbound-only; scan only networks in a signed internal authorization (Ed25519, key derived
   from the app key, never stored in the database); every job signed and checked by the agent (scope, expiry, replay);
-  tokens and enrolment codes stored only as keyed hashes; unprivileged, hardened service; revocable. See
+  tokens and enrollment codes stored only as keyed hashes; unprivileged, hardened service; revocable. See
   [`agent.md`](agent.md).
 - **Audit log:** sign-ins, changes, triage, scans, API writes and retention runs. It is never pruned.
 

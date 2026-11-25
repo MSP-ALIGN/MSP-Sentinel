@@ -7,8 +7,8 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.48.1](https://img.shields.io/badge/version-1.48.1-ff5a1f?style=flat-square)
-![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
+![Version 1.55.1](https://img.shields.io/badge/version-1.55.1-ff5a1f?style=flat-square)
+![License AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
 ![Self-hosted](https://img.shields.io/badge/self--hosted-your%20data%20stays%20yours-2ea44f?style=flat-square)
@@ -38,7 +38,7 @@ check proves them. Its companion product, **MSP Align**, plans, reports and prov
   and Active Directory weaknesses; NinjaOne adds installed software, updates, antivirus and encryption.
 - **Breached accounts:** weekly check of your clients' domains against known data breaches.
 - **Fix workflow:** triage, owners, due dates, daily reminders and *verify fix* rechecks of one finding.
-- **Pen-test engagements:** time-boxed deeper tests, approved by a second admin, with a report and a retest letter.
+- **Pen-test engagements:** time-boxed deeper tests, approved before anything runs (by a second admin unless you turn that off), with a report and a retest letter.
 - **Alerts and reports:** bell, email and Teams/Slack; branded executive and technical reports, frozen with a SHA-256.
 - **Integrations:** ITFlow (clients and tickets), MSP Align (compliance), NinjaOne (devices), API and signed events.
 - **Operations:** one-command installer, Update now, encrypted backups, health checks, audit log.
@@ -55,7 +55,7 @@ check proves them. Its companion product, **MSP Align**, plans, reports and prov
     <td><img src="docs/images/website-email.webp" alt="Website and email security results"><br><sub><b>Website and email</b>: headers, exposed files, CMS versions, SPF/DMARC/DKIM.</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/images/agents.webp" alt="On-premises agents for a client site"><br><sub><b>On-premises agents</b>: signed internal authorisation, check-ins, kill switch.</sub></td>
+    <td><img src="docs/images/agents.webp" alt="On-premises agents for a client site"><br><sub><b>On-premises agents</b>: signed internal authorization, check-ins, kill switch.</sub></td>
     <td><img src="docs/images/device.webp" alt="An internal device with its services and findings"><br><sub><b>Internal device</b>: open services, certificates, software and findings.</sub></td>
   </tr>
   <tr>
@@ -68,13 +68,13 @@ All screenshots use made-up clients and documentation addresses only.
 
 ## How it stays safe
 
-- **Authorised targets only.** Nothing is scanned unless the client approved it in writing and you recorded it.
+- **Authorized targets only.** Nothing is scanned unless the client approved it in writing and you recorded it.
   Scope is checked again at the moment of scanning, and every active scan is logged.
 - **Gentle by default.** Slow, rate-limited scans inside each client's scan window, with a global kill switch and a
   pause per client and per site.
 - **Signed agent jobs.** Agents scan only the networks approved for their site, checked against a signature that the
   database alone can't forge.
-- **Locked-down sign-in.** Mandatory two-factor authentication, three roles, your own password for powerful actions,
+- **Locked-down sign-in.** Mandatory two-factor authentication, built-in and custom roles (limited to chosen clients if you like), your own password for powerful actions,
   secrets encrypted at rest.
 
 More in [docs/security.md](docs/security.md) and [docs/responsible-use.md](docs/responsible-use.md). Sentinel is
@@ -101,7 +101,7 @@ Requirements, a development server, unattended installs and signed release archi
 
 | Guide | |
 |---|---|
-| [Your first client](docs/guides/first-client.md) | Add a client, record the authorisation, run the first scan |
+| [Your first client](docs/guides/first-client.md) | Add a client, record the authorization, run the first scan |
 | [Findings](docs/guides/findings.md) | Read, triage and fix findings; owners, due dates, verify fix |
 | [Search](docs/guides/search.md) | The top-bar search and the filters |
 | [Reports](docs/guides/reports.md) | Executive and technical reports, monthly reports, PDF and CSV |
@@ -119,38 +119,31 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
-### 1.48.1 (2026-11-24): Time zone fixes from review
+### 1.55.1 (2026-11-25): Fixes from review
 
-- **Everything in your time.** The activity feeds on the dashboard and client overview, the certificate "Checked"
-  times, and the dates in reports (first seen, fixed, decided) now use your time zone, or the client's in reports,
-  like the rest.
-- **The button says what it does.** After a Settings save that failed (for example a bad source address), the "move
-  clients still on UTC" button named the time zone just typed, but moved clients to the saved one. It now names the
-  saved one.
-- Time zone names that PHP knows by an older alias are accepted, and stored times in ISO format are shown converted.
+- When a ticket closed in ITFlow is replaced and the new ticket can't be opened yet, the targets moving to it no longer
+  keep the old ticket's ID in the new text field.
+- The ticketing-layer tests no longer depend on which tests ran before them.
 
-### 1.48.0 (2026-11-24): Times in your time zone
+### 1.55.0 (2026-11-25): Tickets ready for other ticketing systems
 
-- **Your time, everywhere.** Under **Administration → Settings → General**, choose your time zone (for example
-  America/Los_Angeles). Every time in Sentinel (scans, findings, notifications, the audit log, agents, integrations)
-  is then shown in it and labelled, for example `2026-11-24 13:33 PST`. Each user can pick their own under **My
-  profile → Time zone**.
-- **New clients start in it,** also those added from ITFlow. Clients still on UTC are listed on the Settings page,
-  with a button that moves them to your time zone (their scan window times stay the same numbers, now read as local
-  time). It's audited.
-- **Reports** show times in their client's time zone, labelled.
-- **Still UTC underneath.** Sentinel keeps storing and comparing times in UTC, so daylight-saving changes never
-  shift a scan, and the logs, agents and API agree. Leave the server's own clock on UTC.
+Nothing changes in how ITFlow works.
 
-### 1.47.2 (2026-11-24): Windows agent scans start
+- **Each ticket knows its system.** Every ticket Sentinel follows now records which ticketing system it belongs to,
+  and its ID there as text, so systems with text ticket IDs fit. Existing tickets are filled in on upgrade.
+- **Neutral ticket settings.** "Open tickets for findings", "since when" and the weekly Warnings ticket, and the last
+  run's result, are stored under names that don't depend on ITFlow. Your current choices are copied over on upgrade.
 
-- **"Could not start nmap" on Windows is fixed.** The agent asked Windows to read nmap's input from `/dev/null`,
-  which only exists on Linux, so every scan failed before it began. It now uses Windows' null device, gives nmap the
-  environment Windows networking needs (without `SystemRoot`, Winsock can't start), and collects nmap's output in
-  private temporary files, because PHP can't read process pipes on Windows without blocking. The stop check, kill
-  switch and time limits keep working during a scan. Linux agents and Sentinel's own scans are unchanged.
-- To get the fix, upgrade the Windows agent: run the install command again with `-Upgrade`, or send a signed remote
-  update from the agent's page.
+### 1.54.1 (2026-11-25): Fixes from review
+
+- **ITFlow sync keeps going.** When an ITFlow client is already linked to another Sentinel client (for example a demo
+  client), the sync counts it as a conflict and carries on with the rest, instead of stopping.
+- **The client form never fails on a taken ITFlow ID.** It says "already in use", also when the ID was linked elsewhere
+  at the same moment.
+- **Old duplicates.** On an install where two clients shared one ITFlow ID, the upgrade keeps the link on the older
+  client, logs the other, and that client's Edit page shows "already in use" until the duplicate is cleared.
+- Linking a client to ITFlow by name and "tickets only from now on" are saved together, so a broken run can never
+  open tickets for old findings.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 
@@ -192,6 +185,6 @@ Please report vulnerabilities privately. See [SECURITY.md](SECURITY.md).
 
 ## Third-party components
 
-Served from `public/assets/vendor/`, each with its licence file: Bootstrap 5.3.8 (MIT), AdminLTE 4.10.0 (MIT),
-Bootstrap Icons 1.13.1 (MIT), qrcode-generator 2.0.4 (MIT, licence notice in the file header), and the fonts
-Chakra Petch and JetBrains Mono (SIL Open Font License 1.1, licence files in `public/assets/vendor/fonts/`).
+Served from `public/assets/vendor/`, each with its license file: Bootstrap 5.3.8 (MIT), AdminLTE 4.10.0 (MIT),
+Bootstrap Icons 1.13.1 (MIT), qrcode-generator 2.0.4 (MIT, license notice in the file header), and the fonts
+Chakra Petch and JetBrains Mono (SIL Open Font License 1.1, license files in `public/assets/vendor/fonts/`).

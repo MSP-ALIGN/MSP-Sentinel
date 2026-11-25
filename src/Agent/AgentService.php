@@ -253,7 +253,7 @@ final class AgentService
         $messages = array_slice(array_map(static fn ($m): string => InventoryRepository::clean($m, 300), (array) ($data['messages'] ?? [])), 0, 10);
         if ($ranges === []) {
             // Revoked (or no longer valid) authorisation: nothing from this job is stored.
-            $this->agents->finishJob((int) $job['id'], 'cancelled', ['messages' => [__('Results ignored: the internal authorisation was revoked or is no longer valid.')]]);
+            $this->agents->finishJob((int) $job['id'], 'cancelled', ['messages' => [__('Results ignored: the internal authorization was revoked or is no longer valid.')]]);
             return ['accepted' => 0, 'rejected' => count((array) ($data['hosts'] ?? [])), 'new_devices' => 0, 'status' => 'cancelled'];
         }
         $stats = ['accepted' => 0, 'rejected' => 0, 'new_devices' => 0, 'status' => $status];
@@ -261,6 +261,23 @@ final class AgentService
         $knownIps = $this->knownElsewhereIps($clientId);
         $new = [];
         $hosts = array_slice(array_values(array_filter((array) ($data['hosts'] ?? []), 'is_array')), 0, self::MAX_HOSTS);
+        // One MAC on several addresses in this upload (a Wi-Fi extender's MAC-NAT, proxy ARP, a host with many
+        // addresses; 1.50): that MAC identifies none of them, so each is kept by its address instead of one record
+        // flipping between them.
+        $macIps = [];
+        foreach ($hosts as $h) {
+            $m = self::mac((string) ($h['mac'] ?? ''));
+            if ($m !== '') {
+                // Keyed by the address as PHP reads it, so written variants of one address count once (1.50.1).
+                $ip = trim((string) ($h['ip'] ?? ''));
+                $bin = @inet_pton($ip);
+                $macIps[$m][$bin !== false ? inet_ntop($bin) : $ip] = true;
+            }
+        }
+        foreach ($hosts as &$h) {
+            $h['_shared_mac'] = count($macIps[self::mac((string) ($h['mac'] ?? ''))] ?? []) > 1;
+        }
+        unset($h);
         foreach (array_chunk($hosts, self::BATCH) as $batch) {
             $this->db->beginTransaction();
             try {
@@ -455,6 +472,10 @@ final class AgentService
      * Insert or update one device. The same MAC address at the same site is the same device even when its address
      * changed (DHCP), so it is not announced as new.
      *
+     * An address alone identifies a device only when the MACs don't contradict it (1.49): if the device last seen at
+     * this address has another known MAC, DHCP gave the address to a different machine, which gets its own record
+     * (keyed by its MAC). Before, the new machine took over the old one's record, name and findings.
+     *
      * @return array{0:int, 1:bool} device ID, and true if this device was never seen at this site before.
      */
     private function upsertDevice(int $clientId, int $siteId, string $ip, array $h, bool $scanned): array
@@ -462,15 +483,26 @@ final class AgentService
         $mac = self::mac((string) ($h['mac'] ?? ''));
         $hostname = InventoryRepository::clean($h['hostname'] ?? '', 255);
         $existing = null;
-        if ($mac !== '') {
+        // A private ("locally administered") MAC, as phones and laptops rotate per network (1.49.1), identifies
+        // nothing for long: such hosts are matched by address, as before, so each rotation isn't a new device.
+        $idMac = self::randomMac($mac) || ($h['_shared_mac'] ?? false) === true ? '' : $mac;
+        if ($idMac !== '') {
             $byMac = $this->db->prepare("SELECT id FROM devices WHERE source = 'agent' AND site_id = :s AND mac = :m ORDER BY last_seen DESC LIMIT 1");
-            $byMac->execute(['s' => $siteId, 'm' => $mac]);
+            $byMac->execute(['s' => $siteId, 'm' => $idMac]);
             $existing = $byMac->fetchColumn() ?: null;
         }
         if ($existing === null) {
-            $byId = $this->db->prepare("SELECT id FROM devices WHERE source = 'agent' AND source_id = :sid");
-            $byId->execute(['sid' => $siteId . ':' . $ip]);
-            $existing = $byId->fetchColumn() ?: null;
+            // The device now at this address (or first seen here), unless its MAC says it is another machine.
+            $byIp = $this->db->prepare("SELECT id, mac FROM devices WHERE source = 'agent' AND site_id = :s AND (ip_addresses = :ip OR source_id = :sid)
+                                        ORDER BY ip_addresses = :ip2 DESC, last_seen DESC");
+            $byIp->execute(['s' => $siteId, 'ip' => $ip, 'sid' => $siteId . ':' . $ip, 'ip2' => $ip]);
+            foreach ($byIp->fetchAll() as $row) {
+                $known = self::randomMac((string) $row['mac']) ? '' : (string) $row['mac'];
+                if ($idMac === '' || $known === '' || $known === $idMac) {
+                    $existing = (int) $row['id'];
+                    break;
+                }
+            }
         }
         if ($existing !== null) {
             $this->db->prepare("UPDATE devices SET client_id = :c, site_id = :site, ip_addresses = :ip, name = IF(:dns <> '', :n, IF(name = '' OR name = ip_addresses, :ip2, name)),
@@ -480,12 +512,25 @@ final class AgentService
                            'mac' => $mac, 'mac2' => $mac, 'full' => $scanned ? 1 : 0, 'id' => (int) $existing]);
             return [(int) $existing, false];
         }
+        // A new machine: keyed by address, or by its MAC when another device was first seen at this address.
+        $sid = $siteId . ':' . $ip;
+        $taken = $this->db->prepare("SELECT COUNT(*) FROM devices WHERE source = 'agent' AND source_id = :sid");
+        $taken->execute(['sid' => $sid]);
+        if ((int) $taken->fetchColumn() > 0) {
+            $sid = $siteId . ':mac:' . ($idMac !== '' ? $idMac : bin2hex(random_bytes(6)));
+        }
         $this->db->prepare(
             "INSERT INTO devices (client_id, site_id, source, source_id, name, dns_name, device_class, ip_addresses, mac, last_contact, first_seen, last_seen, last_full_seen, removed_at)
              VALUES (:c, :site, 'agent', :sid, :n, :dns, 'other', :ip, :mac, UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP(), :full, NULL)"
-        )->execute(['c' => $clientId, 'site' => $siteId, 'sid' => $siteId . ':' . $ip, 'n' => $hostname !== '' ? $hostname : $ip, 'dns' => $hostname, 'ip' => $ip, 'mac' => $mac,
+        )->execute(['c' => $clientId, 'site' => $siteId, 'sid' => $sid, 'n' => $hostname !== '' ? $hostname : $ip, 'dns' => $hostname, 'ip' => $ip, 'mac' => $mac,
                     'full' => $scanned ? gmdate('Y-m-d H:i:s') : null]);
         return [(int) $this->db->lastInsertId(), true];
+    }
+
+    /** True for a locally administered (private, randomized) MAC address: bit 1 of the first byte is set. */
+    private static function randomMac(string $mac): bool
+    {
+        return $mac !== '' && ctype_xdigit($mac[1] ?? '') && (hexdec($mac[1]) & 2) === 2;
     }
 
     /**

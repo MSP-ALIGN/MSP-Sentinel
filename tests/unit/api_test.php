@@ -21,7 +21,7 @@ return [
         Assert::true(TokenService::ipAllowed('2001:db8::/32', '2001:db8::5'), 'IPv6');
         Assert::true(!TokenService::ipAllowed('2001:db8::/32', '203.0.113.9'), 'IPv4 never matches an IPv6 range');
         Assert::true(!TokenService::ipAllowed('198.51.100.0/24', 'garbage'), 'invalid address');
-        Assert::same('203.0.113.10', TokenService::normaliseIp('::ffff:203.0.113.10'), 'IPv4-mapped address normalised');
+        Assert::same('203.0.113.10', TokenService::normaliseIp('::ffff:203.0.113.10'), 'IPv4-mapped address normalized');
         Assert::same('2001:db8::1', TokenService::normaliseIp('2001:db8::1'));
     },
     'event signatures are HMAC-SHA256 over "timestamp.body"' => function (TestContext $ctx): void {

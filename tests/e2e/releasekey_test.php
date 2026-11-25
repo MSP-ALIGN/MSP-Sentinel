@@ -44,7 +44,7 @@ $rkAgent = static function (TestContext $ctx) use ($rkDir): array {
         @mkdir($rkDir($ctx), 0700, true);
         [$code, $out] = $ctx->cli('bin/sentinel-agent.php', ['enrol', '--server', $ctx->baseUrl, '--code', $m[0] ?? 'missing', '--config', $rkDir($ctx) . '/agent.json']);
         if ($code !== 0) {
-            throw new RuntimeException('Agent enrolment failed: ' . $out);
+            throw new RuntimeException('Agent enrollment failed: ' . $out);
         }
         $app = require $ctx->configPath;
         $c = json_decode((string) file_get_contents($rkDir($ctx) . '/agent.json'), true);
@@ -130,7 +130,7 @@ return [
 
             // A new agent gets the key at enrolment.
             [$cid, $site, $agentId] = $rkAgent($ctx);
-            Assert::same($k['publicKey'], json_decode((string) file_get_contents($rkDir($ctx) . '/agent.json'), true)['release_public_key'] ?? null, 'pinned at enrolment');
+            Assert::same($k['publicKey'], json_decode((string) file_get_contents($rkDir($ctx) . '/agent.json'), true)['release_public_key'] ?? null, 'pinned at enrollment');
             $rkRun($ctx);
             Assert::same(ReleaseManifest::keyFingerprint($k['publicKey']), $ctx->db->query("SELECT release_key_fp FROM agents WHERE id = {$agentId}")->fetchColumn());
             // The key pinned at enrolment (only in the root-owned config, no key file) is enough for the helper to update.
@@ -143,7 +143,7 @@ return [
             Assert::contains('Update to 9.9.9 staged', $out);
             [$code, $out] = $helper($ctx);
             Assert::same(0, $code, 'helper: ' . $out);
-            Assert::same("9.9.9\n", file_get_contents(dirname($ctx->configPath) . '/rk-app/VERSION'), 'updated with the key pinned at enrolment');
+            Assert::same("9.9.9\n", file_get_contents(dirname($ctx->configPath) . '/rk-app/VERSION'), 'updated with the key pinned at enrollment');
             $rkRun($ctx); // reports the result and cleans up
             Assert::same(['9.9.9', true], [json_decode((string) $ctx->db->query("SELECT update_result FROM agents WHERE id = {$agentId}")->fetchColumn(), true)['version'] ?? null,
                 json_decode((string) $ctx->db->query("SELECT update_result FROM agents WHERE id = {$agentId}")->fetchColumn(), true)['ok'] ?? null]);

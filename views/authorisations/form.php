@@ -12,7 +12,7 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
 <?php if (($values['replaces'] ?? '') !== ''): ?>
 <div class="alert alert-info">
     <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>
-    <?= e(__('This new authorisation will replace authorisation(s) #{ids}. They will be revoked when you save. The scope below starts with the current scope.', ['ids' => str_replace(',', ', #', $values['replaces'])])) ?>
+    <?= e(__('This new authorization will replace authorization(s) #{ids}. They will be revoked when you save. The scope below starts with the current scope.', ['ids' => str_replace(',', ', #', $values['replaces'])])) ?>
     <?php if (!empty($added)): ?>
     <div class="mt-1"><?= e(__('Added from discovery: {list}. Make sure the client has approved these too.', ['list' => implode(', ', $added)])) ?></div>
     <?php endif; ?>
@@ -58,7 +58,7 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
                 <div class="mt-3 mb-3">
                     <label for="document_ref" class="form-label"><?= e(__('Document reference (optional)')) ?></label>
                     <input type="text" class="form-control<?= $invalid('document_ref') ?>" id="document_ref" name="document_ref" value="<?= e($values['document_ref']) ?>" maxlength="190">
-                    <div class="form-text"><?= e(__('Where the signed authorisation is kept, e.g. a ticket number or document name.')) ?></div>
+                    <div class="form-text"><?= e(__('Where the signed authorization is kept, e.g. a ticket number or document name.')) ?></div>
                     <?php $field = 'document_ref'; require __DIR__ . '/../partials/field_error.php'; ?>
                 </div>
                 <div>
@@ -92,13 +92,13 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
     <div class="card-body">
         <div class="form-check">
             <input class="form-check-input<?= $invalid('confirm') ?>" type="checkbox" value="1" id="confirm" name="confirm" <?= $values['confirm'] === '1' ? 'checked' : '' ?>>
-            <label class="form-check-label" for="confirm"><?= e(__('I confirm that this client has authorised us to scan exactly these systems for these dates, and that the authorisation is documented.')) ?></label>
+            <label class="form-check-label" for="confirm"><?= e(__('I confirm that this client has authorized us to scan exactly these systems for these dates, and that the authorization is documented.')) ?></label>
             <?php $field = 'confirm'; require __DIR__ . '/../partials/field_error.php'; ?>
         </div>
-        <p class="small text-body-secondary mt-2 mb-0"><?= e(__('Authorisations cannot be edited after saving. To change the scope later, revoke this one and record a new one.')) ?></p>
+        <p class="small text-body-secondary mt-2 mb-0"><?= e(__('Authorizations cannot be edited after saving. To change the scope or the dates later, use Change scope / renew on the Authorizations page: the new one replaces this one, and both stay in the register.')) ?></p>
     </div>
     <div class="card-footer">
-        <button type="submit" class="btn btn-primary"><i class="bi bi-file-earmark-check me-1" aria-hidden="true"></i><?= e(__('Record authorisation')) ?></button>
+        <button type="submit" class="btn btn-primary"><i class="bi bi-file-earmark-check me-1" aria-hidden="true"></i><?= e(__('Record authorization')) ?></button>
         <a href="<?= e(url('/clients/' . (int) $client['id'])) ?>" class="btn btn-outline-secondary"><?= e(__('Cancel')) ?></a>
     </div>
 </div>

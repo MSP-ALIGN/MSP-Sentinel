@@ -45,7 +45,7 @@ $dirSetup = static function (TestContext $ctx) use ($dirAgent, $udpPort): array 
     @mkdir($dirAgent($ctx), 0700, true);
     [$code, $out] = $ctx->cli('bin/sentinel-agent.php', ['enrol', '--server', $ctx->baseUrl, '--code', $m[0] ?? 'missing', '--config', $dirAgent($ctx) . '/agent.json']);
     if ($code !== 0) {
-        throw new RuntimeException('Agent enrolment failed: ' . $out);
+        throw new RuntimeException('Agent enrollment failed: ' . $out);
     }
     $app = require $ctx->configPath;
     $c = json_decode((string) file_get_contents($dirAgent($ctx) . '/agent.json'), true);

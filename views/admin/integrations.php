@@ -2,13 +2,12 @@
 /**
  * Administration > Integrations: outside systems Sentinel reads from (NinjaOne first).
  * Expects: $itflow (enabled, url, has_key, tested_at, test_result, last_sync, last_result, last_ok, linked, tickets,
- *          tickets_last_run, tickets_last_result, tickets_last_ok, tickets_total), $ninja (enabled, host, client_id, has_secret, tested_at, test_result, linked), $align (enabled, url, has_key,
+ *          tickets_last_run, tickets_last_result, tickets_last_ok, tickets_total), $inventoryTypes (IntegrationsController::inventoryCards: one per registered inventory source), $align (enabled, url, has_key,
  *          tested_at, test_result, linked), $breach (enabled, has_key, last_run, last_result, last_ok, unmatched, addresses: 1.33).
  * Every value is escaped. The client secret is never sent back to the browser.
  */
 use Sentinel\Core\Csrf;
 
-$n = $ninja;
 ?>
 <p class="text-body-secondary"><?= e(__('Systems Sentinel works with. Sentinel only reads from them, except ITFlow tickets: when ticketing is turned on, Sentinel opens, updates and closes tickets for findings. It never changes anything else.')) ?></p>
 <?php $it = $itflow; ?>
@@ -23,7 +22,7 @@ $n = $ninja;
         <span class="ms-auto small text-body-secondary"><?= e(__('{n} client(s) from ITFlow', ['n' => $it['linked']])) ?></span>
     </div>
     <div class="card-body">
-        <p class="small"><?= e(__('ITFlow is the list of clients: every 15 minutes new ITFlow clients are added to Sentinel, names are kept in step, and clients archived in ITFlow are archived here. A new client is not scanned until its written authorisation is recorded. With MSP Align connected, clients are linked to MSP Align by their ITFlow ID too. With tickets on, findings open tickets on the ITFlow board with how to fix them.')) ?></p>
+        <p class="small"><?= e(__('ITFlow is the list of clients: every 15 minutes new ITFlow clients are added to Sentinel, names are kept in step, and clients archived in ITFlow are archived here. A new client is not scanned until its written authorization is recorded. With MSP Align connected, clients are linked to MSP Align by their ITFlow ID too. With tickets on, findings open tickets on the ITFlow board with how to fix them.')) ?></p>
         <details class="small mb-3">
             <summary><?= e(__('How to create the API key in ITFlow')) ?></summary>
             <ol class="mt-2 mb-0">
@@ -75,13 +74,13 @@ $n = $ninja;
                       . ($it['boards_checked'] ? __('This ITFlow lists no boards (stock ITFlow), so tickets stay where ITFlow puts them.') : __('The boards are listed after Test connection or the next sync.'))
                     : __('Sentinel moves each new ticket to this board right after opening it, unassigned, so the board\'s auto-assign and notifications pick it up. If a move fails, the ticket stays on ITFlow\'s default board and the last run says so.')) ?></div>
             </div>
-            <button type="submit" class="btn btn-primary btn-sm mt-3"><?= e(__('Save')) ?></button>
+            <button type="submit" class="btn btn-primary btn-sm mt-3"><?= e(__('Save ITFlow')) ?></button>
         </form>
         <hr>
         <div class="d-flex flex-wrap align-items-center gap-2">
             <form method="post" action="<?= e(url('/admin/integrations/itflow/test')) ?>"><?= Csrf::field() ?>
                 <button type="submit" class="btn btn-outline-secondary btn-sm"><i class="bi bi-plug me-1" aria-hidden="true"></i><?= e(__('Test connection')) ?></button></form>
-            <form method="post" data-confirm="<?= e(__('Sync clients with ITFlow now? New ITFlow clients are added here (not scanned until authorised), renames are applied, and clients archived in ITFlow are archived here.')) ?>" action="<?= e(url('/admin/integrations/itflow/sync')) ?>"><?= Csrf::field() ?>
+            <form method="post" data-confirm="<?= e(__('Sync clients with ITFlow now? New ITFlow clients are added here (not scanned until authorized), renames are applied, and clients archived in ITFlow are archived here.')) ?>" action="<?= e(url('/admin/integrations/itflow/sync')) ?>"><?= Csrf::field() ?>
                 <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i><?= e(__('Sync now')) ?></button></form>
             <?php if ($it['tickets']): ?>
             <form method="post" data-confirm="<?= e(__('Open ITFlow tickets now? Tickets are created in ITFlow for open Fail and known-exploited findings that have none yet.')) ?>" action="<?= e(url('/admin/integrations/itflow/tickets')) ?>"><?= Csrf::field() ?>
@@ -95,63 +94,62 @@ $n = $ninja;
         <?php if ($it['tickets_last_run'] !== ''): ?><p class="small mb-0 mt-1<?= $it['tickets_last_ok'] ? '' : ' text-danger' ?>"><?= e(__('Tickets {t}: {r} ({n} opened so far)', ['t' => when($it['tickets_last_run']), 'r' => $it['tickets_last_result'], 'n' => $it['tickets_total']])) ?></p><?php endif; ?>
     </div>
 </div>
-<div class="card mb-3" id="ninjaone">
+<?php // Inventory sources (1.52): one card per registered RMM, drawn from its SourceType (fields, steps, intro). ?>
+<?php foreach ($inventoryTypes as $src): $sn = $src['name']; ?>
+<div class="card mb-3" id="<?= e($sn) ?>">
     <div class="card-header d-flex align-items-center gap-2">
-        <h2 class="card-title h5 mb-0"><?= e(__('NinjaOne')) ?></h2>
-        <?php if ($n['enabled'] && $n['host'] !== '' && $n['client_id'] !== '' && $n['has_secret']): ?>
+        <h2 class="card-title h5 mb-0"><?= e($src['label']) ?></h2>
+        <?php if ($src['enabled'] && $src['ready']): ?>
         <span class="badge text-bg-success"><?= e(__('On')) ?></span>
         <?php else: ?>
         <span class="badge text-bg-secondary"><?= e(__('Off')) ?></span>
         <?php endif; ?>
-        <span class="ms-auto small text-body-secondary"><?= e(__('{n} client(s) linked', ['n' => $n['linked']])) ?></span>
+        <span class="ms-auto small text-body-secondary"><?= e(__('{n} client(s) linked', ['n' => $src['linked']])) ?></span>
     </div>
     <div class="card-body">
-        <p class="small"><?= e(__('Brings each linked client\'s devices into Sentinel every 6 hours: operating system and its support date, antivirus, disk encryption (BitLocker), missing Windows updates and installed software, which is checked for known vulnerabilities. Link a client to its NinjaOne organisation on the client\'s Devices page.')) ?></p>
+        <p class="small"><?= e($src['intro']) ?></p>
+        <p class="small text-body-secondary"><?= e(__('A client can be linked to one RMM at a time.')) ?></p>
         <details class="small mb-3">
-            <summary><?= e(__('How to create the API app in NinjaOne')) ?></summary>
+            <summary><?= e(__('How to create the API access in {source}', ['source' => $src['label']])) ?></summary>
             <ol class="mt-2 mb-0">
-                <li><?= e(__('In NinjaOne, go to Administration, Apps, API, and open the Client App IDs tab. Click Add client app.')) ?></li>
-                <li><?= e(__('Application platform: API Services (machine-to-machine). Name: MSP Sentinel.')) ?></li>
-                <li><?= e(__('Scopes: Monitoring only (read-only). Allowed grant types: Client credentials.')) ?></li>
-                <li><?= e(__('Save, then copy the client ID and the client secret into the form below. NinjaOne shows the secret only once.')) ?></li>
+                <?php foreach ($src['steps'] as $step): ?><li><?= e($step) ?></li><?php endforeach; ?>
             </ol>
         </details>
-        <form method="post" action="<?= e(url('/admin/integrations/ninjaone')) ?>" autocomplete="off" novalidate>
+        <form method="post" action="<?= e(url('/admin/integrations/' . $sn)) ?>" autocomplete="off" novalidate>
             <?= Csrf::field() ?>
             <div class="row g-3">
+                <?php foreach ($src['fields'] as $f): $fid = $sn . '-' . $f['key']; ?>
                 <div class="col-md-4">
-                    <label class="form-label" for="ninja-host"><?= e(__('Instance')) ?></label>
-                    <input class="form-control" id="ninja-host" name="host" value="<?= e($n['host']) ?>" placeholder="app.ninjarmm.com" maxlength="100" list="ninja-hosts">
-                    <datalist id="ninja-hosts"><option value="app.ninjarmm.com"><option value="us2.ninjarmm.com"><option value="eu.ninjarmm.com"><option value="ca.ninjarmm.com"><option value="oc.ninjarmm.com"></datalist>
-                    <div class="form-text"><?= e(__('The address you sign in to NinjaOne at.')) ?></div>
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label" for="ninja-id"><?= e(__('Client ID')) ?></label>
-                    <input class="form-control" id="ninja-id" name="client_id" value="<?= e($n['client_id']) ?>" maxlength="200" spellcheck="false">
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label" for="ninja-secret"><?= e(__('Client secret')) ?></label>
-                    <input class="form-control" type="password" id="ninja-secret" name="client_secret" value="" maxlength="500" autocomplete="new-password" placeholder="<?= e($n['has_secret'] ? __('Saved (leave empty to keep)') : '') ?>">
-                    <?php if ($n['has_secret']): ?>
-                    <div class="form-check mt-1"><input class="form-check-input" type="checkbox" id="ninja-clear" name="clear_secret" value="1"><label class="form-check-label small" for="ninja-clear"><?= e(__('Remove the saved secret')) ?></label></div>
+                    <label class="form-label" for="<?= e($fid) ?>"><?= e($f['label']) ?></label>
+                    <?php if ($f['secret']): ?>
+                    <input class="form-control" type="password" id="<?= e($fid) ?>" name="<?= e($f['key']) ?>" value="" maxlength="<?= (int) $f['maxlength'] ?>" autocomplete="new-password" placeholder="<?= e($f['saved'] ? __('Saved (leave empty to keep)') : '') ?>">
+                    <?php if ($f['saved']): ?>
+                    <div class="form-check mt-1"><input class="form-check-input" type="checkbox" id="<?= e($fid) ?>-clear" name="clear_<?= e($f['key']) ?>" value="1"><label class="form-check-label small" for="<?= e($fid) ?>-clear"><?= e(__('Remove the saved secret')) ?></label></div>
                     <?php endif; ?>
+                    <?php else: ?>
+                    <input class="form-control" id="<?= e($fid) ?>" name="<?= e($f['key']) ?>" value="<?= e($f['value']) ?>" maxlength="<?= (int) $f['maxlength'] ?>" spellcheck="false"<?= isset($f['placeholder']) ? ' placeholder="' . e($f['placeholder']) . '"' : '' ?><?= ($f['suggestions'] ?? []) !== [] ? ' list="' . e($fid) . '-list"' : '' ?>>
+                    <?php if (($f['suggestions'] ?? []) !== []): ?><datalist id="<?= e($fid) ?>-list"><?php foreach ($f['suggestions'] as $opt): ?><option value="<?= e($opt) ?>"><?php endforeach; ?></datalist><?php endif; ?>
+                    <?php endif; ?>
+                    <?php if (isset($f['help'])): ?><div class="form-text"><?= e($f['help']) ?></div><?php endif; ?>
                 </div>
+                <?php endforeach; ?>
             </div>
-            <div class="form-check mt-3"><input class="form-check-input" type="checkbox" id="ninja-enabled" name="enabled" value="1" <?= $n['enabled'] ? 'checked' : '' ?>>
-                <label class="form-check-label" for="ninja-enabled"><?= e(__('Sync linked clients from NinjaOne')) ?></label></div>
+            <div class="form-check mt-3"><input class="form-check-input" type="checkbox" id="<?= e($sn) ?>-enabled" name="enabled" value="1" <?= $src['enabled'] ? 'checked' : '' ?>>
+                <label class="form-check-label" for="<?= e($sn) ?>-enabled"><?= e(__('Sync linked clients from {source}', ['source' => $src['label']])) ?></label></div>
             <div class="form-text"><?= e(__('When syncing is off, linked clients keep the devices and findings from their last sync until it is turned on again or they are unlinked.')) ?></div>
-            <button type="submit" class="btn btn-primary btn-sm mt-3"><?= e(__('Save')) ?></button>
+            <button type="submit" class="btn btn-primary btn-sm mt-3"><?= e(__('Save {source}', ['source' => $src['label']])) ?></button>
         </form>
         <hr>
-        <form method="post" action="<?= e(url('/admin/integrations/ninjaone/test')) ?>" class="d-flex flex-wrap align-items-center gap-2">
+        <form method="post" action="<?= e(url('/admin/integrations/' . $sn . '/test')) ?>" class="d-flex flex-wrap align-items-center gap-2">
             <?= Csrf::field() ?>
             <button type="submit" class="btn btn-outline-secondary btn-sm"><i class="bi bi-plug me-1" aria-hidden="true"></i><?= e(__('Test connection')) ?></button>
-            <?php if ($n['test_result'] !== ''): ?>
-            <span class="small"><?= e($n['test_result']) ?> <span class="text-body-secondary">(<?= e(when($n['tested_at'])) ?>)</span></span>
+            <?php if ($src['test_result'] !== ''): ?>
+            <span class="small"><?= e($src['test_result']) ?> <span class="text-body-secondary">(<?= e(when($src['tested_at'])) ?>)</span></span>
             <?php endif; ?>
         </form>
     </div>
 </div>
+<?php endforeach; ?>
 <?php $a = $align; ?>
 <div class="card mb-3" id="mspalign">
     <div class="card-header d-flex align-items-center gap-2">
@@ -190,7 +188,7 @@ $n = $ninja;
             </div>
             <div class="form-check mt-3"><input class="form-check-input" type="checkbox" id="align-enabled" name="enabled" value="1" <?= $a['enabled'] ? 'checked' : '' ?>>
                 <label class="form-check-label" for="align-enabled"><?= e(__('Show compliance from MSP Align')) ?></label></div>
-            <button type="submit" class="btn btn-primary btn-sm mt-3"><?= e(__('Save')) ?></button>
+            <button type="submit" class="btn btn-primary btn-sm mt-3"><?= e(__('Save MSP Align')) ?></button>
         </form>
         <hr>
         <form method="post" action="<?= e(url('/admin/integrations/mspalign/test')) ?>" class="d-flex flex-wrap align-items-center gap-2">
@@ -214,7 +212,7 @@ $n = $ninja;
         <span class="ms-auto small text-body-secondary"><?= e(__('{n} breached address(es) on file', ['n' => $br['addresses']])) ?></span>
     </div>
     <div class="card-body">
-        <p class="small"><?= e(__('Once a week, Sentinel reads which addresses of your verified domains (domains you have proved you own in your XposedOrNot account, by a DNS record or email) appear in known data breaches, and adds them to the client whose authorisation lists that domain. A breach in the last 12 months is a Fail, older ones a Warning. Only breach names, dates and what was exposed are kept: never a password.')) ?></p>
+        <p class="small"><?= e(__('Once a week, Sentinel reads which addresses of your verified domains (domains you have proved you own in your XposedOrNot account, by a DNS record or email) appear in known data breaches, and adds them to the client whose authorization lists that domain. A breach in the last 12 months is a Fail, older ones a Warning. Only breach names, dates and what was exposed are kept: never a password.')) ?></p>
         <details class="small mb-3">
             <summary><?= e(__('How to set it up')) ?></summary>
             <ol class="mt-2 mb-0">
@@ -237,7 +235,7 @@ $n = $ninja;
             </div>
             <div class="form-check mt-3"><input class="form-check-input" type="checkbox" id="xon-enabled" name="enabled" value="1" <?= $br['enabled'] ? 'checked' : '' ?>>
                 <label class="form-check-label" for="xon-enabled"><?= e(__('Check weekly')) ?></label></div>
-            <button type="submit" class="btn btn-primary btn-sm mt-3"><?= e(__('Save')) ?></button>
+            <button type="submit" class="btn btn-primary btn-sm mt-3"><?= e(__('Save breach monitoring')) ?></button>
         </form>
         <hr>
         <form method="post" data-confirm="<?= e(__('Check for breached accounts now? Sentinel asks XposedOrNot once (it allows only a few checks a day).')) ?>" action="<?= e(url('/admin/integrations/breach/check')) ?>" class="d-flex flex-wrap align-items-center gap-2">
@@ -248,7 +246,7 @@ $n = $ninja;
             <?php endif; ?>
         </form>
         <?php if ($br['unmatched'] !== []): ?>
-        <p class="small mt-2 mb-0"><i class="bi bi-info-circle me-1" aria-hidden="true"></i><?= e(__('Verified domains in no client\'s authorisation (ignored until one lists them): {list}', ['list' => implode(', ', $br['unmatched'])])) ?></p>
+        <p class="small mt-2 mb-0"><i class="bi bi-info-circle me-1" aria-hidden="true"></i><?= e(__('Verified domains in no client\'s authorization (ignored until one lists them): {list}', ['list' => implode(', ', $br['unmatched'])])) ?></p>
         <?php endif; ?>
     </div>
 </div>
@@ -319,7 +317,7 @@ $n = $ninja;
             <div class="mt-3"><label class="form-label" for="sso-mine"><?= e(__('Your own password (to confirm)')) ?></label>
                 <input class="form-control sn-w-20" type="password" id="sso-mine" name="my_password" required autocomplete="current-password"></div>
             <div class="form-text"><?= e(__('Only an Admin who sees every client can change this. Changing the tenant clears every user\'s Microsoft link.')) ?></div>
-            <button class="btn btn-primary mt-3" type="submit"><?= e(__('Save')) ?></button>
+            <button class="btn btn-primary mt-3" type="submit"><?= e(__('Save sign-in settings')) ?></button>
         </form>
     </div>
 </div>

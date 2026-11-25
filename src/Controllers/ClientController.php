@@ -73,13 +73,21 @@ final class ClientController extends Controller
         if ($errors !== []) {
             return $this->page('clients/form', __('Add client'), ['mode' => 'create', 'values' => $values, 'errors' => $errors], 422);
         }
-        $id = App::clients()->create($clean, (int) $this->user()['id']);
+        try {
+            $id = App::clients()->create($clean, (int) $this->user()['id']);
+        } catch (\DomainException|\PDOException $ex) {
+            // Linked elsewhere in the meantime (1.54.1): the unique link refused it; nothing was saved.
+            if ($ex instanceof \PDOException && ($ex->errorInfo[1] ?? 0) !== 1062) {
+                throw $ex;
+            }
+            return $this->page('clients/form', __('Add client'), ['mode' => 'create', 'values' => $values, 'errors' => ['itflow_client_id' => __('This ITFlow client can\'t be linked here: it is already in use. Ask an admin who sees every client.')]], 422);
+        }
         // Someone limited to some clients gets the client they just added (1.41), else they couldn't open it.
         if (App::auth()->clientIds() !== null) {
             App::db()->prepare('INSERT IGNORE INTO user_clients (user_id, client_id) VALUES (:u, :c)')->execute(['u' => (int) $this->user()['id'], 'c' => $id]);
         }
         $this->audit($request, 'client.created', 'client', $id, ['name' => $clean['name']]);
-        Session::flash('success', __('Client {name} created. Next, choose Record authorisation (below) to note who approved scanning and what may be scanned.', ['name' => $clean['name']]));
+        Session::flash('success', __('Client {name} created. Next, choose Record authorization (below) to note who approved scanning and what may be scanned.', ['name' => $clean['name']]));
         return Response::redirect('/clients/' . $id);
     }
 
@@ -121,10 +129,12 @@ final class ClientController extends Controller
             'agents' => ['agentSites' => fn () => self::agentSites($client)],
             'devices' => ['inventorySources' => fn () => array_map(static fn (\Sentinel\Inventory\InventorySource $s): string => $s->label(), App::inventorySources()),
                           'inventoryLinks' => fn () => array_map(fn (\Sentinel\Inventory\InventorySource $s): ?array => App::inventory()->link($cid, $s->name()), App::inventorySources()),
+                          'clientLinks' => fn () => App::inventory()->linksFor($cid),
                           'devices' => fn () => App::inventory()->devicesForClient($cid, 500),
                           'deviceTotal' => fn () => (int) App::db()->query('SELECT COUNT(*) FROM devices d WHERE d.removed_at IS NULL AND ' . \Sentinel\Inventory\InventoryRepository::notMerged('d') . ' AND d.client_id = ' . $cid)->fetchColumn(),
                           'devicePatches' => fn () => App::inventory()->patchesByDevice($cid)],
-            'authorisations' => ['authorisations' => $authorisations],
+            // Internal authorizations are listed here too (1.51), per site; they are recorded on Agents.
+            'authorisations' => ['authorisations' => $authorisations, 'agentSites' => fn () => self::internalAuthorisations($client)],
             'engagements' => ['engagements' => fn () => App::engagements()->forClient($cid)],
             'discovery' => ['suggestions' => fn () => App::suggestions()->forClient($cid, 'pending'), 'dismissed' => fn () => App::suggestions()->forClient($cid, 'dismissed'),
                             'lastRun' => fn () => App::suggestions()->lastRun($cid)],
@@ -163,7 +173,8 @@ final class ClientController extends Controller
             $data[$key] = $load();
         }
         $data['clientNav'] = self::nav($client, $section, $data['findingCounts']);
-        return $this->page('clients/show', (string) $client['name'], $data);
+        // The heading is the section; the layout adds the client's name above it and in the browser tab (1.51).
+        return $this->page('clients/show', self::sectionLabel($section), $data);
     }
 
     /**
@@ -175,21 +186,60 @@ final class ClientController extends Controller
      */
     public static function nav(array $client, string $section, array $counts): array
     {
-        $item = static fn (string $key, string $label, string $icon): array => ['key' => $key, 'label' => $label, 'icon' => $icon,
+        $item = static fn (string $key, string $icon): array => ['key' => $key, 'label' => self::sectionLabel($key), 'icon' => $icon,
             'url' => '/clients/' . (int) $client['id'] . ($key === 'overview' ? '' : '/' . $key), 'active' => $key === $section];
         $open = (int) ($counts['fail'] ?? 0) + (int) ($counts['warn'] ?? 0);
         return [
             'name' => (string) $client['name'], 'id' => (int) $client['id'], 'demo' => (int) ($client['is_demo'] ?? 0) === 1, 'archived' => (int) $client['is_archived'] === 1,
+            'section' => $section, 'section_label' => self::sectionLabel($section),
             'groups' => [
-                ['label' => null, 'items' => [$item('overview', __('Overview'), 'bi-speedometer2'), $item('findings', __('Findings'), 'bi-flag') + ['badge' => $open]]],
-                ['label' => __('External'), 'items' => [$item('scans', __('Scans & ports'), 'bi-hdd-network'), $item('vulnerabilities', __('Vulnerabilities'), 'bi-bug'),
-                    $item('certificates', __('Certificates & web'), 'bi-shield-lock'), $item('website', __('Website & email'), 'bi-globe')]],
-                ['label' => __('Internal'), 'items' => [$item('agents', __('Agents'), 'bi-router'), $item('devices', __('Devices'), 'bi-pc-display')]],
-                ['label' => __('Manage'), 'items' => [$item('authorisations', __('Authorisations'), 'bi-file-earmark-check'), $item('engagements', __('Pen-test engagements'), 'bi-crosshair'),
-                    $item('discovery', __('Discovery'), 'bi-search'),
-                    $item('reports', __('Reports'), 'bi-file-earmark-text'), $item('compliance', __('Compliance'), 'bi-clipboard-check')]],
+                ['label' => null, 'items' => [$item('overview', 'bi-speedometer2'), $item('findings', 'bi-flag') + ['badge' => $open]]],
+                ['label' => __('External'), 'items' => [$item('scans', 'bi-hdd-network'), $item('vulnerabilities', 'bi-bug'),
+                    $item('certificates', 'bi-shield-lock'), $item('website', 'bi-globe')]],
+                ['label' => __('Internal'), 'items' => [$item('agents', 'bi-router'), $item('devices', 'bi-pc-display')]],
+                // Discovery feeds the authorizations, so it sits next to them (1.51).
+                ['label' => __('Manage'), 'items' => [$item('authorisations', 'bi-file-earmark-check'), $item('discovery', 'bi-search'),
+                    $item('engagements', 'bi-crosshair'), $item('reports', 'bi-file-earmark-text'), $item('compliance', 'bi-clipboard-check')]],
             ],
         ];
+    }
+
+    /**
+     * The one name of a client section (1.51): the same in the menu, the page heading and the browser tab. The key is
+     * one of SECTIONS (written in code, never input); anything else is shown as "Overview".
+     */
+    public static function sectionLabel(string $key): string
+    {
+        return match ($key) {
+            'findings' => __('Findings'),
+            'scans' => __('Scans and ports'),
+            'vulnerabilities' => __('Vulnerabilities'),
+            'certificates' => __('Certificates and web pages'),
+            'website' => __('Website and email'),
+            'agents' => __('Agents'),
+            'devices' => __('Devices'),
+            'authorisations' => __('Authorizations'),
+            'engagements' => __('Pen-test engagements'),
+            'discovery' => __('Discovery'),
+            'reports' => __('Reports'),
+            'compliance' => __('Compliance'),
+            default => __('Overview'),
+        };
+    }
+
+    /**
+     * Per site: only the site and its active internal authorization (1.51.1), for the Authorizations page, which lists
+     * them; the Agents page loads the rest (agentSites). The client comes from the route, already access-checked.
+     *
+     * @param array<string,mixed> $client
+     * @return list<array{site:array<string,mixed>,active:array<string,mixed>|null}>
+     */
+    private static function internalAuthorisations(array $client): array
+    {
+        $today = \Sentinel\Scope\ScopeService::today((string) $client['timezone']);
+        $repo = App::agents();
+        return array_map(static fn (array $site): array => ['site' => $site, 'active' => $repo->activeAuthorisation((int) $site['id'], $today)],
+            App::clients()->sites((int) $client['id']));
     }
 
     /**
@@ -264,7 +314,15 @@ final class ClientController extends Controller
         if ($errors !== []) {
             return $this->page('clients/form', __('Edit client'), ['mode' => 'edit', 'client' => $client, 'values' => $values, 'errors' => $errors], 422);
         }
-        App::clients()->update($id, $clean);
+        try {
+            App::clients()->update($id, $clean);
+        } catch (\DomainException|\PDOException $ex) {
+            if ($ex instanceof \PDOException && ($ex->errorInfo[1] ?? 0) !== 1062) {
+                throw $ex;
+            }
+            return $this->page('clients/form', __('Edit client'), ['mode' => 'edit', 'client' => $client, 'values' => $values,
+                'errors' => ['itflow_client_id' => __('This ITFlow client can\'t be linked here: it is already in use. Ask an admin who sees every client.')]], 422);
+        }
         $changes = [];
         foreach (['name', 'itflow_client_id', 'timezone', 'scan_window_start', 'scan_window_end', 'ports_extra', 'ports_excluded', 'itflow_sync_off'] as $field) {
             $old = $field === 'scan_window_start' || $field === 'scan_window_end' ? substr((string) $client[$field], 0, 5) : (string) $client[$field];
@@ -300,7 +358,7 @@ final class ClientController extends Controller
         $client = $this->findOr404($params);
         App::clients()->setPaused((int) $client['id'], true);
         $this->audit($request, 'scanning.client_paused', 'client', (int) $client['id'], ['reason' => mb_substr($request->input('reason'), 0, 300)]);
-        Session::flash('warning', __('Scanning paused for {name}. An admin can resume it.', ['name' => $client['name']]));
+        Session::flash('warning', __('Scanning paused for {name}. It stays paused until someone whose role can resume scanning resumes it.', ['name' => $client['name']]));
         return Response::redirect('/clients/' . (int) $client['id']);
     }
 
@@ -389,16 +447,17 @@ final class ClientController extends Controller
                 // One ITFlow client per Sentinel client (1.42.1): else tickets would go to another client's ITFlow record.
                 // Checked only when it changes (1.42.2: an old duplicate never blocks other edits); the message names
                 // no other client, which the user may not see. The database index (migration 0048) backs it up.
-                $current = $exceptId === null ? null : App::clients()->find($exceptId)['itflow_client_id'] ?? null;
-                $taken = App::db()->prepare('SELECT COUNT(*) FROM clients WHERE itflow_client_id = :i AND id <> :x');
-                $taken->execute(['i' => $itflow, 'x' => $exceptId ?? 0]);
+                // From the link table (1.54.1): a client left without a link (an old duplicate) sees "already in use" here.
+                $current = $exceptId === null ? null : (new \Sentinel\Psa\ClientLinks(App::db()))->externalFor($exceptId, 'itflow');
+                $taken = App::db()->prepare("SELECT COUNT(*) FROM psa_client_links WHERE provider = 'itflow' AND external_id = :i AND client_id <> :x");
+                $taken->execute(['i' => (string) $itflow, 'x' => $exceptId ?? 0]);
                 if (($current === null || (int) $current !== $itflow) && (int) $taken->fetchColumn() > 0) {
                     $errors['itflow_client_id'] = __('This ITFlow client can\'t be linked here: it is already in use. Ask an admin who sees every client.');
                 }
             }
         }
         if (!in_array($values['timezone'], \DateTimeZone::listIdentifiers(), true)) {
-            $errors['timezone'] = __('Choose a timezone from the list.');
+            $errors['timezone'] = __('Choose a time zone from the list.');
         }
         foreach (['scan_window_start', 'scan_window_end'] as $field) {
             if (!preg_match('/^([01][0-9]|2[0-3]):[0-5][0-9]$/', $values[$field])) {

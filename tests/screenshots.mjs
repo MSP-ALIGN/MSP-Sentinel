@@ -69,7 +69,7 @@ for (const [path, name] of [['/', '04-dashboard'], ['/users', '05-users'], ['/us
   await shot(page, name);
 }
 
-// Clients and the authorised-to-scan register (made-up client, documentation addresses only).
+// Clients and the authorized-to-scan register (made-up client, documentation addresses only).
 await page.goto(`${base}/clients/new`);
 await page.fill('#name', 'Riverside Example Ltd');
 await page.fill('#itflow_client_id', '17');

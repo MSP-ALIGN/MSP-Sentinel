@@ -26,7 +26,7 @@ return [
         $dir = dirname($ctx->configPath) . '/agent-quay';
         @mkdir($dir, 0700, true);
         [$code, $out] = $ctx->cli('bin/sentinel-agent.php', ['enrol', '--server', $ctx->baseUrl, '--code-stdin', '--config', $dir . '/agent.json']);
-        Assert::true($code !== 0, 'without a code on stdin, enrolment is refused');
+        Assert::true($code !== 0, 'without a code on stdin, enrollment is refused');
         // Code on stdin (as the installer passes it).
         $proc = proc_open([PHP_BINARY, $ctx->root . '/bin/sentinel-agent.php', 'enrol', '--server', $ctx->baseUrl, '--code-stdin', '--config', $dir . '/agent.json'],
             [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $ctx->root, ['SENTINEL_TEST_MODE' => '1', 'SENTINEL_ALLOW_ROOT' => '1', 'PATH' => (string) getenv('PATH')]);

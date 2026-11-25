@@ -109,7 +109,7 @@ $eventLabels = [
                         <div class="text-body-secondary"><?= e(__('by {user}, {date}', ['user' => $finding['assigned_by_username'] ?? '?', 'date' => when($finding['assigned_at'] ?? '?')])) ?></div><?php endif; ?></dd>
                     <dt class="col-5"><?= e(__('Due')) ?></dt>
                     <dd class="col-7"><?php if ($finding['status'] !== 'open' || $finding['due_at'] === null): ?><span class="text-body-secondary"><?= e(__('Not due (only open findings are due)')) ?></span>
-                        <?php else: ?><?= e(substr((string) $finding['due_at'], 0, 10)) ?> <span class="text-body-secondary"><?= e((int) $finding['due_custom'] === 1 ? __('(set by an admin)') : __('(policy)')) ?></span><?php endif; ?></dd>
+                        <?php else: ?><?= e(substr((string) $finding['due_at'], 0, 10)) ?> <span class="text-body-secondary"><?= e((int) $finding['due_custom'] === 1 ? __('(set by hand)') : __('(policy)')) ?></span><?php endif; ?></dd>
                     <dt class="col-5"><?= e(__('Last recheck')) ?></dt>
                     <dd class="col-7"><?php if ($finding['verify_job_id'] === null): ?><span class="text-body-secondary"><?= e(__('Never')) ?></span>
                         <?php elseif (in_array($finding['verify_status'], ['queued', 'running'], true)): ?><span class="badge text-bg-info"><i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i><?= e($finding['verify_status'] === 'queued' ? __('Waiting') : __('Running')) ?></span>
@@ -147,7 +147,7 @@ $eventLabels = [
                     <summary><?= e(__('Change the due date')) ?></summary>
                     <form method="post" action="<?= e(url('/findings/' . (int) $finding['id'] . '/due')) ?>" class="mt-2">
                         <?= Csrf::field() ?>
-                        <label class="form-label mb-1" for="due_date"><?= e(__('Due date (UTC)')) ?></label>
+                        <label class="form-label mb-1" for="due_date"><?= e(__('Due date (end of that day, UTC)')) ?></label>
                         <input type="date" class="form-control form-control-sm mb-2" id="due_date" name="due_date" value="<?= e(substr((string) $finding['due_at'], 0, 10)) ?>">
                         <label class="form-label mb-1" for="due_note"><?= e(__('Reason (required)')) ?></label>
                         <input type="text" class="form-control form-control-sm mb-2" id="due_note" name="due_note" maxlength="500" required>

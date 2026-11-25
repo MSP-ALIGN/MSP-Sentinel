@@ -106,7 +106,7 @@ footer.doc-footer .right { margin-left: auto; }
     <div class="tile"><span class="n" style="color:var(--ok)"><?= (int) $c['fixed'] ?></span>&#10004; <?= e(__('fixed this period')) ?></div>
     <div class="tile"><span class="n"><?= (int) $c['certs_expiring'] ?></span><?= e(__('certificates expiring or expired')) ?></div>
 </div>
-<p class="small muted"><?= e(__('Status on {now} (last scan finished {date}). In the period: {n} new problem(s) found, {x} fixed.', ['now' => when($r['generated_at'], $rz), 'date' => when($r['last_checked'] ?? null, $rz, __('not yet')), 'n' => $c['new'], 'x' => $c['fixed']])) ?></p>
+<p class="small muted"><?= e(__('Status on {now} (last scan finished {date}). In the period: {n} new finding(s), {x} fixed.', ['now' => when($r['generated_at'], $rz), 'date' => when($r['last_checked'] ?? null, $rz, __('not yet')), 'n' => $c['new'], 'x' => $c['fixed']])) ?></p>
 
 <?php if ($exec): ?>
 <h2><?= e(__('Top risks')) ?></h2>
@@ -193,8 +193,8 @@ footer.doc-footer .right { margin-left: auto; }
 <?php endif; ?>
 
 <h2><?= e($exec ? __('What we checked') : __('Appendix: scope and method')) ?></h2>
-<p><?= e(__('We checked the following internet-facing addresses and names, which you authorised us to test:')) ?></p>
-<p><?php if ($r['scope'] === []): ?><span class="muted"><?= e(__('No active authorisation.')) ?></span><?php else: ?><?php foreach ($r['scope'] as $s): ?><code><?= e($s) ?></code> <?php endforeach; ?><?php endif; ?></p>
+<p><?= e(__('We checked the following internet-facing addresses and names, which you authorized us to test:')) ?></p>
+<p><?php if ($r['scope'] === []): ?><span class="muted"><?= e(__('No active authorization.')) ?></span><?php else: ?><?php foreach ($r['scope'] as $s): ?><code><?= e($s) ?></code> <?php endforeach; ?><?php endif; ?></p>
 <?php if (!$exec): ?>
 <h3><?= e(__('Recent scans')) ?></h3>
 <?php if ($r['scans'] === []): ?><p class="muted"><?= e(__('No completed scans.')) ?></p><?php else: ?>

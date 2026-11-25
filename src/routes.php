@@ -57,6 +57,7 @@ $router->add('GET', '/recovery-codes', [AuthController::class, 'showRecoveryCode
 // Everyone signed in
 $router->add('GET', '/', [PageController::class, 'dashboard']);
 $router->add('GET', '/dashboard/live', [PageController::class, 'live'], ['passive' => true]);
+$router->add('POST', '/dashboard/setup-checklist/hide', [PageController::class, 'hideSetup'], ['perm' => 'settings.manage', 'all_clients' => true]);
 $router->add('GET', '/help', [PageController::class, 'help'], $duringPasswordChange);
 $router->add('GET', '/search', [PageController::class, 'search']);
 $router->add('GET', '/profile', [ProfileController::class, 'index']);
@@ -89,8 +90,9 @@ $router->add('POST', '/clients/{id}/resume', [ClientController::class, 'resume']
 $router->add('POST', '/clients/{id}/sites', [ClientController::class, 'addSite'], ['perm' => 'clients.manage']);
 $router->add('POST', '/sites/{id}', [ClientController::class, 'updateSite'], ['perm' => 'clients.manage', 'client' => 'site']);
 
-// Authorised-to-scan register: admins only (everyone sees it on the client page)
+// Authorized-to-scan register: admins only (everyone sees it on the client page)
 // Pen-test engagements: technicians and admins create, stop and cancel; a DIFFERENT admin approves (two-person rule).
+$router->add('GET', '/engagements/new', [\Sentinel\Controllers\EngagementController::class, 'newFor'], ['perm' => 'engagements.run']);
 $router->add('GET', '/clients/{id}/engagements/new', [\Sentinel\Controllers\EngagementController::class, 'create'], ['perm' => 'engagements.run']);
 $router->add('POST', '/clients/{id}/engagements', [\Sentinel\Controllers\EngagementController::class, 'store'], ['perm' => 'engagements.run']);
 $router->add('GET', '/engagements', [\Sentinel\Controllers\EngagementController::class, 'index']);
@@ -186,8 +188,11 @@ $router->add('POST', '/admin/roles/{id}/delete', [\Sentinel\Controllers\RoleCont
 $router->add('GET', '/admin', [AdminController::class, 'index'], $anyAdmin);
 $router->add('GET', '/admin/audit', [AdminController::class, 'auditLog'], ['perm' => 'audit.view', 'all_clients' => true]);
 $router->add('GET', '/admin/integrations', [IntegrationsController::class, 'index'], ['perm' => 'integrations.manage', 'all_clients' => true]);
-$router->add('POST', '/admin/integrations/ninjaone', [IntegrationsController::class, 'saveNinjaOne'], ['perm' => 'integrations.manage', 'all_clients' => true]);
-$router->add('POST', '/admin/integrations/ninjaone/test', [IntegrationsController::class, 'testNinjaOne'], ['perm' => 'integrations.manage', 'all_clients' => true]);
+// Inventory sources (1.52): one save and test route per registered source, e.g. /admin/integrations/ninjaone.
+foreach (array_keys(\Sentinel\Inventory\Sources::types()) as $sourceName) {
+    $router->add('POST', '/admin/integrations/' . $sourceName, [IntegrationsController::class, 'saveInventory'], ['perm' => 'integrations.manage', 'all_clients' => true]);
+    $router->add('POST', '/admin/integrations/' . $sourceName . '/test', [IntegrationsController::class, 'testInventory'], ['perm' => 'integrations.manage', 'all_clients' => true]);
+}
 $router->add('POST', '/admin/integrations/itflow', [IntegrationsController::class, 'saveItflow'], ['perm' => 'integrations.manage', 'all_clients' => true]);
 $router->add('POST', '/admin/integrations/itflow/test', [IntegrationsController::class, 'testItflow'], ['perm' => 'integrations.manage', 'all_clients' => true]);
 $router->add('POST', '/admin/integrations/itflow/sync', [IntegrationsController::class, 'syncItflow'], ['perm' => 'integrations.manage', 'all_clients' => true]);

@@ -367,3 +367,7 @@ a.kpi:hover { background: rgba(var(--st-ember-rgb), .07); }
 .admin-card-status.is-ok { color: var(--st-ok); } .admin-card-status.is-warn { color: var(--st-warn); } .admin-card-status.is-bad { color: var(--st-fail); }
 .admin-card-text { font-size: .86rem; color: var(--bs-secondary-color); }
 .sn-records { min-width: 16rem; max-width: 28rem; }
+
+/* 1.51: long menu labels ("Certificates and web pages", "Pen-test engagements") wrap instead of being cut off. */
+.app-sidebar .sidebar-menu .nav-link { align-items: flex-start; }
+.app-sidebar .sidebar-menu .nav-link > p { white-space: normal; line-height: 1.3; }

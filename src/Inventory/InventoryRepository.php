@@ -62,18 +62,26 @@ final class InventoryRepository
             $active = (int) $activeStmt->fetchColumn();
             if ($complete && $active > 0 && (count($devices) === 0 || ($active >= self::SHRINK_MIN_DEVICES && count($devices) < $active / 2))) {
                 $complete = false;
-                $stats['warning'] = __('The source reported far fewer devices than before ({n} of {m}); nothing was removed. Check the source\'s access to this organisation.', ['n' => count($devices), 'm' => $active]);
+                $stats['warning'] = __('The source reported far fewer devices than before ({n} of {m}); nothing was removed. Check the source\'s access to this organization.', ['n' => count($devices), 'm' => $active]);
             }
             $softwareLeft = self::MAX_SOFTWARE_TOTAL;
             $upDevice = $this->db->prepare(
-                'INSERT INTO devices (client_id, source, source_id, name, dns_name, device_class, os_name, os_build, os_release, ip_addresses, last_contact,
+                'INSERT INTO devices (client_id, source, source_id, name, dns_name, device_class, os_name, os_build, os_release, ip_addresses, mac_addresses, last_contact,
                                       av_product, av_state, av_definitions, encryption, first_seen, last_seen, removed_at)
-                 VALUES (:c, :s, :sid, :n, :dns, :cls, :os, :b, :r, :ip, :lc, :avp, :avs, :avd, :enc, UTC_TIMESTAMP(), UTC_TIMESTAMP(), NULL)
+                 VALUES (:c, :s, :sid, :n, :dns, :cls, :os, :b, :r, :ip, :macs, :lc, :avp, :avs, :avd, :enc, UTC_TIMESTAMP(), UTC_TIMESTAMP(), NULL)
                  ON DUPLICATE KEY UPDATE client_id = VALUES(client_id), name = VALUES(name), dns_name = VALUES(dns_name), device_class = VALUES(device_class),
                     os_name = VALUES(os_name), os_build = VALUES(os_build), os_release = VALUES(os_release), ip_addresses = VALUES(ip_addresses),
-                    last_contact = VALUES(last_contact), av_product = VALUES(av_product), av_state = VALUES(av_state), av_definitions = VALUES(av_definitions),
-                    encryption = VALUES(encryption), last_seen = UTC_TIMESTAMP(), removed_at = NULL'
+                    mac_addresses = IF(VALUES(mac_addresses) = \'\', mac_addresses, VALUES(mac_addresses)),
+                    last_contact = VALUES(last_contact),
+                    av_product = IF(VALUES(av_state) = \'\', av_product, VALUES(av_product)), av_definitions = IF(VALUES(av_state) = \'\', av_definitions, VALUES(av_definitions)),
+                    av_state = IF(VALUES(av_state) = \'\', av_state, VALUES(av_state)),
+                    encryption = IF(VALUES(encryption) = \'\', encryption, VALUES(encryption)), last_seen = UTC_TIMESTAMP(), removed_at = NULL'
             );
+            // Unknown is not "fixed" (1.49): a device the antivirus or disk report says nothing about this time (offline,
+            // or the report came back empty) keeps its last known antivirus and encryption state above (av_state is
+            // updated after the columns that test it, so every IF() reads the old value: MariaDB applies SET from left to right), and a device with no
+            // programs in this snapshot keeps its previous list below. Otherwise its findings would resolve and then
+            // reopen, with a new due date, alert and ticket, when the data comes back.
             $find = $this->db->prepare('SELECT id FROM devices WHERE source = :s AND source_id = :sid');
             $seen = [];
             foreach ($devices as $d) {
@@ -97,6 +105,7 @@ final class InventoryRepository
                     'cls' => in_array($d['device_class'] ?? '', ['workstation', 'server'], true) ? $d['device_class'] : 'other',
                     'os' => self::clean(($d['os_name'] ?? ''), 255), 'b' => self::clean(($d['os_build'] ?? ''), 64), 'r' => self::clean(($d['os_release'] ?? ''), 64),
                     'ip' => implode(',', $ips), 'lc' => $lc,
+                    'macs' => mb_substr(implode(',', array_filter((array) ($d['mac_addresses'] ?? []), static fn ($m): bool => is_string($m) && preg_match('/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/', $m) === 1)), 0, 500),
                     'avp' => self::clean(($d['av_product'] ?? ''), 200), 'avs' => in_array($d['av_state'] ?? '', ['on', 'off', 'missing'], true) ? $d['av_state'] : '',
                     'avd' => in_array($d['av_definitions'] ?? '', ['current', 'outdated'], true) ? $d['av_definitions'] : '',
                     'enc' => in_array($d['encryption'] ?? '', ['on', 'off'], true) ? $d['encryption'] : '',
@@ -109,9 +118,11 @@ final class InventoryRepository
                 if (count((array) ($d['software'] ?? [])) > count($sw) && $softwareLeft < self::MAX_SOFTWARE) {
                     $complete = false; // too much data in total: keep it partial rather than drop programs silently
                 }
-                $saved = $this->saveSoftware($deviceId, $sw);
-                $softwareLeft -= $saved;
-                $stats['software'] += $saved;
+                if ($sw !== []) {
+                    $saved = $this->saveSoftware($deviceId, $sw);
+                    $softwareLeft -= $saved;
+                    $stats['software'] += $saved;
+                }
                 $stats['patches'] += $this->savePatches($deviceId, (array) ($d['patches'] ?? []));
             }
             // Gone from a complete snapshot: removed (kept for history; their findings resolve).
@@ -162,7 +173,10 @@ final class InventoryRepository
         }
         // Earlier versions are gone, but their matches are kept on the device until the new version has data
         // (see devicesAwaitingData), so findings don't resolve just because an update landed before NVD data did.
-        $this->db->prepare('DELETE FROM device_software WHERE device_id = ?' . ($keep === [] ? '' : ' AND id NOT IN (' . implode(',', $keep) . ')'))->execute([$deviceId]);
+        if ($keep === []) {
+            return 0; // no usable entry at all (1.49.1): a gap in the data, never "everything was uninstalled"
+        }
+        $this->db->prepare('DELETE FROM device_software WHERE device_id = ? AND id NOT IN (' . implode(',', $keep) . ')')->execute([$deviceId]);
         // A program no longer identified by the catalogue keeps no matches.
         $this->db->prepare("DELETE sv FROM software_vulns sv JOIN device_software s ON s.id = sv.software_id WHERE s.device_id = ? AND s.cpe = ''")->execute([$deviceId]);
         return count($keep);
@@ -232,11 +246,17 @@ final class InventoryRepository
     }
 
     /**
-     * Match the agent's devices to the inventory source's (1.38): an agent device whose IP address belongs to exactly
-     * one active inventory device of the client, and whose name matches it (or that has no name), is the same machine
-     * and is merged into it ('auto'). A match that no longer holds is undone. Devices an admin merged ('manual') or
-     * split ('split') are left as they are. Nothing is deleted: lists show one row, the device page combines both.
-     * Returns how many changed.
+     * Match the agent's devices to the inventory source's (1.38; stricter evidence in 1.50). An agent device is the
+     * same machine as one active inventory device of the client, in this order of evidence:
+     *  1. MAC: the agent saw a real (not private, not shared) MAC that the inventory device reports; a real MAC the
+     *     inventory device doesn't list among the MACs it does report rules that device out of steps 2 and 3 (1.50.1);
+     *  2. address: the agent's address belongs to exactly one inventory device seen in the last day or with no known
+     *     last contact (an offline PC's last address proves nothing), the names match or the agent saw no name, and no other site of the client
+     *     covers that address (two offices often use the same range, so the address alone can't tell them apart;
+     *     lapsed authorisations and agents at other sites seeing the address count too, since 1.50.1);
+     *  3. name: exactly one inventory device has the agent's host name, and it was seen in the last day (1.50.1).
+     * A match that no longer holds is undone. Devices an admin merged ('manual') or split ('split') are left as they
+     * are. Nothing is deleted: lists show one row, the device page combines both. Returns how many changed.
      */
     public function refreshMerges(int $clientId): int
     {
@@ -248,41 +268,120 @@ final class InventoryRepository
                                         WHERE a.client_id = :c AND a.merged_into IS NOT NULL
                                           AND (t.id IS NULL OR t.removed_at IS NOT NULL OR t.client_id <> a.client_id OR t.source = 'agent' OR t.merged_into IS NOT NULL)");
         $released->execute(['c' => $clientId]);
-        $others = $this->db->prepare("SELECT id, name, dns_name, ip_addresses FROM devices WHERE client_id = :c AND source <> 'agent' AND removed_at IS NULL AND merged_into IS NULL");
+        $others = $this->db->prepare("SELECT id, name, dns_name, ip_addresses, mac_addresses, (last_contact IS NULL OR last_contact > UTC_TIMESTAMP() - INTERVAL 1 DAY) AS fresh
+                                      FROM devices WHERE client_id = :c AND source <> 'agent' AND removed_at IS NULL AND merged_into IS NULL");
         $others->execute(['c' => $clientId]);
         $byIp = [];
+        $byMac = [];
+        $byName = [];
         $names = [];
+        $macsOf = [];
+        $fresh = [];
         foreach ($others->fetchAll() as $o) {
-            $names[(int) $o['id']] = array_filter([$short((string) $o['name']), $short((string) $o['dns_name'])]);
+            $id = (int) $o['id'];
+            $fresh[$id] = (int) $o['fresh'] === 1;
+            $names[$id] = array_filter([$short((string) $o['name']), $short((string) $o['dns_name'])]);
+            foreach (array_unique($names[$id]) as $n) {
+                $byName[$n][$id] = true;
+            }
+            foreach (array_filter(explode(',', (string) $o['mac_addresses'])) as $mac) {
+                $byMac[$mac][$id] = true;
+                $macsOf[$id][$mac] = true;
+            }
+            if ((int) $o['fresh'] !== 1) {
+                continue; // not seen in the last day: its addresses may belong to someone else by now
+            }
             foreach (explode(',', (string) $o['ip_addresses']) as $ip) {
                 if (($ip = trim($ip)) !== '') {
-                    $byIp[$ip][(int) $o['id']] = true;
+                    $byIp[$ip][$id] = true;
                 }
             }
         }
-        $agents = $this->db->prepare("SELECT id, name, dns_name, ip_addresses, merged_into, merge_state FROM devices WHERE client_id = :c AND source = 'agent' AND removed_at IS NULL");
+        // The client's sites and the internal ranges each covers. Lapsed authorisations count too (1.50.1): a site whose
+        // authorisation expired still uses its range, so an address two sites share stays ambiguous.
+        $siteRanges = [];
+        $auths = $this->db->prepare('SELECT site_id, ranges FROM internal_authorisations WHERE client_id = :c');
+        $auths->execute(['c' => $clientId]);
+        foreach ($auths->fetchAll() as $row) {
+            foreach (preg_split('/[\s,]+/', (string) $row['ranges']) ?: [] as $cidr) {
+                if ($cidr !== '') {
+                    $siteRanges[(int) $row['site_id']][] = $cidr;
+                }
+            }
+        }
+        $sitesCovering = static function (string $ip) use ($siteRanges): int {
+            $n = 0;
+            foreach ($siteRanges as $cidrs) {
+                foreach ($cidrs as $cidr) {
+                    if (\Sentinel\Agent\InternalRanges::within($ip, $cidr)) {
+                        $n++;
+                        break;
+                    }
+                }
+            }
+            return $n;
+        };
+        $agents = $this->db->prepare("SELECT id, name, dns_name, ip_addresses, mac, site_id, merged_into, merge_state FROM devices WHERE client_id = :c AND source = 'agent' AND removed_at IS NULL");
         $agents->execute(['c' => $clientId]);
+        $agentRows = $agents->fetchAll();
+        // 1.50.1: a MAC on several agent devices (a router or VPN server answering for others) identifies none of them;
+        // agents at different sites seeing the same address show the address is shared, whatever the ranges say.
+        $agentsPerMac = [];
+        $agentSitesAt = [];
+        foreach ($agentRows as $a) {
+            if ((string) $a['mac'] !== '') {
+                $agentsPerMac[(string) $a['mac']] = ($agentsPerMac[(string) $a['mac']] ?? 0) + 1;
+            }
+            foreach (array_filter(array_map('trim', explode(',', (string) $a['ip_addresses']))) as $ip) {
+                $agentSitesAt[$ip][(int) $a['site_id']] = true;
+            }
+        }
         $set = $this->db->prepare('UPDATE devices SET merged_into = :t, merge_state = :s WHERE id = :id');
         $changed = 0;
-        foreach ($agents->fetchAll() as $a) {
+        foreach ($agentRows as $a) {
             if (in_array($a['merge_state'], ['manual', 'split'], true)) {
                 continue;
             }
-            $candidates = [];
-            foreach (explode(',', (string) $a['ip_addresses']) as $ip) {
-                $candidates += $byIp[trim($ip)] ?? [];
-            }
             // The agent stores the address as the name when a device has no host name: that is no name (1.39).
+            $ips = array_values(array_filter(array_map('trim', explode(',', (string) $a['ip_addresses']))));
             $ownName = (string) $a['name'];
-            if ($ownName !== '' && in_array($ownName, array_map('trim', explode(',', (string) $a['ip_addresses'])), true)) {
+            if ($ownName !== '' && in_array($ownName, $ips, true)) {
                 $ownName = '';
             }
-            $own = array_filter([$short($ownName), $short((string) $a['dns_name'])]);
+            $own = array_values(array_unique(array_filter([$short($ownName), $short((string) $a['dns_name'])])));
             $target = null;
-            if (count($candidates) === 1) {
-                $id = (int) array_key_first($candidates);
-                // A different name on the same address is not proof (a reused address): only a matching or missing name.
-                if ($own === [] || array_intersect($own, $names[$id] ?? []) !== []) {
+            // 1. MAC (a private, locally administered MAC identifies nothing; nor does one several agent devices share).
+            $mac = (string) $a['mac'];
+            $realMac = $mac !== '' && !(ctype_xdigit($mac[1] ?? '') && (hexdec($mac[1]) & 2) === 2) && ($agentsPerMac[$mac] ?? 0) === 1;
+            if ($realMac && count($byMac[$mac] ?? []) === 1) {
+                $target = (int) array_key_first($byMac[$mac]);
+            }
+            // A real MAC the inventory device doesn't list, while it lists others, says they are different machines.
+            $contradicts = static fn (int $id): bool => $realMac && ($macsOf[$id] ?? []) !== [] && !isset($macsOf[$id][$mac]);
+            // 2. Address, with the name check, among devices seen lately, only where one site covers the address.
+            if ($target === null) {
+                $candidates = [];
+                foreach ($ips as $ip) {
+                    if ($sitesCovering($ip) <= 1 && count($agentSitesAt[$ip] ?? []) <= 1) {
+                        $candidates += $byIp[$ip] ?? [];
+                    }
+                }
+                if (count($candidates) === 1) {
+                    $id = (int) array_key_first($candidates);
+                    // A different name on the same address is not proof (a reused address): only a matching or missing name.
+                    if (($own === [] || array_intersect($own, $names[$id] ?? []) !== []) && !$contradicts($id)) {
+                        $target = $id;
+                    }
+                }
+            }
+            // 3. Name: exactly one inventory device has it.
+            if ($target === null && $own !== []) {
+                $byOwn = [];
+                foreach ($own as $n) {
+                    $byOwn += $byName[$n] ?? [];
+                }
+                // Only a device seen lately (a default name like a laptop model's may come back on another machine).
+                if (count($byOwn) === 1 && ($fresh[$id = (int) array_key_first($byOwn)] ?? false) && !$contradicts($id)) {
                     $target = $id;
                 }
             }
@@ -469,20 +568,52 @@ final class InventoryRepository
      * Set the CVE matches of every installed copy of one CPE (for one client or all).
      *
      * @param array<string,string> $matches cve_id => confirmed|possible
+     * @param array<string,list<string>> $platforms cve_id => OS families it is only vulnerable on (1.49): a device on
+     *        another OS doesn't get that CVE; a device whose OS is unknown gets it as possible, never confirmed.
      */
-    public function setMatchesForCpe(?int $clientId, string $cpe, array $matches, string $query): void
+    public function setMatchesForCpe(?int $clientId, string $cpe, array $matches, string $query, array $platforms = []): void
     {
         $scope = $clientId !== null ? ' AND d.client_id = ' . (int) $clientId : '';
         $this->db->beginTransaction();
         try {
             $this->db->prepare("DELETE sv FROM software_vulns sv JOIN device_software s ON s.id = sv.software_id JOIN devices d ON d.id = s.device_id WHERE s.cpe = :cpe{$scope}")
                 ->execute(['cpe' => $cpe]);
-            $ins = $this->db->prepare("INSERT INTO software_vulns (software_id, cve_id, confidence, cpe, first_seen, last_seen)
-                                       SELECT s.id, :v, :conf, :q, UTC_TIMESTAMP(), UTC_TIMESTAMP() FROM device_software s JOIN devices d ON d.id = s.device_id
-                                       WHERE s.cpe = :cpe AND d.removed_at IS NULL{$scope}");
-            foreach ($matches as $cve => $conf) {
-                $ins->execute(['v' => $cve, 'conf' => $conf === 'confirmed' ? 'confirmed' : 'possible', 'q' => $query, 'cpe' => $cpe]);
+            $copies = $this->db->prepare("SELECT s.id, d.os_name FROM device_software s JOIN devices d ON d.id = s.device_id WHERE s.cpe = :cpe AND d.removed_at IS NULL{$scope}");
+            $copies->execute(['cpe' => $cpe]);
+            // Rows are written in batches of 500 (a browser on hundreds of devices with hundreds of CVEs).
+            $rows = [];
+            $flush = function () use (&$rows, $query): void {
+                if ($rows === []) {
+                    return;
+                }
+                $sql = 'INSERT INTO software_vulns (software_id, cve_id, confidence, cpe, first_seen, last_seen) VALUES '
+                    . implode(',', array_fill(0, count($rows), '(?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())'));
+                $args = [];
+                foreach ($rows as [$sid, $cve, $conf]) {
+                    array_push($args, $sid, $cve, $conf, $query);
+                }
+                $this->db->prepare($sql)->execute($args);
+                $rows = [];
+            };
+            foreach ($copies->fetchAll() as $copy) {
+                $family = \Sentinel\Vulns\FeedParser::osFamily((string) $copy['os_name']);
+                foreach ($matches as $cve => $conf) {
+                    $conf = $conf === 'confirmed' ? 'confirmed' : 'possible';
+                    if (isset($platforms[$cve])) {
+                        if ($family !== '' && !in_array($family, $platforms[$cve], true)) {
+                            continue; // only vulnerable on another platform
+                        }
+                        if ($family === '') {
+                            $conf = 'possible';
+                        }
+                    }
+                    $rows[] = [(int) $copy['id'], (string) $cve, $conf];
+                    if (count($rows) >= 500) {
+                        $flush();
+                    }
+                }
             }
+            $flush();
             // Distribution builds (agent-reported services) may carry backported fixes: never "confirmed".
             $this->db->prepare("UPDATE software_vulns sv JOIN device_software s ON s.id = sv.software_id JOIN devices d ON d.id = s.device_id
                                 SET sv.confidence = 'distro' WHERE s.cpe = :cpe AND s.distro = 1 AND sv.confidence = 'confirmed'{$scope}")->execute(['cpe' => $cpe]);
@@ -500,6 +631,48 @@ final class InventoryRepository
      * @return array<string,mixed>|null
      */
     public function link(int $clientId, string $source): ?array
+    {
+        return $this->linkWhere($clientId, $source);
+    }
+
+    /**
+     * The client's link to another registered RMM than $source, or null (1.52: a client is linked to one RMM at a time,
+     * so the same machines never come in twice with duplicate findings). Rows of sources no longer registered are
+     * ignored (1.52.1), so they can never block a client.
+     *
+     * @return array<string,mixed>|null
+     */
+    public function otherLink(int $clientId, string $source): ?array
+    {
+        foreach ($this->linksFor($clientId) as $l) {
+            if ($l['source'] !== $source) {
+                return $l;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Every link of the client to a registered RMM, on or off (1.52.1), by source name: the Devices page shows each
+     * so a link to an RMM that was turned off can still be unlinked.
+     *
+     * @return array<string,array<string,mixed>>
+     */
+    public function linksFor(int $clientId): array
+    {
+        $stmt = $this->db->prepare('SELECT l.*, u.username AS linked_by_username FROM source_links l LEFT JOIN users u ON u.id = l.linked_by WHERE l.client_id = :c ORDER BY l.source');
+        $stmt->execute(['c' => $clientId]);
+        $out = [];
+        foreach ($stmt->fetchAll() as $row) {
+            if (Sources::type((string) $row['source']) !== null) {
+                $out[(string) $row['source']] = $row;
+            }
+        }
+        return $out;
+    }
+
+    /** @return array<string,mixed>|null */
+    private function linkWhere(int $clientId, string $source): ?array
     {
         $stmt = $this->db->prepare('SELECT l.*, u.username AS linked_by_username FROM source_links l LEFT JOIN users u ON u.id = l.linked_by WHERE l.client_id = :c AND l.source = :s');
         $stmt->execute(['c' => $clientId, 's' => $source]);
@@ -532,15 +705,40 @@ final class InventoryRepository
      */
     public function setLink(int $clientId, string $source, string $orgId, string $orgName, int $userId): void
     {
+        // The client row is locked while checking (1.52.1), so two admins linking it to two RMMs at once can't both win.
+        $own = !$this->db->inTransaction();
+        if ($own) {
+            $this->db->beginTransaction();
+        }
+        try {
+            $this->db->prepare('SELECT id FROM clients WHERE id = :c FOR UPDATE')->execute(['c' => $clientId]);
+            if ($this->otherLink($clientId, $source) !== null) {
+                throw new \UnexpectedValueException('This client is already linked to another RMM.');
+            }
+            if ($this->orgLinkedElsewhere($source, $orgId, $clientId)) {
+                throw new \DomainException('This organization is already linked to another client.');
+            }
+            $this->db->prepare('INSERT INTO source_links (client_id, source, org_id, org_name, linked_by, linked_at) VALUES (:c, :s, :o, :n, :u, UTC_TIMESTAMP())
+                                ON DUPLICATE KEY UPDATE org_id = VALUES(org_id), org_name = VALUES(org_name), linked_by = VALUES(linked_by), linked_at = UTC_TIMESTAMP(),
+                                   last_sync_at = NULL, last_sync_status = \'\', last_sync_message = \'\'')
+                ->execute(['c' => $clientId, 's' => $source, 'o' => self::clean($orgId, 64), 'n' => self::clean($orgName, 200), 'u' => $userId]);
+            if ($own) {
+                $this->db->commit();
+            }
+        } catch (\Throwable $ex) {
+            if ($own && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $ex;
+        }
+    }
+
+    /** True when this organisation is already linked to another client. */
+    public function orgLinkedElsewhere(string $source, string $orgId, int $clientId): bool
+    {
         $other = $this->db->prepare('SELECT client_id FROM source_links WHERE source = :s AND org_id = :o AND client_id <> :c');
         $other->execute(['s' => $source, 'o' => $orgId, 'c' => $clientId]);
-        if ($other->fetchColumn() !== false) {
-            throw new \DomainException('This organisation is already linked to another client.');
-        }
-        $this->db->prepare('INSERT INTO source_links (client_id, source, org_id, org_name, linked_by, linked_at) VALUES (:c, :s, :o, :n, :u, UTC_TIMESTAMP())
-                            ON DUPLICATE KEY UPDATE org_id = VALUES(org_id), org_name = VALUES(org_name), linked_by = VALUES(linked_by), linked_at = UTC_TIMESTAMP(),
-                               last_sync_at = NULL, last_sync_status = \'\', last_sync_message = \'\'')
-            ->execute(['c' => $clientId, 's' => $source, 'o' => self::clean($orgId, 64), 'n' => self::clean($orgName, 200), 'u' => $userId]);
+        return $other->fetchColumn() !== false;
     }
 
     /** Remove a client's link; its devices are marked removed (their findings resolve on the next refresh). */

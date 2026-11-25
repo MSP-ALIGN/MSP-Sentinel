@@ -40,7 +40,8 @@ use Sentinel\Reports\Guidance;
  * - Resolved or closed in ITFlow while the finding is still open: Sentinel checks again. A finding that can be
  *   rechecked on its own gets a "verify fix" recheck straight away; a device finding waits for the device's next
  *   data (NinjaOne sync or agent scan). Fixed: done (with a note while the ticket can still take one). Still there:
- *   a resolved ticket is reopened with a note; a closed one (ITFlow can't reopen those) is replaced by a new ticket
+ *   a resolved ticket is reopened with a note; a closed one is reopened too when the PSA can, and otherwise (ITFlow)
+ *   replaced by a new ticket
  *   that names the old one. No conclusive answer within UNCONFIRMED_DAYS: Sentinel stops waiting and says so.
  * - A finding that comes back after Sentinel resolved its ticket: the ticket is reopened (or replaced, if closed).
  * - Weekly Warnings tickets are informational and are not followed.
@@ -71,17 +72,17 @@ final class ItflowTickets
     private const VERIFY_MAX_QUEUED_TOTAL = 50;
 
     public function __construct(private readonly PDO $db, private readonly Settings $settings, private readonly Audit $audit,
-        private readonly ?ItflowClient $itflow, private readonly string $publicUrl)
+        private readonly ?\Sentinel\Psa\TicketingProvider $psa, private readonly string $publicUrl)
     {
     }
 
     /** Run when due (worker). Returns the summary, or null when nothing ran. */
     public function runIfDue(): ?string
     {
-        if ($this->itflow === null || $this->settings->fresh('itflow_tickets_enabled') !== '1') {
+        if ($this->psa === null || $this->settings->fresh('tickets_enabled') !== '1') {
             return null;
         }
-        $last = $this->settings->fresh('itflow_tickets_last_run');
+        $last = $this->settings->fresh('tickets_last_run');
         if ($last !== '' && strtotime($last . ' UTC') > time() - self::INTERVAL_MINUTES * 60) {
             return null;
         }
@@ -92,11 +93,11 @@ final class ItflowTickets
      * Open what is due now. Returns a one-line summary; failures are recorded and returned, never thrown.
      *
      * One item that ITFlow refuses (a deleted client, a closed ticket, no access) is recorded on its row and skipped;
-     * only a refused key or an unreachable ITFlow stops the run (ItflowException::stopsRun).
+     * only a refused key or an unreachable PSA stops the run (PsaException::stopsRun).
      */
     public function run(): string
     {
-        if ($this->itflow === null) {
+        if ($this->psa === null) {
             return 'ITFlow is not connected.';
         }
         $lock = $this->db->quote('msp_sentinel_itflow_tickets_' . substr(hash('sha256', (string) $this->db->query('SELECT DATABASE()')->fetchColumn()), 0, 16));
@@ -104,7 +105,7 @@ final class ItflowTickets
             return 'Another ticket run is going.';
         }
         try {
-            $this->settings->set('itflow_tickets_last_run', gmdate('Y-m-d H:i:s'));
+            $this->settings->set('tickets_last_run', gmdate('Y-m-d H:i:s'));
             $this->n = ['tickets' => 0, 'weekly' => 0, 'notes' => 0, 'resolved' => 0, 'reopened' => 0, 'replaced' => 0, 'rechecks' => 0, 'confirmed' => 0, 'skipped' => 0];
             $this->lastSkip = '';
             $this->boardId = false;
@@ -115,10 +116,11 @@ final class ItflowTickets
                 $this->settlePending();
                 $this->releaseOrphans();
                 $this->twoWay();
+                $this->archivedClients();
                 $this->kevNotes();
                 $this->findingTickets();
                 $this->weeklyTickets();
-            } catch (ItflowException $ex) {
+            } catch (\Sentinel\Psa\PsaException $ex) {
                 $error = $ex->getMessage();
             } catch (\Throwable $ex) {
                 error_log('[msp-sentinel] ITFlow tickets: ' . $ex->getMessage());
@@ -130,8 +132,8 @@ final class ItflowTickets
                 . ($n['skipped'] > 0 ? sprintf(' %d refused by ITFlow (retried later), last: %s', $n['skipped'], $this->lastSkip) : '')
                 . ($this->boardNote !== '' ? ' Board: ' . $this->boardNote . '.' : '')
                 . ($error !== '' ? ' Stopped: ' . $error : '');
-            $this->settings->set('itflow_tickets_last_result', mb_substr($summary, 0, 500));
-            $this->settings->set('itflow_tickets_last_ok', $error === '' && $n['skipped'] === 0 && $this->boardNote === '' ? '1' : '0');
+            $this->settings->set('tickets_last_result', mb_substr($summary, 0, 500));
+            $this->settings->set('tickets_last_ok', $error === '' && $n['skipped'] === 0 && $this->boardNote === '' ? '1' : '0');
             return $summary;
         } finally {
             $this->db->query("SELECT RELEASE_LOCK({$lock})");
@@ -145,7 +147,7 @@ final class ItflowTickets
     private string $lastSkip = '';
 
     /** Count an item ITFlow refused; rethrow what should stop the run. */
-    private function skip(ItflowException $ex): void
+    private function skip(\Sentinel\Psa\PsaException $ex): void
     {
         if ($ex->stopsRun()) {
             throw $ex;
@@ -161,13 +163,13 @@ final class ItflowTickets
      *
      * @return array{id:int, reference:string}|null the ticket, or null when ITFlow refused it
      */
-    private function openTicket(int $rowId, int $itflowClient, string $subject, string $html, string $priority): ?array
+    private function openTicket(int $rowId, int|string $itflowClient, string $subject, string $html, string $priority): ?array
     {
         $marker = 'sentinel-' . $rowId . '-' . bin2hex(random_bytes(4));
         $this->setRow($rowId, ['state' => 'pending', 'marker' => $marker, 'marker_at' => $this->dbNow()]);
         try {
-            $ticket = $this->itflow->createTicket($itflowClient, self::oneLine($subject, 200), $html, $priority, $marker);
-        } catch (ItflowException $ex) {
+            $ticket = $this->psa->createTicket($itflowClient, self::oneLine($subject, 200), $html, $priority, $marker);
+        } catch (\Sentinel\Psa\PsaException $ex) {
             if ($ex->stopsRun()) {
                 throw $ex; // unknown whether ITFlow opened it: settlePending finds out next run
             }
@@ -187,22 +189,23 @@ final class ItflowTickets
      * (the default) = the board named "Alerts" when there is one, '0' = leave it on ITFlow's default board, else a
      * board ID. A move that fails never undoes the ticket: it stays on ITFlow's default board and the run says so.
      */
-    private function placeOnBoard(int $itflowClient, int $ticketId, bool $unassign = true): void
+    private function placeOnBoard(int|string $itflowClient, int $ticketId, bool $unassign = true): void
     {
         if ($this->boardId === false) {
             $this->boardId = null;
             $choice = $this->settings->get('itflow_board');
-            if ($choice !== '0') {
+            // Boards are optional (1.53): only a PSA that has them (TicketBoards) moves tickets.
+            if ($choice !== '0' && $this->psa instanceof \Sentinel\Psa\TicketBoards) {
                 $failed = false;
                 try {
-                    $boards = $this->itflow->refreshBoards($this->settings);
-                } catch (ItflowException $ex) {
+                    $boards = $this->psa->refreshBoards($this->settings);
+                } catch (\Sentinel\Psa\PsaException $ex) {
                     $boards = null;
                     $failed = true;
                     $this->boardNote = 'boards could not be read: ' . mb_substr($ex->getMessage(), 0, 120);
                 }
                 if ($choice === '') {
-                    $this->boardId = ItflowClient::alertsBoard($boards ?? [])['id'] ?? null;
+                    $this->boardId = $this->psa->defaultBoard($boards ?? [])['id'] ?? null;
                 } else {
                     foreach ($boards ?? [] as $b) {
                         if ($b['id'] === (int) $choice) {
@@ -215,12 +218,12 @@ final class ItflowTickets
                 }
             }
         }
-        if ($this->boardId === null) {
+        if ($this->boardId === null || !$this->psa instanceof \Sentinel\Psa\TicketBoards) {
             return;
         }
         try {
-            $this->itflow->moveTicket($itflowClient, $ticketId, $this->boardId, $unassign);
-        } catch (ItflowException $ex) {
+            $this->psa->moveTicket($itflowClient, $ticketId, $this->boardId, $unassign);
+        } catch (\Sentinel\Psa\PsaException $ex) {
             $this->boardNote = 'ticket #' . $ticketId . ' stayed on the default board: ' . mb_substr($ex->getMessage(), 0, 120);
         }
     }
@@ -239,7 +242,7 @@ final class ItflowTickets
     private string $boardNote = '';
 
     /** Mark a row's ticket as refused by ITFlow; retried after 1, 2, 4 ... hours (at most a day). */
-    private function failRow(int $rowId, ItflowException $ex): void
+    private function failRow(int $rowId, \Sentinel\Psa\PsaException $ex): void
     {
         // retry_at first: MariaDB applies SET left to right, so it uses the attempts before this one.
         $this->db->prepare("UPDATE itflow_tickets SET retry_at = UTC_TIMESTAMP() + INTERVAL LEAST(1440, 60 * POW(2, LEAST(attempts, 5))) MINUTE,
@@ -256,7 +259,14 @@ final class ItflowTickets
      */
     private function settlePending(): void
     {
-        $rows = $this->db->query("SELECT t.*, c.itflow_client_id FROM itflow_tickets t JOIN clients c ON c.id = t.client_id AND c.itflow_sync_off = 0
+        // A row a run created but never got as far as opening (no marker yet: killed, deadlock, an error building the
+        // text; 1.49) can't be looked up in ITFlow, because nothing was sent: retry it like a refused ticket, so it
+        // doesn't block its finding, its issue group or the client's weekly ticket for good.
+        $this->db->exec("UPDATE itflow_tickets SET state = 'failed', retry_at = UTC_TIMESTAMP(), attempts = attempts + 1,
+                         last_error = 'Interrupted before the ticket was opened; retrying.'
+                         WHERE state = 'pending' AND marker = '' AND created_at < UTC_TIMESTAMP() - INTERVAL 15 MINUTE");
+        $rows = $this->db->query("SELECT t.*, pl.external_id AS itflow_client_id FROM itflow_tickets t JOIN clients c ON c.id = t.client_id AND c.itflow_sync_off = 0
+                                  LEFT JOIN psa_client_links pl ON pl.client_id = c.id AND pl.provider = 'itflow'
                                   WHERE t.state = 'pending' AND t.marker <> '' ORDER BY t.attempts, t.id LIMIT 20")->fetchAll();
         foreach ($rows as $r) {
             $rowId = (int) $r['id'];
@@ -265,10 +275,19 @@ final class ItflowTickets
                 $this->setRow($rowId, $giveUp('The client is no longer linked to ITFlow.'));
                 continue;
             }
+            if (!$this->psa->capabilities()['markers']) {
+                // A PSA that can't find a ticket by its marker (1.53): open it again, and say a duplicate is possible.
+                $why = 'Could not confirm whether the ticket was opened (this ticketing system can\'t look it up); opening it again. Check for a duplicate.';
+                $this->setRow($rowId, $giveUp($why));
+                if ($r['finding_id'] !== null) {
+                    $this->event((int) $r['finding_id'], $why); // on the finding too, where a technician sees it (1.53.1)
+                }
+                continue;
+            }
             try {
-                $found = $this->itflow->findByMarker((int) $r['itflow_client_id'], (string) $r['marker'], (string) $r['marker_at']);
-            } catch (ItflowException $ex) {
-                if ($ex->kind !== ItflowException::KIND_REFUSED) {
+                $found = $this->psa->findByMarker((string) $r['itflow_client_id'], (string) $r['marker'], (string) $r['marker_at']);
+            } catch (\Sentinel\Psa\PsaException $ex) {
+                if ($ex->kind !== \Sentinel\Psa\PsaException::KIND_REFUSED) {
                     throw $ex;
                 }
                 $this->n['skipped']++;
@@ -288,7 +307,7 @@ final class ItflowTickets
             // Found again after an unclear answer: moved only if it is still new (within 15 minutes of opening it), and
             // then never unassigned, so a ticket a tech already took or moved stays as they left it (1.44.1).
             if ($this->dbAgeMinutes((string) $r['marker_at']) <= 15) {
-                $this->placeOnBoard((int) $r['itflow_client_id'], (int) $found['id'], false);
+                $this->placeOnBoard((string) $r['itflow_client_id'], (int) $found['id'], false);
             }
             if ($r['finding_id'] !== null) {
                 $this->event((int) $r['finding_id'], 'ITFlow ticket ' . ($found['reference'] !== '' ? $found['reference'] : '#' . $found['id']) . ' opened.');
@@ -320,12 +339,13 @@ final class ItflowTickets
     private function twoWay(): void
     {
         $rows = $this->db->query(
-            "SELECT t.*, t.id AS row_id, f.status AS f_status, f.resolved_at AS f_resolved_at, f.triage_note, f.verify_result, f.verify_result_at,
-                    f.verify_requested_at, f.last_seen AS f_last_seen, f.title, f.target, f.evidence, f.finding_key, c.itflow_client_id,
+            "SELECT t.*, t.id AS row_id, f.status AS f_status, f.resolved_at AS f_resolved_at, f.resolved_reason AS f_reason, f.triage_note, f.verify_result, f.verify_result_at,
+                    f.verify_requested_at, f.last_seen AS f_last_seen, f.title, f.target, f.evidence, f.finding_key, pl.external_id AS itflow_client_id,
                     vj.created_at AS vj_created_at, vj.status AS vj_status,
                     IF(d.source = 'agent', d.last_full_seen, d.last_seen) AS d_seen
              FROM itflow_tickets t JOIN findings f ON f.id = t.finding_id
-             JOIN clients c ON c.id = t.client_id AND c.is_archived = 0 AND c.is_demo = 0 AND c.itflow_client_id IS NOT NULL AND c.itflow_sync_off = 0
+             JOIN clients c ON c.id = t.client_id AND c.is_archived = 0 AND c.is_demo = 0 AND c.itflow_sync_off = 0
+             JOIN psa_client_links pl ON pl.client_id = c.id AND pl.provider = 'itflow'
              LEFT JOIN scan_jobs vj ON vj.id = f.verify_job_id
              LEFT JOIN devices d ON d.id = f.device_id
              WHERE t.kind = 'finding' AND (t.state IN ('open', 'sentinel_resolved', 'awaiting_check')
@@ -336,7 +356,7 @@ final class ItflowTickets
         foreach ($rows as $r) {
             try {
                 $this->follow($r);
-            } catch (ItflowException $ex) {
+            } catch (\Sentinel\Psa\PsaException $ex) {
                 $this->setRow((int) $r['row_id'], ['last_error' => mb_substr($ex->getMessage(), 0, 255)]);
                 $this->skip($ex);
             }
@@ -352,14 +372,14 @@ final class ItflowTickets
     private function follow(array $r): void
     {
         $rowId = (int) $r['row_id'];
-        $itflowClient = (int) $r['itflow_client_id'];
+        $itflowClient = (string) $r['itflow_client_id'];
         $ticket = (int) $r['itflow_ticket_id'];
         $ref = $r['reference'] !== '' ? $r['reference'] : '#' . $ticket;
         $members = $this->members($rowId);
         $group = array_merge([$r], $members);
         $open = array_values(array_filter($group, static fn (array $g): bool => $g['f_status'] === 'open'));
         $fixedInSentinel = $open === [];
-        $status = $this->itflow->ticketStatus($ticket);
+        $status = $this->psa->ticketStatus($ticket);
         $now = $this->dbNow(); // the database's clock, like findings.last_seen and scan_jobs.created_at
         $this->setRow($rowId, ['itflow_status' => $status, 'status_checked_at' => $now, 'last_error' => '']);
         if ($status === 'gone') {
@@ -386,11 +406,18 @@ final class ItflowTickets
         }
         switch ($r['state']) {
             case 'open':
+                if ($fixedInSentinel && $status === 'open' && array_filter($group, [self::class, 'notFixed']) !== []) {
+                    // Closed in Sentinel without a fix (device gone, client unlinked; 1.49): say so, leave the ticket open.
+                    $this->fixedNoteOnce($r, $group);
+                    $this->setRow($rowId, ['state' => 'done', 'last_note_at' => $now]);
+                    $this->eventAll($group, 'ITFlow ticket ' . $ref . ' left open with a note: Sentinel stopped tracking this without confirming a fix.');
+                    return;
+                }
                 if ($fixedInSentinel) {
                     // Every target fixed (or decided) in Sentinel: say so and resolve the ticket.
                     if ($status === 'open') {
                         $this->fixedNoteOnce($r, $group);
-                        $this->itflow->resolveTicket($itflowClient, $ticket);
+                        $this->psa->resolveTicket($itflowClient, $ticket);
                         $this->n['resolved']++;
                         $this->eventAll($group, 'ITFlow ticket ' . $ref . ' resolved: ' . (count($group) > 1 ? 'every target is fixed or decided in Sentinel.'
                             : ($r['f_status'] === 'resolved' ? 'no longer seen by Sentinel.' : 'decided in Sentinel.')));
@@ -415,8 +442,9 @@ final class ItflowTickets
                         $this->fixedNoteOnce($r, $group);
                     }
                     $this->setRow($rowId, ['state' => 'done']);
-                    $this->eventAll($group, 'Confirmed fixed by Sentinel after ITFlow ticket ' . $ref . ' was closed.');
-                    $this->n['confirmed']++;
+                    $this->eventAll($group, self::groupNotFixed($group) ? 'Sentinel stopped tracking this after ITFlow ticket ' . $ref . ' was closed (not a confirmed fix).'
+                        : 'Confirmed fixed by Sentinel after ITFlow ticket ' . $ref . ' was closed.');
+                    $this->n['confirmed'] += self::groupNotFixed($group) ? 0 : 1;
                     return;
                 }
                 if ($status === 'open') {
@@ -439,17 +467,21 @@ final class ItflowTickets
                 if ($status !== 'closed') {
                     $this->fixedNoteOnce($r, $group);
                 }
-                if ($status === 'open') {
-                    $this->itflow->resolveTicket($itflowClient, $ticket);
+                if ($status === 'open' && array_filter($group, [self::class, 'notFixed']) === []) { // not for a non-fix (1.49)
+                    $this->psa->resolveTicket($itflowClient, $ticket);
                 }
                 $this->setRow($rowId, ['state' => 'done']);
-                $this->eventAll($group, 'Confirmed fixed by Sentinel after ITFlow ticket ' . $ref . ' was closed.');
-                $this->n['confirmed']++;
+                $this->eventAll($group, self::groupNotFixed($group) ? 'Sentinel stopped tracking this after ITFlow ticket ' . $ref . ' was closed (not a confirmed fix).'
+                    : 'Confirmed fixed by Sentinel after ITFlow ticket ' . $ref . ' was closed.');
+                $this->n['confirmed'] += self::groupNotFixed($group) ? 0 : 1;
                 return;
             default:
                 // sentinel_resolved (or done with a target open again): the problem came back.
                 if (!$fixedInSentinel) {
-                    $this->stillOpen($r, $group, $status, 'This problem came back after ITFlow ticket ' . $ref . ' was resolved.');
+                    // A ticket left open after a non-fix (1.49.1) was never resolved: say "seen again", not "came back after resolved".
+                    $this->stillOpen($r, $group, $status, $status === 'open' && $r['state'] === 'done'
+                        ? 'Sentinel sees this problem again (ITFlow ticket ' . $ref . ' is still open).'
+                        : 'This problem came back after ITFlow ticket ' . $ref . ' was resolved.');
                 } elseif ($status === 'closed' || ($r['last_note_at'] !== null && strtotime($r['last_note_at'] . ' UTC') < time() - self::RESOLVED_FOLLOW_DAYS * 86400)) {
                     $this->setRow($rowId, ['state' => 'done']); // closed, or resolved long enough: stop reading it
                 }
@@ -464,11 +496,12 @@ final class ItflowTickets
     private function members(int $leaderRowId): array
     {
         $stmt = $this->db->prepare(
-            "SELECT t.*, t.id AS row_id, f.status AS f_status, f.resolved_at AS f_resolved_at, f.triage_note, f.verify_result, f.verify_result_at,
-                    f.verify_requested_at, f.last_seen AS f_last_seen, f.title, f.target, f.evidence, f.finding_key, c.itflow_client_id,
+            "SELECT t.*, t.id AS row_id, f.status AS f_status, f.resolved_at AS f_resolved_at, f.resolved_reason AS f_reason, f.triage_note, f.verify_result, f.verify_result_at,
+                    f.verify_requested_at, f.last_seen AS f_last_seen, f.title, f.target, f.evidence, f.finding_key, pl.external_id AS itflow_client_id,
                     vj.created_at AS vj_created_at, vj.status AS vj_status,
                     IF(d.source = 'agent', d.last_full_seen, d.last_seen) AS d_seen
              FROM itflow_tickets t JOIN findings f ON f.id = t.finding_id JOIN clients c ON c.id = t.client_id
+             LEFT JOIN psa_client_links pl ON pl.client_id = c.id AND pl.provider = 'itflow'
              LEFT JOIN scan_jobs vj ON vj.id = f.verify_job_id
              LEFT JOIN devices d ON d.id = f.device_id
              WHERE t.kind = 'member' AND t.parent_id = :p AND t.state = 'open' ORDER BY t.id LIMIT 500"
@@ -494,7 +527,7 @@ final class ItflowTickets
             $html = $isOpen
                 ? '<p><strong>Seen again on ' . self::h($g['target']) . '.</strong></p>' . $this->evidenceHtml($g)
                 : '<p><strong>' . self::h($g['target']) . ':</strong> ' . match ((string) $g['f_status']) {
-                    'resolved' => 'verified fixed by Sentinel (no longer seen since ' . self::h($g['f_resolved_at']) . ' UTC).',
+                    'resolved' => self::notFixed($g) ? self::notFixedText($g) : 'verified fixed by Sentinel (no longer seen since ' . self::h($g['f_resolved_at']) . ' UTC).',
                     'accepted' => 'marked as an accepted risk in Sentinel.' . ((string) $g['triage_note'] !== '' ? ' Reason: ' . self::h($g['triage_note']) : ''),
                     'false_positive' => 'marked as a false positive in Sentinel.' . ((string) $g['triage_note'] !== '' ? ' Reason: ' . self::h($g['triage_note']) : ''),
                     default => 'closed in Sentinel.',
@@ -503,8 +536,8 @@ final class ItflowTickets
                 return; // the rest next run (the notes depend on state, nothing is lost)
             }
             try {
-                $this->itflow->addNote((int) $g['itflow_client_id'], (int) $g['itflow_ticket_id'], $html);
-            } catch (ItflowException $ex) {
+                $this->psa->addNote((string) $g['itflow_client_id'], (int) $g['itflow_ticket_id'], $html);
+            } catch (\Sentinel\Psa\PsaException $ex) {
                 if ($ex->stopsRun()) {
                     throw $ex;
                 }
@@ -561,13 +594,14 @@ final class ItflowTickets
     /** Copy a leading row's ticket number to its members once ITFlow has answered. */
     private function syncMembers(int $rowId, int $ticketId, string $reference): void
     {
-        $this->db->prepare("UPDATE itflow_tickets SET itflow_ticket_id = :t, reference = :r WHERE kind = 'member' AND parent_id = :p")
-            ->execute(['t' => $ticketId, 'r' => $reference, 'p' => $rowId]);
+        $this->db->prepare("UPDATE itflow_tickets SET itflow_ticket_id = :t, external_ticket_id = :x, reference = :r WHERE kind = 'member' AND parent_id = :p")
+            ->execute(['t' => $ticketId, 'x' => self::textId($ticketId), 'r' => $reference, 'p' => $rowId]);
     }
 
     /**
      * The problem is (still or again) there while the ticket is resolved or closed: reopen a resolved ticket with a
-     * note; replace a closed one (ITFlow can't reopen those). An open ticket only needs following again.
+     * note; replace a closed one when the PSA can't reopen those (ITFlow can't: capabilities() since 1.53). An open
+     * ticket only needs following again.
      *
      * @param array<string,mixed> $r
      * @param list<array<string,mixed>> $group the leading row first, then its members (open ones are named in the note)
@@ -580,9 +614,9 @@ final class ItflowTickets
             $this->setRow($rowId, ['state' => 'open', 'closed_seen_at' => null]);
             return;
         }
-        if ($status === 'resolved') {
-            $this->itflow->reopenTicket((int) $r['itflow_client_id'], (int) $r['itflow_ticket_id']);
-            $this->itflow->addNote((int) $r['itflow_client_id'], (int) $r['itflow_ticket_id'], '<p><strong>' . self::h($why) . '</strong> The ticket was reopened.</p>'
+        if ($status === 'resolved' || ($status === 'closed' && $this->psa->capabilities()['reopen_closed'])) {
+            $this->psa->reopenTicket((string) $r['itflow_client_id'], (int) $r['itflow_ticket_id']);
+            $this->psa->addNote((string) $r['itflow_client_id'], (int) $r['itflow_ticket_id'], '<p><strong>' . self::h($why) . '</strong> The ticket was reopened.</p>'
                 . implode('', array_map(fn (array $g): string => $this->evidenceHtml($g), array_slice($open, 0, 50))));
             $this->setRow($rowId, ['state' => 'open', 'closed_seen_at' => null, 'fixed_noted_at' => null, 'last_note_at' => gmdate('Y-m-d H:i:s')]);
             foreach ($open as $g) {
@@ -679,7 +713,7 @@ final class ItflowTickets
         $html = count($group) > 1
             ? '<p><strong>Every target of this ticket is fixed or decided in Sentinel.</strong></p>' . implode('', array_map(fn (array $g): string => '<p>' . self::h($g['target']) . ':</p>' . $this->fixedNote($g), array_slice($group, 0, 100)))
             : $this->fixedNote($r);
-        $this->itflow->addNote((int) $r['itflow_client_id'], (int) $r['itflow_ticket_id'], $html);
+        $this->psa->addNote((string) $r['itflow_client_id'], (int) $r['itflow_ticket_id'], $html);
         $this->setRow((int) $r['row_id'], ['fixed_noted_at' => gmdate('Y-m-d H:i:s'), 'last_note_at' => gmdate('Y-m-d H:i:s')]);
         // Every target is in that note: no separate "fixed" note for any of them later.
         foreach ($group as $g) {
@@ -722,8 +756,8 @@ final class ItflowTickets
             }
             $newRow = $this->newRow((int) $r['client_id'], 'finding', (int) $lead['finding_id'], (string) $f['severity'], (int) $f['in_kev'] === 1);
             foreach ($others as $o) {
-                $this->db->prepare('UPDATE itflow_tickets SET parent_id = :p, itflow_ticket_id = 0, reference = \'\', target_noted = 0 WHERE id = :id')
-                    ->execute(['p' => $newRow, 'id' => $o['row_id']]);
+                // Through setRow (1.55.1), so the text ID is cleared with the number.
+                $this->setRow((int) $o['row_id'], ['parent_id' => $newRow, 'itflow_ticket_id' => 0, 'reference' => '', 'target_noted' => 0]);
             }
             // The fixed targets stay with the old ticket in their history, and are released: one that comes back gets a
             // ticket again (findingTickets handles 'gone' rows).
@@ -734,7 +768,7 @@ final class ItflowTickets
             throw $ex;
         }
         $also = implode('', array_map(fn (array $o): string => $this->alsoFoundHtml($o), array_slice($others, 0, 50)));
-        $ticket = $this->openTicket($newRow, (int) $r['itflow_client_id'], $this->subject($f), '<p><strong>' . self::h($why) . '</strong></p>' . $this->findingHtml($f) . $also, $this->priority($f));
+        $ticket = $this->openTicket($newRow, (string) $r['itflow_client_id'], $this->subject($f), '<p><strong>' . self::h($why) . '</strong></p>' . $this->findingHtml($f) . $also, $this->priority($f));
         if ($ticket === null) {
             return; // retried as a normal finding ticket; the members follow it
         }
@@ -766,9 +800,9 @@ final class ItflowTickets
     /** Insert a pending row (itflow_ticket_id 0 until ITFlow answers). Returns its ID. */
     private function newRow(int $clientId, string $kind, ?int $findingId, string $severity, bool $kev): int
     {
-        $this->db->prepare("INSERT INTO itflow_tickets (client_id, kind, finding_id, itflow_ticket_id, severity_at_open, kev_noted, state, created_at)
-                            VALUES (:c, :k, :f, 0, :s, :kev, 'pending', UTC_TIMESTAMP())")
-            ->execute(['c' => $clientId, 'k' => $kind, 'f' => $findingId, 's' => in_array($severity, ['fail', 'warn'], true) ? $severity : null, 'kev' => $kev ? 1 : 0]);
+        $this->db->prepare("INSERT INTO itflow_tickets (client_id, kind, finding_id, provider, itflow_ticket_id, severity_at_open, kev_noted, state, created_at)
+                            VALUES (:c, :k, :f, :pr, 0, :s, :kev, 'pending', UTC_TIMESTAMP())")
+            ->execute(['c' => $clientId, 'k' => $kind, 'f' => $findingId, 'pr' => $this->psa->name(), 's' => in_array($severity, ['fail', 'warn'], true) ? $severity : null, 'kev' => $kev ? 1 : 0]);
         return (int) $this->db->lastInsertId();
     }
 
@@ -791,10 +825,75 @@ final class ItflowTickets
     {
         $reason = (string) $r['triage_note'] !== '' ? '<p>Reason: ' . self::h($r['triage_note']) . '</p>' : '';
         return match ((string) $r['f_status']) {
-            'resolved' => '<p><strong>Verified fixed by Sentinel.</strong> Its checks no longer see this problem (since ' . self::h($r['f_resolved_at']) . ' UTC).</p>',
+            'resolved' => self::notFixed($r) ? '<p><strong>Sentinel stopped tracking this; it was not confirmed fixed.</strong> ' . self::notFixedText($r) . '</p>'
+                : '<p><strong>Verified fixed by Sentinel.</strong> Its checks no longer see this problem (since ' . self::h($r['f_resolved_at']) . ' UTC).</p>',
             'accepted' => '<p><strong>Marked as an accepted risk in Sentinel.</strong></p>' . $reason,
             'false_positive' => '<p><strong>Marked as a false positive in Sentinel.</strong></p>' . $reason,
             default => '<p>Closed in Sentinel.</p>',
+        };
+    }
+
+    /**
+     * Tickets of clients archived in Sentinel (1.50): each still-followed one gets one note saying Sentinel no longer
+     * follows it (the client is archived, so it is not scanned), instead of being left without a word. The row and its
+     * members are set to 'gone' (no longer followed); if the client is restored while the problem is still open,
+     * findingTickets keeps the old row in the history and opens a new ticket, as for a ticket deleted in ITFlow.
+     * Untrusted: ITFlow's answers (only compared with 'open'). Archived clients are never scanned or ticketed otherwise.
+     * Only 'open' rows get the note (1.50.1): Sentinel already resolved the others, or is waiting on a closed ticket, so
+     * they are set aside silently. The note is best effort: a refused note (ITFlow archived the client too) still sets
+     * the row aside, so it isn't retried every run; only a refusal that stops the run (ITFlow down) leaves it for later.
+     */
+    private function archivedClients(): void
+    {
+        $rows = $this->db->query("SELECT t.id AS row_id, t.itflow_ticket_id, t.state, pl.external_id AS itflow_client_id FROM itflow_tickets t
+                                  JOIN clients c ON c.id = t.client_id AND c.is_archived = 1 AND c.is_demo = 0 AND c.itflow_sync_off = 0
+                                  JOIN psa_client_links pl ON pl.client_id = c.id AND pl.provider = 'itflow'
+                                  WHERE t.kind = 'finding' AND t.itflow_ticket_id > 0 AND t.state IN ('open', 'sentinel_resolved', 'awaiting_check') ORDER BY t.id LIMIT 50")->fetchAll();
+        foreach ($rows as $r) {
+            if ($this->budget <= 0) {
+                return;
+            }
+            try {
+                if ($r['state'] === 'open' && $this->psa->ticketStatus((int) $r['itflow_ticket_id']) === 'open') {
+                    $this->psa->addNote((string) $r['itflow_client_id'], (int) $r['itflow_ticket_id'],
+                        '<p><strong>The client was archived in Sentinel</strong>, so it is no longer scanned and Sentinel no longer follows this ticket. Resolve it here when it is dealt with. If the client is restored, Sentinel opens a new ticket for anything still open.</p>');
+                    $this->budget--;
+                    $this->n['notes']++;
+                }
+            } catch (\Sentinel\Psa\PsaException $ex) {
+                $this->setRow((int) $r['row_id'], ['last_error' => mb_substr($ex->getMessage(), 0, 255)]);
+                $this->skip($ex); // rethrows when the run must stop: the row is left for the next run
+            }
+            $this->setRow((int) $r['row_id'], ['state' => 'gone', 'last_note_at' => $this->dbNow()]);
+            $this->db->prepare("UPDATE itflow_tickets SET state = 'gone' WHERE kind = 'member' AND parent_id = :p AND state = 'open'")->execute(['p' => $r['row_id']]);
+        }
+    }
+
+    /**
+     * Resolved for a reason that is not a fix (1.49): its device is no longer reported by its source, or the client was
+     * unlinked from the source. Such tickets get an honest note and are left open for a technician to decide.
+     *
+     * @param array<string,mixed> $r
+     */
+    private static function notFixed(array $r): bool
+    {
+        return (string) ($r['f_status'] ?? '') === 'resolved' && in_array((string) ($r['f_reason'] ?? ''), ['gone', 'unlinked', 'merged'], true);
+    }
+
+    /** True when any target of a ticket closed without a fix. @param list<array<string,mixed>> $group */
+    private static function groupNotFixed(array $group): bool
+    {
+        return array_filter($group, [self::class, 'notFixed']) !== [];
+    }
+
+    /** @param array<string,mixed> $r */
+    private static function notFixedText(array $r): string
+    {
+        return match ((string) ($r['f_reason'] ?? '')) {
+            'unlinked' => 'The client was unlinked from its inventory source in Sentinel, so Sentinel no longer sees this device. Check it by hand, then resolve this ticket.',
+            // 1.50.1: an upgrade combined two findings for one certificate; the other one carries on.
+            'merged' => 'Sentinel combined this finding with another finding for the same certificate, which it follows from now on. Nothing was confirmed fixed: check the certificate, then resolve this ticket.',
+            default => 'The device is no longer reported by its inventory source (removed, retired or moved), so Sentinel can\'t check it any more. Check it by hand, then resolve this ticket.',
         };
     }
 
@@ -810,8 +909,18 @@ final class ItflowTickets
     /** @param array<string,mixed> $fields column => value; the column names are this class's own, never input */
     private function setRow(int $id, array $fields): void
     {
+        if (array_key_exists('itflow_ticket_id', $fields)) {
+            $fields['external_ticket_id'] = self::textId($fields['itflow_ticket_id']); // kept in step (1.55)
+        }
         $sets = implode(', ', array_map(static fn (string $k): string => "{$k} = :{$k}", array_keys($fields)));
         $this->db->prepare("UPDATE itflow_tickets SET {$sets} WHERE id = :id")->execute($fields + ['id' => $id]);
+    }
+
+    /** A ticket ID as stored in external_ticket_id (1.55): the PSA's ID as text, '' for none (0 or empty). */
+    private static function textId(mixed $id): string
+    {
+        $text = trim((string) $id);
+        return $text === '0' ? '' : mb_substr($text, 0, 64);
     }
 
     /** A line in the finding's history. */
@@ -830,11 +939,12 @@ final class ItflowTickets
         if ($this->budget <= 0) {
             return;
         }
-        $since = $this->settings->fresh('itflow_tickets_since');
+        $since = $this->settings->fresh('tickets_since');
         $since = $since !== '' ? $since : gmdate('Y-m-d H:i:s');
         $stmt = $this->db->prepare(
-            "SELECT f.id, c.itflow_client_id, t.id AS row_id
-             FROM findings f JOIN clients c ON c.id = f.client_id AND c.is_archived = 0 AND c.is_demo = 0 AND c.itflow_client_id IS NOT NULL AND c.itflow_sync_off = 0
+            "SELECT f.id, pl.external_id AS itflow_client_id, t.id AS row_id
+             FROM findings f JOIN clients c ON c.id = f.client_id AND c.is_archived = 0 AND c.is_demo = 0 AND c.itflow_sync_off = 0
+             JOIN psa_client_links pl ON pl.client_id = c.id AND pl.provider = 'itflow'
              LEFT JOIN kev_catalog k ON k.cve_id = f.cve_id
              LEFT JOIN itflow_tickets t ON t.kind IN ('finding', 'member') AND t.finding_id = f.id
              WHERE f.status = 'open' AND (t.id IS NULL OR t.state = 'gone' OR (t.state = 'failed' AND t.retry_at <= UTC_TIMESTAMP()))
@@ -864,7 +974,7 @@ final class ItflowTickets
                 $leader = $this->openLeader($f);
                 if ($leader !== null) {
                     if ($leader['state'] === 'open' && (int) $leader['itflow_ticket_id'] > 0) {
-                        $this->addMember($leader, $f, (int) $row['itflow_client_id']);
+                        $this->addMember($leader, $f, (string) $row['itflow_client_id']);
                     }
                     continue; // its ticket is still being opened: joins next run
                 }
@@ -873,7 +983,7 @@ final class ItflowTickets
             $this->setRow($rowId, ['kev_noted' => $kev ? 1 : 0, 'severity_at_open' => $f['severity']]);
             // A retried replacement ticket names the targets that moved to it.
             $also = implode('', array_map(fn (array $m): string => $this->alsoFoundHtml($m), array_slice($this->members($rowId), 0, 50)));
-            $ticket = $this->openTicket($rowId, (int) $row['itflow_client_id'], $this->subject($f), $this->findingHtml($f) . $also, $this->priority($f));
+            $ticket = $this->openTicket($rowId, (string) $row['itflow_client_id'], $this->subject($f), $this->findingHtml($f) . $also, $this->priority($f));
             if ($ticket === null) {
                 continue;
             }
@@ -906,16 +1016,17 @@ final class ItflowTickets
      * @param array<string,mixed> $leader
      * @param array<string,mixed> $f
      */
-    private function addMember(array $leader, array $f, int $itflowClient): void
+    private function addMember(array $leader, array $f, int|string $itflowClient): void
     {
-        $this->db->prepare("INSERT INTO itflow_tickets (client_id, kind, finding_id, parent_id, itflow_ticket_id, reference, severity_at_open, kev_noted, state, created_at)
-                            VALUES (:c, 'member', :f, :p, :t, :r, :s, :kev, 'open', UTC_TIMESTAMP())")
-            ->execute(['c' => (int) $f['client_id'], 'f' => (int) $f['id'], 'p' => (int) $leader['id'], 't' => (int) $leader['itflow_ticket_id'], 'r' => (string) $leader['reference'],
+        $this->db->prepare("INSERT INTO itflow_tickets (client_id, kind, finding_id, parent_id, provider, itflow_ticket_id, external_ticket_id, reference, severity_at_open, kev_noted, state, created_at)
+                            VALUES (:c, 'member', :f, :p, :pr, :t, :x, :r, :s, :kev, 'open', UTC_TIMESTAMP())")
+            ->execute(['c' => (int) $f['client_id'], 'f' => (int) $f['id'], 'p' => (int) $leader['id'], 'pr' => $this->psa->name(), 't' => (int) $leader['itflow_ticket_id'],
+                'x' => self::textId($leader['itflow_ticket_id']), 'r' => (string) $leader['reference'],
                 's' => in_array($f['severity'], ['fail', 'warn'], true) ? $f['severity'] : null, 'kev' => (int) $f['in_kev'] === 1 ? 1 : 0]);
         $memberRow = (int) $this->db->lastInsertId();
         try {
-            $this->itflow->addNote($itflowClient, (int) $leader['itflow_ticket_id'], $this->alsoFoundHtml($f));
-        } catch (ItflowException $ex) {
+            $this->psa->addNote($itflowClient, (int) $leader['itflow_ticket_id'], $this->alsoFoundHtml($f));
+        } catch (\Sentinel\Psa\PsaException $ex) {
             // Removed again so it is retried. (If ITFlow added the note but the answer was lost, the retry adds it a
             // second time: a harmless duplicate note, never a missed target.)
             $this->db->prepare('DELETE FROM itflow_tickets WHERE id = :id')->execute(['id' => $memberRow]);
@@ -939,9 +1050,10 @@ final class ItflowTickets
     private function kevNotes(): void
     {
         $rows = $this->db->query(
-            "SELECT t.id AS row_id, t.itflow_ticket_id, c.itflow_client_id, k.required_action AS kev_action, k.due_date AS kev_due
+            "SELECT t.id AS row_id, t.itflow_ticket_id, pl.external_id AS itflow_client_id, k.required_action AS kev_action, k.due_date AS kev_due
              FROM itflow_tickets t JOIN findings f ON f.id = t.finding_id
-             JOIN clients c ON c.id = f.client_id AND c.is_archived = 0 AND c.is_demo = 0 AND c.itflow_client_id IS NOT NULL AND c.itflow_sync_off = 0
+             JOIN clients c ON c.id = f.client_id AND c.is_archived = 0 AND c.is_demo = 0 AND c.itflow_sync_off = 0
+             JOIN psa_client_links pl ON pl.client_id = c.id AND pl.provider = 'itflow'
              JOIN kev_catalog k ON k.cve_id = f.cve_id
              WHERE t.kind = 'finding' AND t.state = 'open' AND t.kev_noted = 0 AND (f.status = 'open' OR " . self::OPEN_MEMBER_SQL . ") LIMIT 50"
         )->fetchAll();
@@ -950,8 +1062,8 @@ final class ItflowTickets
                 . ((string) $r['kev_action'] !== '' ? '<p>Required action: ' . self::h($r['kev_action']) . '</p>' : '')
                 . ((string) $r['kev_due'] !== '' ? '<p>CISA due date: ' . self::h($r['kev_due']) . '</p>' : '');
             try {
-                $this->itflow->addNote((int) $r['itflow_client_id'], (int) $r['itflow_ticket_id'], $html);
-            } catch (ItflowException $ex) {
+                $this->psa->addNote((string) $r['itflow_client_id'], (int) $r['itflow_ticket_id'], $html);
+            } catch (\Sentinel\Psa\PsaException $ex) {
                 $this->skip($ex);
                 $this->setRow((int) $r['row_id'], ['kev_noted' => 2, 'last_error' => mb_substr($ex->getMessage(), 0, 255)]);
                 continue;
@@ -963,22 +1075,23 @@ final class ItflowTickets
 
     /**
      * One ticket per client for Warnings, at most weekly, when there are Warnings not in the last one. Weekly
-     * tickets count from itflow_tickets_weekly_since (when tickets were turned on), which the "existing Fails"
+     * tickets count from tickets_weekly_since (when tickets were turned on), which the "existing Fails"
      * button doesn't move.
      */
     private function weeklyTickets(): void
     {
-        $since = $this->settings->fresh('itflow_tickets_weekly_since');
+        $since = $this->settings->fresh('tickets_weekly_since');
         if ($since === '') {
-            $since = $this->settings->fresh('itflow_tickets_since');
+            $since = $this->settings->fresh('tickets_since');
             $since = $since !== '' && $since >= '2001' ? $since : gmdate('Y-m-d H:i:s');
-            $this->settings->set('itflow_tickets_weekly_since', $since);
+            $this->settings->set('tickets_weekly_since', $since);
         }
         $clients = $this->db->query(
-            "SELECT c.id, c.name, c.itflow_client_id,
+            "SELECT c.id, c.name, pl.external_id AS itflow_client_id,
                     (SELECT MAX(t.created_at) FROM itflow_tickets t WHERE t.client_id = c.id AND t.kind = 'weekly' AND t.state NOT IN ('pending', 'failed')) AS last_weekly,
                     (SELECT MAX(t.id) FROM itflow_tickets t WHERE t.client_id = c.id AND t.kind = 'weekly' AND t.state = 'failed' AND t.retry_at <= UTC_TIMESTAMP()) AS retry_row
-             FROM clients c WHERE c.is_archived = 0 AND c.is_demo = 0 AND c.itflow_client_id IS NOT NULL AND c.itflow_sync_off = 0
+             FROM clients c JOIN psa_client_links pl ON pl.client_id = c.id AND pl.provider = 'itflow'
+             WHERE c.is_archived = 0 AND c.is_demo = 0 AND c.itflow_sync_off = 0
                AND EXISTS (SELECT 1 FROM findings f WHERE f.client_id = c.id AND f.status = 'open' AND f.severity = 'warn')
                AND NOT EXISTS (SELECT 1 FROM itflow_tickets t WHERE t.client_id = c.id AND t.kind = 'weekly'
                                AND (t.state = 'pending' OR (t.state = 'failed' AND t.retry_at > UTC_TIMESTAMP())))
@@ -1004,7 +1117,7 @@ final class ItflowTickets
                 continue; // nothing new since the last weekly ticket (or since tickets were turned on)
             }
             $rowId = $c['retry_row'] !== null ? (int) $c['retry_row'] : $this->newRow((int) $c['id'], 'weekly', null, 'warn', false);
-            $ticket = $this->openTicket($rowId, (int) $c['itflow_client_id'], '[Sentinel] ' . count($new) . ' new security warning(s) this week - ' . $c['name'],
+            $ticket = $this->openTicket($rowId, (string) $c['itflow_client_id'], '[Sentinel] ' . count($new) . ' new security warning(s) this week - ' . $c['name'],
                 $this->weeklyHtml((string) $c['name'], $warnings, $cut), 'Medium');
             if ($ticket === null) {
                 continue;
@@ -1023,7 +1136,9 @@ final class ItflowTickets
         $link = $this->publicUrl !== '' ? rtrim($this->publicUrl, '/') . '/findings/' . (int) $f['id'] : '';
         $rows = [
             'Client' => $f['client_name'], 'Severity' => $kev ? 'Fail - known exploited (CISA KEV)' : ($f['severity'] === 'fail' ? 'Fail' : 'Warning'),
-            'Where' => $f['target'], 'Found' => $f['detail'], 'Evidence' => $f['evidence'], 'CVE' => $f['cve_id'],
+            // Breached addresses are masked in tickets as in alerts (1.49): a ticket system is read by more people.
+            'Where' => $f['target'], 'Found' => ($f['finding_type'] ?? '') === 'breach' ? \Sentinel\Breach\BreachMonitor::maskAll((string) $f['detail']) : $f['detail'],
+            'Evidence' => $f['evidence'], 'CVE' => $f['cve_id'],
             'First seen' => ($f['first_seen'] ?? '') !== '' ? $f['first_seen'] . ' UTC' : '', 'Fix by' => ($f['due_at'] ?? '') !== '' && $f['due_at'] !== null ? substr((string) $f['due_at'], 0, 10) : '',
         ];
         $html = '<p><strong>' . self::h($f['title']) . '</strong></p><table>';

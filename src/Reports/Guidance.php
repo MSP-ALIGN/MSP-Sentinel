@@ -33,7 +33,8 @@ final class Guidance
         $key = (string) $f['finding_key'];
         return match ((string) $f['finding_type']) {
             'port' => self::port((int) substr($key, (int) strrpos($key, ':') + 1)),
-            'tls' => self::tls(substr($key, (int) strrpos($key, ':') + 1)),
+            // One validity finding for expiring and expired (1.50): its severity says which.
+            'tls' => self::tls(($c = substr($key, (int) strrpos($key, ':') + 1)) === 'cert_validity' ? (($f['severity'] ?? '') === 'fail' ? 'cert_expired' : 'cert_expiring') : $c),
             'web' => self::web(substr($key, (int) strrpos($key, ':') + 1)),
             'vuln' => self::vuln($vuln),
             'email' => self::email(substr($key, (int) strrpos($key, ':') + 1)),
@@ -296,8 +297,8 @@ Turn off NetBIOS over TCP/IP (network adapter settings, or the DHCP option 001),
                 'fix' => __('Install or turn on the company\'s antivirus/EDR and find out why it was missing or switched off.'),
             ],
             'av_outdated' => [
-                'meaning' => __('The antivirus can\'t recognise recent threats because its definitions are out of date.'),
-                'fix' => __('Check that the antivirus can update (internet access, licence, service running) and force an update.'),
+                'meaning' => __('The antivirus can\'t recognize recent threats because its definitions are out of date.'),
+                'fix' => __('Check that the antivirus can update (internet access, license, service running) and force an update.'),
             ],
             'encryption_off' => [
                 'meaning' => __('If this computer is lost or stolen, anyone can read the files on its disk.'),

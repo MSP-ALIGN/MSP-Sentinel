@@ -1,7 +1,8 @@
 <?php
 /**
  * Internal devices card on the client's pages (inventory sources such as NinjaOne).
- * Expects: $client, $inventorySources (name => label), $inventoryLinks (name => link row|null),
+ * Expects: $client, $inventorySources (name => label), $inventoryLinks (name => link row|null), $clientLinks (every link to a
+ * registered RMM, on or off, by name: 1.52.1),
  * $devices (InventoryRepository::devicesForClient, first 500), $deviceTotal, $devicePatches (by device ID), $currentUser.
  * Device data comes from the source (untrusted) and is always escaped.
  */
@@ -19,14 +20,16 @@ $chip = static function (string $sev, string $text): string {
     <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Internal devices')) ?></h2></div>
     <div class="card-body">
         <?php if ($inventorySources === []): ?>
-        <p class="small text-body-secondary mb-0"><?= e(__('No inventory source is set up yet. When NinjaOne is connected (Administration > Integrations), an admin links this client to its NinjaOne organisation and its devices, installed software and missing updates appear here.')) ?></p>
+        <p class="small text-body-secondary mb-0"><?= e(__('No RMM is connected yet. When one is (for example NinjaOne, under Administration → Integrations), someone who can link integrations links this client to its organization there, and its devices, installed software and missing updates appear here.')) ?></p>
         <?php endif; ?>
         <?php foreach ($inventorySources as $name => $label): $link = $inventoryLinks[$name] ?? null; ?>
         <div class="d-flex flex-wrap align-items-center gap-2 mb-2 small">
             <strong><?= e($label) ?>:</strong>
             <?php if ($link === null): ?>
                 <span class="text-body-secondary"><?= e(__('not linked')) ?></span>
-                <?php if ($isAdmin): ?><a class="btn btn-sm btn-outline-primary" href="<?= e(url('/clients/' . (int) $client['id'] . '/inventory/link', ['source' => $name])) ?>"><?= e(__('Link to an organisation')) ?></a><?php endif; ?>
+                <?php $otherLinked = array_diff(array_keys($clientLinks ?? []), [$name]) !== []; ?>
+                <?php if ($otherLinked): ?><span class="small text-body-secondary"><?= e(__('(linked to another RMM: one at a time)')) ?></span>
+                <?php elseif ($isAdmin): ?><a class="btn btn-sm btn-outline-primary" href="<?= e(url('/clients/' . (int) $client['id'] . '/inventory/link', ['source' => $name])) ?>"><?= e(__('Link to an organization')) ?></a><?php endif; ?>
             <?php else: ?>
                 <span><?= e(__('linked to {org}', ['org' => $link['org_name']])) ?></span>
                 <span class="text-body-secondary">· <?= e($link['last_sync_at'] !== null ? __('last sync {t}', ['t' => when($link['last_sync_at'])]) : __('first sync pending')) ?></span>
@@ -42,9 +45,20 @@ $chip = static function (string $sev, string $text): string {
             <?php endif; ?>
         </div>
         <?php endforeach; ?>
+        <?php // Links to an RMM that is turned off or not filled in (1.52.1): shown, so they can still be removed. ?>
+        <?php foreach ($clientLinks ?? [] as $offName => $offLink): if (isset($inventorySources[$offName])) { continue; } ?>
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-2 small">
+            <strong><?= e(\Sentinel\Inventory\Sources::type($offName)?->label() ?? $offName) ?>:</strong>
+            <span><?= e(__('linked to {org}', ['org' => $offLink['org_name']])) ?></span>
+            <span class="text-body-secondary">· <?= e(__('this RMM is turned off under Administration → Integrations, so it is not synced')) ?></span>
+            <?php if ($isAdmin): ?>
+            <form method="post" action="<?= e(url('/clients/' . (int) $client['id'] . '/inventory/unlink')) ?>" class="d-inline" data-confirm="<?= e(__('Unlink? Its devices disappear from Sentinel and their findings are resolved.')) ?>"><?= Csrf::field() ?><input type="hidden" name="source" value="<?= e($offName) ?>"><button type="submit" class="btn btn-sm btn-outline-secondary"><?= e(__('Unlink')) ?></button></form>
+            <?php endif; ?>
+        </div>
+        <?php endforeach; ?>
         <?php if ($devices !== []): ?>
         <div class="table-responsive">
-        <div class="d-flex align-items-center gap-2 mb-2"><label class="visually-hidden" for="devices-filter"><?= e(__('Filter this list')) ?></label><input class="form-control form-control-sm sn-w-20" type="search" id="devices-filter" maxlength="100" data-filter-list="#devices-table" data-filter-count="#devices-filter-count" placeholder="<?= e(__('Filter devices by name, address or problem…')) ?>"><span class="small text-body-secondary" id="devices-filter-count" aria-live="polite"></span></div>
+        <div class="d-flex align-items-center gap-2 mb-2"><label class="visually-hidden" for="devices-filter"><?= e(__('Filter this list')) ?></label><input class="form-control form-control-sm sn-w-20" type="search" id="devices-filter" maxlength="100" data-filter-list="#devices-table" data-filter-count="#devices-filter-count" placeholder="<?= e(__('Filter devices by name, address or finding…')) ?>"><span class="small text-body-secondary" id="devices-filter-count" aria-live="polite"></span></div>
         <table class="table table-sm align-middle small mb-0" id="devices-table">
             <thead><tr><th><?= e(__('Device')) ?></th><th><?= e(__('Operating system')) ?></th><th><?= e(__('Problems')) ?></th><th class="text-end"><?= e(__('Vulnerabilities')) ?></th><th class="text-nowrap"><?= e(__('Last contact')) ?></th></tr></thead>
             <tbody>
@@ -57,7 +71,7 @@ $chip = static function (string $sev, string $text): string {
                         <?php if ((int) ($d['merged_count'] ?? 0) > 0): ?> · <span class="badge text-bg-secondary"><?= e(__('also found by agent')) ?></span><?php endif; ?></div></td>
                 <td><?= e($d['os_name'] ?: '?') ?><?php if ($d['os_build'] !== ''): ?> <span class="text-body-secondary font-monospace"><?= e($d['os_build']) ?></span><?php endif; ?></td>
                 <?php $open = (int) $d['open_fail'] + (int) $d['open_warn']; ?>
-                <td><?php if ($issues === [] && $open === 0): ?><?= $chip('ok', __('No problems found')) ?><?php endif; ?>
+                <td><?php if ($issues === [] && $open === 0): ?><?= $chip('ok', __('No findings')) ?><?php endif; ?>
                     <?php foreach ($issues as $i): ?><?= $chip($i['severity'], $i['text']) ?><?php endforeach; ?>
                     <?php if ($open > 0): ?><a href="<?= e(url('/clients/' . (int) $client['id'] . '/devices/' . (int) $d['id'])) ?>"><?= $chip((int) $d['open_fail'] > 0 ? 'fail' : 'warn', __('{n} open finding(s)', ['n' => $open])) ?></a><?php endif; ?></td>
                 <td class="text-end"><?= (int) $d['vuln_count'] > 0 ? '<span class="badge text-bg-danger">' . e($d['vuln_count']) . '</span>' : '<span class="text-body-secondary">0</span>' ?></td>

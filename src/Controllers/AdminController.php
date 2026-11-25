@@ -41,7 +41,8 @@ final class AdminController extends Controller
             'webhook' => App::settings()->get('webhook_enabled') === '1',
             'tokens' => $tokens,
             'events' => App::settings()->get('event_webhook_enabled') === '1',
-            'ninja' => App::settings()->get('ninjaone_enabled') === '1' && App::ninjaOne() !== null,
+            // Labels of the inventory sources that are connected and on (1.52: any registered RMM).
+            'inventoryOn' => array_values(array_map(static fn (\Sentinel\Inventory\InventorySource $s): string => $s->label(), App::inventorySources())),
             'problems' => count(array_filter($checks, static fn (array $c): bool => $c['status'] === 'fail')),
             'warnings' => count(array_filter($checks, static fn (array $c): bool => $c['status'] === 'warn')),
             'newer' => App::updates()->newer(),
@@ -156,7 +157,7 @@ final class AdminController extends Controller
         }
         $zone = App::settings()->get('display_timezone');
         if ($zone === 'UTC' || !valid_timezone($zone)) {
-            Session::flash('warning', __('Choose the organisation\'s time zone first.'));
+            Session::flash('warning', __('Choose the organization\'s time zone first.'));
             return $back;
         }
         $rows = App::db()->query("SELECT id, name FROM clients WHERE timezone = 'UTC' AND is_archived = 0 AND is_demo = 0 ORDER BY name")->fetchAll();

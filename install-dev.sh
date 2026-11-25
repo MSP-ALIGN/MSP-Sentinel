@@ -9,7 +9,7 @@
 #  develop. The web interface shows a "Development build" badge on every page.
 #
 #  Use a separate server (or VM) and a separate host name from production, and don't scan clients from it
-#  unless you would scan them from production too: the same written authorisation rules apply.
+#  unless you would scan them from production too: the same written authorization rules apply.
 #
 #  Every SENTINEL_* setting of install.sh works here too. SENTINEL_BRANCH picks another branch (for example a
 #  feature branch); the default is develop.

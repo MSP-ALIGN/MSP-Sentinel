@@ -46,7 +46,7 @@ return [
         $bad = $admin->submit('/clients/new', '/clients', ['name' => '', 'itflow_client_id' => 'abc', 'timezone' => 'Mars/Base',
             'scan_window_start' => '25:00', 'scan_window_end' => '06:00', 'notes' => '']);
         Assert::status(422, $bad);
-        foreach (['Enter a name', 'numeric ITFlow client ID', 'Choose a timezone', '24-hour time'] as $msg) {
+        foreach (['Enter a name', 'numeric ITFlow client ID', 'Choose a time zone', '24-hour time'] as $msg) {
             Assert::contains($msg, $bad->body);
         }
         $same = $admin->submit('/clients/new', '/clients', ['name' => 'Same Time Ltd', 'itflow_client_id' => '', 'timezone' => 'UTC',
@@ -59,7 +59,7 @@ return [
         Assert::status(200, $page);
         Assert::contains('Main site', $page->body);
         Assert::contains('Cannot be scanned', $page->body);
-        Assert::contains('No authorisation recorded', $ctx->clientSection($admin, (int) $id, 'authorisations'));
+        Assert::contains('No authorization recorded', $ctx->clientSection($admin, (int) $id, 'authorisations'));
         $dup = $admin->submit('/clients/new', '/clients', ['name' => 'RIVERSIDE EXAMPLE LTD', 'itflow_client_id' => '', 'timezone' => 'UTC',
             'scan_window_start' => '22:00', 'scan_window_end' => '06:00', 'notes' => '']);
         Assert::contains('Another client already has this name', $dup->body);
@@ -77,7 +77,7 @@ return [
             $page = $c->get('/clients/' . $id);
             $all = $ctx->clientPages($c, (int) $id);
             Assert::status(200, $page, "{$user} sees the client");
-            Assert::notContains('Record authorisation', $all, "{$user} has no record button");
+            Assert::notContains('Record authorization', $all, "{$user} has no record button");
             foreach (['/clients/new', '/clients/' . $id . '/edit', '/clients/' . $id . '/authorisations/new'] as $path) {
                 Assert::status(403, $c->get($path), "{$user} GET {$path}");
             }
@@ -90,7 +90,7 @@ return [
         }
         Assert::same('Readonly Example Co', $ctx->db->query("SELECT name FROM clients WHERE id = {$id}")->fetchColumn(), 'unchanged');
     },
-    'recording an authorisation validates dates, confirmation and scope' => function (TestContext $ctx) use ($makeClient, $authForm): void {
+    'recording an authorization validates dates, confirmation and scope' => function (TestContext $ctx) use ($makeClient, $authForm): void {
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $id = $makeClient($ctx, $admin, 'Lakeshore Example Inc');
         $form = '/clients/' . $id . '/authorisations/new';
@@ -121,13 +121,13 @@ return [
         Assert::redirect('/clients/' . $id . '/authorisations', $ok);
         $page = $admin->get('/clients/' . $id);
         $all = $ctx->clientPages($admin, (int) $id);
-        Assert::contains('Authorisation recorded with 4 scope entries', $page->body);
+        Assert::contains('Authorization recorded with 4 scope entries', $page->body);
         $auths = $ctx->clientSection($admin, (int) $id, 'authorisations');
         Assert::contains('Dana Example', $auths);
         Assert::contains('*.lakeshore.example', $auths);
-        Assert::contains('Can be scanned: 1 active authorisation', $ctx->clientSection($admin, (int) $id, 'overview'));
+        Assert::contains('Can be scanned: 1 active authorization', $ctx->clientSection($admin, (int) $id, 'overview'));
     },
-    'scope check: only in-scope targets of an active authorisation pass' => function (TestContext $ctx) use ($makeClient, $authForm, $inScope): void {
+    'scope check: only in-scope targets of an active authorization pass' => function (TestContext $ctx) use ($makeClient, $authForm, $inScope): void {
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $id = $makeClient($ctx, $admin, 'Scope Check Example');
         $admin->submit('/clients/' . $id . '/authorisations/new', '/clients/' . $id . '/authorisations',
@@ -145,7 +145,7 @@ return [
             Assert::true(!$inScope($ctx, $id, $no), 'should NOT be in scope: ' . json_encode($no));
         }
         Assert::true(!App::scope()->isInScope(999999, '203.0.113.64'), 'unknown client fails closed');
-        Assert::same('2001:db8:5::ff', \Sentinel\Scope\ScopeService::canonicalTarget('2001:DB8:5:0::FF'), 'canonicalTarget normalises');
+        Assert::same('2001:db8:5::ff', \Sentinel\Scope\ScopeService::canonicalTarget('2001:DB8:5:0::FF'), 'canonicalTarget normalizes');
         Assert::same(null, \Sentinel\Scope\ScopeService::canonicalTarget('-.x.example'), 'canonicalTarget rejects bad labels');
         // Pausing in the database is seen at once by the same caller (no stale client row).
         $ctx->db->exec("UPDATE clients SET scanning_paused = 1 WHERE id = {$id}");
@@ -175,7 +175,7 @@ return [
         Assert::contains('Expired', $ctx->clientSection($admin, (int) $id, 'authorisations'));
 
         $admin->submit($base . '/authorisations/new', $base . '/authorisations', $authForm('203.0.113.82'));
-        Assert::true($inScope($ctx, $id, '203.0.113.82'), 'new active authorisation');
+        Assert::true($inScope($ctx, $id, '203.0.113.82'), 'new active authorization');
         $authId = (int) $ctx->db->query("SELECT MAX(id) FROM scan_authorisations WHERE client_id = {$id}")->fetchColumn();
 
         // Per-client pause by a technician; only an admin can resume.
@@ -192,7 +192,7 @@ return [
         Assert::true(!$inScope($ctx, $id, '203.0.113.82'), 'archived client');
         $before = (int) $ctx->db->query("SELECT COUNT(*) FROM scan_authorisations WHERE client_id = {$id}")->fetchColumn();
         Assert::redirect($base . '/authorisations', $admin->submit($base, $base . '/authorisations', $authForm('203.0.113.83')));
-        Assert::same($before, (int) $ctx->db->query("SELECT COUNT(*) FROM scan_authorisations WHERE client_id = {$id}")->fetchColumn(), 'archived clients cannot get new authorisations');
+        Assert::same($before, (int) $ctx->db->query("SELECT COUNT(*) FROM scan_authorisations WHERE client_id = {$id}")->fetchColumn(), 'archived clients cannot get new authorizations');
         $admin->submit($base, $base . '/archive', ['archive' => '0']);
         Assert::true($inScope($ctx, $id, '203.0.113.82'), 'restored');
 
@@ -257,7 +257,7 @@ return [
         $admin->submit('/clients/' . $id, '/sites/' . $siteId, ['name' => 'North Warehouse', 'itflow_location_id' => '43']);
         Assert::same('North Warehouse', $ctx->db->query("SELECT name FROM sites WHERE id = {$siteId}")->fetchColumn());
     },
-    'client and authorisation text is escaped (no stored XSS)' => function (TestContext $ctx) use ($makeClient, $authForm): void {
+    'client and authorization text is escaped (no stored XSS)' => function (TestContext $ctx) use ($makeClient, $authForm): void {
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $id = $makeClient($ctx, $admin, '<script>alert(1)</script> Example');
         $admin->submit('/clients/' . $id . '/authorisations/new', '/clients/' . $id . '/authorisations',
@@ -269,10 +269,10 @@ return [
             Assert::notContains('<b onmouseover', $body, $path);
         }
     },
-    'dashboard counts clients and active authorisations; audit records the register' => function (TestContext $ctx): void {
+    'dashboard counts clients and active authorizations; audit records the register' => function (TestContext $ctx): void {
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $page = $admin->get('/')->body;
-        Assert::contains('active scan authorisations', $page);
+        Assert::contains('active scan authorizations', $page);
         Assert::contains('Pause all scanning', $page);
         $actions = $ctx->db->query('SELECT DISTINCT action FROM audit_log')->fetchAll(PDO::FETCH_COLUMN);
         foreach (['client.created', 'client.archived', 'client.restored', 'authorisation.created', 'authorisation.revoked',

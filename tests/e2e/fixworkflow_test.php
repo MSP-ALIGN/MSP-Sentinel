@@ -70,7 +70,7 @@ return [
         Assert::same(7, $daysDue($ctx, $wp), 'known exploited: 7 days');
 
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
-        Assert::contains('Due dates (fix workflow)', $admin->get('/admin/settings')->body);
+        Assert::contains('Fix due dates', $admin->get('/admin/settings')->body);
         $admin->submit('/admin/settings', '/admin/settings/due-dates', ['due_days_kev' => '0', 'due_days_fail' => '14', 'due_days_warn' => '30']);
         Assert::same('7', App::settings()->fresh('due_days_kev'), 'invalid value rejected');
         Assert::redirect('/admin/settings#due-dates', $admin->submit('/admin/settings', '/admin/settings/due-dates', ['due_days_kev' => '3', 'due_days_fail' => '10', 'due_days_warn' => '60']));
@@ -246,7 +246,7 @@ return [
         $tech->submit('/findings/' . $hsts, '/findings/' . $hsts . '/verify', []);
         $job = (int) $ctx->db->query("SELECT MAX(id) FROM scan_jobs WHERE client_id = {$cid} AND job_type = 'verify'")->fetchColumn();
         $tech->submit('/clients/' . $cid, '/scans/' . $job . '/cancel', []);
-        Assert::contains('cancelled by a user', (string) $ctx->db->query("SELECT note FROM finding_events WHERE finding_id = {$hsts} AND event = 'verified' ORDER BY id DESC LIMIT 1")->fetchColumn());
+        Assert::contains('canceled by a user', (string) $ctx->db->query("SELECT note FROM finding_events WHERE finding_id = {$hsts} AND event = 'verified' ORDER BY id DESC LIMIT 1")->fetchColumn());
         // Resolved by another check before the recheck ran: "already resolved", not "fixed".
         $ctx->db->exec("UPDATE findings SET verify_requested_at = NULL WHERE id = {$hsts}");
         $tech->submit('/findings/' . $hsts, '/findings/' . $hsts . '/verify', []);
@@ -287,7 +287,7 @@ return [
         $ctx->db->exec("UPDATE scan_authorisations SET valid_until = '2000-01-01' WHERE client_id = {$cid}");
         $tech->submit('/findings/' . $hsts, '/findings/' . $hsts . '/verify', []);
         Assert::same($count, (int) $ctx->db->query("SELECT COUNT(*) FROM scan_jobs WHERE client_id = {$cid}")->fetchColumn(), 'out of scope: nothing queued');
-        Assert::contains('no longer in an active authorisation', $tech->get('/findings/' . $hsts)->body);
+        Assert::contains('no longer in an active authorization', $tech->get('/findings/' . $hsts)->body);
         $ctx->db->exec("UPDATE scan_authorisations SET valid_until = '" . gmdate('Y-m-d', time() + 86400 * 200) . "' WHERE client_id = {$cid}");
     },
 ];

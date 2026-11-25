@@ -46,6 +46,18 @@ final class AlertService
 {
     private const MAX_IMMEDIATE = 20;
 
+    /**
+     * Immediate Fail alerts this service sends at most in 10 minutes, across clients (1.49): a feeds run touching many
+     * clients can't send hundreds. Counted per instance (a feeds run, a worker) in a 10-minute window, so a long-running
+     * worker is never silenced for good.
+     */
+    private const MAX_IMMEDIATE_PER_RUN = 60;
+    private const RUN_WINDOW = 600;
+
+    private int $immediateSent = 0;
+    private int $windowStart = 0;
+    private bool $runLimitNoticed = false;
+
     /** @param string $publicUrl Base URL for links (config app.public_url), or '' for no links. */
     public function __construct(private readonly PDO $db, private readonly Settings $settings, private readonly string $publicUrl, private readonly ?EventPublisher $events = null)
     {
@@ -73,9 +85,22 @@ final class AlertService
         $resolved = $this->findings($result['resolved_ids']);
 
         // Immediate alerts for new Fail findings (summarised if there are very many), skipping
-        // findings that already alerted in the last 24 hours (flapping).
+        // findings that already alerted in the last 24 hours (flapping), within a limit per run across clients.
         $fresh = array_values(array_filter($fails, fn (array $f): bool => !$this->alertedRecently((int) $f['id'])));
-        $immediate = array_slice($fresh, 0, self::MAX_IMMEDIATE);
+        if (time() - $this->windowStart > self::RUN_WINDOW) {
+            $this->windowStart = time();
+            $this->immediateSent = 0;
+            $this->runLimitNoticed = false;
+        }
+        $immediate = array_slice($fresh, 0, max(0, min(self::MAX_IMMEDIATE, self::MAX_IMMEDIATE_PER_RUN - $this->immediateSent)));
+        $this->immediateSent += count($immediate);
+        if (count($immediate) < count($fresh) && $this->immediateSent >= self::MAX_IMMEDIATE_PER_RUN && !$this->runLimitNoticed) {
+            $this->runLimitNoticed = true;
+            $title = __('Many new Fail findings at once: individual alerts paused for this run');
+            $body = __('More than {n} new Fail findings appeared in one run (for example after new vulnerability data). The rest are listed on the Findings page (and in each client\'s summary after a scan).', ['n' => self::MAX_IMMEDIATE_PER_RUN]);
+            $this->notifyUsers('finding_fail', 'fail', $title, $body, '/findings?severity=fail', null);
+            $this->queueEmail($this->teamAddresses(), '[Sentinel] ' . $title, $title . "\n\n" . $body . "\n\n" . $this->absolute('/findings?severity=fail'));
+        }
         foreach ($immediate as $f) {
             $this->markAlerted((int) $f['id']);
             $title = __('Fail: {title}', ['title' => $f['title']]);
@@ -86,8 +111,8 @@ final class AlertService
                 $title . "\n\n" . $text . "\n\n" . $f['detail'] . "\n\n" . $this->absolute($link));
             $this->queueWebhook(['title' => $title, 'text' => $text, 'severity' => 'fail', 'client' => $client, 'items' => [], 'link' => $this->absolute($link)]);
         }
-        if (count($fresh) > self::MAX_IMMEDIATE) {
-            $more = count($fresh) - self::MAX_IMMEDIATE;
+        if (count($fresh) > count($immediate)) {
+            $more = count($fresh) - count($immediate);
             $this->notifyUsers('finding_fail', 'fail', __('{n} more new Fail findings for {client}', ['n' => $more, 'client' => $client]), '', '/findings?client=' . $clientId, null, $clientId);
         }
 
@@ -285,7 +310,7 @@ final class AlertService
         $link = '/clients/' . $clientId . '/devices';
         $this->notifyUsers('new_device', 'warn', $title, implode("\n", array_slice($items, 0, 20)), $link, null, $clientId);
         $this->queueEmail($this->emailRecipients(['immediate', 'both'], $clientId), '[' . $client . '] ' . $title,
-            $title . "\n\n" . implode("\n", $items) . "\n\n" . __('If you don\'t recognise a device, find out what it is and who connected it.') . "\n\n" . $this->absolute($link));
+            $title . "\n\n" . implode("\n", $items) . "\n\n" . __('If you don\'t recognize a device, find out what it is and who connected it.') . "\n\n" . $this->absolute($link));
         $this->queueWebhook(['title' => $title, 'text' => __('Devices not seen on this network before.'), 'severity' => 'warn', 'client' => $client, 'items' => $items, 'link' => $this->absolute($link)]);
     }
 

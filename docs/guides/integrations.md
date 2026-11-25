@@ -42,17 +42,24 @@ Keeps Sentinel's clients in step with ITFlow and puts security work on the ITFlo
 
 What happens next:
 
-- **Clients**, every 15 minutes: new ITFlow clients are added (not scanned until you record their authorisation),
+- **Clients**, every 15 minutes: new ITFlow clients are added (not scanned until you record their authorization),
   renames are applied, and archiving in ITFlow archives in Sentinel. A client with the same name is linked, not
   duplicated. A client you archived or restored yourself in Sentinel is left as you set it.
 - **Tickets**: Sentinel opens an internal ticket for each Fail and known-exploited finding (High, or Urgent when
   exploited), with what was found, why it matters, how to fix it and a link back. The same problem on other targets
   of the client joins the open ticket. Warnings go into one ticket per client a week, when there are new ones.
 - **Both ways**, every 5 minutes: when Sentinel no longer sees a problem (or it is accepted or marked false positive),
-  it adds a note and resolves the ticket. When a ticket is resolved or closed in ITFlow while the problem is open,
+  it adds a note and resolves the ticket. When it stopped tracking a problem without seeing it fixed (the device left
+  the inventory source, or the client was unlinked from it), the note says exactly that and the ticket stays open
+  for a technician to decide. When a ticket is resolved or closed in ITFlow while the problem is open,
   Sentinel rechecks it: gone closes the finding; still there reopens the ticket (or opens a new one, since ITFlow
   can't reopen a closed ticket). Without a clear answer within 10 days, Sentinel stops waiting and says so on the
   finding.
+- **Archived clients**: when a client is archived in Sentinel, each of its open tickets gets one note saying Sentinel
+  no longer follows it, so nothing is left hanging silently. Resolve them in ITFlow when they are dealt with. If the
+  client is restored while a problem is still open, Sentinel opens a new ticket for it.
+- No backlog: a client linked to ITFlow later (by hand or by name), or restored from the archive, gets tickets only
+  for findings from then on. Breached email addresses are masked in tickets, as in alerts.
 - A ticket ITFlow refuses is retried later and the reason shows on the finding. Every change is in the audit log as
   "itflow-sync" and in the finding's history.
 
@@ -79,11 +86,22 @@ Reads each client's computers from NinjaOne every 6 hours. It never changes anyt
    (machine-to-machine)**, scope **Monitoring** only, grant type **Client credentials**. Copy the client ID and secret.
 2. In Sentinel, under **NinjaOne**, enter the instance (the address you sign in at, for example `eu.ninjarmm.com`),
    the client ID and the secret. Tick **Sync linked clients**, save, and click **Test connection**.
-3. On each client's **Devices** page, click **Link to an organisation** and pick its NinjaOne organisation.
+3. On each client's **Devices** page, click **Link to an organization** and pick its NinjaOne organization.
 
 What comes over: approved computers with their operating system, antivirus, disk encryption, missing and failed
 Windows updates, and installed software (matched to known vulnerabilities). Anything NinjaOne doesn't report stays
 unknown and is never a finding.
+
+- **Unknown is not fixed.** When a sync says nothing about a device's antivirus, disk encryption or programs (it was
+  offline, or a report came back empty), Sentinel keeps the last known state, so findings don't close and reopen.
+- **CVEs for the right platform.** A CVE NVD limits to some operating systems (for example Chrome on Android) is
+  reported only on devices running them.
+- **MAC addresses** of each device's network cards come over too, so an agent's device is matched to the right
+  NinjaOne device even when addresses are reused (see Agents).
+- **One RMM per client.** A client is linked to one RMM at a time, so the same machines never come in twice with
+  duplicate findings. To move a client to another RMM, unlink it first.
+- **Linking another organization** to a client unlinks the old one first: its devices leave the client and their
+  findings close as "unlinked" (not as fixed).
 
 ## Breach monitoring
 
@@ -94,7 +112,7 @@ Finds your clients' email addresses in known data breaches, once a week, using X
 2. In Sentinel, under **Breach monitoring**, paste the API key and tick **Check weekly**. **Check now** runs at most
    once an hour.
 
-Each address becomes one finding for the client whose authorisation lists its domain: **Fail** if a breach happened
+Each address becomes one finding for the client whose authorization lists its domain: **Fail** if a breach happened
 in the last 12 months, **Warning** if all its breaches are older. Passwords are never stored or shown. Addresses are
 masked in titles and alerts (`j***@client.example`). Verified domains in no client's register are listed and ignored.
 

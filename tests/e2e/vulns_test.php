@@ -76,7 +76,7 @@ return [
             $updater->fetchQuery('cpe:2.3:a:example:ratelimited:1.0');
             Assert::true(false, 'should report the rate limit');
         } catch (\Sentinel\Vulns\RateLimited $ex) {
-            Assert::same(120, $ex->retryAfterSeconds, 'Retry-After honoured');
+            Assert::same(120, $ex->retryAfterSeconds, 'Retry-After honored');
         }
         Assert::true($repo->nvdBlockedUntil() > time() + 100, 'back-off stored for all processes');
         $before = count(file($ctx->feedsLog));
