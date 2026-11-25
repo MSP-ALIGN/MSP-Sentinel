@@ -756,8 +756,8 @@ final class ItflowTickets
             }
             $newRow = $this->newRow((int) $r['client_id'], 'finding', (int) $lead['finding_id'], (string) $f['severity'], (int) $f['in_kev'] === 1);
             foreach ($others as $o) {
-                $this->db->prepare('UPDATE itflow_tickets SET parent_id = :p, itflow_ticket_id = 0, reference = \'\', target_noted = 0 WHERE id = :id')
-                    ->execute(['p' => $newRow, 'id' => $o['row_id']]);
+                // Through setRow (1.55.1), so the text ID is cleared with the number.
+                $this->setRow((int) $o['row_id'], ['parent_id' => $newRow, 'itflow_ticket_id' => 0, 'reference' => '', 'target_noted' => 0]);
             }
             // The fixed targets stay with the old ticket in their history, and are released: one that comes back gets a
             // ticket again (findingTickets handles 'gone' rows).

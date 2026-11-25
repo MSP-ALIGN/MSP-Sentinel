@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.55.0](https://img.shields.io/badge/version-1.55.0-ff5a1f?style=flat-square)
+![Version 1.55.1](https://img.shields.io/badge/version-1.55.1-ff5a1f?style=flat-square)
 ![License AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,12 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.55.1 (2026-11-25): Fixes from review
+
+- When a ticket closed in ITFlow is replaced and the new ticket can't be opened yet, the targets moving to it no longer
+  keep the old ticket's ID in the new text field.
+- The ticketing-layer tests no longer depend on which tests ran before them.
+
 ### 1.55.0 (2026-11-25): Tickets ready for other ticketing systems
 
 Nothing changes in how ITFlow works.
@@ -138,17 +144,6 @@ Nothing changes in how ITFlow works.
   client, logs the other, and that client's Edit page shows "already in use" until the duplicate is cleared.
 - Linking a client to ITFlow by name and "tickets only from now on" are saved together, so a broken run can never
   open tickets for old findings.
-
-### 1.54.0 (2026-11-25): Client links ready for other ticketing systems
-
-Nothing changes in how ITFlow works.
-
-- **Client links in their own table.** The link between a Sentinel client and its client in the ticketing system now
-  lives in one place that also fits systems with text IDs. Existing ITFlow links are copied over on upgrade. The ticket
-  rules and the client sync read it from there.
-- **Nothing breaks.** The ITFlow client ID on each client stays and is kept in step, so the REST API
-  (`itflow_client_id`), MSP Align matching and the client form work as before. A ticketing-system client can still be
-  linked to only one Sentinel client.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

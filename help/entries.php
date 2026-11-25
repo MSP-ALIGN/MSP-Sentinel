@@ -366,6 +366,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.55.1',
+            'date' => '2026-11-25',
+            'items' => [
+                'Fixes from review: a replaced ticket that can\'t be opened yet no longer leaves the old ticket ID on the targets moving to it.',
+            ],
+        ],
+        [
             'version' => '1.55.0',
             'date' => '2026-11-25',
             'items' => [

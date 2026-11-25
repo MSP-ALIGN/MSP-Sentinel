@@ -22,6 +22,8 @@ if (!class_exists('FakeTicketingProvider')) {
         public array $calls = ['create' => [], 'note' => [], 'resolve' => [], 'reopen' => [], 'marker' => []];
         /** @var array<string,string> ticket id => status */
         public array $status = [];
+        /** When true, opening a ticket is refused (as a PSA refusing one request would). */
+        public bool $failCreate = false;
         private int $next = 7000;
 
         public function __construct(private readonly bool $reopenClosed, private readonly bool $markers)
@@ -45,6 +47,9 @@ if (!class_exists('FakeTicketingProvider')) {
 
         public function createTicket(int|string $clientId, string $subject, string $detailsHtml, string $priority, string $marker = ''): array
         {
+            if ($this->failCreate) {
+                throw new \Sentinel\Psa\PsaException('Refused by the fake.', \Sentinel\Psa\PsaException::KIND_REFUSED);
+            }
             $id = (string) ++$this->next;
             $this->calls['create'][] = [$clientId, $subject, $priority];
             $this->status[$id] = 'open';
@@ -183,10 +188,13 @@ return [
         $column = $ctx->db->query("SELECT id, CAST(itflow_client_id AS CHAR) FROM clients WHERE itflow_client_id IS NOT NULL ORDER BY id")->fetchAll(PDO::FETCH_KEY_PAIR);
         $table = $ctx->db->query("SELECT client_id, external_id FROM psa_client_links WHERE provider = 'itflow' ORDER BY client_id")->fetchAll(PDO::FETCH_KEY_PAIR);
         Assert::same($column, $table, 'psa_client_links matches clients.itflow_client_id');
-        Assert::true($table !== [], 'there are links to compare');
         // One Sentinel client per PSA client; text IDs are kept exactly.
         $links = new \Sentinel\Psa\ClientLinks($ctx->db);
-        [$a, $b] = array_map('intval', $ctx->db->query('SELECT id FROM clients ORDER BY id LIMIT 2')->fetchAll(PDO::FETCH_COLUMN));
+        foreach (['Link A Example', 'Link B Example'] as $name) { // two clients of its own, whatever ran before
+            $ctx->db->prepare("INSERT INTO clients (name, timezone, scan_window_start, scan_window_end, notes, ports_extra, ports_excluded, is_archived, created_at, updated_at)
+                               VALUES (:n, 'UTC', '22:00:00', '06:00:00', '', '', '', 1, UTC_TIMESTAMP(), UTC_TIMESTAMP())")->execute(['n' => $name]);
+        }
+        [$a, $b] = array_map('intval', $ctx->db->query("SELECT id FROM clients WHERE name IN ('Link A Example', 'Link B Example') ORDER BY id")->fetchAll(PDO::FETCH_COLUMN));
         $links->set($a, 'otherpsa', 'Abc-123');
         Assert::same($a, $links->clientFor('otherpsa', 'Abc-123'));
         Assert::same(null, $links->clientFor('otherpsa', 'abc-123'), 'compared exactly, case included');
@@ -254,8 +262,7 @@ return [
         // After every earlier ITFlow test: the text ID matches the number (empty for none), and the system is ITFlow.
         $off = (int) $ctx->db->query("SELECT COUNT(*) FROM itflow_tickets WHERE provider <> 'itflow'
                                        OR external_ticket_id <> IF(itflow_ticket_id > 0, CAST(itflow_ticket_id AS CHAR), '')")->fetchColumn();
-        Assert::same(0, $off, 'ticket text IDs in step');
-        Assert::true((int) $ctx->db->query("SELECT COUNT(*) FROM itflow_tickets WHERE external_ticket_id <> ''")->fetchColumn() > 0, 'there are tickets to compare');
+        Assert::same(0, $off, 'ticket text IDs in step'); // (with no earlier ITFlow tests there are simply no rows: still true)
         // The migration copies old settings to the new names once, keeping a value already there, and runs twice safely.
         $s = App::settings();
         $saved = $s->fresh('tickets_weekly_since');
@@ -274,6 +281,56 @@ return [
             $ctx->db->exec("DELETE FROM settings WHERE name IN ('itflow_tickets_weekly_since', 'itflow_tickets_since')");
             $s->set('tickets_weekly_since', $saved);
             $s->set('tickets_since', $savedSince);
+        }
+    },
+    'tickets (1.55.1): a replacement ticket that fails to open leaves no old ticket ID on the targets that moved to it' => function (TestContext $ctx): void {
+        $s = App::settings();
+        $saved = ['itflow_board' => $s->fresh('itflow_board'), 'tickets_since' => $s->fresh('tickets_since')];
+        $others = array_map('intval', $ctx->db->query('SELECT id FROM clients WHERE itflow_client_id IS NOT NULL AND itflow_sync_off = 0')->fetchAll(PDO::FETCH_COLUMN));
+        if ($others !== []) {
+            $ctx->db->exec('UPDATE clients SET itflow_sync_off = 1 WHERE id IN (' . implode(',', $others) . ')');
+        }
+        $s->set('itflow_board', '0');
+        $s->set('tickets_since', gmdate('Y-m-d H:i:s', time() - 3600));
+        $ctx->db->exec("INSERT INTO clients (name, timezone, scan_window_start, scan_window_end, notes, ports_extra, ports_excluded, created_at, updated_at)
+                        VALUES ('Replace Fail Example', 'UTC', '00:00:00', '23:59:00', '', '', '', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+        $cid = (int) $ctx->db->lastInsertId();
+        (new \Sentinel\Psa\ClientLinks($ctx->db))->set($cid, 'itflow', '995');
+        try {
+            $add = static function (string $ip) use ($ctx, $cid): int {
+                $ctx->db->prepare("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, detail, target, evidence, status, first_seen, last_seen, opened_at, due_at)
+                                   VALUES (:c, :k, 'port', 'fail', 'Telnet open', 'Port 23 open.', :t, 'x', 'open', UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP() + INTERVAL 14 DAY)")
+                    ->execute(['c' => $cid, 'k' => 'port:' . $ip . ':23', 't' => $ip . ':23']);
+                return (int) $ctx->db->lastInsertId();
+            };
+            $f1 = $add('203.0.113.97');
+            $f2 = $add('203.0.113.98');
+            $fake = new FakeTicketingProvider(false, true);
+            $tickets = new ItflowTickets($ctx->db, $s, App::audit(), $fake, '');
+            $tickets->run(); // one ticket for the issue; the second target joins it as a member
+            $member = $ctx->db->query("SELECT id, external_ticket_id FROM itflow_tickets WHERE finding_id = {$f2} AND kind = 'member'")->fetch();
+            Assert::true($member !== false && $member['external_ticket_id'] !== '', 'the member carries the ticket\'s text ID');
+            // The ticket was closed while the problem is still there: it is replaced, and opening the new one fails.
+            $r = $ctx->db->query("SELECT t.*, t.id AS row_id, pl.external_id AS itflow_client_id, 'open' AS f_status, f.title, f.target, f.evidence, f.last_seen AS f_last_seen
+                                  FROM itflow_tickets t JOIN psa_client_links pl ON pl.client_id = t.client_id AND pl.provider = 'itflow'
+                                  JOIN findings f ON f.id = t.finding_id WHERE t.finding_id = {$f1} AND t.kind = 'finding'")->fetch();
+            $members = (new ReflectionMethod(ItflowTickets::class, 'members'))->invoke($tickets, (int) $r['row_id']);
+            $fake->failCreate = true;
+            (new ReflectionMethod(ItflowTickets::class, 'replace'))->invoke($tickets, $r, array_merge([$r], $members), 'Closed while still open.');
+            $after = $ctx->db->query("SELECT itflow_ticket_id, external_ticket_id FROM itflow_tickets WHERE id = " . (int) $member['id'])->fetch();
+            Assert::same(['0', ''], [(string) $after['itflow_ticket_id'], (string) $after['external_ticket_id']], 'number and text ID cleared together');
+        } finally {
+            $ctx->db->exec("DELETE FROM itflow_tickets WHERE client_id = {$cid}");
+            $ctx->db->exec("DELETE FROM finding_events WHERE finding_id IN (SELECT id FROM findings WHERE client_id = {$cid})");
+            $ctx->db->exec("DELETE FROM findings WHERE client_id = {$cid}");
+            (new \Sentinel\Psa\ClientLinks($ctx->db))->set($cid, 'itflow', null);
+            $ctx->db->exec("UPDATE clients SET is_archived = 1 WHERE id = {$cid}");
+            if ($others !== []) {
+                $ctx->db->exec('UPDATE clients SET itflow_sync_off = 0 WHERE id IN (' . implode(',', $others) . ')');
+            }
+            foreach ($saved as $k => $v) {
+                $s->set($k, $v);
+            }
         }
     },
 ];
