@@ -781,18 +781,6 @@ return [
         $bt = (int) $ctx->db->query("SELECT itflow_ticket_id FROM itflow_tickets WHERE finding_id = {$breach}")->fetchColumn();
         $body = (string) (array_values(array_filter($sent()['tickets'], static fn (array $t): bool => (int) $t['id'] === $bt))[0]['ticket_details'] ?? '');
         Assert::true($body !== '' && !str_contains($body, 'pat.lee@honest.example'), 'full address not in the ticket');
-        // A newly connected inventory source's first import (its first day): no ticket per finding.
-        $ctx->db->exec("INSERT INTO source_links (client_id, source, org_id, org_name, linked_by, linked_at, last_sync_at, first_synced_at)
-                        VALUES ({$cid}, 'ninjaone', 'honest-org', 'Honest Org', 1, UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP())");
-        $imported = $add('dev:ninjaone:9902:os_unsupported', 'device', 'Operating system no longer gets security updates', 'Windows 10.', 'HONEST-LT-02');
-        $ctx->db->exec("UPDATE findings SET source = 'ninjaone' WHERE id = {$imported}");
-        App::itflowTickets()->run();
-        Assert::same(0, (int) $ctx->db->query("SELECT COUNT(*) FROM itflow_tickets WHERE finding_id = {$imported}")->fetchColumn(), 'first import: no ticket');
-        $ctx->db->exec("UPDATE source_links SET first_synced_at = UTC_TIMESTAMP() - INTERVAL 2 DAY WHERE client_id = {$cid}");
-        $later = $add('dev:ninjaone:9903:av_off', 'device', 'Antivirus or EDR is turned off', 'Off.', 'HONEST-LT-03');
-        $ctx->db->exec("UPDATE findings SET source = 'ninjaone' WHERE id = {$later}");
-        App::itflowTickets()->run();
-        Assert::true((int) $ctx->db->query("SELECT COUNT(*) FROM itflow_tickets WHERE finding_id = {$later}")->fetchColumn() === 1, 'after the first day: tickets as usual');
         // An existing client linked to ITFlow later: its old Fails get no tickets (no backlog), new ones do.
         $res = $admin->submit('/clients/new', '/clients', ['name' => 'Linked Later Example', 'itflow_client_id' => '', 'timezone' => 'UTC', 'scan_window_start' => '00:00', 'scan_window_end' => '23:59', 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);
         $late = (int) basename((string) $res->location());

@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 /**
- * End-to-end tests against alert floods (1.49): a newly connected source's first import gives one summary instead of
- * an alert per finding, and one run never sends more than a set number of immediate Fail alerts across clients.
+ * End-to-end tests against alert floods (1.49): one run never sends more than a set number of immediate Fail alerts
+ * across clients (for example a vulnerability data run touching many clients).
  * Made-up clients and documentation addresses only.
  */
 
@@ -32,10 +32,10 @@ $count = static fn (TestContext $ctx, string $like): int => (int) $ctx->db->quer
 
 /** Remove what these tests made, so later tests' notification counts and outboxes are not affected. */
 $floodCleanup = static function (TestContext $ctx): void {
-    $ctx->db->exec("DELETE n FROM notifications n WHERE n.title LIKE 'Fail: Flood test problem%' OR n.title LIKE 'Fail: Scan-found problem%' OR n.title LIKE '%first import found%'
+    $ctx->db->exec("DELETE n FROM notifications n WHERE n.title LIKE 'Fail: Flood test problem%'
                     OR n.title LIKE 'Many new Fail findings at once%' OR n.title LIKE '% more new Fail findings for Flood Run Example%'");
-    $ctx->db->exec("DELETE FROM deliveries WHERE subject LIKE '%Flood%' OR subject LIKE '%First Import Example%' OR subject LIKE '%Many new Fail findings at once%'");
-    $ids = implode(',', array_map('intval', $ctx->db->query("SELECT id FROM clients WHERE name LIKE 'Flood Run Example%' OR name = 'First Import Example'")->fetchAll(PDO::FETCH_COLUMN)));
+    $ctx->db->exec("DELETE FROM deliveries WHERE subject LIKE '%Flood%' OR subject LIKE '%Many new Fail findings at once%'");
+    $ids = implode(',', array_map('intval', $ctx->db->query("SELECT id FROM clients WHERE name LIKE 'Flood Run Example%'")->fetchAll(PDO::FETCH_COLUMN)));
     if ($ids !== '') {
         $ctx->db->exec("UPDATE clients SET is_archived = 1 WHERE id IN ({$ids})");
         $ctx->db->exec("UPDATE findings SET status = 'resolved', resolved_at = UTC_TIMESTAMP() WHERE client_id IN ({$ids})");
@@ -43,27 +43,6 @@ $floodCleanup = static function (TestContext $ctx): void {
 };
 
 return [
-    'alert floods (1.49): a new source\'s first import is one summary, not an alert per finding' => function (TestContext $ctx) use ($seed, $changed, $count, $floodCleanup): void {
-        [$cid, $ninja] = $seed($ctx, 'First Import Example', 5, 'ninjaone');
-        [, $scan] = (static function () use ($ctx, $cid): array {
-            $ctx->db->prepare("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, detail, target, evidence, status, first_seen, last_seen, opened_at, due_at, source)
-                               VALUES (:c, 'port:203.0.113.200:3389', 'port', 'fail', 'Scan-found problem', 'Open.', '203.0.113.200:3389', 'x', 'open', UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP(), 'scan')")
-                ->execute(['c' => $cid]);
-            return [null, [(int) $ctx->db->lastInsertId()]];
-        })();
-        $ctx->db->prepare("INSERT INTO source_links (client_id, source, org_id, org_name, linked_by, linked_at, last_sync_at, first_synced_at)
-                           VALUES (:c, 'ninjaone', 'flood-org', 'Flood Org', 1, UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP() - INTERVAL 1 HOUR)")->execute(['c' => $cid]);
-        App::alerts()->findingsChanged($cid, $changed(array_merge($ninja, $scan)), false);
-        Assert::same(0, $count($ctx, 'Fail: Flood test problem%'), 'no alert per first-import finding');
-        Assert::same(1, $count($ctx, 'Fail: Scan-found problem'), 'other sources alert as usual');
-        Assert::same(1, $count($ctx, 'First Import Example: first import found 5 Fail%'), 'one summary');
-        // After the first day, the source alerts like any other.
-        $ctx->db->exec("UPDATE source_links SET first_synced_at = UTC_TIMESTAMP() - INTERVAL 2 DAY WHERE client_id = {$cid}");
-        $ctx->db->exec('DELETE FROM finding_events WHERE finding_id IN (' . implode(',', $ninja) . ")");
-        App::alerts()->findingsChanged($cid, $changed([$ninja[0]]), false);
-        Assert::same(1, $count($ctx, 'Fail: Flood test problem 1'), 'alerts again after the first day');
-        $floodCleanup($ctx);
-    },
     'alert floods (1.49): one run sends at most 60 immediate Fail alerts across clients, then one notice' => function (TestContext $ctx) use ($seed, $changed, $count, $floodCleanup): void {
         $before = $count($ctx, 'Fail: Flood test problem%');
         $alerts = App::alerts(); // one run, like a feeds job

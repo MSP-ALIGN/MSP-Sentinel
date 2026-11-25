@@ -56,8 +56,7 @@ What happens next:
   can't reopen a closed ticket). Without a clear answer within 10 days, Sentinel stops waiting and says so on the
   finding.
 - No backlog: a client linked to ITFlow later (by hand or by name), or restored from the archive, gets tickets only
-  for findings from then on. A newly linked inventory source's first import (its first day) gets no tickets either:
-  review it from its summary. Breached email addresses are masked in tickets, as in alerts.
+  for findings from then on. Breached email addresses are masked in tickets, as in alerts.
 - A ticket ITFlow refuses is retried later and the reason shows on the finding. Every change is in the audit log as
   "itflow-sync" and in the finding's history.
 

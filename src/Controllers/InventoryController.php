@@ -86,7 +86,7 @@ final class InventoryController extends Controller
             return Response::redirect('/clients/' . (int) $client['id'] . '/inventory/link?source=' . rawurlencode($name));
         }
         // Another organisation than before (1.49): unlink the old one first, so its devices and their findings leave this
-        // client (closed as "unlinked", not as fixed) instead of staying for good; the new one starts as a first import.
+        // client (closed as "unlinked", not as fixed) instead of staying for good.
         $previous = App::inventory()->link((int) $client['id'], $name);
         if ($previous !== null && (string) $previous['org_id'] !== $org['id']) {
             App::inventorySync()->unlink((int) $client['id'], $name, (int) $this->user()['id']);

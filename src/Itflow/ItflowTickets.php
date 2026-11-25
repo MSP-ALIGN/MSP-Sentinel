@@ -870,10 +870,7 @@ final class ItflowTickets
              FROM findings f JOIN clients c ON c.id = f.client_id AND c.is_archived = 0 AND c.is_demo = 0 AND c.itflow_client_id IS NOT NULL AND c.itflow_sync_off = 0
              LEFT JOIN kev_catalog k ON k.cve_id = f.cve_id
              LEFT JOIN itflow_tickets t ON t.kind IN ('finding', 'member') AND t.finding_id = f.id
-             LEFT JOIN source_links sl ON sl.client_id = f.client_id AND sl.source = f.source
              WHERE f.status = 'open' AND (t.id IS NULL OR t.state = 'gone' OR (t.state = 'failed' AND t.retry_at <= UTC_TIMESTAMP()))
-               -- not a source's first import (its first day, 1.49): reviewed from one summary, not ticketed one by one
-               AND (t.id IS NOT NULL OR sl.first_synced_at IS NULL OR COALESCE(f.opened_at, f.first_seen) > sl.first_synced_at + INTERVAL " . \Sentinel\Alerts\AlertService::FIRST_IMPORT_HOURS . " HOUR)
                AND (f.severity = 'fail' OR k.cve_id IS NOT NULL OR t.state = 'failed')
                AND (t.id IS NOT NULL OR COALESCE(f.opened_at, f.first_seen) >= :since OR k.date_added >= DATE(:since2))
                AND (t.id IS NOT NULL OR c.itflow_resumed_at IS NULL OR COALESCE(f.opened_at, f.first_seen) >= c.itflow_resumed_at)

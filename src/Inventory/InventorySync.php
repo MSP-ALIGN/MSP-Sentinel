@@ -148,9 +148,6 @@ final class InventorySync
             if (!$stats['linked']) {
                 return ['status' => 'skipped', 'message' => __('The client was unlinked while syncing.')];
             }
-            // The link's first sync (1.49): its findings for the first day are one summary, without alerts or tickets each.
-            $this->db->prepare('UPDATE source_links SET first_synced_at = UTC_TIMESTAMP() WHERE client_id = :c AND source = :s AND first_synced_at IS NULL')
-                ->execute(['c' => $clientId, 's' => $sourceName]);
             $pending = 0;
             if ($this->matcher !== null) {
                 try {

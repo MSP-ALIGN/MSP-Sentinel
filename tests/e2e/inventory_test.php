@@ -232,7 +232,7 @@ return [
         $res = $admin->submit('/clients/new', '/clients', ['name' => 'Relink Example', 'itflow_client_id' => '', 'timezone' => 'UTC', 'scan_window_start' => '00:00', 'scan_window_end' => '23:59', 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);
         $cid = (int) basename((string) $res->location());
         // Linked (by mistake) to org-102, with a device and an open finding from it.
-        $ctx->db->exec("INSERT INTO source_links (client_id, source, org_id, org_name, linked_by, linked_at, last_sync_at, first_synced_at) VALUES ({$cid}, 'ninjaone', 'org-102', 'Hilltop Example', 1, UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP() - INTERVAL 3 DAY)");
+        $ctx->db->exec("INSERT INTO source_links (client_id, source, org_id, org_name, linked_by, linked_at, last_sync_at) VALUES ({$cid}, 'ninjaone', 'org-102', 'Hilltop Example', 1, UTC_TIMESTAMP(), UTC_TIMESTAMP())");
         $ctx->db->exec("INSERT INTO devices (client_id, source, source_id, name, device_class, os_name, ip_addresses, first_seen, last_seen) VALUES ({$cid}, 'ninjaone', 'hill-1', 'HILL-WS-01', 'workstation', 'Windows 11 Pro', '192.0.2.77', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
         $dev = (int) $ctx->db->lastInsertId();
         $ctx->db->exec("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, detail, target, evidence, status, first_seen, last_seen, opened_at, due_at, source, device_id)
@@ -243,6 +243,5 @@ return [
         Assert::same('org-fail', (string) $ctx->db->query("SELECT org_id FROM source_links WHERE client_id = {$cid}")->fetchColumn(), 'linked to the new organisation');
         Assert::true($ctx->db->query("SELECT removed_at FROM devices WHERE id = {$dev}")->fetchColumn() !== null, 'the old organisation\'s device left the client');
         Assert::same(['resolved', 'unlinked'], array_values($ctx->db->query("SELECT status, resolved_reason FROM findings WHERE id = {$fid}")->fetch(PDO::FETCH_NUM)), 'its finding closed as unlinked, not fixed');
-        Assert::same(null, $ctx->db->query("SELECT first_synced_at FROM source_links WHERE client_id = {$cid}")->fetchColumn(), 'the new organisation starts as a first import');
     },
 ];

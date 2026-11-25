@@ -15,9 +15,9 @@ From a full review of how devices, findings, alerts and tickets fit together.
   due date, alert and ticket. An empty antivirus report never marks every PC as having no antivirus.
 - **The right device.** An address DHCP gives to a different machine no longer carries over the old device's record,
   name and findings. Re-linking a client to another NinjaOne organisation retires the old organisation's devices.
-- **No floods.** A newly linked source's first import (its first day) is one summary per client, without an alert or
-  ticket each. One run sends at most 60 immediate Fail alerts across clients. Linking a client to ITFlow, or
-  restoring it, no longer opens tickets for months of old findings.
+- **No floods.** One run sends at most 60 immediate Fail alerts across clients (for example after new vulnerability
+  data), then one notice. Linking a client to ITFlow, or restoring it, no longer opens tickets for months of old
+  findings.
 - **Honest tickets.** When Sentinel stops tracking a problem without seeing it fixed (device gone, source unlinked),
   the ticket gets a note saying so and stays open, instead of "Verified fixed". A ticket interrupted before it was
   opened is retried instead of blocking. Breached email addresses are masked in tickets, as in alerts.

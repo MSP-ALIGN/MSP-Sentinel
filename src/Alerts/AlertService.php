@@ -54,9 +54,6 @@ final class AlertService
     private const MAX_IMMEDIATE_PER_RUN = 60;
     private const RUN_WINDOW = 600;
 
-    /** A source's first import lasts this long after its first sync (its CVE data arrives a few hours later). */
-    public const FIRST_IMPORT_HOURS = 24;
-
     private int $immediateSent = 0;
     private int $windowStart = 0;
     private bool $runLimitNoticed = false;
@@ -87,15 +84,6 @@ final class AlertService
         $warns = array_values(array_filter($new, static fn (array $f): bool => $f['severity'] === 'warn' && $f['status'] === 'open'));
         $resolved = $this->findings($result['resolved_ids']);
 
-        // A source's first import (1.49): one summary for everything it brought, no alert per finding.
-        $importing = $this->importingSources($clientId);
-        if ($importing !== []) {
-            $first = array_values(array_filter(array_merge($fails, $warns), static fn (array $f): bool => isset($importing[(string) $f['source']])));
-            if ($first !== []) {
-                $fails = array_values(array_filter($fails, static fn (array $f): bool => !isset($importing[(string) $f['source']])));
-                $this->firstImportSummary($clientId, $client, $first);
-            }
-        }
         // Immediate alerts for new Fail findings (summarised if there are very many), skipping
         // findings that already alerted in the last 24 hours (flapping), within a limit per run across clients.
         $fresh = array_values(array_filter($fails, fn (array $f): bool => !$this->alertedRecently((int) $f['id'])));
@@ -148,35 +136,6 @@ final class AlertService
             $title . "\n\n" . implode("\n", array_slice($items, 0, 200)) . "\n\n" . $this->absolute($link));
         $this->queueWebhook(['title' => $title, 'text' => __('Changes after the latest checks.'), 'severity' => $fails !== [] ? 'fail' : ($warns !== [] ? 'warn' : 'info'),
                              'client' => $client, 'items' => $items, 'link' => $this->absolute($link)]);
-    }
-
-    /**
-     * Inventory sources of a client still in their first import (1.49): source => true while its first sync was less
-     * than FIRST_IMPORT_HOURS ago.
-     *
-     * @return array<string,true>
-     */
-    private function importingSources(int $clientId): array
-    {
-        $stmt = $this->db->prepare('SELECT source FROM source_links WHERE client_id = :c AND first_synced_at > UTC_TIMESTAMP() - INTERVAL ' . self::FIRST_IMPORT_HOURS . ' HOUR');
-        $stmt->execute(['c' => $clientId]);
-        return array_fill_keys(array_map('strval', $stmt->fetchAll(PDO::FETCH_COLUMN)), true);
-    }
-
-    /**
-     * One summary of what a source's first import brought for a client (1.49), instead of an alert per finding: in-app
-     * for those who see the client, and an email to the team addresses.
-     *
-     * @param list<array<string,mixed>> $found
-     */
-    private function firstImportSummary(int $clientId, string $client, array $found): void
-    {
-        $fails = count(array_filter($found, static fn (array $f): bool => $f['severity'] === 'fail'));
-        $title = __('{client}: first import found {f} Fail and {w} Warning finding(s)', ['client' => $client, 'f' => $fails, 'w' => count($found) - $fails]);
-        $body = __('These came from a newly connected source. To avoid a flood, they get this summary instead of an alert each, and no tickets; review them on the client\'s Findings page. New findings after the first day alert as usual.');
-        $link = '/clients/' . $clientId . '/findings';
-        $this->notifyUsers('digest', $fails > 0 ? 'fail' : 'warn', $title, $body, $link, null, $clientId);
-        $this->queueEmail($this->teamAddresses(), '[' . $client . '] ' . $title, $title . "\n\n" . $body . "\n\n" . $this->absolute($link));
     }
 
     /** A scan job failed: tell admins (in-app) and the team addresses. */
