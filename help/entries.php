@@ -366,6 +366,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.54.1',
+            'date' => '2026-11-25',
+            'items' => [
+                'Fixes from review: the ITFlow sync carries on past an ITFlow client linked to another (e.g. demo) client; the client form says "already in use" instead of failing; an old duplicate ITFlow ID is kept on the older client and shown on the other\'s Edit page; linking by name and "tickets from now on" are saved together.',
+            ],
+        ],
+        [
             'version' => '1.54.0',
             'date' => '2026-11-25',
             'items' => [

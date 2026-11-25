@@ -23,11 +23,12 @@ final class ClientLinks
 
     /**
      * Link a client to a PSA client, or unlink it (null). Refuses (DomainException) when that PSA client is linked to
-     * another Sentinel client.
+     * another Sentinel client or the ID isn't valid; a link made elsewhere at the same moment fails with PDOException 1062.
      */
     public function set(int $clientId, string $provider, ?string $externalId): void
     {
-        if ($externalId !== null && ($externalId === '' || strlen($externalId) > 64)) {
+        if ($externalId !== null && ($externalId === '' || strlen($externalId) > 64
+            || ($provider === 'itflow' && preg_match('/^[1-9][0-9]{0,9}$/', $externalId) !== 1))) { // ITFlow: whole numbers, written plainly (1.54.1)
             throw new \DomainException('Not a valid client ID for ' . $provider . '.');
         }
         $owner = $externalId === null ? null : $this->clientFor($provider, $externalId);
@@ -36,9 +37,13 @@ final class ClientLinks
         }
         if ($externalId === null) {
             $this->db->prepare('DELETE FROM psa_client_links WHERE client_id = :c AND provider = :p')->execute(['c' => $clientId, 'p' => $provider]);
+        } elseif ($this->externalFor($clientId, $provider) !== null) {
+            // Update, then insert, never "insert or update" (1.54.1): a PSA client someone linked elsewhere in the meantime
+            // then fails on the unique key (PDOException 1062) instead of being silently skipped.
+            $this->db->prepare('UPDATE psa_client_links SET linked_at = IF(external_id = :e1, linked_at, UTC_TIMESTAMP()), external_id = :e2 WHERE client_id = :c AND provider = :p')
+                ->execute(['e1' => $externalId, 'e2' => $externalId, 'c' => $clientId, 'p' => $provider]);
         } else {
-            $this->db->prepare('INSERT INTO psa_client_links (client_id, provider, external_id, linked_at) VALUES (:c, :p, :e, UTC_TIMESTAMP())
-                                ON DUPLICATE KEY UPDATE linked_at = IF(external_id = VALUES(external_id), linked_at, VALUES(linked_at)), external_id = VALUES(external_id)')
+            $this->db->prepare('INSERT INTO psa_client_links (client_id, provider, external_id, linked_at) VALUES (:c, :p, :e, UTC_TIMESTAMP())')
                 ->execute(['c' => $clientId, 'p' => $provider, 'e' => $externalId]);
         }
         if ($provider === 'itflow') {

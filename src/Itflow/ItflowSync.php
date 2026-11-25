@@ -154,8 +154,9 @@ final class ItflowSync
             }
             try {
                 $this->syncOne($c, $name, $s, $byItflow, $byName, $offName);
-            } catch (\PDOException $ex) {
-                // e.g. someone created a client with this name at the same moment: count it, carry on with the rest
+            } catch (\PDOException|\DomainException $ex) {
+                // e.g. someone created a client with this name at the same moment, or the ITFlow client is linked to another
+                // (e.g. demo) client (1.54.1): count it, carry on with the rest
                 error_log('[msp-sentinel] ITFlow sync, client ' . $c['id'] . ': ' . $ex->getMessage());
                 $s['conflicts']++;
             }
@@ -185,8 +186,16 @@ final class ItflowSync
             $same = $byName->fetch();
             if ($same !== false) {
                 // Linked by name (1.49): only findings from now on get ITFlow tickets, not months of old ones.
-                (new \Sentinel\Psa\ClientLinks($this->db))->set((int) $same['id'], 'itflow', (string) $c['id']);
-                $this->db->prepare('UPDATE clients SET itflow_resumed_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['id' => $same['id']]);
+                // The link and "tickets from now on" together (1.54.1), so a broken run never links without the latter.
+                $this->db->beginTransaction();
+                try {
+                    $this->db->prepare('UPDATE clients SET itflow_resumed_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['id' => $same['id']]);
+                    (new \Sentinel\Psa\ClientLinks($this->db))->set((int) $same['id'], 'itflow', (string) $c['id']);
+                    $this->db->commit();
+                } catch (\Throwable $ex) {
+                    $this->db->rollBack();
+                    throw $ex;
+                }
                 $this->log('client.itflow_linked', (int) $same['id'], ['itflow_client_id' => $c['id']]);
                 $s['linked']++;
                 $mine = $same + ['itflow_client_id' => $c['id']];

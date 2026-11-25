@@ -73,7 +73,15 @@ final class ClientController extends Controller
         if ($errors !== []) {
             return $this->page('clients/form', __('Add client'), ['mode' => 'create', 'values' => $values, 'errors' => $errors], 422);
         }
-        $id = App::clients()->create($clean, (int) $this->user()['id']);
+        try {
+            $id = App::clients()->create($clean, (int) $this->user()['id']);
+        } catch (\DomainException|\PDOException $ex) {
+            // Linked elsewhere in the meantime (1.54.1): the unique link refused it; nothing was saved.
+            if ($ex instanceof \PDOException && ($ex->errorInfo[1] ?? 0) !== 1062) {
+                throw $ex;
+            }
+            return $this->page('clients/form', __('Add client'), ['mode' => 'create', 'values' => $values, 'errors' => ['itflow_client_id' => __('This ITFlow client can\'t be linked here: it is already in use. Ask an admin who sees every client.')]], 422);
+        }
         // Someone limited to some clients gets the client they just added (1.41), else they couldn't open it.
         if (App::auth()->clientIds() !== null) {
             App::db()->prepare('INSERT IGNORE INTO user_clients (user_id, client_id) VALUES (:u, :c)')->execute(['u' => (int) $this->user()['id'], 'c' => $id]);
@@ -306,7 +314,15 @@ final class ClientController extends Controller
         if ($errors !== []) {
             return $this->page('clients/form', __('Edit client'), ['mode' => 'edit', 'client' => $client, 'values' => $values, 'errors' => $errors], 422);
         }
-        App::clients()->update($id, $clean);
+        try {
+            App::clients()->update($id, $clean);
+        } catch (\DomainException|\PDOException $ex) {
+            if ($ex instanceof \PDOException && ($ex->errorInfo[1] ?? 0) !== 1062) {
+                throw $ex;
+            }
+            return $this->page('clients/form', __('Edit client'), ['mode' => 'edit', 'client' => $client, 'values' => $values,
+                'errors' => ['itflow_client_id' => __('This ITFlow client can\'t be linked here: it is already in use. Ask an admin who sees every client.')]], 422);
+        }
         $changes = [];
         foreach (['name', 'itflow_client_id', 'timezone', 'scan_window_start', 'scan_window_end', 'ports_extra', 'ports_excluded', 'itflow_sync_off'] as $field) {
             $old = $field === 'scan_window_start' || $field === 'scan_window_end' ? substr((string) $client[$field], 0, 5) : (string) $client[$field];
@@ -431,7 +447,8 @@ final class ClientController extends Controller
                 // One ITFlow client per Sentinel client (1.42.1): else tickets would go to another client's ITFlow record.
                 // Checked only when it changes (1.42.2: an old duplicate never blocks other edits); the message names
                 // no other client, which the user may not see. The database index (migration 0048) backs it up.
-                $current = $exceptId === null ? null : App::clients()->find($exceptId)['itflow_client_id'] ?? null;
+                // From the link table (1.54.1): a client left without a link (an old duplicate) sees "already in use" here.
+                $current = $exceptId === null ? null : (new \Sentinel\Psa\ClientLinks(App::db()))->externalFor($exceptId, 'itflow');
                 $taken = App::db()->prepare("SELECT COUNT(*) FROM psa_client_links WHERE provider = 'itflow' AND external_id = :i AND client_id <> :x");
                 $taken->execute(['i' => (string) $itflow, 'x' => $exceptId ?? 0]);
                 if (($current === null || (int) $current !== $itflow) && (int) $taken->fetchColumn() > 0) {

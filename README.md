@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.54.0](https://img.shields.io/badge/version-1.54.0-ff5a1f?style=flat-square)
+![Version 1.54.1](https://img.shields.io/badge/version-1.54.1-ff5a1f?style=flat-square)
 ![License AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,17 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.54.1 (2026-11-25): Fixes from review
+
+- **ITFlow sync keeps going.** When an ITFlow client is already linked to another Sentinel client (for example a demo
+  client), the sync counts it as a conflict and carries on with the rest, instead of stopping.
+- **The client form never fails on a taken ITFlow ID.** It says "already in use", also when the ID was linked elsewhere
+  at the same moment.
+- **Old duplicates.** On an install where two clients shared one ITFlow ID, the upgrade keeps the link on the older
+  client, logs the other, and that client's Edit page shows "already in use" until the duplicate is cleared.
+- Linking a client to ITFlow by name and "tickets only from now on" are saved together, so a broken run can never
+  open tickets for old findings.
+
 ### 1.54.0 (2026-11-25): Client links ready for other ticketing systems
 
 Nothing changes in how ITFlow works.
@@ -135,18 +146,6 @@ Nothing changes in how ITFlow works.
 - When a ticketing system can't look a ticket up after an unclear answer, the "check for a duplicate" warning is also
   in the finding's history, where technicians see it. (ITFlow can look tickets up, so this doesn't affect it.)
 - The ITFlow connection is read once per run; tests of the ticketing layer no longer touch other clients.
-
-### 1.53.0 (2026-11-25): Ready for more ticketing systems
-
-The next step towards working with ticketing systems besides ITFlow. Nothing changes in how ITFlow works.
-
-- **One ticketing layer.** Opening, following, resolving and reopening tickets, and the client sync, now go through a
-  general ticketing layer, with ITFlow as its first system. Another PSA can be added later without touching the ticket
-  rules (one ticket per issue, two-way status, rechecks, the weekly Warnings ticket).
-- **Adapts to what a PSA can do.** A PSA that can reopen closed tickets gets them reopened instead of replaced. One
-  that can't look a ticket up again after an unclear answer gets it opened again, with a note to check for a
-  duplicate. ITFlow keeps its current behavior on both.
-- Service boards and the client tag filter are used only with PSAs that have them.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

@@ -200,4 +200,54 @@ return [
         $links->set($a, 'otherpsa', null);
         Assert::same(null, $links->externalFor($a, 'otherpsa'), 'unlinked');
     },
+    'client links (1.54.1): a sync meeting a link held by a demo client carries on; the form says "already in use", never fails' => function (TestContext $ctx): void {
+        $s = App::settings();
+        $saved = ['itflow_enabled' => $s->fresh('itflow_enabled'), 'itflow_tag_filter' => $s->fresh('itflow_tag_filter')];
+        $links = new \Sentinel\Psa\ClientLinks($ctx->db);
+        $ctx->db->exec("INSERT INTO clients (name, timezone, scan_window_start, scan_window_end, notes, ports_extra, ports_excluded, is_demo, created_at, updated_at)
+                        VALUES ('Demo Link Example', 'UTC', '22:00:00', '06:00:00', '', '', '', 1, UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+        $demo = (int) $ctx->db->lastInsertId();
+        $links->set($demo, 'itflow', '993');
+        $ctx->db->exec("INSERT INTO clients (name, timezone, scan_window_start, scan_window_end, notes, ports_extra, ports_excluded, created_at, updated_at)
+                        VALUES ('Same Name Example', 'UTC', '22:00:00', '06:00:00', '', '', '', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+        $real = (int) $ctx->db->lastInsertId();
+        $directory = new class implements \Sentinel\Psa\ClientDirectory {
+            /** ITFlow client 993 (linked to the demo client) has the real client's name; 994 is new (test double). */
+            public function clients(): array
+            {
+                return [['id' => 993, 'name' => 'Same Name Example', 'archived' => false], ['id' => 994, 'name' => 'After Conflict Example', 'archived' => false]];
+            }
+        };
+        try {
+            $s->set('itflow_enabled', '1');
+            $s->set('itflow_tag_filter', '0');
+            $result = (new \Sentinel\Itflow\ItflowSync($ctx->db, $s, App::audit(), $directory))->sync();
+            Assert::notContains('Failed', $result, $result);
+            Assert::contains('1 new', $result, 'the next client is still processed');
+            Assert::same(null, $links->externalFor($real, 'itflow'), 'the real client is not linked to a PSA client the demo client holds');
+            // The form: an ID linked elsewhere is "already in use" (422), never an error page.
+            $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+            $res = $admin->submit('/clients/' . $real . '/edit', '/clients/' . $real, ['name' => 'Same Name Example', 'itflow_client_id' => '993', 'timezone' => 'UTC',
+                'scan_window_start' => '22:00', 'scan_window_end' => '06:00', 'notes' => '', 'ports_extra' => '', 'ports_excluded' => '']);
+            Assert::status(422, $res);
+            Assert::contains('already in use', $res->body);
+            // ITFlow IDs are whole numbers written plainly.
+            $bad = false;
+            try {
+                $links->set($real, 'itflow', '007');
+            } catch (\DomainException) {
+                $bad = true;
+            }
+            Assert::true($bad, 'a non-canonical ITFlow ID is refused');
+        } finally {
+            foreach ($saved as $k => $v) {
+                $s->set($k, $v);
+            }
+            $created = (int) $ctx->db->query("SELECT client_id FROM psa_client_links WHERE provider = 'itflow' AND external_id = '994'")->fetchColumn();
+            foreach (array_filter([$demo, $real, $created]) as $id) {
+                $links->set($id, 'itflow', null);
+                $ctx->db->exec("UPDATE clients SET is_archived = 1 WHERE id = {$id}");
+            }
+        }
+    },
 ];
