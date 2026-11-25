@@ -104,7 +104,7 @@ final class ItflowSync
                 }
                 $ok = true;
                 // Keep the board list fresh for the Integrations page (1.44.1); a board problem never fails the sync.
-                if ($this->settings->get('itflow_tickets_enabled') === '1' && $this->psa instanceof \Sentinel\Psa\TicketBoards) {
+                if ($this->settings->get('tickets_enabled') === '1' && $this->psa instanceof \Sentinel\Psa\TicketBoards) {
                     try {
                         $this->psa->refreshBoards($this->settings);
                     } catch (\Sentinel\Psa\PsaException) {

@@ -2,6 +2,15 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.55.0 (2026-11-25): Tickets ready for other ticketing systems
+
+Nothing changes in how ITFlow works.
+
+- **Each ticket knows its system.** Every ticket Sentinel follows now records which ticketing system it belongs to,
+  and its ID there as text, so systems with text ticket IDs fit. Existing tickets are filled in on upgrade.
+- **Neutral ticket settings.** "Open tickets for findings", "since when" and the weekly Warnings ticket, and the last
+  run's result, are stored under names that don't depend on ITFlow. Your current choices are copied over on upgrade.
+
 ### 1.54.1 (2026-11-25): Fixes from review
 
 - **ITFlow sync keeps going.** When an ITFlow client is already linked to another Sentinel client (for example a demo

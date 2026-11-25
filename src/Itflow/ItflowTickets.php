@@ -79,10 +79,10 @@ final class ItflowTickets
     /** Run when due (worker). Returns the summary, or null when nothing ran. */
     public function runIfDue(): ?string
     {
-        if ($this->psa === null || $this->settings->fresh('itflow_tickets_enabled') !== '1') {
+        if ($this->psa === null || $this->settings->fresh('tickets_enabled') !== '1') {
             return null;
         }
-        $last = $this->settings->fresh('itflow_tickets_last_run');
+        $last = $this->settings->fresh('tickets_last_run');
         if ($last !== '' && strtotime($last . ' UTC') > time() - self::INTERVAL_MINUTES * 60) {
             return null;
         }
@@ -105,7 +105,7 @@ final class ItflowTickets
             return 'Another ticket run is going.';
         }
         try {
-            $this->settings->set('itflow_tickets_last_run', gmdate('Y-m-d H:i:s'));
+            $this->settings->set('tickets_last_run', gmdate('Y-m-d H:i:s'));
             $this->n = ['tickets' => 0, 'weekly' => 0, 'notes' => 0, 'resolved' => 0, 'reopened' => 0, 'replaced' => 0, 'rechecks' => 0, 'confirmed' => 0, 'skipped' => 0];
             $this->lastSkip = '';
             $this->boardId = false;
@@ -132,8 +132,8 @@ final class ItflowTickets
                 . ($n['skipped'] > 0 ? sprintf(' %d refused by ITFlow (retried later), last: %s', $n['skipped'], $this->lastSkip) : '')
                 . ($this->boardNote !== '' ? ' Board: ' . $this->boardNote . '.' : '')
                 . ($error !== '' ? ' Stopped: ' . $error : '');
-            $this->settings->set('itflow_tickets_last_result', mb_substr($summary, 0, 500));
-            $this->settings->set('itflow_tickets_last_ok', $error === '' && $n['skipped'] === 0 && $this->boardNote === '' ? '1' : '0');
+            $this->settings->set('tickets_last_result', mb_substr($summary, 0, 500));
+            $this->settings->set('tickets_last_ok', $error === '' && $n['skipped'] === 0 && $this->boardNote === '' ? '1' : '0');
             return $summary;
         } finally {
             $this->db->query("SELECT RELEASE_LOCK({$lock})");
@@ -594,8 +594,8 @@ final class ItflowTickets
     /** Copy a leading row's ticket number to its members once ITFlow has answered. */
     private function syncMembers(int $rowId, int $ticketId, string $reference): void
     {
-        $this->db->prepare("UPDATE itflow_tickets SET itflow_ticket_id = :t, reference = :r WHERE kind = 'member' AND parent_id = :p")
-            ->execute(['t' => $ticketId, 'r' => $reference, 'p' => $rowId]);
+        $this->db->prepare("UPDATE itflow_tickets SET itflow_ticket_id = :t, external_ticket_id = :x, reference = :r WHERE kind = 'member' AND parent_id = :p")
+            ->execute(['t' => $ticketId, 'x' => self::textId($ticketId), 'r' => $reference, 'p' => $rowId]);
     }
 
     /**
@@ -800,9 +800,9 @@ final class ItflowTickets
     /** Insert a pending row (itflow_ticket_id 0 until ITFlow answers). Returns its ID. */
     private function newRow(int $clientId, string $kind, ?int $findingId, string $severity, bool $kev): int
     {
-        $this->db->prepare("INSERT INTO itflow_tickets (client_id, kind, finding_id, itflow_ticket_id, severity_at_open, kev_noted, state, created_at)
-                            VALUES (:c, :k, :f, 0, :s, :kev, 'pending', UTC_TIMESTAMP())")
-            ->execute(['c' => $clientId, 'k' => $kind, 'f' => $findingId, 's' => in_array($severity, ['fail', 'warn'], true) ? $severity : null, 'kev' => $kev ? 1 : 0]);
+        $this->db->prepare("INSERT INTO itflow_tickets (client_id, kind, finding_id, provider, itflow_ticket_id, severity_at_open, kev_noted, state, created_at)
+                            VALUES (:c, :k, :f, :pr, 0, :s, :kev, 'pending', UTC_TIMESTAMP())")
+            ->execute(['c' => $clientId, 'k' => $kind, 'f' => $findingId, 'pr' => $this->psa->name(), 's' => in_array($severity, ['fail', 'warn'], true) ? $severity : null, 'kev' => $kev ? 1 : 0]);
         return (int) $this->db->lastInsertId();
     }
 
@@ -909,8 +909,18 @@ final class ItflowTickets
     /** @param array<string,mixed> $fields column => value; the column names are this class's own, never input */
     private function setRow(int $id, array $fields): void
     {
+        if (array_key_exists('itflow_ticket_id', $fields)) {
+            $fields['external_ticket_id'] = self::textId($fields['itflow_ticket_id']); // kept in step (1.55)
+        }
         $sets = implode(', ', array_map(static fn (string $k): string => "{$k} = :{$k}", array_keys($fields)));
         $this->db->prepare("UPDATE itflow_tickets SET {$sets} WHERE id = :id")->execute($fields + ['id' => $id]);
+    }
+
+    /** A ticket ID as stored in external_ticket_id (1.55): the PSA's ID as text, '' for none (0 or empty). */
+    private static function textId(mixed $id): string
+    {
+        $text = trim((string) $id);
+        return $text === '0' ? '' : mb_substr($text, 0, 64);
     }
 
     /** A line in the finding's history. */
@@ -929,7 +939,7 @@ final class ItflowTickets
         if ($this->budget <= 0) {
             return;
         }
-        $since = $this->settings->fresh('itflow_tickets_since');
+        $since = $this->settings->fresh('tickets_since');
         $since = $since !== '' ? $since : gmdate('Y-m-d H:i:s');
         $stmt = $this->db->prepare(
             "SELECT f.id, pl.external_id AS itflow_client_id, t.id AS row_id
@@ -1008,9 +1018,10 @@ final class ItflowTickets
      */
     private function addMember(array $leader, array $f, int|string $itflowClient): void
     {
-        $this->db->prepare("INSERT INTO itflow_tickets (client_id, kind, finding_id, parent_id, itflow_ticket_id, reference, severity_at_open, kev_noted, state, created_at)
-                            VALUES (:c, 'member', :f, :p, :t, :r, :s, :kev, 'open', UTC_TIMESTAMP())")
-            ->execute(['c' => (int) $f['client_id'], 'f' => (int) $f['id'], 'p' => (int) $leader['id'], 't' => (int) $leader['itflow_ticket_id'], 'r' => (string) $leader['reference'],
+        $this->db->prepare("INSERT INTO itflow_tickets (client_id, kind, finding_id, parent_id, provider, itflow_ticket_id, external_ticket_id, reference, severity_at_open, kev_noted, state, created_at)
+                            VALUES (:c, 'member', :f, :p, :pr, :t, :x, :r, :s, :kev, 'open', UTC_TIMESTAMP())")
+            ->execute(['c' => (int) $f['client_id'], 'f' => (int) $f['id'], 'p' => (int) $leader['id'], 'pr' => $this->psa->name(), 't' => (int) $leader['itflow_ticket_id'],
+                'x' => self::textId($leader['itflow_ticket_id']), 'r' => (string) $leader['reference'],
                 's' => in_array($f['severity'], ['fail', 'warn'], true) ? $f['severity'] : null, 'kev' => (int) $f['in_kev'] === 1 ? 1 : 0]);
         $memberRow = (int) $this->db->lastInsertId();
         try {
@@ -1064,16 +1075,16 @@ final class ItflowTickets
 
     /**
      * One ticket per client for Warnings, at most weekly, when there are Warnings not in the last one. Weekly
-     * tickets count from itflow_tickets_weekly_since (when tickets were turned on), which the "existing Fails"
+     * tickets count from tickets_weekly_since (when tickets were turned on), which the "existing Fails"
      * button doesn't move.
      */
     private function weeklyTickets(): void
     {
-        $since = $this->settings->fresh('itflow_tickets_weekly_since');
+        $since = $this->settings->fresh('tickets_weekly_since');
         if ($since === '') {
-            $since = $this->settings->fresh('itflow_tickets_since');
+            $since = $this->settings->fresh('tickets_since');
             $since = $since !== '' && $since >= '2001' ? $since : gmdate('Y-m-d H:i:s');
-            $this->settings->set('itflow_tickets_weekly_since', $since);
+            $this->settings->set('tickets_weekly_since', $since);
         }
         $clients = $this->db->query(
             "SELECT c.id, c.name, pl.external_id AS itflow_client_id,

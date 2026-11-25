@@ -197,7 +197,7 @@ return [
         App::settings()->setSecret('itflow_api_key', 'wrong-key-0123456789abcdef');
         Assert::contains('Stopped: ITFlow refused', App::itflowTickets()->run());
         App::settings()->set('itflow_enabled', '0');
-        App::settings()->set('itflow_tickets_enabled', '0');
+        App::settings()->set('tickets_enabled', '0');
     },
     'ITFlow two-way: fixed in Sentinel resolves the ticket; closed in ITFlow rechecks, then reopens or replaces' => function (TestContext $ctx) use ($base, $setItflow, $key): void {
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
@@ -415,7 +415,7 @@ return [
         Assert::same('open', $row($f3)['state']);
         $ctx->db->exec("UPDATE clients SET is_demo = 0, is_archived = 1 WHERE id = {$cid2}");
         App::settings()->set('itflow_enabled', '0');
-        App::settings()->set('itflow_tickets_enabled', '0');
+        App::settings()->set('tickets_enabled', '0');
         @unlink($dir . '/nmap-closed.json');
     },
     'ITFlow: one ticket per issue; it follows every target, resolves when all are fixed, and moves on when replaced' => function (TestContext $ctx) use ($base, $setItflow, $key): void {
@@ -604,7 +604,7 @@ return [
         $summary = App::itflowTickets()->run();
         Assert::same($tickets + 2, count($sent()['tickets']), 'ticket kept when the move is refused');
         Assert::contains('stayed on the default board', $summary);
-        Assert::same('0', App::settings()->fresh('itflow_tickets_last_ok'), 'the run is flagged');
+        Assert::same('0', App::settings()->fresh('tickets_last_ok'), 'the run is flagged');
         @unlink($failFile);
     },
 

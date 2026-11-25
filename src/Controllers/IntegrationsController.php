@@ -44,7 +44,7 @@ final class IntegrationsController extends Controller
                 'last_result' => $s->get('itflow_last_result'),
                 'last_ok' => $s->get('itflow_last_ok') !== '0',
                 'linked' => (int) App::db()->query('SELECT COUNT(*) FROM clients WHERE itflow_client_id IS NOT NULL AND is_demo = 0')->fetchColumn(),
-                'tickets' => $s->get('itflow_tickets_enabled') === '1',
+                'tickets' => $s->get('tickets_enabled') === '1',
                 'tag_filter' => $s->get('itflow_tag_filter') === '1',
                 'tag_name' => $s->get('itflow_tag_name'),
                 'sync_off' => (int) App::db()->query('SELECT COUNT(*) FROM clients WHERE itflow_sync_off = 1 AND is_demo = 0')->fetchColumn(),
@@ -56,9 +56,9 @@ final class IntegrationsController extends Controller
                     return is_array($c) ? array_values(array_filter($c, static fn ($b): bool => is_array($b) && is_int($b['id'] ?? null) && is_string($b['name'] ?? null))) : null;
                 })(),
                 'boards_checked' => $s->get('itflow_boards_cache') !== '',
-                'tickets_last_run' => $s->get('itflow_tickets_last_run'),
-                'tickets_last_result' => $s->get('itflow_tickets_last_result'),
-                'tickets_last_ok' => $s->get('itflow_tickets_last_ok') !== '0',
+                'tickets_last_run' => $s->get('tickets_last_run'),
+                'tickets_last_result' => $s->get('tickets_last_result'),
+                'tickets_last_ok' => $s->get('tickets_last_ok') !== '0',
                 'tickets_total' => (int) App::db()->query('SELECT COUNT(*) FROM itflow_tickets')->fetchColumn(),
             ],
             'sso' => [
@@ -503,9 +503,9 @@ final class IntegrationsController extends Controller
             $changed['itflow_api_key'] = 'cleared (address changed)';
         }
         $tickets = $request->input('tickets') === '1';
-        if ($tickets && $s->get('itflow_tickets_enabled') !== '1') {
-            $s->set('itflow_tickets_since', gmdate('Y-m-d H:i:s')); // only findings from now on (no flood when turning it on)
-            $s->set('itflow_tickets_weekly_since', gmdate('Y-m-d H:i:s'));
+        if ($tickets && $s->get('tickets_enabled') !== '1') {
+            $s->set('tickets_since', gmdate('Y-m-d H:i:s')); // only findings from now on (no flood when turning it on)
+            $s->set('tickets_weekly_since', gmdate('Y-m-d H:i:s'));
         }
         // The board for new tickets (1.44): '' = the one named Alerts, '0' = ITFlow's default, else a board ID. Untrusted.
         $board = $request->input('board');
@@ -516,11 +516,11 @@ final class IntegrationsController extends Controller
             $s->set('itflow_board', $board);
             $changed['itflow_board'] = $board;
         }
-        foreach (['itflow_url' => $url, 'itflow_enabled' => $enabled ? '1' : '0', 'itflow_tickets_enabled' => $tickets ? '1' : '0',
+        foreach (['itflow_url' => $url, 'itflow_enabled' => $enabled ? '1' : '0', 'tickets_enabled' => $tickets ? '1' : '0',
                   'itflow_tag_filter' => $tagFilter ? '1' : '0', 'itflow_tag_name' => $tagName] as $key => $value) {
             if ($s->get($key) !== $value) {
                 $s->set($key, $value);
-                $changed[$key] = in_array($key, ['itflow_enabled', 'itflow_tickets_enabled', 'itflow_tag_filter'], true) ? $value === '1' : $value;
+                $changed[$key] = in_array($key, ['itflow_enabled', 'tickets_enabled', 'itflow_tag_filter'], true) ? $value === '1' : $value;
             }
         }
         if ($request->input('clear_key') === '1') {
@@ -593,17 +593,17 @@ final class IntegrationsController extends Controller
     /**
      * POST /admin/integrations/itflow/tickets: open due tickets now; with existing=1 first include the open Fail findings
      * that were there before tickets were turned on (the rest follow every 5 minutes, MAX_PER_RUN at a time). Weekly
-     * Warnings tickets keep their own start (itflow_tickets_weekly_since), so this never sends every client one.
+     * Warnings tickets keep their own start (tickets_weekly_since), so this never sends every client one.
      */
     public function ticketsItflow(Request $request): Response
     {
         $back = Response::redirect('/admin/integrations#itflow');
-        if (App::itflow() === null || App::settings()->get('itflow_tickets_enabled') !== '1') {
+        if (App::itflow() === null || App::settings()->get('tickets_enabled') !== '1') {
             Session::flash('warning', __('Turn on ITFlow tickets and save first.'));
             return $back;
         }
         if ($request->input('existing') === '1') {
-            App::settings()->set('itflow_tickets_since', '2000-01-01 00:00:00');
+            App::settings()->set('tickets_since', '2000-01-01 00:00:00');
             $this->audit($request, 'itflow.tickets_for_existing');
         }
         @set_time_limit(120);

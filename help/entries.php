@@ -366,6 +366,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.55.0',
+            'date' => '2026-11-25',
+            'items' => [
+                'Tickets ready for other ticketing systems: each ticket records its system and its ID there as text, and the ticket settings no longer depend on ITFlow (copied over on upgrade). ITFlow works as before.',
+            ],
+        ],
+        [
             'version' => '1.54.1',
             'date' => '2026-11-25',
             'items' => [

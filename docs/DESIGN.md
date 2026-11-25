@@ -182,8 +182,10 @@ whether a ticket can be found again by its marker (otherwise an unclear create i
 duplicate). Errors are `PsaException` (refused one request, or stop the run). ITFlow is `Psa\ItflowProvider`, a thin
 adapter over `Itflow\ItflowClient`. One PSA is active at a time (`App::psa()`). Client links are in `psa_client_links`
 (1.54: provider, the PSA's client ID as exact text; one Sentinel client per PSA client), always changed through
-`Psa\ClientLinks`, which keeps `clients.itflow_client_id` in step for the REST API and MSP Align. Ticket rows still
-store integer ticket IDs; they become provider-neutral in the next step.
+`Psa\ClientLinks`, which keeps `clients.itflow_client_id` in step for the REST API and MSP Align. Ticket rows
+(`itflow_tickets`) record their `provider` and the ticket's ID as text (`external_ticket_id`, 1.55), written together
+with the old integer `itflow_ticket_id`; the ticket settings are `tickets_*`. Still to do before a PSA with text
+ticket IDs: read ticket IDs from `external_ticket_id`, then rename the table and drop the integer column.
 
 ## 7. Default port profile
 

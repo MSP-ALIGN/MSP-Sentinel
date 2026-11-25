@@ -2,6 +2,12 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.53.1 (2026-11-25): Fixes from review
+
+- When a ticketing system can't look a ticket up after an unclear answer, the "check for a duplicate" warning is also
+  in the finding's history, where technicians see it. (ITFlow can look tickets up, so this doesn't affect it.)
+- The ITFlow connection is read once per run; tests of the ticketing layer no longer touch other clients.
+
 ### 1.53.0 (2026-11-25): Ready for more ticketing systems
 
 The next step towards working with ticketing systems besides ITFlow. Nothing changes in how ITFlow works.

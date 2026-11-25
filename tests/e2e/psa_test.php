@@ -90,13 +90,13 @@ return [
     'ticketing layer (1.53): the workflow runs on any ticketing system and adapts to what it can do' => function (TestContext $ctx): void {
         $s = App::settings();
         // Only this test's client takes part (1.53.1): other tests' linked clients are set aside and put back after.
-        $saved = ['itflow_board' => $s->fresh('itflow_board'), 'itflow_tickets_since' => $s->fresh('itflow_tickets_since')];
+        $saved = ['itflow_board' => $s->fresh('itflow_board'), 'tickets_since' => $s->fresh('tickets_since')];
         $others = array_map('intval', $ctx->db->query('SELECT id FROM clients WHERE itflow_client_id IS NOT NULL AND itflow_sync_off = 0')->fetchAll(PDO::FETCH_COLUMN));
         if ($others !== []) {
             $ctx->db->exec('UPDATE clients SET itflow_sync_off = 1 WHERE id IN (' . implode(',', $others) . ')');
         }
         $s->set('itflow_board', '0');
-        $s->set('itflow_tickets_since', gmdate('Y-m-d H:i:s', time() - 3600));
+        $s->set('tickets_since', gmdate('Y-m-d H:i:s', time() - 3600));
         $ctx->db->exec("INSERT INTO clients (name, timezone, scan_window_start, scan_window_end, notes, ports_extra, ports_excluded, itflow_client_id, created_at, updated_at)
                         VALUES ('Fake PSA Example', 'UTC', '00:00:00', '23:59:00', '', '', '', 990, UTC_TIMESTAMP(), UTC_TIMESTAMP())");
         $cid = (int) $ctx->db->lastInsertId();
@@ -113,7 +113,7 @@ return [
             $tickets = new ItflowTickets($ctx->db, $s, App::audit(), $fake, '');
             $f = $add('port:203.0.113.95:23');
             $tickets->run();
-            Assert::same([['990', '[Sentinel] Fail: Telnet open - 203.0.113.95:23', 'High']], array_map(static fn (array $c): array => [$c[0], $c[1], $c[2]], $fake->calls['create']), 'one ticket, for the linked client, High for a Fail: ' . $s->fresh('itflow_tickets_last_result'));
+            Assert::same([['990', '[Sentinel] Fail: Telnet open - 203.0.113.95:23', 'High']], array_map(static fn (array $c): array => [$c[0], $c[1], $c[2]], $fake->calls['create']), 'one ticket, for the linked client, High for a Fail: ' . $s->fresh('tickets_last_result'));
             $ticket = (string) $ctx->db->query("SELECT itflow_ticket_id FROM itflow_tickets WHERE finding_id = {$f}")->fetchColumn();
             Assert::same('7001', $ticket, 'the fake\'s ticket ID is stored');
             $ctx->db->exec("UPDATE findings SET status = 'resolved', resolved_at = UTC_TIMESTAMP(), resolved_reason = '' WHERE id = {$f}");
@@ -248,6 +248,32 @@ return [
                 $links->set($id, 'itflow', null);
                 $ctx->db->exec("UPDATE clients SET is_archived = 1 WHERE id = {$id}");
             }
+        }
+    },
+    'tickets (1.55): every ticket row has its system and text ID in step with the number; ticket settings moved to neutral names' => function (TestContext $ctx): void {
+        // After every earlier ITFlow test: the text ID matches the number (empty for none), and the system is ITFlow.
+        $off = (int) $ctx->db->query("SELECT COUNT(*) FROM itflow_tickets WHERE provider <> 'itflow'
+                                       OR external_ticket_id <> IF(itflow_ticket_id > 0, CAST(itflow_ticket_id AS CHAR), '')")->fetchColumn();
+        Assert::same(0, $off, 'ticket text IDs in step');
+        Assert::true((int) $ctx->db->query("SELECT COUNT(*) FROM itflow_tickets WHERE external_ticket_id <> ''")->fetchColumn() > 0, 'there are tickets to compare');
+        // The migration copies old settings to the new names once, keeping a value already there, and runs twice safely.
+        $s = App::settings();
+        $saved = $s->fresh('tickets_weekly_since');
+        $savedSince = $s->fresh('tickets_since');
+        try {
+            $ctx->db->exec("DELETE FROM settings WHERE name = 'tickets_weekly_since'");
+            $ctx->db->exec("REPLACE INTO settings (name, value) VALUES ('itflow_tickets_weekly_since', '2026-01-02 03:04:05'), ('tickets_since', 'kept-value')");
+            $ctx->db->exec("REPLACE INTO settings (name, value) VALUES ('itflow_tickets_since', 'old-value')");
+            $migration = require dirname(__DIR__, 2) . '/migrations/0060_neutral_tickets.php';
+            $m = new \Sentinel\Migrations\Migrator($ctx->db, dirname(__DIR__, 2) . '/migrations');
+            $migration['up']($ctx->db, $m);
+            $migration['up']($ctx->db, $m);
+            Assert::same('2026-01-02 03:04:05', $s->fresh('tickets_weekly_since'), 'copied');
+            Assert::same('kept-value', $s->fresh('tickets_since'), 'a value already under the new name is kept');
+        } finally {
+            $ctx->db->exec("DELETE FROM settings WHERE name IN ('itflow_tickets_weekly_since', 'itflow_tickets_since')");
+            $s->set('tickets_weekly_since', $saved);
+            $s->set('tickets_since', $savedSince);
         }
     },
 ];
