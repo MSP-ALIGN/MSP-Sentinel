@@ -469,7 +469,8 @@ final class App
         $url = $s->fresh('itflow_url'); // read once, for the client and its ticket links
         $key = $s->getSecret('itflow_api_key');
         return $url === '' || $key === '' ? null
-            : new \Sentinel\Psa\ItflowProvider(new \Sentinel\Itflow\ItflowClient($url, $key, self::webhookTestMode()), $url, self::webhookTestMode());
+            : new \Sentinel\Psa\ItflowProvider(new \Sentinel\Itflow\ItflowClient($url, $key, self::webhookTestMode()), $url, self::webhookTestMode(),
+                (int) $s->fresh('itflow_ticket_template')); // the template for new tickets (1.56), 0 = none
     }
 
     /** PSA client sync (worker every 15 minutes, and "Sync now"). */

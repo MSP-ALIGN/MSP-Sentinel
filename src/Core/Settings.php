@@ -95,6 +95,10 @@ final class Settings
         'itflow_last_ok' => '',
         // ITFlow tickets from findings (ItflowTickets): on/off, from when, and the last run.
         'tickets_enabled' => '0',
+        // 1.56: one priority for every Sentinel ticket ('' = automatic: High, Urgent when exploited, Medium weekly), and an
+        // optional ITFlow ticket template whose category (tags, tasks, due time) new tickets get.
+        'tickets_priority' => '',
+        'itflow_ticket_template' => '',
         'tickets_since' => '', 'tickets_weekly_since' => '',
         // Moving agents to a new Sentinel address: ONE value in SECRETS (agent_move, JSON url/ca/requested_at), encrypted
         // and authenticated with the app key from the config file, so a database write alone can't set a move.

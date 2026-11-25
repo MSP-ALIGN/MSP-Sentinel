@@ -16,7 +16,8 @@ use Sentinel\Itflow\ItflowClient;
  */
 final class ItflowProvider implements TicketingProvider, TicketBoards, ClientDirectory, ClientTags
 {
-    public function __construct(private readonly ItflowClient $client, private readonly string $baseUrl, private readonly bool $allowHttp = false)
+    /** @param int $templateId An ITFlow ticket template for new tickets (1.56; 0 = none): their category comes from it. */
+    public function __construct(private readonly ItflowClient $client, private readonly string $baseUrl, private readonly bool $allowHttp = false, private readonly int $templateId = 0)
     {
     }
 
@@ -41,7 +42,7 @@ final class ItflowProvider implements TicketingProvider, TicketBoards, ClientDir
     /** {@inheritDoc} */
     public function createTicket(int|string $clientId, string $subject, string $detailsHtml, string $priority, string $marker = ''): array
     {
-        return $this->client->createTicket(self::id($clientId), $subject, $detailsHtml, $priority, $marker);
+        return $this->client->createTicket(self::id($clientId), $subject, $detailsHtml, $priority, $marker, $this->templateId);
     }
 
     /** {@inheritDoc} */

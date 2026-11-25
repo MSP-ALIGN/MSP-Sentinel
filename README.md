@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.55.2](https://img.shields.io/badge/version-1.55.2-ff5a1f?style=flat-square)
+![Version 1.56.0](https://img.shields.io/badge/version-1.56.0-ff5a1f?style=flat-square)
 ![License AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,17 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.56.0 (2026-11-25): ITFlow ticket priority and category
+
+- **One priority for every ticket.** Under **Integrations → ITFlow**, choose **Priority for Sentinel tickets**:
+  *Automatic* (as before: High, Urgent when known exploited, Medium for the weekly ticket) or Low, Medium, High or
+  Urgent for every ticket. ITFlow sets a ticket's SLA from its priority, so choosing a priority without an SLA keeps
+  SLAs off Sentinel's tickets.
+- **Category through a ticket template.** ITFlow's API can't set a category directly, so enter the number of an
+  ITFlow ticket template that has the category you want. New tickets get its category (and any tags, tasks and due
+  time); Sentinel's subject, details and priority are kept. A template ITFlow refuses is reported on the finding and
+  retried later.
+
 ### 1.55.2 (2026-11-25): Clearer update check
 
 - **Check now says what happened.** Instead of one message for every case ("did not get an answer"), it now says
@@ -131,15 +142,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 - When a ticket closed in ITFlow is replaced and the new ticket can't be opened yet, the targets moving to it no longer
   keep the old ticket's ID in the new text field.
 - The ticketing-layer tests no longer depend on which tests ran before them.
-
-### 1.55.0 (2026-11-25): Tickets ready for other ticketing systems
-
-Nothing changes in how ITFlow works.
-
-- **Each ticket knows its system.** Every ticket Sentinel follows now records which ticketing system it belongs to,
-  and its ID there as text, so systems with text ticket IDs fit. Existing tickets are filled in on upgrade.
-- **Neutral ticket settings.** "Open tickets for findings", "since when" and the weekly Warnings ticket, and the last
-  run's result, are stored under names that don't depend on ITFlow. Your current choices are copied over on upgrade.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

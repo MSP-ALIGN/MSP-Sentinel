@@ -55,7 +55,7 @@ use Sentinel\Core\Csrf;
                     <?php if ($it['sync_off'] > 0): ?><?= e(__('{n} client(s) are set to "Don\'t sync with ITFlow" on their Edit page.', ['n' => $it['sync_off']])) ?><?php endif; ?></div></div>
             <div class="form-check"><input class="form-check-input" type="checkbox" id="itflow-tickets" name="tickets" value="1" <?= $it['tickets'] ? 'checked' : '' ?>>
                 <label class="form-check-label" for="itflow-tickets"><?= e(__('Open ITFlow tickets for findings')) ?></label>
-                <div class="form-text"><?= e(__('Each Fail, and anything known to be exploited, gets its own ticket (High; Urgent when exploited) with how to fix it. Warnings get one ticket per client a week when there are new ones. Tickets are internal: ITFlow does not email the client. Status goes both ways: fixed in Sentinel resolves the ticket; resolved or closed in ITFlow makes Sentinel check again, and the ticket is reopened (or replaced, if closed) when the problem is still there. Only findings that appear after this is turned on get tickets, unless you open them for the existing ones below.')) ?></div></div>
+                <div class="form-text"><?= e(__('Each Fail, and anything known to be exploited, gets its own ticket (High; Urgent when exploited, unless you choose one priority below) with how to fix it. Warnings get one ticket per client a week when there are new ones. Tickets are internal: ITFlow does not email the client. Status goes both ways: fixed in Sentinel resolves the ticket; resolved or closed in ITFlow makes Sentinel check again, and the ticket is reopened (or replaced, if closed) when the problem is still there. Only findings that appear after this is turned on get tickets, unless you open them for the existing ones below.')) ?></div></div>
             <div class="mt-3">
                 <label class="form-label" for="itflow-board"><?= e(__('Board for new tickets')) ?></label>
                 <?php $alerts = \Sentinel\Itflow\ItflowClient::alertsBoard($it['boards'] ?? []); ?>
@@ -73,6 +73,23 @@ use Sentinel\Core\Csrf;
                     ? __('For ITFlow builds with service boards: Sentinel moves each new ticket to this board, unassigned, so the board\'s own rules pick it up.') . ' '
                       . ($it['boards_checked'] ? __('This ITFlow lists no boards (stock ITFlow), so tickets stay where ITFlow puts them.') : __('The boards are listed after Test connection or the next sync.'))
                     : __('Sentinel moves each new ticket to this board right after opening it, unassigned, so the board\'s auto-assign and notifications pick it up. If a move fails, the ticket stays on ITFlow\'s default board and the last run says so.')) ?></div>
+            </div>
+            <div class="row g-3 mt-0">
+                <div class="col-md-5">
+                    <label class="form-label" for="itflow-priority"><?= e(__('Priority for Sentinel tickets')) ?></label>
+                    <select class="form-select form-select-sm" id="itflow-priority" name="ticket_priority">
+                        <option value="" <?= $it['priority'] === '' ? 'selected' : '' ?>><?= e(__('Automatic: High, Urgent when known exploited, Medium for the weekly ticket')) ?></option>
+                        <?php foreach (['Low' => __('Low'), 'Medium' => __('Medium'), 'High' => __('High'), 'Urgent' => __('Urgent')] as $pv => $pl): ?>
+                        <option value="<?= e($pv) ?>" <?= $it['priority'] === $pv ? 'selected' : '' ?>><?= e(__('{p} for every ticket', ['p' => $pl])) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <div class="form-text"><?= e(__('ITFlow sets a ticket\'s SLA from its priority. To keep SLAs off Sentinel\'s tickets, choose a priority that has no SLA in ITFlow.')) ?></div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" for="itflow-template"><?= e(__('Ticket template (optional)')) ?></label>
+                    <input class="form-control form-control-sm" id="itflow-template" name="ticket_template" value="<?= e($it['template']) ?>" inputmode="numeric" maxlength="10" placeholder="<?= e(__('none')) ?>">
+                    <div class="form-text"><?= e(__('The number of an ITFlow ticket template (Admin → Ticket Templates). New tickets get its category, and any tags, tasks and due time it has; Sentinel\'s subject, details and priority are kept.')) ?></div>
+                </div>
             </div>
             <button type="submit" class="btn btn-primary btn-sm mt-3"><?= e(__('Save ITFlow')) ?></button>
         </form>

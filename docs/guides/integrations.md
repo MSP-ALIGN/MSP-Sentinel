@@ -33,7 +33,14 @@ Keeps Sentinel's clients in step with ITFlow and puts security work on the ITFlo
    changes nothing when the tags can't be read, no client tag has that name, ITFlow doesn't say which clients have it,
    or no client has it, so a typo or an odd answer never archives every client. Only client tags count, never a
    contact or location tag of the same name. The ITFlow agent needs read access to tags.
-6. **Leave one client out**: on the client's **Edit** page, tick **Don't sync with ITFlow**. The sync then never
+6. **Priority and category** (1.56): **Priority for Sentinel tickets** is *Automatic* (High, Urgent when known
+   exploited, Medium for the weekly Warnings ticket) or one priority for every ticket. ITFlow sets a ticket's SLA from
+   its priority, so to keep SLAs off Sentinel's tickets, choose a priority that has no SLA in ITFlow. ITFlow's API
+   can't set a category directly: create a ticket template in ITFlow (**Admin → Ticket Templates**) with the category
+   you want and enter its number as **Ticket template**. New tickets get its category (and any tags, tasks and due
+   time it has); Sentinel's subject, details and priority are kept. If ITFlow refuses the template (deleted or
+   archived), tickets are retried later and the reason shows on the finding.
+7. **Leave one client out**: on the client's **Edit** page, tick **Don't sync with ITFlow**. The sync then never
    renames, archives or restores it, an ITFlow client with the same name is neither linked to it nor added beside it,
    it is not linked to MSP Align by ITFlow ID, and Sentinel opens and updates no ITFlow tickets for it. Tickets already
    open in ITFlow are no longer followed: close them in ITFlow if they are not needed. When you turn the switch off
