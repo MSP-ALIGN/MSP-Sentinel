@@ -77,7 +77,8 @@ agent then pins the new address at its next sign-in.
   are shown.
 - **Same machine, new address:** a device keeps its record when DHCP gives it another address (matched by its MAC).
   An address that DHCP hands to a different machine (another MAC) gets a new record, so the new machine never
-  inherits the old one's name or findings.
+  inherits the old one's name or findings. Phones and laptops that use private (rotating) MAC addresses are
+  recognised by their address instead, so a new private MAC isn't a new device.
 - **One device per machine:** when NinjaOne also reports a machine the agent finds, the Devices list shows one row.
   They are matched when the agent's address belongs to exactly one NinjaOne device and the name matches (or the agent
   saw no name). The device page then shows NinjaOne's OS, antivirus and patches together with the agent's open

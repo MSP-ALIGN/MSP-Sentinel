@@ -428,8 +428,9 @@ final class ItflowTickets
                         $this->fixedNoteOnce($r, $group);
                     }
                     $this->setRow($rowId, ['state' => 'done']);
-                    $this->eventAll($group, 'Confirmed fixed by Sentinel after ITFlow ticket ' . $ref . ' was closed.');
-                    $this->n['confirmed']++;
+                    $this->eventAll($group, self::groupNotFixed($group) ? 'Sentinel stopped tracking this after ITFlow ticket ' . $ref . ' was closed (not a confirmed fix).'
+                        : 'Confirmed fixed by Sentinel after ITFlow ticket ' . $ref . ' was closed.');
+                    $this->n['confirmed'] += self::groupNotFixed($group) ? 0 : 1;
                     return;
                 }
                 if ($status === 'open') {
@@ -456,13 +457,17 @@ final class ItflowTickets
                     $this->itflow->resolveTicket($itflowClient, $ticket);
                 }
                 $this->setRow($rowId, ['state' => 'done']);
-                $this->eventAll($group, 'Confirmed fixed by Sentinel after ITFlow ticket ' . $ref . ' was closed.');
-                $this->n['confirmed']++;
+                $this->eventAll($group, self::groupNotFixed($group) ? 'Sentinel stopped tracking this after ITFlow ticket ' . $ref . ' was closed (not a confirmed fix).'
+                    : 'Confirmed fixed by Sentinel after ITFlow ticket ' . $ref . ' was closed.');
+                $this->n['confirmed'] += self::groupNotFixed($group) ? 0 : 1;
                 return;
             default:
                 // sentinel_resolved (or done with a target open again): the problem came back.
                 if (!$fixedInSentinel) {
-                    $this->stillOpen($r, $group, $status, 'This problem came back after ITFlow ticket ' . $ref . ' was resolved.');
+                    // A ticket left open after a non-fix (1.49.1) was never resolved: say "seen again", not "came back after resolved".
+                    $this->stillOpen($r, $group, $status, $status === 'open' && $r['state'] === 'done'
+                        ? 'Sentinel sees this problem again (ITFlow ticket ' . $ref . ' is still open).'
+                        : 'This problem came back after ITFlow ticket ' . $ref . ' was resolved.');
                 } elseif ($status === 'closed' || ($r['last_note_at'] !== null && strtotime($r['last_note_at'] . ' UTC') < time() - self::RESOLVED_FOLLOW_DAYS * 86400)) {
                     $this->setRow($rowId, ['state' => 'done']); // closed, or resolved long enough: stop reading it
                 }
@@ -821,6 +826,12 @@ final class ItflowTickets
     private static function notFixed(array $r): bool
     {
         return (string) ($r['f_status'] ?? '') === 'resolved' && in_array((string) ($r['f_reason'] ?? ''), ['gone', 'unlinked'], true);
+    }
+
+    /** True when any target of a ticket closed without a fix. @param list<array<string,mixed>> $group */
+    private static function groupNotFixed(array $group): bool
+    {
+        return array_filter($group, [self::class, 'notFixed']) !== [];
     }
 
     /** @param array<string,mixed> $r */

@@ -466,9 +466,12 @@ final class AgentService
         $mac = self::mac((string) ($h['mac'] ?? ''));
         $hostname = InventoryRepository::clean($h['hostname'] ?? '', 255);
         $existing = null;
-        if ($mac !== '') {
+        // A private ("locally administered") MAC, as phones and laptops rotate per network (1.49.1), identifies
+        // nothing for long: such hosts are matched by address, as before, so each rotation isn't a new device.
+        $idMac = self::randomMac($mac) ? '' : $mac;
+        if ($idMac !== '') {
             $byMac = $this->db->prepare("SELECT id FROM devices WHERE source = 'agent' AND site_id = :s AND mac = :m ORDER BY last_seen DESC LIMIT 1");
-            $byMac->execute(['s' => $siteId, 'm' => $mac]);
+            $byMac->execute(['s' => $siteId, 'm' => $idMac]);
             $existing = $byMac->fetchColumn() ?: null;
         }
         if ($existing === null) {
@@ -477,7 +480,8 @@ final class AgentService
                                         ORDER BY ip_addresses = :ip2 DESC, last_seen DESC");
             $byIp->execute(['s' => $siteId, 'ip' => $ip, 'sid' => $siteId . ':' . $ip, 'ip2' => $ip]);
             foreach ($byIp->fetchAll() as $row) {
-                if ($mac === '' || (string) $row['mac'] === '' || (string) $row['mac'] === $mac) {
+                $known = self::randomMac((string) $row['mac']) ? '' : (string) $row['mac'];
+                if ($idMac === '' || $known === '' || $known === $idMac) {
                     $existing = (int) $row['id'];
                     break;
                 }
@@ -496,7 +500,7 @@ final class AgentService
         $taken = $this->db->prepare("SELECT COUNT(*) FROM devices WHERE source = 'agent' AND source_id = :sid");
         $taken->execute(['sid' => $sid]);
         if ((int) $taken->fetchColumn() > 0) {
-            $sid = $siteId . ':mac:' . ($mac !== '' ? $mac : bin2hex(random_bytes(6)));
+            $sid = $siteId . ':mac:' . ($idMac !== '' ? $idMac : bin2hex(random_bytes(6)));
         }
         $this->db->prepare(
             "INSERT INTO devices (client_id, site_id, source, source_id, name, dns_name, device_class, ip_addresses, mac, last_contact, first_seen, last_seen, last_full_seen, removed_at)
@@ -504,6 +508,12 @@ final class AgentService
         )->execute(['c' => $clientId, 'site' => $siteId, 'sid' => $sid, 'n' => $hostname !== '' ? $hostname : $ip, 'dns' => $hostname, 'ip' => $ip, 'mac' => $mac,
                     'full' => $scanned ? gmdate('Y-m-d H:i:s') : null]);
         return [(int) $this->db->lastInsertId(), true];
+    }
+
+    /** True for a locally administered (private, randomized) MAC address: bit 1 of the first byte is set. */
+    private static function randomMac(string $mac): bool
+    {
+        return $mac !== '' && ctype_xdigit($mac[1] ?? '') && (hexdec($mac[1]) & 2) === 2;
     }
 
     /**

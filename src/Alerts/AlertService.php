@@ -97,7 +97,7 @@ final class AlertService
         if (count($immediate) < count($fresh) && $this->immediateSent >= self::MAX_IMMEDIATE_PER_RUN && !$this->runLimitNoticed) {
             $this->runLimitNoticed = true;
             $title = __('Many new Fail findings at once: individual alerts paused for this run');
-            $body = __('More than {n} new Fail findings appeared in one run (for example after new vulnerability data). The rest are on the Findings page and in each client\'s summary.', ['n' => self::MAX_IMMEDIATE_PER_RUN]);
+            $body = __('More than {n} new Fail findings appeared in one run (for example after new vulnerability data). The rest are listed on the Findings page (and in each client\'s summary after a scan).', ['n' => self::MAX_IMMEDIATE_PER_RUN]);
             $this->notifyUsers('finding_fail', 'fail', $title, $body, '/findings?severity=fail', null);
             $this->queueEmail($this->teamAddresses(), '[Sentinel] ' . $title, $title . "\n\n" . $body . "\n\n" . $this->absolute('/findings?severity=fail'));
         }

@@ -287,21 +287,25 @@ return [
         };
         $dev = static fn (string $mac): array => $ctx->db->query("SELECT id, name, ip_addresses, source_id FROM devices WHERE source = 'agent' AND site_id = {$site} AND mac = '{$mac}'")->fetch() ?: [];
         // A laptop at .31.
-        $sweep([['ip' => '10.90.0.31', 'mac' => '02:00:00:00:00:31', 'hostname' => 'laptop-a.example']]);
-        $laptop = $dev('02:00:00:00:00:31');
+        $sweep([['ip' => '10.90.0.31', 'mac' => '00:1b:21:00:00:31', 'hostname' => 'laptop-a.example']]);
+        $laptop = $dev('00:1b:21:00:00:31');
         Assert::same('10.90.0.31', $laptop['ip_addresses'] ?? null);
         // DHCP: a printer (no name) gets .31, the laptop moves to .39.
-        $sweep([['ip' => '10.90.0.31', 'mac' => '02:00:00:00:00:32'], ['ip' => '10.90.0.39', 'mac' => '02:00:00:00:00:31', 'hostname' => 'laptop-a.example']]);
-        $after = $dev('02:00:00:00:00:31');
-        $printer = $dev('02:00:00:00:00:32');
+        $sweep([['ip' => '10.90.0.31', 'mac' => '00:1b:21:00:00:32'], ['ip' => '10.90.0.39', 'mac' => '00:1b:21:00:00:31', 'hostname' => 'laptop-a.example']]);
+        $after = $dev('00:1b:21:00:00:31');
+        $printer = $dev('00:1b:21:00:00:32');
         Assert::same([(int) $laptop['id'], '10.90.0.39', 'laptop-a.example'], [(int) $after['id'], $after['ip_addresses'], $after['name']], 'the laptop keeps its record at its new address');
         Assert::true($printer !== [] && (int) $printer['id'] !== (int) $laptop['id'], 'the printer gets its own record');
         Assert::same('10.90.0.31', $printer['name'], 'not named after the laptop');
-        Assert::same($site . ':mac:02:00:00:00:00:32', $printer['source_id'], 'keyed by its MAC (the address was first used by the laptop)');
+        Assert::same($site . ':mac:00:1b:21:00:00:32', $printer['source_id'], 'keyed by its MAC (the address was first used by the laptop)');
         // The other order (printer reported first, laptop not yet moved in this sweep): the same result.
-        $sweep([['ip' => '10.90.0.31', 'mac' => '02:00:00:00:00:32']]);
-        Assert::same((int) $printer['id'], (int) $dev('02:00:00:00:00:32')['id'], 'the printer is found again by its MAC');
-        Assert::same('laptop-a.example', $dev('02:00:00:00:00:31')['name'], 'the laptop untouched');
+        $sweep([['ip' => '10.90.0.31', 'mac' => '00:1b:21:00:00:32']]);
+        Assert::same((int) $printer['id'], (int) $dev('00:1b:21:00:00:32')['id'], 'the printer is found again by its MAC');
+        Assert::same('laptop-a.example', $dev('00:1b:21:00:00:31')['name'], 'the laptop untouched');
+        // 1.49.1: a phone rotating private (locally administered) MACs at one address stays one device.
+        $sweep([['ip' => '10.90.0.50', 'mac' => '3a:11:22:33:44:01', 'hostname' => 'phone.example']]);
+        $sweep([['ip' => '10.90.0.50', 'mac' => '3a:99:88:77:66:02', 'hostname' => 'phone.example']]);
+        Assert::same(1, (int) $ctx->db->query("SELECT COUNT(*) FROM devices WHERE source = 'agent' AND site_id = {$site} AND ip_addresses = '10.90.0.50'")->fetchColumn(), 'private MACs: one record by address');
         // A host without a MAC (routed subnet) is still found by its address.
         $sweep([['ip' => '10.90.0.45', 'hostname' => 'routed.example']]);
         $sweep([['ip' => '10.90.0.45']]);

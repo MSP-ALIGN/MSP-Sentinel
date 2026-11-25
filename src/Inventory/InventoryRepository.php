@@ -171,7 +171,10 @@ final class InventoryRepository
         }
         // Earlier versions are gone, but their matches are kept on the device until the new version has data
         // (see devicesAwaitingData), so findings don't resolve just because an update landed before NVD data did.
-        $this->db->prepare('DELETE FROM device_software WHERE device_id = ?' . ($keep === [] ? '' : ' AND id NOT IN (' . implode(',', $keep) . ')'))->execute([$deviceId]);
+        if ($keep === []) {
+            return 0; // no usable entry at all (1.49.1): a gap in the data, never "everything was uninstalled"
+        }
+        $this->db->prepare('DELETE FROM device_software WHERE device_id = ? AND id NOT IN (' . implode(',', $keep) . ')')->execute([$deviceId]);
         // A program no longer identified by the catalogue keeps no matches.
         $this->db->prepare("DELETE sv FROM software_vulns sv JOIN device_software s ON s.id = sv.software_id WHERE s.device_id = ? AND s.cpe = ''")->execute([$deviceId]);
         return count($keep);

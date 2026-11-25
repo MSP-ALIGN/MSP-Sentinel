@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.49.0](https://img.shields.io/badge/version-1.49.0-ff5a1f?style=flat-square)
+![Version 1.49.1](https://img.shields.io/badge/version-1.49.1-ff5a1f?style=flat-square)
 ![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,23 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.49.1 (2026-11-25): Fixes from review
+
+- **Platform limits only for real operating systems.** NVD labels such as "node.js" or "WordPress", and other
+  vendors' "IOS", no longer hide CVEs; Linux distributions (Debian, Ubuntu, Red Hat) count as Linux; NVD's "not on
+  this platform" is never read as "only on it"; a CVE listed without a limit by any NVD answer keeps no limit.
+  "Cisco IOS XE" is no longer read as macOS, and iPadOS counts as iOS.
+- **Private MAC addresses.** Phones and laptops that rotate private MACs are recognised by their address, so each
+  rotation isn't a new device and a new-device alert.
+- **Gentler refresh.** The one-off refresh of cached vulnerability data (for platform limits) takes at most 50
+  products per run, after the regular work, so a feeds run never stalls on it.
+- **Clearer tickets.** Ticket history no longer says "confirmed fixed" when Sentinel stopped tracking a problem
+  without a fix, and a ticket left open that way says "seen again" when the problem returns.
+- **First sync as usual.** A newly linked source alerts and opens tickets normally from its first sync (the planned
+  first-import summary was dropped: you're setting the client up and expect that data).
+- A program list without any usable entry no longer clears a device's software; a re-link that loses a race says
+  so plainly; the "alerts paused" notice says where the rest are.
+
 ### 1.49.0 (2026-11-25): Accurate data, calmer alerts and tickets
 
 From a full review of how devices, findings, alerts and tickets fit together.
@@ -148,19 +165,6 @@ From a full review of how devices, findings, alerts and tickets fit together.
   clients still on UTC" button named the time zone just typed, but moved clients to the saved one. It now names the
   saved one.
 - Time zone names that PHP knows by an older alias are accepted, and stored times in ISO format are shown converted.
-
-### 1.48.0 (2026-11-24): Times in your time zone
-
-- **Your time, everywhere.** Under **Administration → Settings → General**, choose your time zone (for example
-  America/Los_Angeles). Every time in Sentinel (scans, findings, notifications, the audit log, agents, integrations)
-  is then shown in it and labelled, for example `2026-11-24 13:33 PST`. Each user can pick their own under **My
-  profile → Time zone**.
-- **New clients start in it,** also those added from ITFlow. Clients still on UTC are listed on the Settings page,
-  with a button that moves them to your time zone (their scan window times stay the same numbers, now read as local
-  time). It's audited.
-- **Reports** show times in their client's time zone, labelled.
-- **Still UTC underneath.** Sentinel keeps storing and comparing times in UTC, so daylight-saving changes never
-  shift a scan, and the logs, agents and API agree. Leave the server's own clock on UTC.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

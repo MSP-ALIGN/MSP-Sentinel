@@ -92,13 +92,12 @@ final class VulnMatcher
                 continue;
             }
             $cves = [];
-            $limited = [];
             foreach ($fetched as $query) {
                 foreach ($this->repo->cvesForQuery($query) as $id) {
                     $cves[$id] = true;
                 }
-                $limited += $this->repo->platformsForQuery($query);
             }
+            $limited = $this->platformLimits($fetched);
             $cves = array_keys($cves);
             $matches = [];
             if ($cpe['version'] !== '') {
@@ -214,17 +213,39 @@ final class VulnMatcher
             return null;
         }
         $cves = [];
-        $platforms = [];
         foreach ($fetched as $query) {
             foreach ($this->repo->cvesForQuery($query) as $id) {
                 $cves[$id] = true;
             }
-            $platforms += $this->repo->platformsForQuery($query);
         }
+        $platforms = $this->platformLimits($fetched);
         $matches = [];
         foreach ($cpe['version'] !== '' ? array_keys($cves) : $this->repo->kevSubset(array_keys($cves)) as $id) {
             $matches[$id] = $cpe['version'] !== '' ? 'confirmed' : 'possible';
         }
         return ['query' => $queries[0], 'matches' => $matches, 'platforms' => array_intersect_key($platforms, $matches)];
+    }
+
+    /**
+     * Platform limits over several NVD answers for one product (1.49.1): a CVE counts as limited only if EVERY answer
+     * that lists it limits it (any unlimited listing wins), and then to the union of the platforms named.
+     *
+     * @param list<string> $queries
+     * @return array<string,list<string>>
+     */
+    private function platformLimits(array $queries): array
+    {
+        $listed = [];
+        $limits = [];
+        foreach ($queries as $query) {
+            $limited = $this->repo->platformsForQuery($query);
+            foreach ($this->repo->cvesForQuery($query) as $id) {
+                $listed[$id] = ($listed[$id] ?? true) && isset($limited[$id]);
+                if (isset($limited[$id])) {
+                    $limits[$id] = array_values(array_unique(array_merge($limits[$id] ?? [], $limited[$id])));
+                }
+            }
+        }
+        return array_intersect_key($limits, array_filter($listed));
     }
 }

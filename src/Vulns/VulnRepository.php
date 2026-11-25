@@ -53,14 +53,24 @@ final class VulnRepository
         $stmt = $this->db->prepare(
             "SELECT query FROM cpe_queries
              WHERE last_needed > UTC_TIMESTAMP() - INTERVAL 30 DAY
-               AND (status = 'pending' OR (status = 'error' AND fail_count < 5) OR (status = 'ok' AND fetched_at < UTC_TIMESTAMP() - INTERVAL :ttl DAY)
-                    OR (status = 'ok' AND platforms_checked = 0))
-             ORDER BY status = 'pending' DESC, platforms_checked, fetched_at LIMIT :lim"
+               AND (status = 'pending' OR (status = 'error' AND fail_count < 5) OR (status = 'ok' AND fetched_at < UTC_TIMESTAMP() - INTERVAL :ttl DAY))
+             ORDER BY status = 'pending' DESC, fetched_at LIMIT :lim"
         );
         $stmt->bindValue('ttl', self::QUERY_TTL_DAYS, PDO::PARAM_INT);
         $stmt->bindValue('lim', $limit, PDO::PARAM_INT);
         $stmt->execute();
-        return $stmt->fetchAll(PDO::FETCH_COLUMN);
+        $due = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        // Answers cached before platform limits were kept (1.49.1) are fetched again a few at a time (at most 50 per
+        // run, after the regular work), so the one-off refresh never takes over a feeds run or NVD's rate limit.
+        $room = min(50, $limit - count($due));
+        if ($room > 0) {
+            $old = $this->db->prepare("SELECT query FROM cpe_queries WHERE status = 'ok' AND platforms_checked = 0 AND last_needed > UTC_TIMESTAMP() - INTERVAL 30 DAY
+                                       ORDER BY last_needed DESC LIMIT :lim");
+            $old->bindValue('lim', $room, PDO::PARAM_INT);
+            $old->execute();
+            $due = array_values(array_unique(array_merge($due, $old->fetchAll(PDO::FETCH_COLUMN))));
+        }
+        return $due;
     }
 
     /**

@@ -363,6 +363,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.49.1',
+            'date' => '2026-11-25',
+            'items' => [
+                'Fixes from review: only real operating systems limit a CVE (labels like node.js or WordPress, and other vendors\' "IOS", no longer hide CVEs); Linux distributions count as Linux; "not on this platform" is never read as "only on it"; phones with private MAC addresses aren\'t a new device at each rotation; the one-off refresh of vulnerability data is spread over several runs; ticket history no longer says "confirmed fixed" after a non-fix; a newly linked source alerts and tickets as usual from its first sync.',
+            ],
+        ],
+        [
             'version' => '1.49.0',
             'date' => '2026-11-25',
             'items' => [
