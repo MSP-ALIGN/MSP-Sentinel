@@ -2,6 +2,24 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.56.0 (2026-11-25): ITFlow ticket priority and category
+
+- **One priority for every ticket.** Under **Integrations → ITFlow**, choose **Priority for Sentinel tickets**:
+  *Automatic* (as before: High, Urgent when known exploited, Medium for the weekly ticket) or Low, Medium, High or
+  Urgent for every ticket. ITFlow sets a ticket's SLA from its priority, so choosing a priority without an SLA keeps
+  SLAs off Sentinel's tickets.
+- **Category through a ticket template.** ITFlow's API can't set a category directly, so enter the number of an
+  ITFlow ticket template that has the category you want. New tickets get its category (and any tags, tasks and due
+  time); Sentinel's subject, details and priority are kept. A template ITFlow refuses is reported on the finding and
+  retried later.
+
+### 1.55.2 (2026-11-25): Clearer update check
+
+- **Check now says what happened.** Instead of one message for every case ("did not get an answer"), it now says
+  whether GitHub has no published release yet (or the repository is private), whether the server couldn't reach
+  GitHub at all, or that the check is off. Servers installed from a branch are told how far behind their branch they
+  are.
+
 ### 1.55.1 (2026-11-25): Fixes from review
 
 - When a ticket closed in ITFlow is replaced and the new ticket can't be opened yet, the targets moving to it no longer

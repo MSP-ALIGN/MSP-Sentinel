@@ -2,6 +2,22 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.56.3 (2026-11-25): Fixes from review
+
+- The Windows installer's check that the newly installed nmap runs never stops the install by mistake; it falls back
+  to nmap's setup window instead.
+- With no one at the screen (an RMM tool), the silent nmap attempt waits at most 2 minutes, and the message says
+  whether nmap is missing or installed but not working.
+- Stopping a stuck nmap setup only stops processes that setup started.
+
+### 1.56.2 (2026-11-25): Silent nmap install on Windows where it can work
+
+- **The Windows agent installer tries a silent nmap install first.** nmap itself installs silently; only the free
+  edition's bundled Npcap waits for a click. So on a machine that already has Npcap (for example from Wireshark),
+  the whole install is unattended again. Where the silent install can't finish within 5 minutes, it is stopped and
+  the installer falls back to nmap's setup window as before (or, with no one at the screen, stops with a clear
+  message).
+
 ### 1.56.1 (2026-11-25): Fixes from review
 
 - Correcting the ITFlow ticket template retries tickets that failed on it at the next run, instead of up to a day
