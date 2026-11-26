@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.59.0](https://img.shields.io/badge/version-1.59.0-ff5a1f?style=flat-square)
+![Version 1.60.0](https://img.shields.io/badge/version-1.60.0-ff5a1f?style=flat-square)
 ![License AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,12 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.60.0 (2026-11-26): Logo with the company name
+
+- If your logo already shows the company name, tick **My logo includes the company name** under Report branding.
+  The report cover and the report emails then show the logo alone, a little larger, instead of the logo with the
+  name beside it. The name is still used as text in the footer, the sign-off and the contact details.
+
 ### 1.59.0 (2026-11-26): Professional, fully branded reports
 
 - **A new look for every report.** The executive summary, technical findings, pen-test report and retest letter
@@ -144,12 +150,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 - The API's client summary uses the same rule and adds a `score` field.
 - Fixes from review: a client At risk from many Warnings alone gets the right reason; the report's Fail count
   says "serious, fix first"; the API docs describe `score`.
-
-### 1.58.1 (2026-11-26): Fixes from review
-
-- Under the sonar, "Highest" is now "Most at risk": the center shows the client ranked first (level first, then
-  score), which isn't always the one with the highest number.
-- Help describes the new ranking correctly; a test now covers findings from inside the network (40% weight).
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

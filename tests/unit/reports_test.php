@@ -103,7 +103,7 @@ return [
         // The HTML itself: branding from settings, every value escaped, colors only when valid.
         $settings = new \Sentinel\Core\Settings($ctx->db);
         $old = [];
-        foreach (['brand_name' => 'Example <MSP>', 'brand_color' => 'red;x', 'brand_accent' => '#123abc', 'brand_address' => "1 Example Road\nTown", 'brand_email' => 'hi@msp.example'] as $k => $v) {
+        foreach (['brand_logo_has_name' => '0', 'brand_name' => 'Example <MSP>', 'brand_color' => 'red;x', 'brand_accent' => '#123abc', 'brand_address' => "1 Example Road\nTown", 'brand_email' => 'hi@msp.example'] as $k => $v) {
             $old[$k] = $settings->get($k);
             $settings->set($k, $v);
         }
@@ -119,6 +119,10 @@ return [
             Assert::contains('cid:' . \Sentinel\Reports\ReportEmail::LOGO_CID, $mail['html']);
             Assert::same(1, count($mail['inline']));
             Assert::same([], \Sentinel\Reports\ReportEmail::build($settings, 'not a png', 'S', 'B')['inline'], 'no logo unless it is a PNG');
+            Assert::contains('font-size:16px;font-weight:600', $mail['html'], 'the name sits beside the logo by default');
+            $settings->set('brand_logo_has_name', '1');
+            Assert::notContains('font-size:16px;font-weight:600', \Sentinel\Reports\ReportEmail::build($settings, $png, 'S', 'B')['html'], 'a logo with the name stands alone');
+            Assert::contains('font-size:16px;font-weight:600', \Sentinel\Reports\ReportEmail::build($settings, '', 'S', 'B')['html'], 'without a logo the name is always shown');
         } finally {
             foreach ($old as $k => $v) {
                 $settings->set($k, $v);

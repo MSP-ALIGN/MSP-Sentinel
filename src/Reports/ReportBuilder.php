@@ -229,7 +229,7 @@ final class ReportBuilder
      * Untrusted: every text value (admin input); ReportTheme::brand() checks colors, cover and paper again before CSS.
      *
      * @return array{name:string, color:string, footer:string, logo:string, powered_by:bool, paper:string, accent:string, cover:string,
-     *               address:string, phone:string, email:string, website:string, prepared_by:string, prepared_title:string, signoff:string, confidential:string}
+     *               address:string, phone:string, email:string, website:string, prepared_by:string, prepared_title:string, signoff:string, confidential:string, logo_has_name:bool}
      */
     public function brand(): array
     {
@@ -259,6 +259,7 @@ final class ReportBuilder
             'prepared_title' => $this->settings->get('report_prepared_title'),
             'signoff' => $this->settings->get('report_signoff'),
             'confidential' => $this->settings->get('report_confidential'),
+            'logo_has_name' => $this->settings->get('brand_logo_has_name') === '1',
         ];
     }
 

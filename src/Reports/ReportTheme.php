@@ -47,6 +47,7 @@ final class ReportTheme
         $out['cover'] = ($b['cover'] ?? 'color') === 'white' ? 'white' : 'color';
         $out['paper'] = ($b['paper'] ?? 'A4') === 'Letter' ? 'Letter' : 'A4';
         $out['powered_by'] = !empty($b['powered_by']);
+        $out['logo_has_name'] = !empty($b['logo_has_name']);
         return $out;
     }
 
@@ -115,6 +116,7 @@ h3 { font-size: 11pt; margin: 16px 0 6px; break-after: avoid; page-break-after: 
 .cover .plate { background: #fff; border-radius: 8px; padding: 8px 12px; display: inline-flex; }
 .cover .plate img { max-height: 46px; max-width: 190px; display: block; }
 .cover .bname { font-size: 13pt; font-weight: 600; }
+.cover .logo-only .plate img { max-height: 64px; max-width: 260px; }
 .cover .middle { margin-top: auto; position: relative; }
 .cover .eyebrow { color: var(--accent); }
 .cover .title { color: inherit; font-size: 30pt; font-weight: 700; line-height: 1.1; margin: 0 0 10px; letter-spacing: -.015em; }
@@ -238,7 +240,9 @@ CSS;
         $b = self::brand($b);
         $logo = str_starts_with($b['logo'], 'data:image/png;base64,') ? '<span class="plate"><img src="' . e($b['logo']) . '" alt="' . e($b['name']) . '"></span>' : '';
         $html = '<section class="cover' . ($b['cover'] === 'white' ? ' white' : '') . '">'
-            . '<div class="brandrow">' . $logo . '<span class="bname">' . e($b['name']) . '</span></div>'
+            // A logo that already shows the company name (1.60) stands alone, a little larger; otherwise the name sits beside it.
+            . '<div class="brandrow' . ($logo !== '' && $b['logo_has_name'] ? ' logo-only' : '') . '">' . $logo
+            . ($logo !== '' && $b['logo_has_name'] ? '' : '<span class="bname">' . e($b['name']) . '</span>') . '</div>'
             . '<div class="middle"><p class="eyebrow">' . e($o['eyebrow']) . '</p><h1 class="title">' . e($o['title']) . '</h1>'
             . '<p class="client">' . e($o['client']) . '</p><p class="period">' . e($o['period']) . '</p>';
         if (isset($o['level_word']) && $o['level_word'] !== '') {

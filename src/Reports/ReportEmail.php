@@ -32,7 +32,7 @@ final class ReportEmail
             'name' => $s->get('brand_name') !== '' ? $s->get('brand_name') : $s->get('product_name'),
             'color' => $s->get('brand_color'), 'accent' => $s->get('brand_accent'),
             'address' => $s->get('brand_address'), 'phone' => $s->get('brand_phone'), 'email' => $s->get('brand_email'), 'website' => $s->get('brand_website'),
-            'footer' => $s->get('brand_footer'),
+            'footer' => $s->get('brand_footer'), 'logo_has_name' => $s->get('brand_logo_has_name') === '1',
         ]);
         $logo = str_starts_with($logoPng, "\x89PNG\r\n\x1a\n")
             ? '<img src="cid:' . self::LOGO_CID . '" alt="' . e($b['name']) . '" height="40" style="display:block;height:40px;max-width:180px;border:0">'
@@ -57,8 +57,9 @@ final class ReportEmail
             . '<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background:#ffffff;border-radius:8px;overflow:hidden">'
             . '<tr><td style="background:' . $b['color'] . ';padding:18px 24px;border-bottom:4px solid ' . $b['accent'] . '">'
             . '<table role="presentation" cellpadding="0" cellspacing="0"><tr>'
-            . ($logo !== '' ? '<td style="background:#ffffff;border-radius:6px;padding:6px 10px">' . $logo . '</td><td width="14"></td>' : '')
-            . '<td style="color:#ffffff;font-size:16px;font-weight:600;' . $font . '">' . e($b['name']) . '</td></tr></table></td></tr>'
+            . ($logo !== '' ? '<td style="background:#ffffff;border-radius:6px;padding:6px 10px">' . $logo . '</td>' . ($b['logo_has_name'] ? '' : '<td width="14"></td>') : '')
+            // A logo that already shows the company name (1.60) stands alone.
+            . ($logo !== '' && $b['logo_has_name'] ? '' : '<td style="color:#ffffff;font-size:16px;font-weight:600;' . $font . '">' . e($b['name']) . '</td>') . '</tr></table></td></tr>'
             . '<tr><td style="padding:24px;color:#1b2430;font-size:14px;line-height:1.55;' . $font . '">'
             . '<h1 style="margin:0 0 16px;font-size:19px;line-height:1.3;color:#1b2430">' . e($subject) . '</h1>' . $html . '</td></tr>'
             . '<tr><td style="padding:16px 24px;background:#f4f6f9;color:#5d6673;font-size:12px;line-height:1.5;' . $font . '">'

@@ -61,6 +61,8 @@ final class Settings
         'report_prepared_title' => '',
         'report_signoff' => '',
         'report_confidential' => 'Confidential: prepared for {client}',
+        // '1' when the logo already shows the company name (1.60): the cover and emails then show the logo alone.
+        'brand_logo_has_name' => '0',
         // Outbound events for other systems (step 10). URL and signing secret are stored encrypted.
         'event_webhook_enabled' => '0',
         'event_webhook_url' => '',
