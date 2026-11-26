@@ -14,14 +14,23 @@ use Sentinel\Tests\Assert;
 use Sentinel\Tests\TestContext;
 
 return [
-    'risk score and level follow the documented formula' => function (TestContext $ctx): void {
-        Assert::same(0, DashboardData::score(0, 0, 0));
-        Assert::same(2, DashboardData::score(0, 0, 1));
-        Assert::same(10, DashboardData::score(0, 1, 0));
-        Assert::same(20, DashboardData::score(1, 1, 0), 'a known-exploited Fail counts 20, not 20 + 10');
-        Assert::same(52, DashboardData::score(1, 3, 6));
-        Assert::same(100, DashboardData::score(9, 9, 50), 'capped at 100');
-        Assert::same(['risk', 'attention', 'good'], [DashboardData::level(1, 0), DashboardData::level(0, 3), DashboardData::level(0, 0)]);
+    'risk score and level follow the documented formula (1.58: internal weighs 40%, a curve towards 100)' => function (TestContext $ctx): void {
+        Assert::same(0, DashboardData::score([0, 0, 0]));
+        Assert::same(3, DashboardData::score([0, 0, 1]), 'one external Warning');
+        Assert::same(15, DashboardData::score([0, 1, 0]), 'one external Fail');
+        Assert::same(28, DashboardData::score([1, 1, 0]), 'one external known-exploited Fail (counts 20, not 20 + 10)');
+        Assert::same(63, DashboardData::score([3, 3, 0]), 'three of them');
+        Assert::same(58, DashboardData::score([1, 3, 6]));
+        Assert::same(6, DashboardData::score([0, 0, 0], [0, 1, 0]), 'the same Fail inside the network (a printer) counts 40%');
+        Assert::same(81, DashboardData::score([0, 10, 0]), 'ten external Fails: high, not yet 100');
+        Assert::same(98, DashboardData::score([5, 10, 50]), 'only a lot of serious exposure (5 known-exploited, 10 Fails, 50 Warnings) comes close to 100');
+        Assert::same(['risk', 'risk', 'attention', 'attention', 'good'], [
+            DashboardData::level(28, 1, 1),   // an external known-exploited Fail: At risk whatever the score
+            DashboardData::level(55, 0, 6),   // 50+
+            DashboardData::level(40, 0, 4),   // 15-49
+            DashboardData::level(6, 0, 1),    // any Fail (e.g. inside the network)
+            DashboardData::level(3, 0, 0),    // a Warning or two
+        ]);
     },
     'command view and client console show the panels; refresh fragments are signed-in only' => function (TestContext $ctx): void {
         if ((int) $ctx->db->query('SELECT COUNT(*) FROM clients WHERE is_archived = 0')->fetchColumn() === 0) {
@@ -36,13 +45,16 @@ return [
         Assert::contains('class="sonar"', $dash);
         $ctx->db->exec("INSERT INTO clients (name, timezone, created_at, updated_at) VALUES ('Sonar <b>Example</b>', 'UTC', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
         $sonarId = (int) $ctx->db->lastInsertId();
-        // At risk, so it is drawn even when there are more clients than the sonar shows (they are drawn worst first).
-        $ctx->db->exec("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, detail, target, evidence, status, first_seen, last_seen, opened_at, due_at)
-                        VALUES ({$sonarId}, 'port:203.0.113.101:23', 'port', 'fail', 'Telnet open', '', '203.0.113.101:23', 'x', 'open', UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+        // At risk (six external Fails: score 63), so it is drawn even when there are more clients than the sonar shows.
+        for ($i = 0; $i < 6; $i++) {
+            $ctx->db->exec("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, detail, target, evidence, status, first_seen, last_seen, opened_at, due_at)
+                            VALUES ({$sonarId}, 'port:203.0.113.101:2{$i}', 'port', 'fail', 'Telnet open', '', '203.0.113.101:2{$i}', 'x', 'open', UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+        }
         $dash = $admin->get('/')->body;
         $active = (int) $ctx->db->query('SELECT COUNT(*) FROM clients WHERE is_archived = 0')->fetchColumn();
-        $riskier = (int) $ctx->db->query("SELECT COUNT(DISTINCT client_id) FROM findings f JOIN clients c ON c.id = f.client_id AND c.is_archived = 0 WHERE f.status = 'open' AND f.severity = 'fail'")->fetchColumn();
-        if ($riskier <= \Sentinel\Dashboard\Svg::SONAR_MAX) {
+        // Drawn when it is among the first SONAR_MAX of the dashboard's own ranking.
+        $rank = array_search($sonarId, array_column((new \Sentinel\Dashboard\DashboardData(\Sentinel\Core\App::db(), \Sentinel\Core\App::settings(), null))->clients(), 'id'), true);
+        if ($rank !== false && $rank < \Sentinel\Dashboard\Svg::SONAR_MAX) {
             Assert::contains('<a href="/clients/' . $sonarId . '" class="sn-dot sn-risk"', $dash, 'a dot links to its client');
             Assert::contains('<title>Sonar &lt;b&gt;Example&lt;/b&gt; · ', $dash, 'hover text escaped');
         }
@@ -95,7 +107,7 @@ return [
         Assert::contains('class="trend"', $page);
         Assert::notContains('The trend builds up day by day', substr($page, 0, (int) strpos($page, 'id="findings"')));
     },
-    'background refreshes never keep a session alive; ranking puts Fail before many Warnings' => function (TestContext $ctx): void {
+    'background refreshes never keep a session alive; ranking: level, then score; internal findings weigh less (1.58)' => function (TestContext $ctx): void {
         $uid = (int) $ctx->db->query("SELECT id FROM users WHERE username = 'admin'")->fetchColumn();
         $sv = (int) $ctx->db->query("SELECT session_version FROM users WHERE id = {$uid}")->fetchColumn();
         $old = time() - 1000;
@@ -113,7 +125,8 @@ return [
         Assert::same(true, $router->match('GET', '/clients/1/overview')['opts']['passive']);
         Assert::same(false, $router->match('GET', '/')['opts']['passive']);
 
-        // Ranking: 50 Warnings (score 100, Needs attention) never outrank one Fail (At risk).
+        // Ranking (1.58): level first, then score. 50 external Warnings (score 81) are At risk and rank above one
+        // external Fail (score 15, Needs attention); an external known-exploited Fail is At risk whatever its score.
         $db = $ctx->db;
         $db->exec("INSERT INTO clients (name, timezone, created_at, updated_at) VALUES ('Rank Warn Example', 'UTC', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
         $w = (int) $db->lastInsertId();
@@ -123,8 +136,19 @@ return [
         $db->exec("INSERT INTO clients (name, timezone, created_at, updated_at) VALUES ('Rank Fail Example', 'UTC', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
         $f = (int) $db->lastInsertId();
         $db->exec("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, target, status, first_seen, last_seen) VALUES ({$f}, 'f1', 'port', 'fail', 'F', 't', 'open', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
-        $order = array_column((new \Sentinel\Dashboard\DashboardData(\Sentinel\Core\App::db(), \Sentinel\Core\App::settings(), null))->clients(), 'id');
-        Assert::true(array_search($f, $order, true) < array_search($w, $order, true), 'At risk ranks above Needs attention');
+        $rows = (new \Sentinel\Dashboard\DashboardData(\Sentinel\Core\App::db(), \Sentinel\Core\App::settings(), null))->clients();
+        $byId = array_column($rows, null, 'id');
+        Assert::same([81, 'risk', 15, 'attention'], [$byId[$w]['score'], $byId[$w]['level'], $byId[$f]['score'], $byId[$f]['level']]);
+        $order = array_column($rows, 'id');
+        Assert::true(array_search($w, $order, true) < array_search($f, $order, true), 'At risk ranks above Needs attention');
+        // The same Fail found by an agent inside the network (source 'agent'): 40% weight, score 6, Needs attention (any Fail).
+        $db->exec("INSERT INTO clients (name, timezone, created_at, updated_at) VALUES ('Rank Internal Example', 'UTC', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+        $in = (int) $db->lastInsertId();
+        $db->exec("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, target, status, source, first_seen, last_seen) VALUES ({$in}, 'p1', 'port', 'fail', 'F', 't', 'open', 'agent', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+        $byId = array_column((new \Sentinel\Dashboard\DashboardData(\Sentinel\Core\App::db(), \Sentinel\Core\App::settings(), null))->clients(), null, 'id');
+        Assert::same([6, 'attention'], [$byId[$in]['score'], $byId[$in]['level']], 'an internal Fail counts 40%');
+        $db->exec("DELETE FROM findings WHERE client_id = {$in}");
+        $db->exec("UPDATE clients SET is_archived = 1 WHERE id = {$in}");
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $db->exec("UPDATE clients SET is_archived = 1 WHERE id IN ({$w}, {$f})");
         Assert::status(404, $admin->get('/clients/' . $f . '/overview'), 'archived clients have no overview');

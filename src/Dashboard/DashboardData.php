@@ -14,14 +14,19 @@ use Sentinel\Scanning\ScanWindow;
 /**
  * Numbers for the main dashboard and each client's overview.
  *
- * Risk score (0-100, higher is worse), explained in Help:
- *   20 for each open known-exploited Fail, 10 for each other open Fail,
- *   2 for each open Warning; capped at 100. Accepted risks and false
- *   positives don't count. Level: At risk (any open Fail), Needs attention
- *   (open Warnings only) or Good (nothing open), the same as in reports.
+ * Risk score (0-100, higher is worse; 1.58), explained in Help:
+ *   points: 20 for each open known-exploited Fail, 10 for each other open Fail,
+ *   2 for each open Warning; findings inside the client's network (agents,
+ *   RMMs: source <> 'external') count INTERNAL_WEIGHT (40%) of that, since an
+ *   attacker must be inside first. score = 100 x (1 - e^(-points / CURVE)): each
+ *   finding adds less than the last, so the score approaches 100 only with a lot
+ *   of serious exposure (1 external known-exploited Fail = 28, 3 = 63). Accepted
+ *   risks and false positives don't count.
+ * Level: At risk at score 50+ or with any external known-exploited Fail; Needs
+ *   attention at 15+ or with any open Fail; Good otherwise.
  *
  * Ranking puts the level first (At risk before Needs attention before Good),
- * then the score, so many Warnings never outrank a Fail.
+ * then the score.
  *
  * Certificates and TLS counts only include services that are still open.
  *
@@ -46,16 +51,37 @@ final class DashboardData
         return \Sentinel\Auth\ClientAccess::sql($column, $this->clientIds);
     }
 
-    /** Score from counts (see class notes). */
-    public static function score(int $kevFail, int $fail, int $warn): int
+    /** How much a finding inside the client's network counts against the same finding on the internet (1.58). */
+    public const INTERNAL_WEIGHT = 0.4;
+    /** The curve's scale: points at which the score reaches 63 (1.58). */
+    public const CURVE = 60;
+
+    /** Risk points from counts: 20 per known-exploited Fail, 10 per other Fail, 2 per Warning (the counts' own weight). */
+    public static function points(int $kevFail, int $fail, int $warn): float
     {
-        return min(100, 20 * $kevFail + 10 * max(0, $fail - $kevFail) + 2 * $warn);
+        return 20 * $kevFail + 10 * max(0, $fail - $kevFail) + 2 * $warn;
     }
 
-    /** Level from counts: risk, attention or good. */
-    public static function level(int $fail, int $warn): string
+    /**
+     * Score from external and internal counts (see class notes): external points in full, internal ones at
+     * INTERNAL_WEIGHT, on a curve that approaches 100. Counts are [kevFail, fail, warn]; fail includes kevFail.
+     *
+     * @param array{0:int,1:int,2:int} $external
+     * @param array{0:int,1:int,2:int} $internal
+     */
+    public static function score(array $external, array $internal = [0, 0, 0]): int
     {
-        return $fail > 0 ? 'risk' : ($warn > 0 ? 'attention' : 'good');
+        $points = self::points(...$external) + self::INTERNAL_WEIGHT * self::points(...$internal);
+        return (int) round(100 * (1 - exp(-$points / self::CURVE)));
+    }
+
+    /** Level (1.58): risk at 50+ or with an external known-exploited Fail; attention at 15+ or with any Fail; else good. */
+    public static function level(int $score, int $externalKevFail, int $fail): string
+    {
+        if ($score >= 50 || $externalKevFail > 0) {
+            return 'risk';
+        }
+        return $score >= 15 || $fail > 0 ? 'attention' : 'good';
     }
 
     /**
@@ -69,6 +95,9 @@ final class DashboardData
                        COALESCE(SUM(f.status = 'open' AND f.severity = 'fail'), 0) AS fail,
                        COALESCE(SUM(f.status = 'open' AND f.severity = 'warn'), 0) AS warn,
                        COALESCE(SUM(f.status = 'open' AND f.severity = 'fail' AND k.cve_id IS NOT NULL), 0) AS kev,
+                       COALESCE(SUM(f.status = 'open' AND f.severity = 'fail' AND f.source <> 'external'), 0) AS int_fail,
+                       COALESCE(SUM(f.status = 'open' AND f.severity = 'warn' AND f.source <> 'external'), 0) AS int_warn,
+                       COALESCE(SUM(f.status = 'open' AND f.severity = 'fail' AND k.cve_id IS NOT NULL AND f.source <> 'external'), 0) AS int_kev,
                        GREATEST(COALESCE((SELECT MAX(j.finished_at) FROM scan_jobs j WHERE j.client_id = c.id AND j.finished_at IS NOT NULL AND j.job_type <> 'verify'), '1000-01-01'),
                                 COALESCE((SELECT MAX(aj.finished_at) FROM agent_jobs aj WHERE aj.client_id = c.id AND aj.status IN ('done', 'partial')), '1000-01-01')) AS last_scan
                 FROM clients c
@@ -81,8 +110,12 @@ final class DashboardData
             $fail = (int) $r['fail'];
             $warn = (int) $r['warn'];
             $kev = (int) $r['kev'];
+            // 1.58: internal findings (agents, RMMs) weigh less than what the internet can reach.
+            $internal = [(int) $r['int_kev'], (int) $r['int_fail'], (int) $r['int_warn']];
+            $external = [$kev - $internal[0], $fail - $internal[1], $warn - $internal[2]];
+            $score = self::score($external, $internal);
             $rows[] = ['id' => (int) $r['id'], 'name' => (string) $r['name'], 'fail' => $fail, 'warn' => $warn, 'kev' => $kev,
-                       'score' => self::score($kev, $fail, $warn), 'level' => self::level($fail, $warn),
+                       'score' => $score, 'level' => self::level($score, $external[0], $fail),
                        'paused' => (int) $r['scanning_paused'] === 1, 'last_scan' => str_starts_with((string) $r['last_scan'], '1000-01-01') ? null : $r['last_scan']];  // '1000-01-01': never scanned (the GREATEST above)
         }
         $rank = ['risk' => 2, 'attention' => 1, 'good' => 0];

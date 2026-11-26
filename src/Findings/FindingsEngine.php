@@ -510,12 +510,20 @@ final class FindingsEngine
                 $cves = array_keys($g['cves']);
                 sort($cves);
                 $n = count($cves);
+                // 1.57.2: the version the CVEs were matched against is in the title and first in the details. A service
+                // the agent found is stored as "Product (port N)": the version goes after the product, before the port.
+                $version = trim((string) $v['version']);
+                $product = (string) $v['product'];
+                $component = preg_match('/^(.*) \(port (\d+)\)$/', $product, $pm) === 1
+                    ? trim($pm[1] . ' ' . ($version !== '' ? $version : __('(version unknown)'))) . ' ' . __('(port {p})', ['p' => $pm[2]])
+                    : trim($product . ' ' . ($version !== '' ? $version : __('(version unknown)')));
                 $add("devvuln:{$key}", [
                     'type' => 'vuln', 'severity' => $g['sev'],
-                    'title' => ($g['kev'] > 0 ? __('Known exploited: ') : '') . __('{component}: {n} known CVE(s)', ['n' => $n, 'component' => trim($v['product'] . ' ' . $v['version'])])
+                    'title' => ($g['kev'] > 0 ? __('Known exploited: ') : '') . __('{component}: {n} known CVE(s)', ['n' => $n, 'component' => $component])
                         . ' ' . __('(worst: {cve}, {score} {sev})', ['cve' => $w['cve_id'], 'score' => $w['cvss_score'] ?? '?', 'sev' => ucfirst(strtolower((string) $w['cvss_severity']))]),
-                    'detail' => trim(match ($v['confidence']) { 'confirmed' => __('confirmed for the installed version'), 'distro' => __('distribution build, the fix may be backported'), default => __('product found, version unknown') }
-                        . '. ' . __('CVEs: {list}', ['list' => implode(', ', array_slice($cves, 0, 30)) . ($n > 30 ? ' …' : '')]) . ' ' . __('Update {product} to the latest version.', ['product' => $v['product']])),
+                    'detail' => trim(($version !== '' ? __('Installed version: {v}.', ['v' => $version]) : __('Installed version: not reported.')) . ' '
+                        . match ($v['confidence']) { 'confirmed' => __('These CVEs are confirmed for that version.'), 'distro' => __('A distribution build: the fixes may be backported, check the package version.'), default => __('The version is unknown, so these CVEs are possible, not confirmed.') }
+                        . ' ' . __('CVEs: {list}', ['list' => implode(', ', array_slice($cves, 0, 30)) . ($n > 30 ? ' …' : '')]) . ' ' . __('Update {product} to the latest version.', ['product' => preg_replace('/ \(port \d+\)$/', '', $product)])),
                     'target' => (string) $v['device_name'], 'evidence' => $v['confidence'] . '|' . $v['product'] . ' ' . $v['version'], 'cve_id' => (string) $w['cve_id'],
                     'source' => (string) $v['source'], 'device_id' => (int) $v['device_id'],
                 ]);

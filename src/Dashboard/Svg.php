@@ -62,7 +62,7 @@ final class Svg
         $drawn = array_slice($clients, 0, self::SONAR_MAX);
         // 1.57.1: clients are spread evenly around the scope in ID order (a stable order: dots only move when a client is
         // added or removed), and neighbours are staggered across three depths of their band, so dots never sit on top of
-        // each other, also when many share a score (every Good client scores 0; at-risk ones often reach 100).
+        // each other, also when many share a score (Good clients score 0-14 and many share one).
         $ids = array_map(static fn (array $x): int => (int) $x['id'], $drawn);
         sort($ids);
         $slot = array_flip($ids);

@@ -290,7 +290,7 @@ final class AgentService
                     $scanned = $full && ($h['scanned'] ?? false) === true && is_array($h['ports'] ?? null);
                     [$deviceId, $isNew] = $this->upsertDevice($clientId, $siteId, $ip, $h, $scanned);
                     if ($isNew) {
-                        $new[] = ['ip' => $ip, 'hostname' => InventoryRepository::clean($h['hostname'] ?? '', 255), 'mac' => self::mac((string) ($h['mac'] ?? ''))];
+                        $new[] = ['ip' => $ip, 'hostname' => self::hostname($h['hostname'] ?? ''), 'mac' => self::mac((string) ($h['mac'] ?? ''))];
                     }
                     if ($scanned) {
                         $this->savePorts($deviceId, $h['ports']); // only a finished host scan replaces what was known
@@ -481,7 +481,7 @@ final class AgentService
     private function upsertDevice(int $clientId, int $siteId, string $ip, array $h, bool $scanned): array
     {
         $mac = self::mac((string) ($h['mac'] ?? ''));
-        $hostname = InventoryRepository::clean($h['hostname'] ?? '', 255);
+        $hostname = self::hostname($h['hostname'] ?? '');
         $existing = null;
         // A private ("locally administered") MAC, as phones and laptops rotate per network (1.49.1), identifies
         // nothing for long: such hosts are matched by address, as before, so each rotation isn't a new device.
@@ -505,8 +505,8 @@ final class AgentService
             }
         }
         if ($existing !== null) {
-            $this->db->prepare("UPDATE devices SET client_id = :c, site_id = :site, ip_addresses = :ip, name = IF(:dns <> '', :n, IF(name = '' OR name = ip_addresses, :ip2, name)),
-                                dns_name = IF(:dns2 <> '', :dns3, dns_name), mac = IF(:mac <> '', :mac2, mac), last_contact = UTC_TIMESTAMP(), last_seen = UTC_TIMESTAMP(),
+            $this->db->prepare("UPDATE devices SET client_id = :c, site_id = :site, ip_addresses = :ip, name = IF(:dns <> '', :n, IF(name = '' OR name = ip_addresses OR name REGEXP '" . self::LOOPBACK_SQL . "', :ip2, name)),
+                                dns_name = IF(:dns2 <> '', :dns3, IF(dns_name REGEXP '" . self::LOOPBACK_SQL . "', '', dns_name)), mac = IF(:mac <> '', :mac2, mac), last_contact = UTC_TIMESTAMP(), last_seen = UTC_TIMESTAMP(),
                                 last_full_seen = IF(:full = 1, UTC_TIMESTAMP(), last_full_seen), removed_at = NULL WHERE id = :id")
                 ->execute(['c' => $clientId, 'site' => $siteId, 'ip' => $ip, 'dns' => $hostname, 'n' => $hostname, 'ip2' => $ip, 'dns2' => $hostname, 'dns3' => $hostname,
                            'mac' => $mac, 'mac2' => $mac, 'full' => $scanned ? 1 : 0, 'id' => (int) $existing]);
@@ -598,7 +598,7 @@ final class AgentService
                     $checks['creds'] = \Sentinel\Scanning\DefaultCredentials::cleanResults($h['creds']);
                 }
             }
-            $engagements->addResult((int) $e['id'], 'internal', (int) $job['site_id'], 'agent:' . (int) $job['id'], $ip, [$clean($h['hostname'] ?? '', 255)],
+            $engagements->addResult((int) $e['id'], 'internal', (int) $job['site_id'], 'agent:' . (int) $job['id'], $ip, [self::hostname($h['hostname'] ?? '')],
                 $ports, $checks, ($h['scanned'] ?? false) === true);
             $stats['accepted']++;
         }
@@ -713,11 +713,15 @@ final class AgentService
             $this->db->prepare("UPDATE devices SET os_name = :o, os_build = :b, device_class = :c WHERE id = :id AND (:b2 <> '' OR os_build = '' OR os_build IS NULL)")
                 ->execute(['o' => mb_substr($g['os_name'], 0, 255), 'b' => $g['os_build'], 'b2' => $g['os_build'], 'c' => $g['device_class'], 'id' => $deviceId]);
         }
-        $nb = InventoryRepository::clean($ntlm['netbios_name'] ?? '', 64);
-        $dns = InventoryRepository::clean($ntlm['dns_name'] ?? '', 255);
+        // 1.57.3: the SMB answer's names go through hostname() too (a box whose own name is localhost answers "LOCALHOST"),
+        // or they would bring "localhost" back after every full scan.
+        $nb = mb_substr(self::hostname($ntlm['netbios_name'] ?? ''), 0, 64);
+        $dns = self::hostname($ntlm['dns_name'] ?? '');
         if ($nb !== '' || $dns !== '') {
-            // The agent stores the address as the name when it had no host name: that counts as empty (1.39).
-            $this->db->prepare("UPDATE devices SET name = IF(name = '' OR FIND_IN_SET(name, REPLACE(ip_addresses, ' ', '')) > 0, :n, name), dns_name = IF(dns_name = '', :d, dns_name) WHERE id = :id")
+            // The agent stores the address as the name when it had no host name: that counts as empty (1.39), and so
+            // does a loopback name stored before 1.57.2.
+            $this->db->prepare("UPDATE devices SET name = IF(name = '' OR FIND_IN_SET(name, REPLACE(ip_addresses, ' ', '')) > 0 OR name REGEXP '" . self::LOOPBACK_SQL . "', :n, name),
+                                dns_name = IF(dns_name = '' OR dns_name REGEXP '" . self::LOOPBACK_SQL . "', :d, dns_name) WHERE id = :id")
                 ->execute(['n' => $nb !== '' ? $nb : $dns, 'd' => strtolower($dns), 'id' => $deviceId]);
         }
     }
@@ -740,6 +744,23 @@ final class AgentService
             }
         }
         return $out;
+    }
+
+    /**
+     * Loopback names (1.57.2; localhost6 since 1.57.3): never a device's name. One pattern for MariaDB's REGEXP and PCRE
+     * (hostname() and the agent's Runner use it too). Written in code, not input.
+     */
+    public const LOOPBACK_SQL = '^(localhost6?|ip6-localhost|ip6-loopback)([.]|$)';
+
+    /**
+     * A host name the agent reported, cleaned, or '' when it names no machine (1.57.2): some devices (a NAS, a Linux
+     * box whose own name maps to 127.0.1.1) answer "localhost", which would name the device and its findings
+     * "localhost" instead of its address. Untrusted: the agent's report.
+     */
+    public static function hostname(mixed $name): string
+    {
+        $clean = InventoryRepository::clean($name, 255);
+        return preg_match('/' . self::LOOPBACK_SQL . '/i', $clean) === 1 ? '' : $clean;
     }
 
     /** A MAC address in canonical form (aa:bb:cc:dd:ee:ff), or ''. */

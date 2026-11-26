@@ -105,6 +105,21 @@ return [
         Assert::true($v !== null && $v['severity'] === 'fail' && $v['finding_type'] === 'vuln' && $v['source'] === 'ninjaone', 'critical confirmed CVE in installed software');
         Assert::contains('Google Chrome 120.0.6099.130: 1 known CVE(s)', (string) $v['title']);
         Assert::contains('CVE-2099-0301', (string) $v['detail']);
+        Assert::true(str_starts_with((string) $v['detail'], 'Installed version: 120.0.6099.130. These CVEs are confirmed for that version.'), '1.57.2: the version the CVEs are for, first: ' . $v['detail']);
+        // 1.57.2: a service the agent found ("Product (port N)"): the version goes after the product, before the port.
+        $dev = (int) $ctx->db->query("SELECT id FROM devices WHERE client_id = {$cid} AND source = 'ninjaone' AND source_id = '{$ws}'")->fetchColumn();
+        $ctx->db->prepare("INSERT INTO device_software (device_id, name, version, product, cpe, name_hash, first_seen, last_seen)
+                           VALUES (:d, 'Samba smbd (port 139)', '4.6.2', 'Samba smbd (port 139)', 'cpe:2.3:a:samba:samba:4.6.2', :h, UTC_TIMESTAMP(), UTC_TIMESTAMP())")
+            ->execute(['d' => $dev, 'h' => hash('sha256', 'samba-port-test')]);
+        $ctx->db->exec("INSERT INTO software_vulns (software_id, cve_id, confidence, cpe, first_seen, last_seen) VALUES (" . (int) $ctx->db->lastInsertId() . ", 'CVE-2099-0301', 'confirmed', '', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+        App::findingsEngine()->refreshClient($cid);
+        $samba = $finding($ctx, $cid, "devvuln:ninjaone:{$ws}:Samba smbd (port 139)");
+        Assert::contains('Samba smbd 4.6.2 (port 139): 1 known CVE(s)', (string) ($samba['title'] ?? ''), 'version before the port');
+        Assert::contains('Installed version: 4.6.2.', (string) ($samba['detail'] ?? ''));
+        Assert::contains('Update Samba smbd to the latest version.', (string) ($samba['detail'] ?? ''), 'no "(port N)" in the advice');
+        $ctx->db->exec("DELETE sv FROM software_vulns sv JOIN device_software s ON s.id = sv.software_id WHERE s.device_id = {$dev} AND s.name = 'Samba smbd (port 139)'");
+        $ctx->db->exec("DELETE FROM device_software WHERE device_id = {$dev} AND name = 'Samba smbd (port 139)'");
+        App::findingsEngine()->refreshClient($cid);
         // 1.49: CVEs NVD limits to Android or macOS are not reported on this Windows PC.
         Assert::notContains('CVE-2099-0302', (string) $v['detail'], 'Android-only CVE left out on Windows');
         Assert::notContains('CVE-2099-0303', (string) $v['detail'], 'macOS-only (target_sw) CVE left out on Windows');

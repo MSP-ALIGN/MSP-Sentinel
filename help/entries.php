@@ -339,9 +339,10 @@ return [
             'title' => 'Dashboards and the risk score',
             'paragraphs' => [
                 'The dashboard shows every client: the threat level (the highest client risk), totals, a 90-day trend of open problems, clients ranked by risk, the worst open findings, live activity, the attack surface by type of service, certificates expiring in the next 30 days, and a status strip (scanning armed or paused, worker, threat feeds, scans running, scan windows, authorizations). Each client\'s Overview is the same for that client.',
-                'The risk score runs from 0 to 100; higher is worse. It adds 20 for each open known-exploited Fail, 10 for each other open Fail and 2 for each open Warning, up to 100. Accepted risks and false positives don\'t count. The level is the same as in reports: At risk (any open Fail), Needs attention (Warnings only) or Good (nothing open). A client shows "Not scanned yet" until its first scan.',
-                'Clients are ranked by level first, then by score, so a client with many Warnings never appears above one with a Fail.',
-                'The threat level is a sonar (1.57): every client is a dot in the band of its level (red core = at risk, amber = needs attention, green rim = good), closer to the center the higher its score within that band. The center shows the highest client\'s score. Hover a dot for the client\'s name, level and score; click it to open the client. The sweep turns and dots ping as it passes, except when your system asks for reduced motion. Up to 60 clients are drawn (worst first), spaced evenly around the scope; a dot only moves when a client is added or removed. The client risk grid next to it lists every client for the keyboard.',
+                'The risk score runs from 0 to 100; higher is worse (1.58). Each open finding adds points: 20 for a known-exploited Fail, 10 for another Fail, 2 for a Warning. Findings inside the client\'s network (from agents and RMMs) count 40% of that, since an attacker must get in first: Remote Desktop open to the internet weighs far more than Remote Desktop on an office printer. The points go on a curve, so each finding adds less than the one before and the score only comes close to 100 with a lot of serious exposure: one external known-exploited Fail is 28, three are 63, ten external Fails 81. Accepted risks and false positives don\'t count.',
+                'The level: At risk at a score of 50 or more, or with any known-exploited Fail reachable from the internet; Needs attention at 15 or more, or with any open Fail; Good otherwise. Reports keep their own rating for the period they cover. A client shows "Not scanned yet" until its first scan.',
+                'Clients are ranked by level first, then by score. So a client that is At risk because of one known-exploited Fail on the internet ranks above one that needs attention with a higher score.',
+                'The threat level is a sonar (1.57): every client is a dot in the band of its level (red core = at risk, amber = needs attention, green rim = good), closer to the center the higher its score within that band. The center shows the score of the client ranked first (most at risk). Hover a dot for the client\'s name, level and score; click it to open the client. The sweep turns and dots ping as it passes, except when your system asks for reduced motion. Up to 60 clients are drawn (worst first), spaced evenly around the scope; a dot only moves when a client is added or removed. The client risk grid next to it lists every client for the keyboard.',
                 'Dashboards refresh themselves every minute while the page is open and visible; "Pause live refresh" holds the view still, and refreshes also wait while you are using a panel. Refreshes don\'t count as activity: an unattended screen still signs out after 30 minutes, and refreshing stops after 30 minutes without input. The trend fills in day by day from when Sentinel started recording. Certificates are counted only on services that are still open.',
             ],
         ],
@@ -367,6 +368,34 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.58.1',
+            'date' => '2026-11-26',
+            'items' => [
+                'Fixes from review: "Most at risk" instead of "Highest" under the sonar (the client ranked first); help describes the new ranking.',
+            ],
+        ],
+        [
+            'version' => '1.58.0',
+            'date' => '2026-11-26',
+            'items' => [
+                'A fairer risk score: findings inside the network count 40% of internet-facing ones; points go on a curve so the score no longer jumps to 100; levels follow the score (At risk at 50+ or with an internet-facing known-exploited Fail).',
+            ],
+        ],
+        [
+            'version' => '1.57.3',
+            'date' => '2026-11-25',
+            'items' => [
+                'Fixes from review: SMB names can\'t bring "localhost" back after a full scan; agents skip certificates made out to localhost so a real name can be used; localhost6 names are recognized.',
+            ],
+        ],
+        [
+            'version' => '1.57.2',
+            'date' => '2026-11-25',
+            'items' => [
+                'Devices that answer "localhost" are named by their address (existing ones renamed on upgrade); vulnerability findings for internal devices show the installed version in the title and first in the details.',
+            ],
+        ],
         [
             'version' => '1.57.1',
             'date' => '2026-11-25',

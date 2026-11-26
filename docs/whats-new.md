@@ -2,6 +2,45 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.57.2 (2026-11-25): Device names and CVE versions
+
+- **No more "localhost" devices.** Some machines (often a NAS, or a Linux box whose own name maps to localhost) answer
+  the agent with "localhost". That is no longer used as the device's name: the device, and its findings, show its
+  address instead. Devices already named "localhost" are renamed on upgrade.
+- **The version the CVEs are for.** Vulnerability findings for internal devices put the installed version in the
+  title (for example "Samba smbd 4.6.2 (port 139): 25 known CVE(s)") and start their details with "Installed version:
+  4.6.2", saying whether the CVEs are confirmed for that version, a distribution build that may be backported, or
+  possible because no version was reported.
+
+### 1.57.1 (2026-11-25): Fixes from review
+
+- **Sonar dots never overlap.** Clients are spaced evenly around the scope and staggered across their band, so many
+  clients with the same score (every Good client, or many at 100) no longer pile on top of each other. A dot only
+  moves when a client is added or removed.
+- **Smooth refresh.** The once-a-minute dashboard refresh no longer makes the sweep jump back to the top.
+- Dots ping as the sweep reaches them, not just before; the sweep line shows clearly in the light theme; band labels
+  no longer sit under a dot.
+- The dots are a mouse shortcut and stay out of the keyboard's tab order; the client risk grid beside the sonar
+  links every client.
+
+### 1.57.0 (2026-11-25): Threat level sonar
+
+- **The main dashboard's threat level is now a sonar.** Every client is a dot in the band of its level: a red core
+  for clients at risk, amber for needs attention and a green rim for good. Within its band, the higher a client's
+  score, the closer it sits to the center, and each client keeps its place between refreshes. The center shows the
+  highest client's score.
+- **Hover a dot** for the client's name, level and score; **click it** to open the client.
+- The sweep turns like the logo's radar and dots ping as it passes; nothing moves for people whose system asks for
+  reduced motion. Up to 60 clients are drawn (worst first). Client pages keep their own gauge.
+
+### 1.56.3 (2026-11-25): Fixes from review
+
+- The Windows installer's check that the newly installed nmap runs never stops the install by mistake; it falls back
+  to nmap's setup window instead.
+- With no one at the screen (an RMM tool), the silent nmap attempt waits at most 2 minutes, and the message says
+  whether nmap is missing or installed but not working.
+- Stopping a stuck nmap setup only stops processes that setup started.
+
 ### 1.56.2 (2026-11-25): Silent nmap install on Windows where it can work
 
 - **The Windows agent installer tries a silent nmap install first.** nmap itself installs silently; only the free

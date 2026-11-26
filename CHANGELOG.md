@@ -2,6 +2,42 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.58.1 (2026-11-26): Fixes from review
+
+- Under the sonar, "Highest" is now "Most at risk": the center shows the client ranked first (level first, then
+  score), which isn't always the one with the highest number.
+- Help describes the new ranking correctly; a test now covers findings from inside the network (40% weight).
+
+### 1.58.0 (2026-11-26): A fairer risk score
+
+- **Internet exposure weighs more.** Findings inside a client's network (from agents and RMMs) now count 40% of the
+  same finding on the internet: Remote Desktop open to the internet weighs far more than Remote Desktop on an office
+  printer.
+- **No more jumping to 100.** Points go on a curve: each finding adds less than the one before, so the score only comes
+  close to 100 with a lot of serious exposure. One external known-exploited Fail is 28, three are 63, ten external
+  Fails 81; the same Fail on an office device is 6.
+- **Levels follow the score.** At risk at 50 or more, or with any known-exploited Fail reachable from the internet;
+  Needs attention at 15 or more, or with any open Fail; Good otherwise. The dashboard sonar, client list and client
+  overviews all use it. Reports keep their own rating.
+
+### 1.57.3 (2026-11-25): Fixes from review
+
+- **"localhost" stays gone.** The names a Windows or Samba machine gives in its SMB answer are checked too, so a
+  full scan can no longer bring "LOCALHOST" back and make the device's name change with every scan.
+- **The agent skips certificates made out to "localhost"** (common on a NAS), so a real name from another
+  certificate on the same machine can still be used. This takes effect when agents update.
+- "localhost6" names (some Linux systems) are recognized too.
+
+### 1.57.2 (2026-11-25): Device names and CVE versions
+
+- **No more "localhost" devices.** Some machines (often a NAS, or a Linux box whose own name maps to localhost) answer
+  the agent with "localhost". That is no longer used as the device's name: the device, and its findings, show its
+  address instead. Devices already named "localhost" are renamed on upgrade.
+- **The version the CVEs are for.** Vulnerability findings for internal devices put the installed version in the
+  title (for example "Samba smbd 4.6.2 (port 139): 25 known CVE(s)") and start their details with "Installed version:
+  4.6.2", saying whether the CVEs are confirmed for that version, a distribution build that may be backported, or
+  possible because no version was reported.
+
 ### 1.57.1 (2026-11-25): Fixes from review
 
 - **Sonar dots never overlap.** Clients are spaced evenly around the scope and staggered across their band, so many
