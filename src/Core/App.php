@@ -391,6 +391,12 @@ final class App
         return new ReportRenderer(SENTINEL_ROOT . '/views/reports');
     }
 
+    /** Risk score history per client (1.62). */
+    public static function scoreHistory(): \Sentinel\Dashboard\ScoreHistory
+    {
+        return new \Sentinel\Dashboard\ScoreHistory(self::db(), self::settings());
+    }
+
     /** Report logo storage. */
     public static function branding(): Branding
     {

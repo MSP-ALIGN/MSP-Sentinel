@@ -88,7 +88,7 @@ return [
 
         $cid = (int) $ctx->db->query("SELECT id FROM clients WHERE is_archived = 0 ORDER BY id LIMIT 1")->fetchColumn();
         $page = $ctx->clientPages($admin, (int) $cid);
-        Assert::contains('data-refresh-url="/clients/' . $cid . '/overview"', $page);
+        Assert::contains('data-refresh-url="/clients/' . $cid . '/overview?range=90"', $page);
         $scanned = (int) $ctx->db->query("SELECT COUNT(*) FROM scan_jobs WHERE client_id = {$cid} AND finished_at IS NOT NULL AND job_type <> 'verify'")->fetchColumn() > 0
             || (int) $ctx->db->query("SELECT COUNT(*) FROM findings WHERE client_id = {$cid} AND status = 'open'")->fetchColumn() > 0;
         Assert::contains($scanned ? 'RISK / 100' : 'Not scanned yet', $page, 'a score once scanned, never a "good" score before');

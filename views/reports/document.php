@@ -76,6 +76,26 @@ $footLine = $b['name'] . ' · ' . $client . ' · ' . $docTitle;
 </div>
 <p class="small muted"><?= e(__('Status on {now} (last scan finished {date}). In the period: {n} new finding(s), {x} fixed.', ['now' => when($r['generated_at'], $rz), 'date' => when($r['last_checked'] ?? null, $rz, __('not yet')), 'n' => $c['new'], 'x' => $c['fixed']])) ?></p>
 
+<?php $sh = $r['score_history'] ?? null; // reports made before 1.62 have no score history
+if ($exec && $sh !== null && $score !== null): ?>
+<h2 class="sec"><?= e(__('Risk score over time')) ?></h2>
+<?php if (($sh['from'] ?? null) !== null): $delta = $score - (int) $sh['from']['score']; ?>
+<p class="verdict-line <?= $delta > 0 ? 'c-fail' : ($delta < 0 ? 'c-ok' : '') ?>"><?= $delta > 0 ? '&#9650;' : ($delta < 0 ? '&#9660;' : '&#9654;') ?>
+    <?= e($delta === 0
+        ? __('Risk score {a} at the start of the period and {b} now: no change.', ['a' => $sh['from']['score'], 'b' => $score])
+        : ($delta > 0
+            ? __('Risk score {a} at the start of the period and {b} now: up {n} (worse).', ['a' => $sh['from']['score'], 'b' => $score, 'n' => $delta])
+            : __('Risk score {a} at the start of the period and {b} now: down {n} (better).', ['a' => $sh['from']['score'], 'b' => $score, 'n' => -$delta]))) ?>
+    <?php if ($sh['from']['estimated']): ?><span class="small muted"><?= e(__('(The starting score is estimated.)')) ?></span><?php endif; ?></p>
+<?php endif; ?>
+<?php if (count($sh['points']) >= 2): ?>
+<?= \Sentinel\Dashboard\Svg::scoreHistory($sh['points'], __('Risk score over the last six months'), (int) $sh['days']) ?>
+<p class="small muted"><?= e(__('The last six months. Lower is better.')) ?><?php if (in_array(true, array_column($sh['points'], 'estimated'), true)): ?> <?= e(__('The dashed part is estimated from earlier Fail and Warning counts.')) ?><?php endif; ?></p>
+<?php else: ?>
+<p class="small muted"><?= e(__('The score history builds up day by day; the chart appears in later reports.')) ?></p>
+<?php endif; ?>
+<?php endif; ?>
+
 <?php if ($exec): ?>
 <h2 class="sec"><?= e(__('Top risks')) ?></h2>
 <?php if ($r['top'] === []): ?>

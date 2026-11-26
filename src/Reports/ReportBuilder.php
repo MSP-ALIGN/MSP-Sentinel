@@ -9,6 +9,7 @@ use DateTimeZone;
 use PDO;
 use Sentinel\Core\Settings;
 use Sentinel\Dashboard\DashboardData;
+use Sentinel\Dashboard\ScoreHistory;
 use Sentinel\Scope\AuthorisationRepository;
 use Sentinel\Scope\ScopeService;
 
@@ -122,7 +123,21 @@ final class ReportBuilder
             'scans' => $scanRows,
             'last_checked' => $scanRows[0]['finished_at'] ?? null,
             'trend' => $this->trend($cid, count($fails), count($warns)),
+            'score_history' => $this->scoreHistory($cid, $start, $rate),
         ];
+    }
+
+    /**
+     * The risk score over the last six months and at the start of the period (1.62), for the executive summary. Today's
+     * point is the report's own score, so the chart always ends where the rating does (also for archived clients).
+     *
+     * @param array{score:int, level:string, fail:int, warn:int} $rate DashboardData::rate() for this report (also calibrates estimates)
+     * @return array{points:list<array{day:string, score:int, level:string, estimated:bool}>, from:?array{day:string, score:int, level:string, estimated:bool}, days:int}
+     */
+    private function scoreHistory(int $clientId, string $start, array $rate): array
+    {
+        $history = new ScoreHistory($this->db, $this->settings);
+        return ['points' => $history->series($clientId, 182, $rate), 'from' => $history->on($clientId, $start, $rate), 'days' => 182];
     }
 
     /**

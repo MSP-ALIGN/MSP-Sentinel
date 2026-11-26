@@ -44,6 +44,29 @@ $w = $ov['window'];
         <?php endif; ?>
         
     </section>
+    <section class="hud hud-score" id="score-history" aria-labelledby="h-c-score">
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <h2 id="h-c-score" class="hud-title mb-0"><?= e(__('Risk score history')) ?></h2>
+            <nav class="ms-auto btn-group btn-group-sm" aria-label="<?= e(__('Time range')) ?>">
+                <?php foreach ([30 => __('30 days'), 90 => __('90 days'), 365 => __('12 months')] as $days => $word): ?>
+                <a class="btn btn-outline-secondary<?= (int) $ov['range'] === $days ? ' active' : '' ?>" href="<?= e(url('/clients/' . (int) $client['id'] . '?range=' . $days . '#score-history')) ?>"<?= (int) $ov['range'] === $days ? ' aria-current="true"' : '' ?>><?= e($word) ?></a>
+                <?php endforeach; ?>
+            </nav>
+        </div>
+        <?php $sh = $ov['score_history']; ?>
+        <?php if (($c['last_scan'] ?? null) === null && (int) $c['fail'] === 0 && (int) $c['warn'] === 0): ?>
+        <p class="trend-note"><i class="bi bi-hourglass" aria-hidden="true"></i><?= e(__('The score history starts after the first scan.')) ?></p>
+        <?php elseif (count($sh) < 2): ?>
+        <p class="trend-note"><i class="bi bi-graph-up" aria-hidden="true"></i><?= e(__('The score history builds up day by day: check back tomorrow.')) ?></p>
+        <?php else: $from = $sh[0]; $to = $sh[count($sh) - 1]; $delta = $to['score'] - $from['score']; ?>
+        <?= Svg::scoreHistory($sh, __('Risk score for this client over time'), (int) $ov['range']) ?>
+        <p class="legend-line">
+            <span class="sh-change <?= $delta > 0 ? 'is-up' : ($delta < 0 ? 'is-down' : '') ?>"><i class="bi <?= $delta > 0 ? 'bi-arrow-up-right' : ($delta < 0 ? 'bi-arrow-down-right' : 'bi-arrow-right') ?>" aria-hidden="true"></i>
+                <?= e($delta === 0 ? __('{a} → {b}: no change', ['a' => $from['score'], 'b' => $to['score']]) : ($delta > 0 ? __('{a} → {b}: up {n} (worse)', ['a' => $from['score'], 'b' => $to['score'], 'n' => $delta]) : __('{a} → {b}: down {n} (better)', ['a' => $from['score'], 'b' => $to['score'], 'n' => -$delta]))) ?></span>
+            <?php if (in_array(true, array_column($sh, 'estimated'), true)): ?><span class="hud-meta ms-2">┅ <?= e(__('estimated from earlier Fail and Warning counts')) ?></span><?php endif; ?>
+        </p>
+        <?php endif; ?>
+    </section>
     <section class="hud hud-surface" aria-labelledby="h-c-surface">
         <h2 id="h-c-surface" class="hud-title"><?= e(__('Attack surface')) ?></h2>
         <?= Svg::bars($ov['surface']['categories'], __('Open services by type for this client')) ?>

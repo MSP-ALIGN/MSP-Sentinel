@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.61.0](https://img.shields.io/badge/version-1.61.0-ff5a1f?style=flat-square)
+![Version 1.62.0](https://img.shields.io/badge/version-1.62.0-ff5a1f?style=flat-square)
 ![License AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,19 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.62.0 (2026-11-26): Risk score history
+
+- **Score over time on every client.** The client's Overview has a **Risk score history** chart: the score as a
+  line over the Good, Needs attention and At risk bands, for 30 days, 90 days or 12 months, with the change
+  ("76 → 23: down 53, better").
+- **Biggest changes** on the dashboard: the clients whose score rose or fell most in the last 30 days.
+- **Executive summary:** a "Risk score over time" section with the last six months, and the change since the start
+  of the report period.
+- **API:** `GET /api/v1/clients/{id}/score-history?days=90`.
+- **History from day one.** Exact scores are recorded daily from this release. Earlier days are estimated from
+  their Fail and Warning counts, calibrated to each client's mix of internal and known-exploited findings, and
+  shown dashed, marked "estimated". A client that changed nothing shows no change.
+
 ### 1.61.0 (2026-11-26): Logo without the white panel
 
 - New **Logo background** choice under Report branding:
@@ -135,23 +148,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 - If your logo already shows the company name, tick **My logo includes the company name** under Report branding.
   The report cover and the report emails then show the logo alone, a little larger, instead of the logo with the
   name beside it. The name is still used as text in the footer, the sign-off and the contact details.
-
-### 1.59.0 (2026-11-26): Professional, fully branded reports
-
-- **A new look for every report.** The executive summary, technical findings, pen-test report and retest letter
-  share one design: a branded cover with the client, period and risk score; an "At a glance" page with a risk-score
-  gauge and totals; numbered sections; cleaner tables; and a sign-off page with your contact details.
-- **Print-perfect PDFs.** Print to PDF from Chrome or Edge to get a full-page cover, page numbers ("Page 2 of 5"),
-  and the confidential label at the top of every page.
-- **Branding suite** (Administration → Settings → Report branding): brand and accent colors, a full-color or white
-  cover, address, phone, email and website, "Prepared by" with job title and a closing note, and a confidential
-  label ("Confidential: prepared for {client}"). The **Preview** buttons show a made-up report with your branding.
-- **Branded report emails.** Monthly report emails have an HTML version with your logo, colors and contact
-  details. The plain-text version is still included, and the reports are still attached.
-- **Honest scope.** Reports with findings from agents or an RMM now say they include checks from inside the
-  network. They no longer say that internal networks were not tested.
-- Fixes from review: spaces after punctuation are kept in the printed header and footer; a settings page opened
-  before the upgrade can still be saved; the pen-test report's last line says "Issued by".
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

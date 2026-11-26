@@ -31,6 +31,7 @@ final class ApiKernel
         ['GET', '#^/api/v1/clients$#', 'clients', 'read'],
         ['GET', '#^/api/v1/clients/(?P<id>[1-9][0-9]{0,9})$#', 'client', 'read'],
         ['GET', '#^/api/v1/clients/(?P<id>[1-9][0-9]{0,9})/summary$#', 'summary', 'read'],
+        ['GET', '#^/api/v1/clients/(?P<id>[1-9][0-9]{0,9})/score-history$#', 'scoreHistory', 'read'],
         ['POST', '#^/api/v1/clients/(?P<id>[1-9][0-9]{0,9})/scans$#', 'queueScan', 'scan'],
         ['GET', '#^/api/v1/assets$#', 'assets', 'read'],
         ['GET', '#^/api/v1/findings$#', 'findings', 'read'],

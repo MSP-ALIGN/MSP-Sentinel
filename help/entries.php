@@ -342,6 +342,7 @@ return [
                 'The dashboard shows every client: the threat level (the highest client risk), totals, a 90-day trend of open problems, clients ranked by risk, the worst open findings, live activity, the attack surface by type of service, certificates expiring in the next 30 days, and a status strip (scanning armed or paused, worker, threat feeds, scans running, scan windows, authorizations). Each client\'s Overview is the same for that client.',
                 'The risk score runs from 0 to 100; higher is worse (1.58). Each open finding adds points: 20 for a known-exploited Fail, 10 for another Fail, 2 for a Warning. Findings inside the client\'s network (from agents and RMMs) count 40% of that, since an attacker must get in first: Remote Desktop open to the internet weighs far more than Remote Desktop on an office printer. The points go on a curve, so each finding adds less than the one before and the score only comes close to 100 with a lot of serious exposure: one external known-exploited Fail is 28, three are 63, ten external Fails 81. Accepted risks and false positives don\'t count.',
                 'The level: At risk at a score of 50 or more, or with any known-exploited Fail reachable from the internet; Needs attention at 15 or more, or with any open Fail; Good otherwise. Reports and the API\'s client summary use the same score and level (1.58.2); a report keeps the one it had when it was created. A client shows "Not scanned yet" until its first scan.',
+                'Risk score history (1.62): Sentinel records every client\'s score each day. The client\'s Overview shows it as a line over the level bands (30 days, 90 days or 12 months), with the change from the first day shown. Days before 1.62 are estimated from that day\'s Fail and Warning counts, calibrated so the client\'s mix of internal and known-exploited findings matches today\'s, and drawn dashed. Biggest changes compare with a recorded day at most 31 days before the start. The dashboard\'s "Biggest changes, last 30 days" lists the clients whose score rose (worse) or fell (better) the most. The executive summary shows the last six months and the change since the start of the report period. The API has GET /api/v1/clients/{id}/score-history.',
                 'Clients are ranked by level first, then by score. So a client that is At risk because of one known-exploited Fail on the internet ranks above one that needs attention with a higher score.',
                 'The threat level is a sonar (1.57): every client is a dot in the band of its level (red core = at risk, amber = needs attention, green rim = good), closer to the center the higher its score within that band. The center shows the score of the client ranked first (most at risk). Hover a dot for the client\'s name, level and score; click it to open the client. The sweep turns and dots ping as it passes, except when your system asks for reduced motion. Up to 60 clients are drawn (worst first), spaced evenly around the scope; a dot only moves when a client is added or removed. The client risk grid next to it lists every client for the keyboard.',
                 'Dashboards refresh themselves every minute while the page is open and visible; "Pause live refresh" holds the view still, and refreshes also wait while you are using a panel. Refreshes don\'t count as activity: an unattended screen still signs out after 30 minutes, and refreshing stops after 30 minutes without input. The trend fills in day by day from when Sentinel started recording. Certificates are counted only on services that are still open.',
@@ -369,6 +370,13 @@ return [
         ],
     ],
     'releases' => [
+        [
+            'version' => '1.62.0',
+            'date' => '2026-11-26',
+            'items' => [
+                'Risk score history: a chart on each client\'s Overview (30 days, 90 days, 12 months), Biggest changes on the dashboard, a six-month chart and the change in the executive summary, and an API endpoint. Days before this release are estimated and drawn dashed.',
+            ],
+        ],
         [
             'version' => '1.61.0',
             'date' => '2026-11-26',

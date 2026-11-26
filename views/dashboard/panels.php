@@ -76,6 +76,20 @@ $feedOk = static fn (?int $age): bool => $age !== null && $age <= 2 * 86400;
         </div>
     </section>
 
+    <section class="hud hud-movers" aria-labelledby="h-movers">
+        <h2 id="h-movers" class="hud-title"><?= e(__('Biggest changes, last 30 days')) ?></h2>
+        <?php if ($d['movers'] === []): ?><p class="hud-empty"><?= e(__('No score changes in the last 30 days yet.')) ?></p><?php endif; ?>
+        <ul class="movers">
+            <?php foreach ($d['movers'] as $m): $up = $m['delta'] > 0; ?>
+            <li><a class="mover <?= $up ? 'is-up' : 'is-down' ?>" href="<?= e(url('/clients/' . (int) $m['id'] . '?range=90#score-history')) ?>">
+                <span class="mv-delta"><i class="bi <?= $up ? 'bi-arrow-up-right' : 'bi-arrow-down-right' ?>" aria-hidden="true"></i> <?= e(($up ? '+' : '−') . abs($m['delta'])) ?></span>
+                <span class="mv-name"><?= e($m['name']) ?></span>
+                <span class="hud-meta"><?= e(__('{a} → {b}', ['a' => $m['from'], 'b' => $m['to']])) ?> · <?= e($up ? __('worse') : __('better')) ?><?= $m['estimated'] ? ' · ' . e(__('from an estimate')) : '' ?></span>
+            </a></li>
+            <?php endforeach; ?>
+        </ul>
+    </section>
+
     <section class="hud hud-exposures" aria-labelledby="h-top">
         <h2 id="h-top" class="hud-title"><?= e(__('Top exposures')) ?></h2>
         <?php if ($d['top'] === []): ?><p class="hud-empty"><?= e(__('Nothing open. Good.')) ?></p><?php endif; ?>

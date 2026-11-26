@@ -118,7 +118,7 @@ final class ClientController extends Controller
         $web = static fn (): \Sentinel\Web\WebsiteRepository => new \Sentinel\Web\WebsiteRepository(App::db());
         // What each section needs (closures, so a page only runs its own queries).
         $loaders = [
-            'overview' => ['sites' => fn () => App::clients()->sites($cid), 'authorisations' => $authorisations, 'overview' => fn () => self::overviewData($client)],
+            'overview' => ['sites' => fn () => App::clients()->sites($cid), 'authorisations' => $authorisations, 'overview' => fn () => self::overviewData($client, self::scoreRange($request))],
             'findings' => ['clientFindings' => fn () => App::findings()->search(['client' => $cid, 'status' => 'open'])['rows']],
             'scans' => ['openJob' => fn () => App::scans()->openJob($cid), 'recentJobs' => fn () => App::scans()->recentJobs($cid), 'services' => fn () => App::scans()->openServices($cid),
                         'scanLog' => fn () => App::scans()->logForClient($cid, 30), 'ports' => fn () => PortProfile::forClient($client), 'windowOpen' => fn () => ScanWindow::isOpen($client)],
@@ -268,16 +268,24 @@ final class ClientController extends Controller
         if ((int) $client['is_archived'] === 1) {
             throw new HttpException(404); // archived clients have no overview
         }
-        return Response::html(View::render('clients/overview', ['client' => $client, 'ov' => self::overviewData($client)], null))->header('X-Sentinel-Fragment', '1');
+        return Response::html(View::render('clients/overview', ['client' => $client, 'ov' => self::overviewData($client, self::scoreRange($request))], null))->header('X-Sentinel-Fragment', '1');
+    }
+
+    /** The score history range in days from ?range= (1.62): 30, 90 (default) or 365. Untrusted: anything else is 90. */
+    public static function scoreRange(Request $request): int
+    {
+        $r = (int) $request->query('range');
+        return in_array($r, [30, 90, 365], true) ? $r : 90;
     }
 
     /**
      * Numbers for a client's overview console.
      *
      * @param array<string,mixed> $client
+     * @param int $range score history range in days (scoreRange())
      * @return array<string,mixed>
      */
-    private static function overviewData(array $client): array
+    private static function overviewData(array $client, int $range = 90): array
     {
         $data = App::dashboard();
         $cid = (int) $client['id'];
@@ -290,6 +298,9 @@ final class ClientController extends Controller
             'surface' => $data->surface($cid),
             'activity' => $data->activity(6, $cid),
             'certs' => $data->certificates(30, $cid),
+            // 1.62: risk score over time (estimated for days before exact scores were recorded).
+            'score_history' => App::scoreHistory()->series($cid, $range),
+            'range' => $range,
         ];
     }
 

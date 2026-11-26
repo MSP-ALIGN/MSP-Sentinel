@@ -26,6 +26,7 @@ curl -H "Authorization: Bearer snt_xxxxxxxxxxxx_..." https://sentinel.msp.exampl
 | `GET /me` | read | This token: name, permissions, clients, expiry |
 | `GET /clients`, `GET /clients/{id}` | read | Clients |
 | `GET /clients/{id}/summary` | read | Rating (`at_risk`, `needs_attention`, `good`) and `score` (0 to 100), the same as the dashboard since 1.58.2; open Fail/Warning, accepted, by type, last scan |
+| `GET /clients/{id}/score-history?days=90` | read | Risk score per day (1-366 days, default 90), oldest first, ending today: `day`, `score`, `level`, `estimated` (true for days before 1.62, estimated from Fail/Warning counts) |
 | `GET /assets` | read | Assets with their open services |
 | `GET /findings`, `GET /findings/{id}` | read | Findings (filters: `client_id`, `status`, `severity`, `type`, `updated_since`); one finding includes its history. Each finding has `assignee` (username or null), `assigned_at` and `due_at` (open findings only) |
 | `POST /findings/{id}/triage` | triage | `{"status": "accepted"\|"false_positive"\|"open", "note": "..."}` |
