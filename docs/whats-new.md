@@ -2,6 +2,17 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.57.1 (2026-11-25): Fixes from review
+
+- **Sonar dots never overlap.** Clients are spaced evenly around the scope and staggered across their band, so many
+  clients with the same score (every Good client, or many at 100) no longer pile on top of each other. A dot only
+  moves when a client is added or removed.
+- **Smooth refresh.** The once-a-minute dashboard refresh no longer makes the sweep jump back to the top.
+- Dots ping as the sweep reaches them, not just before; the sweep line shows clearly in the light theme; band labels
+  no longer sit under a dot.
+- The dots are a mouse shortcut and stay out of the keyboard's tab order; the client risk grid beside the sonar
+  links every client.
+
 ### 1.57.0 (2026-11-25): Threat level sonar
 
 - **The main dashboard's threat level is now a sonar.** Every client is a dot in the band of its level: a red core

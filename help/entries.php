@@ -369,6 +369,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.58.0',
+            'date' => '2026-11-26',
+            'items' => [
+                'A fairer risk score: findings inside the network count 40% of internet-facing ones; points go on a curve so the score no longer jumps to 100; levels follow the score (At risk at 50+ or with an internet-facing known-exploited Fail).',
+            ],
+        ],
+        [
             'version' => '1.57.3',
             'date' => '2026-11-25',
             'items' => [
