@@ -52,8 +52,9 @@ return [
         }
         $dash = $admin->get('/')->body;
         $active = (int) $ctx->db->query('SELECT COUNT(*) FROM clients WHERE is_archived = 0')->fetchColumn();
-        $riskier = (int) $ctx->db->query("SELECT COUNT(DISTINCT client_id) FROM findings f JOIN clients c ON c.id = f.client_id AND c.is_archived = 0 WHERE f.status = 'open' AND f.severity = 'fail'")->fetchColumn();
-        if ($riskier <= \Sentinel\Dashboard\Svg::SONAR_MAX) {
+        // Drawn when it is among the first SONAR_MAX of the dashboard's own ranking.
+        $rank = array_search($sonarId, array_column((new \Sentinel\Dashboard\DashboardData(\Sentinel\Core\App::db(), \Sentinel\Core\App::settings(), null))->clients(), 'id'), true);
+        if ($rank !== false && $rank < \Sentinel\Dashboard\Svg::SONAR_MAX) {
             Assert::contains('<a href="/clients/' . $sonarId . '" class="sn-dot sn-risk"', $dash, 'a dot links to its client');
             Assert::contains('<title>Sonar &lt;b&gt;Example&lt;/b&gt; · ', $dash, 'hover text escaped');
         }
@@ -106,7 +107,7 @@ return [
         Assert::contains('class="trend"', $page);
         Assert::notContains('The trend builds up day by day', substr($page, 0, (int) strpos($page, 'id="findings"')));
     },
-    'background refreshes never keep a session alive; ranking puts Fail before many Warnings' => function (TestContext $ctx): void {
+    'background refreshes never keep a session alive; ranking: level, then score; internal findings weigh less (1.58)' => function (TestContext $ctx): void {
         $uid = (int) $ctx->db->query("SELECT id FROM users WHERE username = 'admin'")->fetchColumn();
         $sv = (int) $ctx->db->query("SELECT session_version FROM users WHERE id = {$uid}")->fetchColumn();
         $old = time() - 1000;
@@ -140,6 +141,14 @@ return [
         Assert::same([81, 'risk', 15, 'attention'], [$byId[$w]['score'], $byId[$w]['level'], $byId[$f]['score'], $byId[$f]['level']]);
         $order = array_column($rows, 'id');
         Assert::true(array_search($w, $order, true) < array_search($f, $order, true), 'At risk ranks above Needs attention');
+        // The same Fail found by an agent inside the network (source 'agent'): 40% weight, score 6, Needs attention (any Fail).
+        $db->exec("INSERT INTO clients (name, timezone, created_at, updated_at) VALUES ('Rank Internal Example', 'UTC', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+        $in = (int) $db->lastInsertId();
+        $db->exec("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, target, status, source, first_seen, last_seen) VALUES ({$in}, 'p1', 'port', 'fail', 'F', 't', 'open', 'agent', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+        $byId = array_column((new \Sentinel\Dashboard\DashboardData(\Sentinel\Core\App::db(), \Sentinel\Core\App::settings(), null))->clients(), null, 'id');
+        Assert::same([6, 'attention'], [$byId[$in]['score'], $byId[$in]['level']], 'an internal Fail counts 40%');
+        $db->exec("DELETE FROM findings WHERE client_id = {$in}");
+        $db->exec("UPDATE clients SET is_archived = 1 WHERE id = {$in}");
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
         $db->exec("UPDATE clients SET is_archived = 1 WHERE id IN ({$w}, {$f})");
         Assert::status(404, $admin->get('/clients/' . $f . '/overview'), 'archived clients have no overview');

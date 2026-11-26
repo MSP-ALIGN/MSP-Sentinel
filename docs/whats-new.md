@@ -2,6 +2,16 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.57.2 (2026-11-25): Device names and CVE versions
+
+- **No more "localhost" devices.** Some machines (often a NAS, or a Linux box whose own name maps to localhost) answer
+  the agent with "localhost". That is no longer used as the device's name: the device, and its findings, show its
+  address instead. Devices already named "localhost" are renamed on upgrade.
+- **The version the CVEs are for.** Vulnerability findings for internal devices put the installed version in the
+  title (for example "Samba smbd 4.6.2 (port 139): 25 known CVE(s)") and start their details with "Installed version:
+  4.6.2", saying whether the CVEs are confirmed for that version, a distribution build that may be backported, or
+  possible because no version was reported.
+
 ### 1.57.1 (2026-11-25): Fixes from review
 
 - **Sonar dots never overlap.** Clients are spaced evenly around the scope and staggered across their band, so many

@@ -2,6 +2,12 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.58.1 (2026-11-26): Fixes from review
+
+- Under the sonar, "Highest" is now "Most at risk": the center shows the client ranked first (level first, then
+  score), which isn't always the one with the highest number.
+- Help describes the new ranking correctly; a test now covers findings from inside the network (40% weight).
+
 ### 1.58.0 (2026-11-26): A fairer risk score
 
 - **Internet exposure weighs more.** Findings inside a client's network (from agents and RMMs) now count 40% of the

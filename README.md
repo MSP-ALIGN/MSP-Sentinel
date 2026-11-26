@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.58.0](https://img.shields.io/badge/version-1.58.0-ff5a1f?style=flat-square)
+![Version 1.58.1](https://img.shields.io/badge/version-1.58.1-ff5a1f?style=flat-square)
 ![License AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,12 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.58.1 (2026-11-26): Fixes from review
+
+- Under the sonar, "Highest" is now "Most at risk": the center shows the client ranked first (level first, then
+  score), which isn't always the one with the highest number.
+- Help describes the new ranking correctly; a test now covers findings from inside the network (40% weight).
+
 ### 1.58.0 (2026-11-26): A fairer risk score
 
 - **Internet exposure weighs more.** Findings inside a client's network (from agents and RMMs) now count 40% of the
@@ -138,16 +144,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 - **The agent skips certificates made out to "localhost"** (common on a NAS), so a real name from another
   certificate on the same machine can still be used. This takes effect when agents update.
 - "localhost6" names (some Linux systems) are recognized too.
-
-### 1.57.2 (2026-11-25): Device names and CVE versions
-
-- **No more "localhost" devices.** Some machines (often a NAS, or a Linux box whose own name maps to localhost) answer
-  the agent with "localhost". That is no longer used as the device's name: the device, and its findings, show its
-  address instead. Devices already named "localhost" are renamed on upgrade.
-- **The version the CVEs are for.** Vulnerability findings for internal devices put the installed version in the
-  title (for example "Samba smbd 4.6.2 (port 139): 25 known CVE(s)") and start their details with "Installed version:
-  4.6.2", saying whether the CVEs are confirmed for that version, a distribution build that may be backported, or
-  possible because no version was reported.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 
