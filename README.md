@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.57.3](https://img.shields.io/badge/version-1.57.3-ff5a1f?style=flat-square)
+![Version 1.58.0](https://img.shields.io/badge/version-1.58.0-ff5a1f?style=flat-square)
 ![License AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,18 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.58.0 (2026-11-26): A fairer risk score
+
+- **Internet exposure weighs more.** Findings inside a client's network (from agents and RMMs) now count 40% of the
+  same finding on the internet: Remote Desktop open to the internet weighs far more than Remote Desktop on an office
+  printer.
+- **No more jumping to 100.** Points go on a curve: each finding adds less than the one before, so the score only comes
+  close to 100 with a lot of serious exposure. One external known-exploited Fail is 28, three are 63, ten external
+  Fails 81; the same Fail on an office device is 6.
+- **Levels follow the score.** At risk at 50 or more, or with any known-exploited Fail reachable from the internet;
+  Needs attention at 15 or more, or with any open Fail; Good otherwise. The dashboard sonar, client list and client
+  overviews all use it. Reports keep their own rating.
+
 ### 1.57.3 (2026-11-25): Fixes from review
 
 - **"localhost" stays gone.** The names a Windows or Samba machine gives in its SMB answer are checked too, so a
@@ -126,27 +138,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 - **The agent skips certificates made out to "localhost"** (common on a NAS), so a real name from another
   certificate on the same machine can still be used. This takes effect when agents update.
 - "localhost6" names (some Linux systems) are recognized too.
-
-### 1.57.2 (2026-11-25): Device names and CVE versions
-
-- **No more "localhost" devices.** Some machines (often a NAS, or a Linux box whose own name maps to localhost) answer
-  the agent with "localhost". That is no longer used as the device's name: the device, and its findings, show its
-  address instead. Devices already named "localhost" are renamed on upgrade.
-- **The version the CVEs are for.** Vulnerability findings for internal devices put the installed version in the
-  title (for example "Samba smbd 4.6.2 (port 139): 25 known CVE(s)") and start their details with "Installed version:
-  4.6.2", saying whether the CVEs are confirmed for that version, a distribution build that may be backported, or
-  possible because no version was reported.
-
-### 1.57.1 (2026-11-25): Fixes from review
-
-- **Sonar dots never overlap.** Clients are spaced evenly around the scope and staggered across their band, so many
-  clients with the same score (every Good client, or many at 100) no longer pile on top of each other. A dot only
-  moves when a client is added or removed.
-- **Smooth refresh.** The once-a-minute dashboard refresh no longer makes the sweep jump back to the top.
-- Dots ping as the sweep reaches them, not just before; the sweep line shows clearly in the light theme; band labels
-  no longer sit under a dot.
-- The dots are a mouse shortcut and stay out of the keyboard's tab order; the client risk grid beside the sonar
-  links every client.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

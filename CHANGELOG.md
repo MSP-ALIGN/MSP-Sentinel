@@ -2,6 +2,18 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.58.0 (2026-11-26): A fairer risk score
+
+- **Internet exposure weighs more.** Findings inside a client's network (from agents and RMMs) now count 40% of the
+  same finding on the internet: Remote Desktop open to the internet weighs far more than Remote Desktop on an office
+  printer.
+- **No more jumping to 100.** Points go on a curve: each finding adds less than the one before, so the score only comes
+  close to 100 with a lot of serious exposure. One external known-exploited Fail is 28, three are 63, ten external
+  Fails 81; the same Fail on an office device is 6.
+- **Levels follow the score.** At risk at 50 or more, or with any known-exploited Fail reachable from the internet;
+  Needs attention at 15 or more, or with any open Fail; Good otherwise. The dashboard sonar, client list and client
+  overviews all use it. Reports keep their own rating.
+
 ### 1.57.3 (2026-11-25): Fixes from review
 
 - **"localhost" stays gone.** The names a Windows or Samba machine gives in its SMB answer are checked too, so a
