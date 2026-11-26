@@ -218,7 +218,8 @@ Then check everything with `sudo -u sentinel php8.4 /opt/msp-sentinel/bin/doctor
 ## After installing
 
 1. **Settings → Alerts:** set up email (SMTP) and, if you like, a Teams or Slack webhook. Use the test buttons.
-2. **Settings → Report branding:** your company name, logo, color and contact details.
+2. **Settings → Report branding:** your company name, logo, colors, cover style, contact details, sign-off and
+   confidential label. Use **Preview executive summary** to check the result.
 3. **Users:** add your technicians (role *technician*) and anyone who only needs to read (role *viewer*).
 4. **Clients:** add a client, record the scan authorization with the approved addresses, and run a first scan.
 5. Optionally, get a free **NVD API key** and set `nvd.api_key` in the config: vulnerability lookups get about ten

@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.58.2](https://img.shields.io/badge/version-1.58.2-ff5a1f?style=flat-square)
+![Version 1.59.0](https://img.shields.io/badge/version-1.59.0-ff5a1f?style=flat-square)
 ![License AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,21 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.59.0 (2026-11-26): Professional, fully branded reports
+
+- **A new look for every report.** The executive summary, technical findings, pen-test report and retest letter
+  share one design: a branded cover with the client, period and risk score; an "At a glance" page with a risk-score
+  gauge and totals; numbered sections; cleaner tables; and a sign-off page with your contact details.
+- **Print-perfect PDFs.** Print to PDF from Chrome or Edge to get a full-page cover, page numbers ("Page 2 of 5"),
+  and the confidential label at the top of every page.
+- **Branding suite** (Administration → Settings → Report branding): brand and accent colors, a full-color or white
+  cover, address, phone, email and website, "Prepared by" with job title and a closing note, and a confidential
+  label ("Confidential: prepared for {client}"). The **Preview** buttons show a made-up report with your branding.
+- **Branded report emails.** Monthly report emails have an HTML version with your logo, colors and contact
+  details. The plain-text version is still included, and the reports are still attached.
+- **Honest scope.** Reports with findings from agents or an RMM now say they include checks from inside the
+  network. They no longer say that internal networks were not tested.
+
 ### 1.58.2 (2026-11-26): Reports match the dashboard
 
 - Reports now rate a client with the dashboard's score and level, so both always agree. For example, a few
@@ -133,18 +148,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 - Under the sonar, "Highest" is now "Most at risk": the center shows the client ranked first (level first, then
   score), which isn't always the one with the highest number.
 - Help describes the new ranking correctly; a test now covers findings from inside the network (40% weight).
-
-### 1.58.0 (2026-11-26): A fairer risk score
-
-- **Internet exposure weighs more.** Findings inside a client's network (from agents and RMMs) now count 40% of the
-  same finding on the internet: Remote Desktop open to the internet weighs far more than Remote Desktop on an office
-  printer.
-- **No more jumping to 100.** Points go on a curve: each finding adds less than the one before, so the score only comes
-  close to 100 with a lot of serious exposure. One external known-exploited Fail is 28, three are 63, ten external
-  Fails 81; the same Fail on an office device is 6.
-- **Levels follow the score.** At risk at 50 or more, or with any known-exploited Fail reachable from the internet;
-  Needs attention at 15 or more, or with any open Fail; Good otherwise. The dashboard sonar, client list and client
-  overviews all use it. Reports keep their own rating.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

@@ -113,6 +113,12 @@ final class ReportBuilder
             'decided' => $decided,
             'fixed' => $fixed,
             'scope' => $scope,
+            // Which kinds of checks found something (1.59), so the report describes its method and limits truthfully:
+            // external = Sentinel's scans from the internet; internal = agents and RMM data from inside the network.
+            'coverage' => [
+                'external' => $scope !== [] || in_array('external', array_column($all, 'source'), true),
+                'internal' => array_filter($all, static fn (array $f): bool => (string) $f['source'] !== 'external') !== [],
+            ],
             'scans' => $scanRows,
             'last_checked' => $scanRows[0]['finished_at'] ?? null,
             'trend' => $this->trend($cid, count($fails), count($warns)),
@@ -239,6 +245,17 @@ final class ReportBuilder
             'logo' => $logo,
             'powered_by' => $this->settings->get('report_powered_by') === '1',
             'paper' => $this->settings->get('report_paper') === 'Letter' ? 'Letter' : 'A4',
+            // Branding suite (1.59): checked again by ReportTheme::brand() before any of it reaches CSS.
+            'accent' => preg_match('/^#[0-9a-f]{6}$/i', $this->settings->get('brand_accent')) ? $this->settings->get('brand_accent') : ReportTheme::DEFAULT_ACCENT,
+            'cover' => $this->settings->get('report_cover') === 'white' ? 'white' : 'color',
+            'address' => $this->settings->get('brand_address'),
+            'phone' => $this->settings->get('brand_phone'),
+            'email' => $this->settings->get('brand_email'),
+            'website' => $this->settings->get('brand_website'),
+            'prepared_by' => $this->settings->get('report_prepared_by'),
+            'prepared_title' => $this->settings->get('report_prepared_title'),
+            'signoff' => $this->settings->get('report_signoff'),
+            'confidential' => $this->settings->get('report_confidential'),
         ];
     }
 

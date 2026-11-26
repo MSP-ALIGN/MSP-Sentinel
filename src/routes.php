@@ -164,6 +164,7 @@ $router->add('GET', '/reports/{id}/download', [ReportController::class, 'downloa
 $router->add('GET', '/reports/{id}/csv', [ReportController::class, 'csv'], ['client' => 'report']);
 $router->add('POST', '/reports/{id}/delete', [ReportController::class, 'delete'], ['perm' => 'reports.delete', 'client' => 'report']);
 $router->add('POST', '/admin/branding', [ReportController::class, 'branding'], ['perm' => 'settings.manage', 'all_clients' => true]);
+$router->add('GET', '/admin/branding/preview', [ReportController::class, 'brandingPreview'], ['perm' => 'settings.manage', 'all_clients' => true]);
 
 // Global kill switch
 $router->add('POST', '/scanning/pause', [ScanningController::class, 'pause'], ['perm' => 'scanning.pause', 'all_clients' => true]);

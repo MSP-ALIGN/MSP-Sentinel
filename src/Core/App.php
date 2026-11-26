@@ -280,7 +280,7 @@ final class App
     {
         $caFile = (string) self::config()->get('tls.ca_file', '');
         return new Outbox(self::db(), self::settings(), $caFile === '' ? null : $caFile,
-            new WebhookSender(self::webhookTestMode()));
+            new WebhookSender(self::webhookTestMode()), SENTINEL_ROOT . '/storage/branding');
     }
 
     /**
@@ -376,8 +376,19 @@ final class App
     /** Creates reports and runs the monthly schedule. */
     public static function reportService(): ReportService
     {
-        $builder = new ReportBuilder(self::db(), self::settings(), self::authorisations(), SENTINEL_ROOT . '/storage/branding', self::version());
-        return new ReportService(self::db(), $builder, new ReportRenderer(SENTINEL_ROOT . '/views/reports'), self::reports(), self::alerts(), self::events());
+        return new ReportService(self::db(), self::reportBuilder(), self::reportRenderer(), self::reports(), self::alerts(), self::events());
+    }
+
+    /** Gathers report snapshots and the current branding. */
+    public static function reportBuilder(): ReportBuilder
+    {
+        return new ReportBuilder(self::db(), self::settings(), self::authorisations(), SENTINEL_ROOT . '/storage/branding', self::version());
+    }
+
+    /** Renders report snapshots to self-contained HTML. */
+    public static function reportRenderer(): ReportRenderer
+    {
+        return new ReportRenderer(SENTINEL_ROOT . '/views/reports');
     }
 
     /** Report logo storage. */

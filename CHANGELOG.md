@@ -2,6 +2,21 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.59.0 (2026-11-26): Professional, fully branded reports
+
+- **A new look for every report.** The executive summary, technical findings, pen-test report and retest letter
+  share one design: a branded cover with the client, period and risk score; an "At a glance" page with a risk-score
+  gauge and totals; numbered sections; cleaner tables; and a sign-off page with your contact details.
+- **Print-perfect PDFs.** Print to PDF from Chrome or Edge to get a full-page cover, page numbers ("Page 2 of 5"),
+  and the confidential label at the top of every page.
+- **Branding suite** (Administration → Settings → Report branding): brand and accent colors, a full-color or white
+  cover, address, phone, email and website, "Prepared by" with job title and a closing note, and a confidential
+  label ("Confidential: prepared for {client}"). The **Preview** buttons show a made-up report with your branding.
+- **Branded report emails.** Monthly report emails have an HTML version with your logo, colors and contact
+  details. The plain-text version is still included, and the reports are still attached.
+- **Honest scope.** Reports with findings from agents or an RMM now say they include checks from inside the
+  network. They no longer say that internal networks were not tested.
+
 ### 1.58.2 (2026-11-26): Reports match the dashboard
 
 - Reports now rate a client with the dashboard's score and level, so both always agree. For example, a few

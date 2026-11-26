@@ -77,4 +77,46 @@ return [
         Assert::notContains("\r\n.\r\n", $msg, 'content is encoded, so it cannot end the SMTP DATA early');
         Assert::contains(base64_encode('a,b'), $msg);
     },
+    'branded report email (1.59): text + HTML alternative, inline logo, escaped, then attachments' => function (TestContext $ctx): void {
+        $png = "\x89PNG\r\n\x1a\n" . 'made-up-image-bytes';
+        $msg = SmtpMailer::buildMessage('s@msp.example', ['a@msp.example'], 'Reports', 'Plain text.',
+            [['name' => 'r.html', 'type' => 'text/html', 'content' => '<p>R</p>']],
+            ['html' => '<p>Hello</p>', 'inline' => [['cid' => "logo@x\r\nBcc: evil@evil.example", 'type' => 'image/svg+xml', 'content' => $png]]]);
+        // Structure: mixed( alternative( text, related( html, logo ) ), attachment ), in that order.
+        $order = array_map(static fn (string $t): int => (int) strpos($msg, $t), ['multipart/mixed', 'multipart/alternative', 'text/plain', 'multipart/related', 'Content-Type: text/html', 'Content-ID:', 'filename="r.html"']);
+        $sorted = $order;
+        sort($sorted);
+        Assert::true($order === $sorted && !in_array(0, $order, true), 'MIME parts nested in the right order: ' . json_encode($order));
+        Assert::contains('Content-ID: <logo@xBccevil@evil.example>', $msg, 'the cid keeps only safe characters (no line break)');
+        Assert::notContains("\r\nBcc:", $msg);
+        Assert::contains('Content-Type: application/octet-stream', $msg, 'only PNG or JPEG inline images');
+        Assert::contains(base64_encode('<p>Hello</p>'), $msg);
+        // Without attachments the top level is the alternative.
+        Assert::contains('Content-Type: multipart/alternative', SmtpMailer::buildMessage('s@msp.example', ['a@msp.example'], 'R', 'T', [], ['html' => '<p>H</p>', 'inline' => []]));
+
+        // The HTML itself: branding from settings, every value escaped, colors only when valid.
+        $settings = new \Sentinel\Core\Settings($ctx->db);
+        $old = [];
+        foreach (['brand_name' => 'Example <MSP>', 'brand_color' => 'red;x', 'brand_accent' => '#123abc', 'brand_address' => "1 Example Road\nTown", 'brand_email' => 'hi@msp.example'] as $k => $v) {
+            $old[$k] = $settings->get($k);
+            $settings->set($k, $v);
+        }
+        try {
+            $mail = \Sentinel\Reports\ReportEmail::build($settings, $png, 'Reports for <Client>', "Line one\n\n- Executive summary\n- Technical findings\n\n-- \nSent by Sentinel.");
+            Assert::contains('Example &lt;MSP&gt;', $mail['html']);
+            Assert::contains('Reports for &lt;Client&gt;', $mail['html']);
+            Assert::contains('<li style="margin:2px 0">Executive summary</li>', $mail['html']);
+            Assert::contains('1 Example Road<br>Town', $mail['html']);
+            Assert::contains('background:#1f4e79', $mail['html'], 'an invalid brand color falls back to the default');
+            Assert::contains('#123abc', $mail['html']);
+            Assert::notContains('red;x', $mail['html']);
+            Assert::contains('cid:' . \Sentinel\Reports\ReportEmail::LOGO_CID, $mail['html']);
+            Assert::same(1, count($mail['inline']));
+            Assert::same([], \Sentinel\Reports\ReportEmail::build($settings, 'not a png', 'S', 'B')['inline'], 'no logo unless it is a PNG');
+        } finally {
+            foreach ($old as $k => $v) {
+                $settings->set($k, $v);
+            }
+        }
+    },
 ];
