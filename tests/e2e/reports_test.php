@@ -85,7 +85,7 @@ return [
         $csp = (string) $doc->header('content-security-policy');
         Assert::true(str_contains($csp, "default-src 'none'") && str_contains($csp, 'sandbox') && !str_contains($csp, 'script-src'), 'strict report CSP: ' . $csp);
         Assert::contains('Reports Example', $doc->body);
-        Assert::contains('At risk', $doc->body);
+        Assert::contains('Needs attention', $doc->body);  // one Fail on the internet, not known exploited (1.58.2: as on the dashboard)
         Assert::contains('Remote Desktop open to the internet', $doc->body);
         Assert::contains('How to fix', $doc->body);
         Assert::contains('Accepted risks and false positives', $doc->body);
@@ -112,6 +112,48 @@ return [
         Assert::contains('What it means for you', $body);
         Assert::true(substr_count($body, 'class="risk ') <= 5, 'at most 5 top risks');
         Assert::status(404, $view->get('/reports/999999/view'));
+    },
+    'the rating matches the dashboard: same score and level in the report, its page and the API (1.58.2)' => function (TestContext $ctx) use ($users): void {
+        $users($ctx);
+        // A client with made-up findings only (no scan): each step adds findings and checks all three places agree.
+        $ctx->db->exec("INSERT INTO clients (name, timezone, created_at, updated_at) VALUES ('Rating Match Example', 'UTC', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+        $cid = (int) $ctx->db->lastInsertId();
+        $ctx->db->exec("INSERT IGNORE INTO kev_catalog (cve_id, vendor, product, name) VALUES ('CVE-2099-0588', 'Example', 'Example', 'Made-up test entry')");
+        $add = static function (string $key, string $sev, string $source, ?string $cve = null) use ($ctx, $cid): void {
+            $ctx->db->prepare("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, target, status, source, cve_id, first_seen, last_seen)
+                               VALUES (:c, :k, 'port', :s, :t, '203.0.113.188:1', 'open', :src, :cve, UTC_TIMESTAMP(), UTC_TIMESTAMP())")
+                ->execute(['c' => $cid, 'k' => $key, 's' => $sev, 't' => 'Rating test ' . $key, 'src' => $source, 'cve' => $cve]);
+        };
+        $plain = App::apiTokens()->create('Rating token', false, [$cid], false, false, [], 30,
+            (int) $ctx->db->query("SELECT id FROM users WHERE username = 'admin'")->fetchColumn())[1];
+        $ctx->db->exec("DELETE FROM auth_throttle");
+        $view = $ctx->login('rview', 'Rview-Pass-0001!');
+        $check = static function (int $score, string $level, string $words, string $reason) use ($ctx, $cid, $plain, $view): void {
+            $dash = (new \Sentinel\Dashboard\DashboardData($ctx->db, App::settings()))->clients($cid)[0];
+            Assert::same([$score, $level], [$dash['score'], $dash['level']], 'dashboard');
+            $id = App::reportService()->generate(App::clients()->find($cid), 'executive', gmdate('Y-m-d', time() - 29 * 86400), gmdate('Y-m-d'), null, 'Test');
+            $snap = json_decode((string) $ctx->db->query("SELECT snapshot FROM reports WHERE id = {$id}")->fetchColumn(), true);
+            Assert::same([$score, $level], [$snap['rating']['score'], $snap['rating']['level']], 'report snapshot');
+            $doc = $view->get('/reports/' . $id . '/view')->body;
+            Assert::contains($words, $doc);
+            Assert::contains($reason, $doc);
+            Assert::contains('Risk score ' . $score . ' of 100', $doc);
+            Assert::contains('Risk score ' . $score . ' of 100', $view->get('/reports/' . $id)->body, 'report page shows the score');
+            $sum = json_decode($ctx->api('GET', '/api/v1/clients/' . $cid . '/summary', $plain)->body, true)['data'];
+            Assert::same([$score, ['risk' => 'at_risk', 'attention' => 'needs_attention', 'good' => 'good'][$level]], [$sum['score'], $sum['rating']], 'API summary');
+        };
+        $add('w1', 'warn', 'external');
+        $add('w2', 'warn', 'external');
+        $add('w3', 'warn', 'external');
+        $check(10, 'good', 'Good', '3 minor item(s) are listed in this report');   // used to be "Needs attention" in reports
+        $add('f1', 'fail', 'agent');
+        $check(15, 'attention', 'Needs attention', '1 serious problem(s) should be fixed soon');
+        $add('k1', 'fail', 'external', 'CVE-2099-0588');
+        $check(39, 'risk', 'At risk', '1 known-exploited weakness(es) can be reached from the internet');
+        $ctx->db->exec("DELETE FROM reports WHERE client_id = {$cid}");
+        $ctx->db->exec("DELETE FROM findings WHERE client_id = {$cid}");
+        $ctx->db->exec("DELETE FROM api_tokens WHERE name = 'Rating token'");
+        $ctx->db->exec("DELETE FROM clients WHERE id = {$cid}");
     },
     'downloads: HTML and CSV with safe names; CSV formulas neutralised' => function (TestContext $ctx) use ($setup): void {
         $cid = $setup($ctx);

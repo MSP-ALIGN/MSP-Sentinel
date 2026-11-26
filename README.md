@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.58.1](https://img.shields.io/badge/version-1.58.1-ff5a1f?style=flat-square)
+![Version 1.58.2](https://img.shields.io/badge/version-1.58.2-ff5a1f?style=flat-square)
 ![License AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,13 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.58.2 (2026-11-26): Reports match the dashboard
+
+- Reports now rate a client with the dashboard's score and level, so both always agree. For example, a few
+  Warnings show Good in both places, and one Fail inside the network shows Needs attention in both. Each report
+  shows "Risk score N of 100" under its rating. Reports made before this update keep their rating.
+- The API's client summary uses the same rule and adds a `score` field.
+
 ### 1.58.1 (2026-11-26): Fixes from review
 
 - Under the sonar, "Highest" is now "Most at risk": the center shows the client ranked first (level first, then
@@ -136,14 +143,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 - **Levels follow the score.** At risk at 50 or more, or with any known-exploited Fail reachable from the internet;
   Needs attention at 15 or more, or with any open Fail; Good otherwise. The dashboard sonar, client list and client
   overviews all use it. Reports keep their own rating.
-
-### 1.57.3 (2026-11-25): Fixes from review
-
-- **"localhost" stays gone.** The names a Windows or Samba machine gives in its SMB answer are checked too, so a
-  full scan can no longer bring "LOCALHOST" back and make the device's name change with every scan.
-- **The agent skips certificates made out to "localhost"** (common on a NAS), so a real name from another
-  certificate on the same machine can still be used. This takes effect when agents update.
-- "localhost6" names (some Linux systems) are recognized too.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

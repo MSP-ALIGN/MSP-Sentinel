@@ -128,7 +128,7 @@ return [
         Assert::same('203.0.113.160', $assets[0]['ip']);
         Assert::true(in_array(3389, array_column($assets[0]['open_services'], 'port'), true), 'open services listed');
         $sum = json_decode($ctx->api('GET', '/api/v1/clients/' . $a . '/summary', $plain)->body, true)['data'];
-        Assert::same('at_risk', $sum['rating']);
+        Assert::same('needs_attention', $sum['rating']);
         Assert::true($sum['last_scan']['scan_id'] > 0 && str_ends_with($sum['last_scan']['finished_at'], 'Z'), 'last scan in ISO 8601 UTC');
         $scans = json_decode($ctx->api('GET', '/api/v1/scans', $plain)->body, true)['data'];
         Assert::same([$a], array_values(array_unique(array_column($scans, 'client_id'))));
@@ -149,7 +149,7 @@ return [
         Assert::contains('sandbox', (string) $html->header('content-security-policy'));
         Assert::contains('status,severity', $ctx->api('GET', '/api/v1/reports/' . $id . '/csv', $plain)->body);
         Assert::same(404, $ctx->api('GET', '/api/v1/reports/' . $other . '/html', $plain)->status);
-        Assert::same('risk', json_decode($ctx->api('GET', '/api/v1/reports/' . $id, $plain)->body, true)['data']['rating']);
+        Assert::same('attention', json_decode($ctx->api('GET', '/api/v1/reports/' . $id, $plain)->body, true)['data']['rating']);
     },
     'writes need opt-in permissions: triage with a note, queue scans' => function (TestContext $ctx) use ($setup, $token): void {
         [$a, $b] = $setup($ctx);
@@ -242,7 +242,7 @@ return [
 
         $ctx->db->exec("UPDATE clients SET is_archived = 1 WHERE id = {$b}");
         $sum = json_decode($ctx->api('GET', '/api/v1/clients/' . $b . '/summary', $plain)->body, true)['data'];
-        Assert::true($sum['archived'] === true && $sum['open']['fail'] > 0 && $sum['rating'] === 'at_risk', 'archived client shows real totals');
+        Assert::true($sum['archived'] === true && $sum['open']['fail'] > 0 && $sum['rating'] === 'needs_attention', 'archived client shows real totals');
         $ctx->db->exec("UPDATE clients SET is_archived = 0 WHERE id = {$b}");
 
         // Events: retried with growing gaps, not dropped after 20 minutes.

@@ -15,7 +15,7 @@ $rt = $rating !== null ? ($ratingLabel[$rating['level']] ?? null) : null;
         <div class="card">
             <div class="card-body">
                 <?php if ($rt !== null): ?>
-                <p class="h5"><span class="badge text-bg-<?= e($rt[1]) ?>"><i class="bi <?= e($rt[2]) ?> me-1" aria-hidden="true"></i><?= e($rt[0]) ?></span> <span class="small"><?= e($rating['reason']) ?></span></p>
+                <p class="h5"><span class="badge text-bg-<?= e($rt[1]) ?>"><i class="bi <?= e($rt[2]) ?> me-1" aria-hidden="true"></i><?= e($rt[0]) ?></span> <span class="small"><?= e($rating['reason']) ?><?= isset($rating['score']) ? ' · ' . e(__('Risk score {s} of 100', ['s' => (int) $rating['score']])) : '' ?></span></p>
                 <?php endif; ?>
                 <dl class="row small mb-3">
                     <dt class="col-sm-4"><?= e(__('Client')) ?></dt><dd class="col-sm-8"><a href="<?= e(url('/clients/' . (int) $report['client_id'])) ?>"><?= e($report['client_name']) ?></a></dd>

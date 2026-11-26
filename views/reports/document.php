@@ -97,7 +97,7 @@ footer.doc-footer .right { margin-left: auto; }
 
 <div class="rating rating-<?= e($r['rating']['level']) ?>">
     <span class="big"><?= $rating[0] ?> <?= e($rating[1]) ?></span>
-    <p><?= e($r['rating']['reason']) ?></p>
+    <p><?= e($r['rating']['reason']) ?><?php if (isset($r['rating']['score'])): ?><br><span class="muted"><?= e(__('Risk score {s} of 100', ['s' => (int) $r['rating']['score']])) ?></span><?php endif; ?></p>
 </div>
 
 <div class="tiles">

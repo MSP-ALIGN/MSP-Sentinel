@@ -2,6 +2,13 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.58.2 (2026-11-26): Reports match the dashboard
+
+- Reports now rate a client with the dashboard's score and level, so both always agree. For example, a few
+  Warnings show Good in both places, and one Fail inside the network shows Needs attention in both. Each report
+  shows "Risk score N of 100" under its rating. Reports made before this update keep their rating.
+- The API's client summary uses the same rule and adds a `score` field.
+
 ### 1.58.1 (2026-11-26): Fixes from review
 
 - Under the sonar, "Highest" is now "Most at risk": the center shows the client ranked first (level first, then

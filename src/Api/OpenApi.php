@@ -42,7 +42,7 @@ final class OpenApi
                 '/me' => $get('This token: name, permissions, clients, expiry', [], 'Token details'),
                 '/clients' => $get('List clients', array_merge($page, [$since]), 'Clients'),
                 '/clients/{id}' => $get('One client', [$id], 'Client'),
-                '/clients/{id}/summary' => $get('Rating, open totals, last scan', [$id], 'Summary'),
+                '/clients/{id}/summary' => $get('Rating and risk score (as on the dashboard), open totals, last scan', [$id], 'Summary'),
                 '/clients/{id}/scans' => ['post' => ['summary' => 'Queue a scan (needs the "scan" permission; runs in the client\'s scan window)', 'parameters' => [$id],
                     'responses' => ['202' => ['description' => 'Queued'], '409' => ['description' => 'Already queued, paused, archived or nothing to scan']] + $errors]],
                 '/assets' => $get('List assets with open services', array_merge($page, [$client, $since]), 'Assets'),
