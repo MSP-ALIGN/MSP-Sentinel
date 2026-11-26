@@ -85,7 +85,10 @@ return [
         $csp = (string) $doc->header('content-security-policy');
         Assert::true(str_contains($csp, "default-src 'none'") && str_contains($csp, 'sandbox') && !str_contains($csp, 'script-src'), 'strict report CSP: ' . $csp);
         Assert::contains('Reports Example', $doc->body);
-        Assert::contains('Needs attention', $doc->body);  // one Fail on the internet, not known exploited (1.58.2: as on the dashboard)
+        // The level follows the dashboard's rule (1.58.2); the fixture's depends on made-up CVE data earlier tests add.
+        $rows = $ctx->db->query("SELECT f.severity, f.source, (k.cve_id IS NOT NULL) AS in_kev FROM findings f
+                                 LEFT JOIN kev_catalog k ON k.cve_id = f.cve_id WHERE f.client_id = {$cid} AND f.status = 'open'")->fetchAll();
+        Assert::contains(['risk' => 'At risk', 'attention' => 'Needs attention', 'good' => 'Good'][\Sentinel\Dashboard\DashboardData::rate($rows)['level']], $doc->body);
         Assert::contains('Remote Desktop open to the internet', $doc->body);
         Assert::contains('How to fix', $doc->body);
         Assert::contains('Accepted risks and false positives', $doc->body);
@@ -142,18 +145,28 @@ return [
             $sum = json_decode($ctx->api('GET', '/api/v1/clients/' . $cid . '/summary', $plain)->body, true)['data'];
             Assert::same([$score, ['risk' => 'at_risk', 'attention' => 'needs_attention', 'good' => 'good'][$level]], [$sum['score'], $sum['rating']], 'API summary');
         };
-        $add('w1', 'warn', 'external');
-        $add('w2', 'warn', 'external');
-        $add('w3', 'warn', 'external');
-        $check(10, 'good', 'Good', '3 minor item(s) are listed in this report');   // used to be "Needs attention" in reports
-        $add('f1', 'fail', 'agent');
-        $check(15, 'attention', 'Needs attention', '1 serious problem(s) should be fixed soon');
-        $add('k1', 'fail', 'external', 'CVE-2099-0588');
-        $check(39, 'risk', 'At risk', '1 known-exploited weakness(es) can be reached from the internet');
-        $ctx->db->exec("DELETE FROM reports WHERE client_id = {$cid}");
-        $ctx->db->exec("DELETE FROM findings WHERE client_id = {$cid}");
-        $ctx->db->exec("DELETE FROM api_tokens WHERE name = 'Rating token'");
-        $ctx->db->exec("DELETE FROM clients WHERE id = {$cid}");
+        try {
+            $add('w1', 'warn', 'external');
+            $add('w2', 'warn', 'external');
+            $add('w3', 'warn', 'external');
+            $check(10, 'good', 'Good', '3 minor item(s) are listed in this report');   // used to be "Needs attention" in reports
+            $add('f1', 'fail', 'agent');
+            $check(15, 'attention', 'Needs attention', '1 serious problem(s) should be fixed soon');
+            $add('k1', 'fail', 'external', 'CVE-2099-0588');
+            $check(39, 'risk', 'At risk', '1 known-exploited weakness(es) can be reached from the internet');
+            // Warnings alone can reach At risk (21 on the internet = 42 points = 50): the reason names them.
+            $ctx->db->exec("DELETE FROM findings WHERE client_id = {$cid}");
+            for ($i = 1; $i <= 21; $i++) {
+                $add('many' . $i, 'warn', 'external');
+            }
+            $check(50, 'risk', 'At risk', 'No serious problems, but 21 item(s) together put the client at risk');
+        } finally {
+            // Cleaned up even when a check fails, so a rerun starts clean.
+            $ctx->db->exec("DELETE FROM reports WHERE client_id = {$cid}");
+            $ctx->db->exec("DELETE FROM findings WHERE client_id = {$cid}");
+            $ctx->db->exec("DELETE FROM api_tokens WHERE name = 'Rating token'");
+            $ctx->db->exec("DELETE FROM clients WHERE id = {$cid}");
+        }
     },
     'downloads: HTML and CSV with safe names; CSV formulas neutralised' => function (TestContext $ctx) use ($setup): void {
         $cid = $setup($ctx);

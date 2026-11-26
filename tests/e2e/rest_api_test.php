@@ -46,6 +46,15 @@ $token = static function (TestContext $ctx, array $clients, bool $triage = false
     return App::apiTokens()->create('Test token', $clients === [], $clients, $triage, $scan, $ips, 30, $adminId($ctx));
 };
 
+// The client's level by the dashboard's rule (1.58.2), from its open findings; the fixture's level depends on the
+// made-up CVE data earlier tests add, so the tests compare against the rule, not a fixed word.
+$ratingLevel = static function (TestContext $ctx, int $cid): string {
+    $rows = $ctx->db->query("SELECT f.severity, f.source, (k.cve_id IS NOT NULL) AS in_kev FROM findings f
+                             LEFT JOIN kev_catalog k ON k.cve_id = f.cve_id WHERE f.client_id = {$cid} AND f.status = 'open'")->fetchAll();
+    return \Sentinel\Dashboard\DashboardData::rate($rows)['level'];
+};
+$apiRating = ['risk' => 'at_risk', 'attention' => 'needs_attention', 'good' => 'good'];
+
 return [
     'admins create tokens: shown once, stored only as a keyed hash' => function (TestContext $ctx) use ($setup): void {
         [$a] = $setup($ctx);
@@ -97,7 +106,7 @@ return [
         Assert::same(404, $ctx->api('GET', '/api/v1/nothing', $plain)->status);
         Assert::same(405, $ctx->api('DELETE', '/api/v1/clients', $plain)->status);
     },
-    'reads are limited to the token\'s clients; pagination and filters' => function (TestContext $ctx) use ($setup, $token): void {
+    'reads are limited to the token\'s clients; pagination and filters' => function (TestContext $ctx) use ($setup, $token, $ratingLevel, $apiRating): void {
         [$a, $b] = $setup($ctx);
         [, $plain] = $token($ctx, [$a]);
         $clients = json_decode($ctx->api('GET', '/api/v1/clients', $plain)->body, true);
@@ -128,7 +137,8 @@ return [
         Assert::same('203.0.113.160', $assets[0]['ip']);
         Assert::true(in_array(3389, array_column($assets[0]['open_services'], 'port'), true), 'open services listed');
         $sum = json_decode($ctx->api('GET', '/api/v1/clients/' . $a . '/summary', $plain)->body, true)['data'];
-        Assert::same('needs_attention', $sum['rating']);
+        Assert::same($apiRating[$ratingLevel($ctx, $a)], $sum['rating']);
+        Assert::true($sum['rating'] !== 'good' && is_int($sum['score']) && $sum['score'] > 0, 'open Fail rated, with a score');
         Assert::true($sum['last_scan']['scan_id'] > 0 && str_ends_with($sum['last_scan']['finished_at'], 'Z'), 'last scan in ISO 8601 UTC');
         $scans = json_decode($ctx->api('GET', '/api/v1/scans', $plain)->body, true)['data'];
         Assert::same([$a], array_values(array_unique(array_column($scans, 'client_id'))));
@@ -136,7 +146,7 @@ return [
         Assert::same('3.1.0', $spec['openapi']);
         Assert::true(isset($spec['paths']['/findings/{id}/triage']['post']), 'documented');
     },
-    'reports through the API: list, frozen HTML with its hash, CSV' => function (TestContext $ctx) use ($setup, $token): void {
+    'reports through the API: list, frozen HTML with its hash, CSV' => function (TestContext $ctx) use ($setup, $token, $ratingLevel): void {
         [$a, $b] = $setup($ctx);
         $client = App::clients()->find($a);
         $id = App::reportService()->generate($client, 'technical', gmdate('Y-m-d', time() - 29 * 86400), gmdate('Y-m-d'), null, 'Test');
@@ -149,7 +159,7 @@ return [
         Assert::contains('sandbox', (string) $html->header('content-security-policy'));
         Assert::contains('status,severity', $ctx->api('GET', '/api/v1/reports/' . $id . '/csv', $plain)->body);
         Assert::same(404, $ctx->api('GET', '/api/v1/reports/' . $other . '/html', $plain)->status);
-        Assert::same('attention', json_decode($ctx->api('GET', '/api/v1/reports/' . $id, $plain)->body, true)['data']['rating']);
+        Assert::same($ratingLevel($ctx, $a), json_decode($ctx->api('GET', '/api/v1/reports/' . $id, $plain)->body, true)['data']['rating']);
     },
     'writes need opt-in permissions: triage with a note, queue scans' => function (TestContext $ctx) use ($setup, $token): void {
         [$a, $b] = $setup($ctx);
@@ -225,7 +235,7 @@ return [
         Assert::same(1, (int) $ctx->db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'api.locked_out'")->fetchColumn(), 'the lockout is audited once');
         $ctx->db->exec("DELETE FROM auth_throttle");
     },
-    'updated_since only reports real changes; archived clients keep real totals; events retry for longer' => function (TestContext $ctx) use ($setup, $token): void {
+    'updated_since only reports real changes; archived clients keep real totals; events retry for longer' => function (TestContext $ctx) use ($setup, $token, $ratingLevel, $apiRating): void {
         [$a, $b] = $setup($ctx);
         [, $plain] = $token($ctx, []);
         sleep(1);
@@ -242,7 +252,7 @@ return [
 
         $ctx->db->exec("UPDATE clients SET is_archived = 1 WHERE id = {$b}");
         $sum = json_decode($ctx->api('GET', '/api/v1/clients/' . $b . '/summary', $plain)->body, true)['data'];
-        Assert::true($sum['archived'] === true && $sum['open']['fail'] > 0 && $sum['rating'] === 'needs_attention', 'archived client shows real totals');
+        Assert::true($sum['archived'] === true && $sum['open']['fail'] > 0 && $sum['rating'] === $apiRating[$ratingLevel($ctx, $sum['client_id'])], 'archived client shows real totals');
         $ctx->db->exec("UPDATE clients SET is_archived = 0 WHERE id = {$b}");
 
         // Events: retried with growing gaps, not dropped after 20 minutes.

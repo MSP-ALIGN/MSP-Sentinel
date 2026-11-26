@@ -125,6 +125,8 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
   Warnings show Good in both places, and one Fail inside the network shows Needs attention in both. Each report
   shows "Risk score N of 100" under its rating. Reports made before this update keep their rating.
 - The API's client summary uses the same rule and adds a `score` field.
+- Fixes from review: a client At risk from many Warnings alone gets the right reason; the report's Fail count
+  says "serious, fix first"; the API docs describe `score`.
 
 ### 1.58.1 (2026-11-26): Fixes from review
 

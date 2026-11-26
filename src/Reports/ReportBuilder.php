@@ -70,6 +70,8 @@ final class ReportBuilder
         $level = $rate['level'];
         $reason = match (true) {
             $level === 'risk' && $rate['external_kev_fail'] > 0 => __('{n} known-exploited weakness(es) can be reached from the internet and need fixing now.', ['n' => $rate['external_kev_fail']]),
+            // Many Warnings alone can reach a score of 50 (21 or more on the internet): name them, not "0 serious problems".
+            $level === 'risk' && $fails === [] => __('No serious problems, but {n} item(s) together put the client at risk and should be fixed soon.', ['n' => count($warns)]),
             $level === 'risk' => __('{n} serious problem(s) need fixing now.', ['n' => count($fails)]),
             $level === 'attention' && $fails !== [] => __('{n} serious problem(s) should be fixed soon.', ['n' => count($fails)]),
             $level === 'attention' => __('No serious problems, but {n} item(s) should be fixed soon.', ['n' => count($warns)]),

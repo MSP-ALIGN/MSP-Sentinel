@@ -101,7 +101,7 @@ footer.doc-footer .right { margin-left: auto; }
 </div>
 
 <div class="tiles">
-    <div class="tile"><span class="n" style="color:var(--fail)"><?= (int) $c['fail'] ?></span><?= $sev('fail') ?> <?= e(__('serious, fix now')) ?></div>
+    <div class="tile"><span class="n" style="color:var(--fail)"><?= (int) $c['fail'] ?></span><?= $sev('fail') ?> <?= e(__('serious, fix first')) ?></div>
     <div class="tile"><span class="n" style="color:var(--warn)"><?= (int) $c['warn'] ?></span><?= $sev('warn') ?> <?= e(__('fix soon')) ?></div>
     <div class="tile"><span class="n" style="color:var(--ok)"><?= (int) $c['fixed'] ?></span>&#10004; <?= e(__('fixed this period')) ?></div>
     <div class="tile"><span class="n"><?= (int) $c['certs_expiring'] ?></span><?= e(__('certificates expiring or expired')) ?></div>
