@@ -77,6 +77,12 @@ return [
         Assert::notContains("\r\n.\r\n", $msg, 'content is encoded, so it cannot end the SMTP DATA early');
         Assert::contains(base64_encode('a,b'), $msg);
     },
+    'CSS strings in the page margins (1.59): escaped, and the space after punctuation survives' => function (TestContext $ctx): void {
+        // CSS eats one whitespace after an escape, so each escape carries its own space: ": b" must stay ": b".
+        Assert::same('"a\\00003A  b"', \Sentinel\Reports\ReportTheme::cssString('a: b'));
+        Assert::same('"x\\000022 \\00003C \\00002F style\\00003E \\00005C "', \Sentinel\Reports\ReportTheme::cssString('x"</style>\\'));
+        Assert::same('"line one line two"', \Sentinel\Reports\ReportTheme::cssString("line one\nline two"), 'control characters become spaces');
+    },
     'branded report email (1.59): text + HTML alternative, inline logo, escaped, then attachments' => function (TestContext $ctx): void {
         $png = "\x89PNG\r\n\x1a\n" . 'made-up-image-bytes';
         $msg = SmtpMailer::buildMessage('s@msp.example', ['a@msp.example'], 'Reports', 'Plain text.',

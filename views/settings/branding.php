@@ -7,6 +7,7 @@
 use Sentinel\Core\Csrf;
 
 $bv = $branding;
+/** One labelled text input for a branding field; every value is escaped. */
 $text = static function (string $name, string $label, int $max, string $placeholder = '', string $help = '') use ($bv): string {
     return '<label class="form-label small mb-0" for="' . e($name) . '">' . e($label) . '</label>'
         . '<input class="form-control form-control-sm" id="' . e($name) . '" name="' . e($name) . '" value="' . e($bv[$name]) . '" maxlength="' . $max . '"'

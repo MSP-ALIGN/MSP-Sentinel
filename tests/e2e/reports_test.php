@@ -258,7 +258,7 @@ return [
             Assert::contains($want, $new);
         }
         Assert::contains('Private for Reports Example &quot;quoted&quot; &lt;/style&gt;&lt;script&gt;', $new, 'confidential label on the cover, escaped');
-        Assert::contains('content: "Private for Reports Example \\000022quoted\\000022 \\00003C\\00002Fstyle\\00003E', $new, 'label in the page margin as an escaped CSS string');
+        Assert::contains('content: "Private for Reports Example \\000022 quoted\\000022  \\00003C \\00002F style\\00003E ', $new, 'label in the page margin as an escaped CSS string');
         Assert::same(1, substr_count($new, '</style>'), 'the label never closes the stylesheet');
         Assert::notContains('<script', $new);
         Assert::same($oldHtml, (string) $ctx->db->query("SELECT html FROM reports WHERE id = {$old}")->fetchColumn(), 'saved reports keep their branding');

@@ -53,13 +53,15 @@ final class ReportTheme
     /**
      * A quoted CSS string that shows $text literally. Every character other than ASCII letters, digits and spaces is a
      * 6-digit hex escape, so quotes, backslashes, "<" and line breaks can never end the string or the stylesheet.
+     * Each escape ends with one space: CSS swallows a single whitespace after an escape, so this space is eaten
+     * instead of a real one that follows (": b" stays ": b").
      */
     public static function cssString(string $text): string
     {
         $text = mb_substr((string) preg_replace('/[\x00-\x1F\x7F]+/u', ' ', mb_check_encoding($text, 'UTF-8') ? $text : ''), 0, 200);
         $out = '';
         foreach (mb_str_split($text) as $ch) {
-            $out .= preg_match('/^[A-Za-z0-9 ]$/', $ch) ? $ch : sprintf('\\%06X', mb_ord($ch));
+            $out .= preg_match('/^[A-Za-z0-9 ]$/', $ch) ? $ch : sprintf('\\%06X ', mb_ord($ch));
         }
         return '"' . $out . '"';
     }

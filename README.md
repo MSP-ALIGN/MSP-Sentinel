@@ -133,6 +133,8 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
   details. The plain-text version is still included, and the reports are still attached.
 - **Honest scope.** Reports with findings from agents or an RMM now say they include checks from inside the
   network. They no longer say that internal networks were not tested.
+- Fixes from review: spaces after punctuation are kept in the printed header and footer; a settings page opened
+  before the upgrade can still be saved; the pen-test report's last line says "Issued by".
 
 ### 1.58.2 (2026-11-26): Reports match the dashboard
 

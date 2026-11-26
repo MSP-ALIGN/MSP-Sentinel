@@ -226,7 +226,10 @@ final class ReportBuilder
     /**
      * Branding frozen into the report.
      *
-     * @return array{name:string, color:string, footer:string, logo:string, powered_by:bool, paper:string}
+     * Untrusted: every text value (admin input); ReportTheme::brand() checks colors, cover and paper again before CSS.
+     *
+     * @return array{name:string, color:string, footer:string, logo:string, powered_by:bool, paper:string, accent:string, cover:string,
+     *               address:string, phone:string, email:string, website:string, prepared_by:string, prepared_title:string, signoff:string, confidential:string}
      */
     public function brand(): array
     {

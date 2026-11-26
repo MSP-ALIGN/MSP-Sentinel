@@ -222,8 +222,9 @@ final class ReportController extends Controller
         }
         $v += [
             'brand_color' => strtolower($request->input('brand_color')),
-            'brand_accent' => strtolower($request->input('brand_accent')),
-            'report_cover' => $request->input('report_cover'),
+            // A form from before 1.59 (an old tab) has no accent or cover field: keep the saved value.
+            'brand_accent' => strtolower($request->input('brand_accent') !== '' ? $request->input('brand_accent') : $s->get('brand_accent')),
+            'report_cover' => $request->input('report_cover') !== '' ? $request->input('report_cover') : $s->get('report_cover'),
             'report_paper' => $request->input('report_paper'),
             'report_powered_by' => $request->input('report_powered_by') === '1' ? '1' : '0',
         ];
