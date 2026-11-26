@@ -10,6 +10,7 @@ use PDO;
 use Sentinel\Core\App;
 use Sentinel\Core\Request;
 use Sentinel\Core\Response;
+use Sentinel\Dashboard\DashboardData;
 use Sentinel\Reports\CsvExport;
 use Sentinel\Scanning\NmapRunner;
 
@@ -101,11 +102,17 @@ final class ApiController
             $byType[$t['finding_type']][$t['severity']] = (int) $t['n'];
         }
         $assets = (int) $this->db->query('SELECT COUNT(*) FROM assets WHERE client_id = ' . $cid)->fetchColumn();
+        // 1.58.2: the dashboard's score and level (DashboardData::rate), like the reports.
+        $open = $this->db->prepare("SELECT f.severity, f.source, (k.cve_id IS NOT NULL) AS in_kev FROM findings f
+                                    LEFT JOIN kev_catalog k ON k.cve_id = f.cve_id WHERE f.client_id = :c AND f.status = 'open'");
+        $open->execute(['c' => $cid]);
+        $rate = DashboardData::rate($open->fetchAll());
         return ApiKernel::json(['data' => [
             'client_id' => $cid,
             'name' => $c['name'],
             'archived' => (int) $c['is_archived'] === 1,
-            'rating' => $counts['fail'] > 0 ? 'at_risk' : ($counts['warn'] > 0 ? 'needs_attention' : 'good'),
+            'rating' => ['risk' => 'at_risk', 'attention' => 'needs_attention', 'good' => 'good'][$rate['level']],
+            'score' => $rate['score'],
             'open' => ['fail' => $counts['fail'], 'warn' => $counts['warn']],
             'accepted' => $counts['accepted'],
             'false_positive' => $counts['false_positive'],

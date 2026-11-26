@@ -85,7 +85,10 @@ return [
         $csp = (string) $doc->header('content-security-policy');
         Assert::true(str_contains($csp, "default-src 'none'") && str_contains($csp, 'sandbox') && !str_contains($csp, 'script-src'), 'strict report CSP: ' . $csp);
         Assert::contains('Reports Example', $doc->body);
-        Assert::contains('At risk', $doc->body);
+        // The level follows the dashboard's rule (1.58.2); the fixture's depends on made-up CVE data earlier tests add.
+        $rows = $ctx->db->query("SELECT f.severity, f.source, (k.cve_id IS NOT NULL) AS in_kev FROM findings f
+                                 LEFT JOIN kev_catalog k ON k.cve_id = f.cve_id WHERE f.client_id = {$cid} AND f.status = 'open'")->fetchAll();
+        Assert::contains(['risk' => 'At risk', 'attention' => 'Needs attention', 'good' => 'Good'][\Sentinel\Dashboard\DashboardData::rate($rows)['level']], $doc->body);
         Assert::contains('Remote Desktop open to the internet', $doc->body);
         Assert::contains('How to fix', $doc->body);
         Assert::contains('Accepted risks and false positives', $doc->body);
@@ -112,6 +115,58 @@ return [
         Assert::contains('What it means for you', $body);
         Assert::true(substr_count($body, 'class="risk ') <= 5, 'at most 5 top risks');
         Assert::status(404, $view->get('/reports/999999/view'));
+    },
+    'the rating matches the dashboard: same score and level in the report, its page and the API (1.58.2)' => function (TestContext $ctx) use ($users): void {
+        $users($ctx);
+        // A client with made-up findings only (no scan): each step adds findings and checks all three places agree.
+        $ctx->db->exec("INSERT INTO clients (name, timezone, created_at, updated_at) VALUES ('Rating Match Example', 'UTC', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+        $cid = (int) $ctx->db->lastInsertId();
+        $ctx->db->exec("INSERT IGNORE INTO kev_catalog (cve_id, vendor, product, name) VALUES ('CVE-2099-0588', 'Example', 'Example', 'Made-up test entry')");
+        $add = static function (string $key, string $sev, string $source, ?string $cve = null) use ($ctx, $cid): void {
+            $ctx->db->prepare("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, target, status, source, cve_id, first_seen, last_seen)
+                               VALUES (:c, :k, 'port', :s, :t, '203.0.113.188:1', 'open', :src, :cve, UTC_TIMESTAMP(), UTC_TIMESTAMP())")
+                ->execute(['c' => $cid, 'k' => $key, 's' => $sev, 't' => 'Rating test ' . $key, 'src' => $source, 'cve' => $cve]);
+        };
+        $plain = App::apiTokens()->create('Rating token', false, [$cid], false, false, [], 30,
+            (int) $ctx->db->query("SELECT id FROM users WHERE username = 'admin'")->fetchColumn())[1];
+        $ctx->db->exec("DELETE FROM auth_throttle");
+        $view = $ctx->login('rview', 'Rview-Pass-0001!');
+        $check = static function (int $score, string $level, string $words, string $reason) use ($ctx, $cid, $plain, $view): void {
+            $dash = (new \Sentinel\Dashboard\DashboardData($ctx->db, App::settings()))->clients($cid)[0];
+            Assert::same([$score, $level], [$dash['score'], $dash['level']], 'dashboard');
+            $id = App::reportService()->generate(App::clients()->find($cid), 'executive', gmdate('Y-m-d', time() - 29 * 86400), gmdate('Y-m-d'), null, 'Test');
+            $snap = json_decode((string) $ctx->db->query("SELECT snapshot FROM reports WHERE id = {$id}")->fetchColumn(), true);
+            Assert::same([$score, $level], [$snap['rating']['score'], $snap['rating']['level']], 'report snapshot');
+            $doc = $view->get('/reports/' . $id . '/view')->body;
+            Assert::contains($words, $doc);
+            Assert::contains($reason, $doc);
+            Assert::contains('Risk score ' . $score . ' of 100', $doc);
+            Assert::contains('Risk score ' . $score . ' of 100', $view->get('/reports/' . $id)->body, 'report page shows the score');
+            $sum = json_decode($ctx->api('GET', '/api/v1/clients/' . $cid . '/summary', $plain)->body, true)['data'];
+            Assert::same([$score, ['risk' => 'at_risk', 'attention' => 'needs_attention', 'good' => 'good'][$level]], [$sum['score'], $sum['rating']], 'API summary');
+        };
+        try {
+            $add('w1', 'warn', 'external');
+            $add('w2', 'warn', 'external');
+            $add('w3', 'warn', 'external');
+            $check(10, 'good', 'Good', '3 minor item(s) are listed in this report');   // used to be "Needs attention" in reports
+            $add('f1', 'fail', 'agent');
+            $check(15, 'attention', 'Needs attention', '1 serious problem(s) should be fixed soon');
+            $add('k1', 'fail', 'external', 'CVE-2099-0588');
+            $check(39, 'risk', 'At risk', '1 known-exploited weakness(es) can be reached from the internet');
+            // Warnings alone can reach At risk (21 on the internet = 42 points = 50): the reason names them.
+            $ctx->db->exec("DELETE FROM findings WHERE client_id = {$cid}");
+            for ($i = 1; $i <= 21; $i++) {
+                $add('many' . $i, 'warn', 'external');
+            }
+            $check(50, 'risk', 'At risk', 'No serious problems, but 21 item(s) together put the client at risk');
+        } finally {
+            // Cleaned up even when a check fails, so a rerun starts clean.
+            $ctx->db->exec("DELETE FROM reports WHERE client_id = {$cid}");
+            $ctx->db->exec("DELETE FROM findings WHERE client_id = {$cid}");
+            $ctx->db->exec("DELETE FROM api_tokens WHERE name = 'Rating token'");
+            $ctx->db->exec("DELETE FROM clients WHERE id = {$cid}");
+        }
     },
     'downloads: HTML and CSV with safe names; CSV formulas neutralised' => function (TestContext $ctx) use ($setup): void {
         $cid = $setup($ctx);
@@ -149,12 +204,22 @@ return [
         imagepng($img, $dir . '/logo.png');
         file_put_contents($dir . '/logo.png', "trailing-junk-after-image", FILE_APPEND);
         file_put_contents($dir . '/fake.png', "<?php echo 'not an image';");
-        $fields = ['brand_name' => 'Example MSP Ltd', 'brand_color' => '#7a1f5c', 'brand_footer' => "Example MSP · support@msp.example\n555-0100", 'report_paper' => 'Letter', 'report_powered_by' => '1'];
+        $fields = ['brand_name' => 'Example MSP Ltd', 'brand_color' => '#7a1f5c', 'brand_footer' => "Example MSP · support@msp.example\n555-0100", 'report_paper' => 'Letter', 'report_powered_by' => '1',
+            // The branding suite (1.59).
+            'brand_accent' => '#2b8a3e', 'report_cover' => 'white', 'brand_address' => "1 Example Road\nExample Town", 'brand_phone' => '555-0199',
+            'brand_email' => 'hello@msp.example', 'brand_website' => 'www.msp.example', 'report_prepared_by' => 'Sam Example', 'report_prepared_title' => 'Security lead',
+            'report_signoff' => "Thank you.\n<b>Not bold</b>", 'report_confidential' => 'Private for {client} "quoted" </style><script>'];
 
         $admin->upload('/admin/settings', '/admin/branding', $fields, 'brand_logo', $dir . '/fake.png', 'image/png');
         Assert::contains('PNG or JPEG image', $admin->get('/admin/settings')->body, 'a non-image is refused');
         $admin->submit('/admin/settings', '/admin/branding', ['brand_color' => 'red;}body{display:none'] + $fields);
         Assert::contains('The color must look like', $admin->get('/admin/settings')->body);
+        // Every new field is checked: accent color, cover style, email, website, line breaks in one-line fields, lengths.
+        foreach ([['brand_accent' => 'blue'], ['report_cover' => 'neon'], ['brand_email' => 'not-an-address'], ['brand_website' => 'javascript:alert(1)'],
+                  ['report_prepared_by' => "Sam\nExample"], ['brand_logo_bg' => 'transparent'], ['report_confidential' => str_repeat('x', 121)], ['report_signoff' => str_repeat('x', 601)]] as $bad) {
+            $admin->submit('/admin/settings', '/admin/branding', $bad + $fields);
+            Assert::true(App::settings()->fresh('brand_name') !== 'Example MSP Ltd', 'refused: ' . json_encode($bad));
+        }
 
         $admin->upload('/admin/settings', '/admin/branding', $fields, 'brand_logo', $dir . '/logo.png', 'image/png');
         $hash = App::settings()->fresh('brand_logo');
@@ -168,6 +233,16 @@ return [
 
         $tech = $ctx->login('rtech', 'Rtech-Pass-0001!');
         Assert::status(403, $tech->post('/admin/branding', ['_csrf' => $tech->get('/')->csrf()] + $fields));
+        // The preview (1.59): made-up data with the saved branding, strict report CSP, admins only.
+        foreach (['executive' => 'Security summary', 'technical' => 'Technical findings'] as $kind => $title) {
+            $pre = $admin->get('/admin/branding/preview?kind=' . $kind);
+            Assert::status(200, $pre);
+            Assert::contains($title, $pre->body);
+            Assert::contains('Example Client Co.', $pre->body);
+            Assert::contains('Sam Example', $pre->body);
+            Assert::contains("default-src 'none'", (string) $pre->header('content-security-policy'));
+        }
+        Assert::status(403, $tech->get('/admin/branding/preview'));
         $tech->submit('/clients/' . $cid, '/clients/' . $cid . '/reports', ['kind' => 'executive', 'period' => 'month']);
         $new = (string) $ctx->db->query("SELECT html FROM reports WHERE client_id = {$cid} ORDER BY id DESC LIMIT 1")->fetchColumn();
         Assert::contains('Example MSP Ltd', $new);
@@ -175,12 +250,34 @@ return [
         Assert::contains('size: Letter', $new);
         Assert::contains('data:image/png;base64,', $new);
         Assert::contains('Generated by MSP Sentinel', $new);
+        // The branding suite (1.59): cover, contact block, sign-off, accent; the label is in the page margins as a CSS
+        // string with every special character escaped, so it can't break out of the stylesheet.
+        Assert::contains('class="cover white"', $new);
+        Assert::contains('--accent: #2b8a3e', $new);
+        foreach (['1 Example Road', 'Example Town', '555-0199', 'hello@msp.example', 'www.msp.example', 'Sam Example', 'Security lead', 'Thank you.', '&lt;b&gt;Not bold&lt;/b&gt;'] as $want) {
+            Assert::contains($want, $new);
+        }
+        Assert::contains('Private for Reports Example &quot;quoted&quot; &lt;/style&gt;&lt;script&gt;', $new, 'confidential label on the cover, escaped');
+        Assert::contains('content: "Private for Reports Example \\000022 quoted\\000022  \\00003C \\00002F style\\00003E ', $new, 'label in the page margin as an escaped CSS string');
+        Assert::same(1, substr_count($new, '</style>'), 'the label never closes the stylesheet');
+        Assert::notContains('<script', $new);
         Assert::same($oldHtml, (string) $ctx->db->query("SELECT html FROM reports WHERE id = {$old}")->fetchColumn(), 'saved reports keep their branding');
         // White-label: the "Generated by" line can be turned off.
         $admin->submit('/admin/settings', '/admin/branding', ['report_powered_by' => '0'] + $fields);
         App::settings()->set('report_powered_by', App::settings()->fresh('report_powered_by'));
         $tech->submit('/clients/' . $cid, '/clients/' . $cid . '/reports', ['kind' => 'executive', 'period' => 'month']);
         Assert::notContains('Generated by MSP Sentinel', (string) $ctx->db->query("SELECT html FROM reports WHERE client_id = {$cid} ORDER BY id DESC LIMIT 1")->fetchColumn());
+        // A logo that includes the company name (1.60): the cover shows the logo alone; the name stays in the sign-off.
+        Assert::contains('<span class="bname">Example MSP Ltd</span>', $new, 'by default the name sits beside the logo');
+        $admin->submit('/admin/settings', '/admin/branding', ['brand_logo_has_name' => '1'] + $fields);
+        Assert::same('1', App::settings()->fresh('brand_logo_has_name'));
+        $tech->submit('/clients/' . $cid, '/clients/' . $cid . '/reports', ['kind' => 'executive', 'period' => 'month']);
+        $logoOnly = (string) $ctx->db->query("SELECT html FROM reports WHERE client_id = {$cid} ORDER BY id DESC LIMIT 1")->fetchColumn();
+        Assert::contains('class="brandrow logo-only"', $logoOnly);
+        Assert::notContains('class="bname"', $logoOnly);
+        Assert::contains('<div class="contact"><b>Example MSP Ltd</b>', $logoOnly, 'the name is still in the contact block');
+        Assert::contains('<br><span class="small muted">Example MSP Ltd</span>', $logoOnly, 'and in the sign-off');
+        App::settings()->set('brand_logo_has_name', '0'); // back to the default for later tests
         array_map('unlink', glob($dir . '/*'));
         rmdir($dir);
     },
@@ -213,6 +310,9 @@ return [
         Assert::contains('Monthly security reports', $mails[0]['subject']);
         Assert::same(2, substr_count($mails[0]['raw'], 'Content-Disposition: attachment; filename="report-'), 'both reports attached');
         Assert::contains('multipart/mixed', $mails[0]['raw']);
+        // Branded HTML version (1.59) next to the plain text, with the logo inline when one is set.
+        Assert::contains('multipart/alternative', $mails[0]['raw']);
+        Assert::contains('Content-Type: text/html; charset=UTF-8', $mails[0]['raw']);
         Assert::contains('Monthly', $admin->get('/reports?client=' . $cid)->body);
     },
     'monthly schedule: a failing client is isolated, retried hourly, admins told; deleted reports are not remade' => function (TestContext $ctx) use ($setup): void {

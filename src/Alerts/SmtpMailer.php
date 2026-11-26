@@ -42,9 +42,11 @@ final class SmtpMailer
      *
      * @param list<string> $to Recipient addresses (validated here again).
      * @param list<array{name:string, type:string, content:string}> $attachments Files to attach (names are sanitised).
+     * @param array{html:string, inline:list<array{cid:string, type:string, content:string}>}|null $html An HTML version
+     *        with its inline images (1.59, report emails); the plain text is always sent too.
      * @throws \RuntimeException with a safe message on any failure.
      */
-    public function send(array $to, string $subject, string $body, array $attachments = []): void
+    public function send(array $to, string $subject, string $body, array $attachments = [], ?array $html = null): void
     {
         $to = array_values(array_filter($to, [self::class, 'validAddress']));
         if ($to === [] || !self::validAddress($this->from)) {
@@ -92,7 +94,7 @@ final class SmtpMailer
                 $this->command($sock, 'RCPT TO:<' . $rcpt . '>', [250, 251]);
             }
             $this->command($sock, 'DATA', 354);
-            $this->write($sock, self::buildMessage($this->from, $to, $subject, $body, $attachments) . "\r\n.");
+            $this->write($sock, self::buildMessage($this->from, $to, $subject, $body, $attachments, $html) . "\r\n.");
             $this->expect($sock, 250);
             // The message is accepted. A bad answer to QUIT must not make it look failed (and be sent again).
             try {
@@ -110,7 +112,7 @@ final class SmtpMailer
      * @param list<string> $to
      * @param list<array{name:string, type:string, content:string}> $attachments
      */
-    public static function buildMessage(string $from, array $to, string $subject, string $body, array $attachments = []): string
+    public static function buildMessage(string $from, array $to, string $subject, string $body, array $attachments = [], ?array $html = null): string
     {
         $subject = trim((string) preg_replace('/[\r\n\t]+/', ' ', $subject));
         $headers = [
@@ -125,23 +127,40 @@ final class SmtpMailer
             'Auto-Submitted: auto-generated',
         ];
         $b64 = static fn (string $data): string => rtrim(chunk_split(base64_encode($data), 76, "\r\n"));
-        $text = $b64(str_replace(["\r\n", "\r"], "\n", $body));
-        if ($attachments === []) {
-            $headers[] = 'Content-Type: text/plain; charset=UTF-8';
-            $headers[] = 'Content-Transfer-Encoding: base64';
-            $content = $text;
-        } else {
-            // multipart/mixed: the text, then each file. Everything is base64, so no part can break the structure.
-            $boundary = '=_sentinel_' . bin2hex(random_bytes(12));
-            $headers[] = 'Content-Type: multipart/mixed; boundary="' . $boundary . '"';
-            $parts = ["--{$boundary}\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n" . $text];
+        $boundary = static fn (): string => '=_sentinel_' . bin2hex(random_bytes(12));
+        // Each part is [content headers, body]. Everything is base64, so no part can break the MIME structure.
+        $part = ["Content-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64", $b64(str_replace(["\r\n", "\r"], "\n", $body))];
+        $multi = static function (string $type, array $parts) use ($boundary): array {
+            $bd = $boundary();
+            $out = '';
+            foreach ($parts as [$h, $c]) {
+                $out .= "--{$bd}\r\n{$h}\r\n\r\n{$c}\r\n";
+            }
+            return ["Content-Type: multipart/{$type}; boundary=\"{$bd}\"", $out . "--{$bd}--"];
+        };
+        if ($html !== null) {
+            // multipart/alternative: text first, HTML last (preferred); inline images (cid:) beside the HTML in multipart/related.
+            $htmlPart = ["Content-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64", $b64((string) $html['html'])];
+            $inline = [];
+            foreach ($html['inline'] ?? [] as $img) {
+                $cid = (string) preg_replace('/[^A-Za-z0-9.@_-]/', '', (string) $img['cid']);
+                $type = in_array($img['type'], ['image/png', 'image/jpeg'], true) ? $img['type'] : 'application/octet-stream';
+                $inline[] = ["Content-Type: {$type}\r\nContent-ID: <{$cid}>\r\nContent-Disposition: inline\r\nContent-Transfer-Encoding: base64", $b64((string) $img['content'])];
+            }
+            $part = $multi('alternative', [$part, $inline === [] ? $htmlPart : $multi('related', array_merge([$htmlPart], $inline))]);
+        }
+        if ($attachments !== []) {
+            // multipart/mixed: the message, then each file.
+            $files = [$part];
             foreach ($attachments as $a) {
                 $name = substr((string) preg_replace('/[^A-Za-z0-9._-]+/', '-', $a['name']), 0, 100) ?: 'attachment';
                 $type = preg_match('#^[a-z]+/[a-z0-9.+-]+$#', $a['type']) ? $a['type'] : 'application/octet-stream';
-                $parts[] = "--{$boundary}\r\nContent-Type: {$type}; name=\"{$name}\"\r\nContent-Disposition: attachment; filename=\"{$name}\"\r\nContent-Transfer-Encoding: base64\r\n\r\n" . $b64($a['content']);
+                $files[] = ["Content-Type: {$type}; name=\"{$name}\"\r\nContent-Disposition: attachment; filename=\"{$name}\"\r\nContent-Transfer-Encoding: base64", $b64($a['content'])];
             }
-            $content = implode("\r\n", $parts) . "\r\n--{$boundary}--";
+            $part = $multi('mixed', $files);
         }
+        $headers[] = $part[0];
+        $content = $part[1];
         // Base64 lines never start with ".", but dot-stuff anyway in case the encoding ever changes.
         $lines = preg_replace('/^\./m', '..', $content);
         return implode("\r\n", $headers) . "\r\n\r\n" . $lines;

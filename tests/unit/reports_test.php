@@ -77,4 +77,95 @@ return [
         Assert::notContains("\r\n.\r\n", $msg, 'content is encoded, so it cannot end the SMTP DATA early');
         Assert::contains(base64_encode('a,b'), $msg);
     },
+    'CSS strings in the page margins (1.59): escaped, and the space after punctuation survives' => function (TestContext $ctx): void {
+        // CSS eats one whitespace after an escape, so each escape carries its own space: ": b" must stay ": b".
+        Assert::same('"a\\00003A  b"', \Sentinel\Reports\ReportTheme::cssString('a: b'));
+        Assert::same('"x\\000022 \\00003C \\00002F style\\00003E \\00005C "', \Sentinel\Reports\ReportTheme::cssString('x"</style>\\'));
+        Assert::same('"line one line two"', \Sentinel\Reports\ReportTheme::cssString("line one\nline two"), 'control characters become spaces');
+    },
+    'a logo with the company name stands alone on the cover, but only when there is a logo (1.60)' => function (TestContext $ctx): void {
+        $logo = 'data:image/png;base64,' . base64_encode("\x89PNG\r\n\x1a\nx");
+        $o = ['eyebrow' => 'E', 'title' => 'T', 'client' => 'Client Example', 'period' => 'P', 'date' => 'D'];
+        $cover = static fn (array $b): string => \Sentinel\Reports\ReportTheme::cover($b + ['name' => 'Example MSP'], $o);
+        Assert::notContains('class="bname"', $cover(['logo' => $logo, 'logo_has_name' => true]));
+        Assert::contains('class="brandrow logo-only"', $cover(['logo' => $logo, 'logo_has_name' => true]));
+        Assert::contains('<span class="bname">Example MSP</span>', $cover(['logo' => '', 'logo_has_name' => true]), 'no logo: the name is shown');
+        Assert::contains('<span class="bname">Example MSP</span>', $cover(['logo' => $logo]), 'snapshots from before 1.60 (no key): name beside the logo');
+    },
+    'logo background (1.61): a panel only where the logo would not show' => function (TestContext $ctx): void {
+        $T = \Sentinel\Reports\ReportTheme::class;
+        // [style, on dark?] => panel
+        foreach ([['panel', true, 'white'], ['panel', false, ''], ['light', true, ''], ['light', false, 'brand'], ['dark', true, 'white'], ['dark', false, ''], ['bogus', true, 'white']] as [$bg, $dark, $want]) {
+            Assert::same($want, $T::logoPanel($bg, $dark), "{$bg} on " . ($dark ? 'dark' : 'white'));
+        }
+        $logo = 'data:image/png;base64,' . base64_encode("\x89PNG\r\n\x1a\nx");
+        $o = ['eyebrow' => 'E', 'title' => 'T', 'client' => 'C', 'period' => 'P', 'date' => 'D'];
+        Assert::contains('class="plate bare"', $T::cover(['logo' => $logo, 'logo_bg' => 'light', 'cover' => 'color'], $o), 'light logo bare on the color cover');
+        Assert::contains('class="plate p-brand"', $T::docHead(['logo' => $logo, 'logo_bg' => 'light'], 'T', 'S'), 'light logo on a brand panel on white pages');
+        Assert::contains('class="plate p-white"', $T::cover(['logo' => $logo, 'logo_bg' => 'dark', 'cover' => 'color'], $o), 'dark logo on a white panel on the color cover');
+        Assert::contains('class="plate bare"', $T::cover(['logo' => $logo, 'logo_bg' => 'dark', 'cover' => 'white'], $o));
+        Assert::contains('class="plate p-white"', $T::cover(['logo' => $logo, 'cover' => 'color'], $o), 'older snapshots: the white panel as before');
+        Assert::contains('class="plate bare"', $T::cover(['logo' => $logo, 'cover' => 'white'], $o), 'white cover, default: bare as before');
+        Assert::contains('class="plate p-brand"', $T::cover(['logo' => $logo, 'logo_bg' => 'light', 'cover' => 'white'], $o), 'light logo on the white cover');
+        foreach (['panel', 'dark'] as $bg) {
+            Assert::contains('class="plate bare"', $T::docHead(['logo' => $logo, 'logo_bg' => $bg], 'T', 'S'), "page header, {$bg}: bare");
+        }
+        // A bare logo in the page header has no padding (the header rule only pads real panels).
+        $css = $T::css([], 'f', 'h');
+        Assert::contains('.plate.bare { padding: 0; }', $css);
+        Assert::contains('.doc-head .plate:not(.bare) {', $css);
+    },
+    'branded report email (1.59): text + HTML alternative, inline logo, escaped, then attachments' => function (TestContext $ctx): void {
+        $png = "\x89PNG\r\n\x1a\n" . 'made-up-image-bytes';
+        $msg = SmtpMailer::buildMessage('s@msp.example', ['a@msp.example'], 'Reports', 'Plain text.',
+            [['name' => 'r.html', 'type' => 'text/html', 'content' => '<p>R</p>']],
+            ['html' => '<p>Hello</p>', 'inline' => [['cid' => "logo@x\r\nBcc: evil@evil.example", 'type' => 'image/svg+xml', 'content' => $png]]]);
+        // Structure: mixed( alternative( text, related( html, logo ) ), attachment ), in that order.
+        $order = array_map(static fn (string $t): int => (int) strpos($msg, $t), ['multipart/mixed', 'multipart/alternative', 'text/plain', 'multipart/related', 'Content-Type: text/html', 'Content-ID:', 'filename="r.html"']);
+        $sorted = $order;
+        sort($sorted);
+        Assert::true($order === $sorted && !in_array(0, $order, true), 'MIME parts nested in the right order: ' . json_encode($order));
+        Assert::contains('Content-ID: <logo@xBccevil@evil.example>', $msg, 'the cid keeps only safe characters (no line break)');
+        Assert::notContains("\r\nBcc:", $msg);
+        Assert::contains('Content-Type: application/octet-stream', $msg, 'only PNG or JPEG inline images');
+        Assert::contains(base64_encode('<p>Hello</p>'), $msg);
+        // Without attachments the top level is the alternative.
+        Assert::contains('Content-Type: multipart/alternative', SmtpMailer::buildMessage('s@msp.example', ['a@msp.example'], 'R', 'T', [], ['html' => '<p>H</p>', 'inline' => []]));
+
+        // The HTML itself: branding from settings, every value escaped, colors only when valid.
+        $settings = new \Sentinel\Core\Settings($ctx->db);
+        $old = [];
+        foreach (['brand_logo_bg' => 'panel', 'brand_logo_has_name' => '0', 'brand_name' => 'Example <MSP>', 'brand_color' => 'red;x', 'brand_accent' => '#123abc', 'brand_address' => "1 Example Road\nTown", 'brand_email' => 'hi@msp.example'] as $k => $v) {
+            $old[$k] = $settings->get($k);
+            $settings->set($k, $v);
+        }
+        try {
+            $mail = \Sentinel\Reports\ReportEmail::build($settings, $png, 'Reports for <Client>', "Line one\n\n- Executive summary\n- Technical findings\n\n-- \nSent by Sentinel.");
+            Assert::contains('Example &lt;MSP&gt;', $mail['html']);
+            Assert::contains('Reports for &lt;Client&gt;', $mail['html']);
+            Assert::contains('<li style="margin:2px 0">Executive summary</li>', $mail['html']);
+            Assert::contains('1 Example Road<br>Town', $mail['html']);
+            Assert::contains('background:#1f4e79', $mail['html'], 'an invalid brand color falls back to the default');
+            Assert::contains('#123abc', $mail['html']);
+            Assert::notContains('red;x', $mail['html']);
+            Assert::contains('cid:' . \Sentinel\Reports\ReportEmail::LOGO_CID, $mail['html']);
+            Assert::same(1, count($mail['inline']));
+            Assert::same([], \Sentinel\Reports\ReportEmail::build($settings, 'not a png', 'S', 'B')['inline'], 'no logo unless it is a PNG');
+            Assert::contains('font-size:16px;font-weight:600', $mail['html'], 'the name sits beside the logo by default');
+            $settings->set('brand_logo_has_name', '1');
+            $alone = \Sentinel\Reports\ReportEmail::build($settings, $png, 'S', 'B')['html'];
+            Assert::notContains('font-size:16px;font-weight:600', $alone, 'a logo with the name stands alone');
+            Assert::contains('height:52px', $alone, 'and gets a little more room');
+            Assert::contains('background:#ffffff;border-radius:6px', $alone, 'any logo: white panel in the brand-colored header');
+            $settings->set('brand_logo_bg', 'light');
+            Assert::notContains('background:#ffffff;border-radius:6px', \Sentinel\Reports\ReportEmail::build($settings, $png, 'S', 'B')['html'], 'a light logo stands bare');
+            $settings->set('brand_logo_bg', 'dark');
+            Assert::contains('background:#ffffff;border-radius:6px', \Sentinel\Reports\ReportEmail::build($settings, $png, 'S', 'B')['html'], 'a dark logo keeps the white panel on the brand color');
+            Assert::contains('font-size:16px;font-weight:600', \Sentinel\Reports\ReportEmail::build($settings, '', 'S', 'B')['html'], 'without a logo the name is always shown');
+        } finally {
+            foreach ($old as $k => $v) {
+                $settings->set($k, $v);
+            }
+        }
+    },
 ];

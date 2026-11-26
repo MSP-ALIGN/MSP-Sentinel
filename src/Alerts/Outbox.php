@@ -40,8 +40,9 @@ final class Outbox
     /** Report attachments larger than this in total are left out; the email then points to the reports in Sentinel. */
     private const MAX_ATTACH_BYTES = 5_000_000;
 
-    /** Needs settings (for SMTP and webhook) and an optional extra CA file for SMTP TLS. */
-    public function __construct(private readonly PDO $db, private readonly Settings $settings, private readonly ?string $caFile, private readonly WebhookSender $webhook)
+    /** Needs settings (for SMTP and webhook), an optional extra CA file for SMTP TLS and the logo folder (branded report emails, 1.59). */
+    public function __construct(private readonly PDO $db, private readonly Settings $settings, private readonly ?string $caFile, private readonly WebhookSender $webhook,
+        private readonly ?string $brandingDir = null)
     {
     }
 
@@ -78,7 +79,15 @@ final class Outbox
                     if ($files === [] && (string) ($d['report_ids'] ?? '') !== '') {
                         $body .= "\n\n" . 'The reports are too large to attach. Open them in MSP Sentinel under Reports (report IDs: ' . $d['report_ids'] . ').';
                     }
-                    $this->mailer()->send(explode(',', (string) $d['recipient']), (string) $d['subject'], $body, $files);
+                    // Report emails (they carry report IDs) also get the branded HTML version (1.59), built at send time.
+                    $html = null;
+                    if ((string) ($d['report_ids'] ?? '') !== '' && $this->brandingDir !== null) {
+                        $hash = $this->settings->get('brand_logo');
+                        $logoFile = $this->brandingDir . '/logo-' . $hash . '.png';
+                        $logo = preg_match('/^[a-f0-9]{64}$/', $hash) && is_file($logoFile) && hash_file('sha256', $logoFile) === $hash ? (string) file_get_contents($logoFile) : '';
+                        $html = \Sentinel\Reports\ReportEmail::build($this->settings, $logo, (string) $d['subject'], $body);
+                    }
+                    $this->mailer()->send(explode(',', (string) $d['recipient']), (string) $d['subject'], $body, $files, $html);
                 } elseif ($d['channel'] === 'event') {
                     // Signed at send time, so each retry carries a fresh timestamp.
                     $secret = $this->settings->getSecret('event_webhook_secret');

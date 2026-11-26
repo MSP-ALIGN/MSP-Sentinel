@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.58.1](https://img.shields.io/badge/version-1.58.1-ff5a1f?style=flat-square)
+![Version 1.61.0](https://img.shields.io/badge/version-1.61.0-ff5a1f?style=flat-square)
 ![License AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,31 +119,39 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
-### 1.58.1 (2026-11-26): Fixes from review
+### 1.61.0 (2026-11-26): Logo without the white panel
 
-- Under the sonar, "Highest" is now "Most at risk": the center shows the client ranked first (level first, then
-  score), which isn't always the one with the highest number.
-- Help describes the new ranking correctly; a test now covers findings from inside the network (40% weight).
+- New **Logo background** choice under Report branding:
+  - **White panel** (the default) works with any logo.
+  - **Light logo** shows your white or light logo on the brand-color cover and in the report emails without a
+    panel.
+  - **Dark logo** shows it without a panel on white pages and on the white cover.
+- Where the logo would not show (a light logo on a white page, or a dark logo on the brand color), it gets a small
+  panel in the brand color or in white. Upload a PNG with a transparent background for the best result.
+- Fix from review: the logo at the top of content pages sits flush again with the default setting.
 
-### 1.58.0 (2026-11-26): A fairer risk score
+### 1.60.0 (2026-11-26): Logo with the company name
 
-- **Internet exposure weighs more.** Findings inside a client's network (from agents and RMMs) now count 40% of the
-  same finding on the internet: Remote Desktop open to the internet weighs far more than Remote Desktop on an office
-  printer.
-- **No more jumping to 100.** Points go on a curve: each finding adds less than the one before, so the score only comes
-  close to 100 with a lot of serious exposure. One external known-exploited Fail is 28, three are 63, ten external
-  Fails 81; the same Fail on an office device is 6.
-- **Levels follow the score.** At risk at 50 or more, or with any known-exploited Fail reachable from the internet;
-  Needs attention at 15 or more, or with any open Fail; Good otherwise. The dashboard sonar, client list and client
-  overviews all use it. Reports keep their own rating.
+- If your logo already shows the company name, tick **My logo includes the company name** under Report branding.
+  The report cover and the report emails then show the logo alone, a little larger, instead of the logo with the
+  name beside it. The name is still used as text in the footer, the sign-off and the contact details.
 
-### 1.57.3 (2026-11-25): Fixes from review
+### 1.59.0 (2026-11-26): Professional, fully branded reports
 
-- **"localhost" stays gone.** The names a Windows or Samba machine gives in its SMB answer are checked too, so a
-  full scan can no longer bring "LOCALHOST" back and make the device's name change with every scan.
-- **The agent skips certificates made out to "localhost"** (common on a NAS), so a real name from another
-  certificate on the same machine can still be used. This takes effect when agents update.
-- "localhost6" names (some Linux systems) are recognized too.
+- **A new look for every report.** The executive summary, technical findings, pen-test report and retest letter
+  share one design: a branded cover with the client, period and risk score; an "At a glance" page with a risk-score
+  gauge and totals; numbered sections; cleaner tables; and a sign-off page with your contact details.
+- **Print-perfect PDFs.** Print to PDF from Chrome or Edge to get a full-page cover, page numbers ("Page 2 of 5"),
+  and the confidential label at the top of every page.
+- **Branding suite** (Administration → Settings → Report branding): brand and accent colors, a full-color or white
+  cover, address, phone, email and website, "Prepared by" with job title and a closing note, and a confidential
+  label ("Confidential: prepared for {client}"). The **Preview** buttons show a made-up report with your branding.
+- **Branded report emails.** Monthly report emails have an HTML version with your logo, colors and contact
+  details. The plain-text version is still included, and the reports are still attached.
+- **Honest scope.** Reports with findings from agents or an RMM now say they include checks from inside the
+  network. They no longer say that internal networks were not tested.
+- Fixes from review: spaces after punctuation are kept in the printed header and footer; a settings page opened
+  before the upgrade can still be saved; the pen-test report's last line says "Issued by".
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

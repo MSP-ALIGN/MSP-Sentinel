@@ -2,6 +2,49 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.61.0 (2026-11-26): Logo without the white panel
+
+- New **Logo background** choice under Report branding:
+  - **White panel** (the default) works with any logo.
+  - **Light logo** shows your white or light logo on the brand-color cover and in the report emails without a
+    panel.
+  - **Dark logo** shows it without a panel on white pages and on the white cover.
+- Where the logo would not show (a light logo on a white page, or a dark logo on the brand color), it gets a small
+  panel in the brand color or in white. Upload a PNG with a transparent background for the best result.
+- Fix from review: the logo at the top of content pages sits flush again with the default setting.
+
+### 1.60.0 (2026-11-26): Logo with the company name
+
+- If your logo already shows the company name, tick **My logo includes the company name** under Report branding.
+  The report cover and the report emails then show the logo alone, a little larger, instead of the logo with the
+  name beside it. The name is still used as text in the footer, the sign-off and the contact details.
+
+### 1.59.0 (2026-11-26): Professional, fully branded reports
+
+- **A new look for every report.** The executive summary, technical findings, pen-test report and retest letter
+  share one design: a branded cover with the client, period and risk score; an "At a glance" page with a risk-score
+  gauge and totals; numbered sections; cleaner tables; and a sign-off page with your contact details.
+- **Print-perfect PDFs.** Print to PDF from Chrome or Edge to get a full-page cover, page numbers ("Page 2 of 5"),
+  and the confidential label at the top of every page.
+- **Branding suite** (Administration → Settings → Report branding): brand and accent colors, a full-color or white
+  cover, address, phone, email and website, "Prepared by" with job title and a closing note, and a confidential
+  label ("Confidential: prepared for {client}"). The **Preview** buttons show a made-up report with your branding.
+- **Branded report emails.** Monthly report emails have an HTML version with your logo, colors and contact
+  details. The plain-text version is still included, and the reports are still attached.
+- **Honest scope.** Reports with findings from agents or an RMM now say they include checks from inside the
+  network. They no longer say that internal networks were not tested.
+- Fixes from review: spaces after punctuation are kept in the printed header and footer; a settings page opened
+  before the upgrade can still be saved; the pen-test report's last line says "Issued by".
+
+### 1.58.2 (2026-11-26): Reports match the dashboard
+
+- Reports now rate a client with the dashboard's score and level, so both always agree. For example, a few
+  Warnings show Good in both places, and one Fail inside the network shows Needs attention in both. Each report
+  shows "Risk score N of 100" under its rating. Reports made before this update keep their rating.
+- The API's client summary uses the same rule and adds a `score` field.
+- Fixes from review: a client At risk from many Warnings alone gets the right reason; the report's Fail count
+  says "serious, fix first"; the API docs describe `score`.
+
 ### 1.58.1 (2026-11-26): Fixes from review
 
 - Under the sonar, "Highest" is now "Most at risk": the center shows the client ranked first (level first, then

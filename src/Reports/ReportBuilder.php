@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 use PDO;
 use Sentinel\Core\Settings;
+use Sentinel\Dashboard\DashboardData;
 use Sentinel\Scope\AuthorisationRepository;
 use Sentinel\Scope\ScopeService;
 
@@ -15,6 +16,7 @@ use Sentinel\Scope\ScopeService;
  * Builds a report snapshot: everything a report shows, gathered at one moment,
  * so the stored report never changes afterwards.
  *
+ * The rating uses the dashboard's score and level (DashboardData::rate, 1.58.2).
  * Findings, totals and the rating show the status at the moment the report
  * is created (stated in the document); "new" and "fixed" count what changed
  * within the chosen period.
@@ -63,10 +65,18 @@ final class ReportBuilder
         $warns = array_values(array_filter($open, static fn (array $f): bool => $f['severity'] === 'warn'));
         $certs = array_filter($open, static fn (array $f): bool => $f['finding_type'] === 'tls' && (str_ends_with((string) $f['finding_key'], ':cert_validity') || str_ends_with((string) $f['finding_key'], ':cert_expiring') || str_ends_with((string) $f['finding_key'], ':cert_expired')));
 
-        [$level, $reason] = match (true) {
-            $fails !== [] => ['risk', __('{n} serious problem(s) need fixing now.', ['n' => count($fails)])],
-            $warns !== [] => ['attention', __('No serious problems, but {n} item(s) should be fixed soon.', ['n' => count($warns)])],
-            default => ['good', __('No open problems were found in the checks we ran.')],
+        // 1.58.2: the same score and level as the dashboard (DashboardData::rate), so a report never disagrees with it.
+        $rate = DashboardData::rate($open);
+        $level = $rate['level'];
+        $reason = match (true) {
+            $level === 'risk' && $rate['external_kev_fail'] > 0 => __('{n} known-exploited weakness(es) can be reached from the internet and need fixing now.', ['n' => $rate['external_kev_fail']]),
+            // Many Warnings alone can reach a score of 50 (21 or more on the internet): name them, not "0 serious problems".
+            $level === 'risk' && $fails === [] => __('No serious problems, but {n} item(s) together put the client at risk and should be fixed soon.', ['n' => count($warns)]),
+            $level === 'risk' => __('{n} serious problem(s) need fixing now.', ['n' => count($fails)]),
+            $level === 'attention' && $fails !== [] => __('{n} serious problem(s) should be fixed soon.', ['n' => count($fails)]),
+            $level === 'attention' => __('No serious problems, but {n} item(s) should be fixed soon.', ['n' => count($warns)]),
+            $warns !== [] => __('No serious problems. {n} minor item(s) are listed in this report.', ['n' => count($warns)]),
+            default => __('No open problems were found in the checks we ran.'),
         };
 
         $scans = $this->db->prepare("SELECT id, status, started_at, finished_at FROM scan_jobs WHERE client_id = :c AND finished_at IS NOT NULL AND job_type <> 'verify' ORDER BY id DESC LIMIT 10");
@@ -85,7 +95,7 @@ final class ReportBuilder
             // The client's time zone (1.48): the report shows its times there, labelled (older snapshots: UTC).
             'client' => ['id' => $cid, 'name' => (string) $client['name'], 'timezone' => (string) $client['timezone']],
             'brand' => $this->brand(),
-            'rating' => ['level' => $level, 'reason' => $reason],
+            'rating' => ['level' => $level, 'reason' => $reason, 'score' => $rate['score']],
             'counts' => [
                 'fail' => count($fails), 'warn' => count($warns), 'new' => count($new), 'fixed' => count($fixed),
                 'accepted' => count(array_filter($decided, static fn (array $f): bool => $f['status'] === 'accepted')),
@@ -103,6 +113,12 @@ final class ReportBuilder
             'decided' => $decided,
             'fixed' => $fixed,
             'scope' => $scope,
+            // Which kinds of checks found something (1.59), so the report describes its method and limits truthfully:
+            // external = Sentinel's scans from the internet; internal = agents and RMM data from inside the network.
+            'coverage' => [
+                'external' => $scope !== [] || in_array('external', array_column($all, 'source'), true),
+                'internal' => array_filter($all, static fn (array $f): bool => (string) $f['source'] !== 'external') !== [],
+            ],
             'scans' => $scanRows,
             'last_checked' => $scanRows[0]['finished_at'] ?? null,
             'trend' => $this->trend($cid, count($fails), count($warns)),
@@ -150,7 +166,7 @@ final class ReportBuilder
     {
         $stmt = $this->db->prepare(
             "SELECT f.id, f.finding_key, f.finding_type, f.severity, f.title, f.detail, f.target, f.evidence, f.cve_id, f.status,
-                    f.triage_note, f.triaged_at, u.display_name AS triaged_by_name, f.reappeared, f.first_seen, f.last_seen, f.resolved_at,
+                    f.source, f.triage_note, f.triaged_at, u.display_name AS triaged_by_name, f.reappeared, f.first_seen, f.last_seen, f.resolved_at,
                     (k.cve_id IS NOT NULL) AS in_kev, k.required_action AS kev_action, k.due_date AS kev_due, ep.score AS epss, ep.percentile AS epss_percentile
              FROM findings f
              LEFT JOIN users u ON u.id = f.triaged_by
@@ -210,7 +226,10 @@ final class ReportBuilder
     /**
      * Branding frozen into the report.
      *
-     * @return array{name:string, color:string, footer:string, logo:string, powered_by:bool, paper:string}
+     * Untrusted: every text value (admin input); ReportTheme::brand() checks colors, cover and paper again before CSS.
+     *
+     * @return array{name:string, color:string, footer:string, logo:string, powered_by:bool, paper:string, accent:string, cover:string,
+     *               address:string, phone:string, email:string, website:string, prepared_by:string, prepared_title:string, signoff:string, confidential:string, logo_has_name:bool, logo_bg:string}
      */
     public function brand(): array
     {
@@ -229,6 +248,19 @@ final class ReportBuilder
             'logo' => $logo,
             'powered_by' => $this->settings->get('report_powered_by') === '1',
             'paper' => $this->settings->get('report_paper') === 'Letter' ? 'Letter' : 'A4',
+            // Branding suite (1.59): checked again by ReportTheme::brand() before any of it reaches CSS.
+            'accent' => preg_match('/^#[0-9a-f]{6}$/i', $this->settings->get('brand_accent')) ? $this->settings->get('brand_accent') : ReportTheme::DEFAULT_ACCENT,
+            'cover' => $this->settings->get('report_cover') === 'white' ? 'white' : 'color',
+            'address' => $this->settings->get('brand_address'),
+            'phone' => $this->settings->get('brand_phone'),
+            'email' => $this->settings->get('brand_email'),
+            'website' => $this->settings->get('brand_website'),
+            'prepared_by' => $this->settings->get('report_prepared_by'),
+            'prepared_title' => $this->settings->get('report_prepared_title'),
+            'signoff' => $this->settings->get('report_signoff'),
+            'confidential' => $this->settings->get('report_confidential'),
+            'logo_has_name' => $this->settings->get('brand_logo_has_name') === '1',
+            'logo_bg' => in_array($this->settings->get('brand_logo_bg'), ['light', 'dark'], true) ? $this->settings->get('brand_logo_bg') : 'panel',
         ];
     }
 

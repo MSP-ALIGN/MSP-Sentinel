@@ -49,6 +49,24 @@ final class Settings
         'brand_logo' => '',
         'report_paper' => 'A4',
         'report_powered_by' => '1',
+        // Branding suite (1.59): second color, cover style, contact block, sign-off and the confidential label
+        // ({client} becomes the client's name). All plain text, validated by ReportController::branding().
+        'brand_accent' => '#5aa9e6',
+        'report_cover' => 'color',
+        'brand_address' => '',
+        'brand_phone' => '',
+        'brand_email' => '',
+        'brand_website' => '',
+        'report_prepared_by' => '',
+        'report_prepared_title' => '',
+        'report_signoff' => '',
+        'report_confidential' => 'Confidential: prepared for {client}',
+        // '1' when the logo already shows the company name (1.60): the cover and emails then show the logo alone.
+        'brand_logo_has_name' => '0',
+        // The logo's background (1.61): 'panel' = a white panel on dark backgrounds (any logo); 'light' = a light logo,
+        // shown bare on dark backgrounds and on a brand-color panel on white ones; 'dark' = a dark logo, bare on white
+        // backgrounds and on a white panel on dark ones. See ReportTheme::logo().
+        'brand_logo_bg' => 'panel',
         // Outbound events for other systems (step 10). URL and signing secret are stored encrypted.
         'event_webhook_enabled' => '0',
         'event_webhook_url' => '',

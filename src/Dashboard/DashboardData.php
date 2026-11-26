@@ -85,6 +85,42 @@ final class DashboardData
     }
 
     /**
+     * Score and level from one client's open findings, with the same rule as the dashboard (1.58.2), so reports and the
+     * API's client summary always agree with it. Each row needs severity, source and in_kev (truthy when its CVE is
+     * known exploited); rows that are not Fail or Warning are skipped. The caller passes open findings only.
+     *
+     * Untrusted: the rows are scan data, but only compared with fixed strings and counted.
+     *
+     * @param iterable<array<string,mixed>> $open
+     * @return array{score:int, level:string, fail:int, warn:int, external_kev_fail:int}
+     */
+    public static function rate(iterable $open): array
+    {
+        $n = ['external' => [0, 0, 0], 'internal' => [0, 0, 0]];  // [kevFail, fail, warn] per side
+        foreach ($open as $f) {
+            $sev = (string) ($f['severity'] ?? '');
+            if ($sev !== 'fail' && $sev !== 'warn') {
+                continue;
+            }
+            // The same split as clients(): anything not found from the internet is internal.
+            $side = (string) ($f['source'] ?? 'external') === 'external' ? 'external' : 'internal';
+            if ($sev === 'warn') {
+                $n[$side][2]++;
+                continue;
+            }
+            $n[$side][1]++;
+            if ((bool) ($f['in_kev'] ?? false)) {
+                $n[$side][0]++;
+            }
+        }
+        [$external, $internal] = [$n['external'], $n['internal']];
+        $score = self::score($external, $internal);
+        $fail = $external[1] + $internal[1];
+        return ['score' => $score, 'level' => self::level($score, $external[0], $fail), 'fail' => $fail,
+                'warn' => $external[2] + $internal[2], 'external_kev_fail' => $external[0]];
+    }
+
+    /**
      * Every active client with its counts, score and level, worst first.
      *
      * @return list<array{id:int, name:string, fail:int, warn:int, kev:int, score:int, level:string, paused:bool, last_scan:?string}>
