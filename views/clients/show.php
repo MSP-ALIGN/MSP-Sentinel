@@ -24,7 +24,7 @@ $activeCount = count(array_filter($authorisations, static fn ($a) => $a['status'
 <?php if ($section === 'overview'): ?>
 <?php if (!$archived): ?>
 <div class="dash-actions"><button type="button" class="btn btn-sm btn-outline-secondary refresh-toggle" data-refresh-toggle aria-pressed="false" data-label-pause="<?= e(__('Pause live refresh')) ?>" data-label-resume="<?= e(__('Resume live refresh')) ?>" title="<?= e(__('Stops this page refreshing itself every minute. Scans are not affected.')) ?>"><?= e(__('Pause live refresh')) ?></button></div>
-<div id="live-client" data-refresh-url="<?= e(url('/clients/' . $clientId . '/overview')) ?>" aria-live="off">
+<div id="live-client" data-refresh-url="<?= e(url('/clients/' . $clientId . '/overview?range=' . (int) $overview['range'])) ?>" aria-live="off">
     <?php $ov = $overview; require __DIR__ . '/overview.php'; ?>
 </div>
 <?php endif; ?>

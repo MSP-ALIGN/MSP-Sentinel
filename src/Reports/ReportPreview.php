@@ -15,6 +15,22 @@ namespace Sentinel\Reports;
 final class ReportPreview
 {
     /**
+     * Made-up score history (1.62): six months falling from 78 to 52, the first months estimated.
+     *
+     * @return array{points:list<array{day:string, score:int, level:string, estimated:bool}>, from:array{day:string, score:int, level:string, estimated:bool}, days:int}
+     */
+    private static function scoreHistory(): array
+    {
+        $points = [];
+        for ($d = 180; $d >= 0; $d -= 6) {
+            $score = (int) round(52 + 26 * $d / 180 + ($d % 30 === 0 ? 3 : 0));
+            $points[] = ['day' => gmdate('Y-m-d', time() - $d * 86400), 'score' => $score, 'level' => $score >= 50 ? 'risk' : 'attention', 'estimated' => $d > 100];
+        }
+        $points[count($points) - 1]['score'] = 52;
+        return ['points' => $points, 'from' => ['day' => gmdate('Y-m-d', time() - 30 * 86400), 'score' => 60, 'level' => 'risk', 'estimated' => false], 'days' => 182];
+    }
+
+    /**
      * @param array<string,mixed> $brand ReportBuilder::brand()
      * @return array<string,mixed>
      */
@@ -63,6 +79,7 @@ final class ReportPreview
             'scans' => [['id' => 1, 'status' => 'done', 'started_at' => $today . ' 02:00:00', 'finished_at' => $today . ' 02:14:00']],
             'last_checked' => $today . ' 02:14:00',
             'trend' => $trend,
+            'score_history' => self::scoreHistory(),
         ];
     }
 }

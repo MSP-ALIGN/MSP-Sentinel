@@ -179,6 +179,15 @@ table.data { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 9
 .chart { width: 100%; max-height: 66mm; }
 .chart .axis { stroke: #8a929c; stroke-width: 1; } .chart .val { font-size: 11px; font-weight: 700; } .chart .lbl { font-size: 10px; fill: #5b6470; }
 .legend span { margin-right: 14px; }
+.verdict-line { font-weight: 600; margin: 4px 0 8px; }
+.score-history { width: 100%; max-height: 62mm; display: block; }
+.score-history .sh-band-good { fill: #e8f5ec; } .score-history .sh-band-attention { fill: #fdf3dc; } .score-history .sh-band-risk { fill: #fbe4e8; }
+.score-history .sh-axis { fill: #6b7480; font-size: 10px; }
+.score-history .sh-line { fill: none; stroke: var(--brand); stroke-width: 2.5; stroke-linejoin: round; }
+.score-history .sh-est { stroke-dasharray: 6 5; opacity: .75; }
+.score-history .sh-dot { stroke: #fff; stroke-width: 2; }
+.score-history .sh-risk { fill: #d6334a; } .score-history .sh-attention { fill: #e0a100; } .score-history .sh-good { fill: #2f9e5b; }
+.score-history .sh-val { fill: var(--ink); font-size: 11px; font-weight: 700; }
 .note { background: var(--soft); border-left: 3px solid var(--accent); border-radius: 4px; padding: 8px 12px; break-inside: avoid; }
 .asset { margin-top: 14px; } .asset > .label { break-after: avoid; page-break-after: avoid; color: var(--brand); }
 .signoff { margin-top: 24px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; break-inside: avoid; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }

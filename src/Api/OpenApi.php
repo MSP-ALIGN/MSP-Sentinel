@@ -43,6 +43,8 @@ final class OpenApi
                 '/clients' => $get('List clients', array_merge($page, [$since]), 'Clients'),
                 '/clients/{id}' => $get('One client', [$id], 'Client'),
                 '/clients/{id}/summary' => $get('Rating and risk score (as on the dashboard), open totals, last scan', [$id], 'Summary'),
+                '/clients/{id}/score-history' => $get('Risk score per day, oldest first, ending today; "estimated" marks days before exact scores were recorded',
+                    [$id, ['name' => 'days', 'in' => 'query', 'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 366, 'default' => 90]]], 'Score history'),
                 '/clients/{id}/scans' => ['post' => ['summary' => 'Queue a scan (needs the "scan" permission; runs in the client\'s scan window)', 'parameters' => [$id],
                     'responses' => ['202' => ['description' => 'Queued'], '409' => ['description' => 'Already queued, paused, archived or nothing to scan']] + $errors]],
                 '/assets' => $get('List assets with open services', array_merge($page, [$client, $since]), 'Assets'),

@@ -122,6 +122,27 @@ final class ApiController
         ]]);
     }
 
+    /**
+     * GET /api/v1/clients/{id}/score-history?days=90 (1.62): the risk score per recorded day, oldest first, ending with
+     * today's. Days before exact scores were recorded are estimated from their Fail/Warning counts and say so.
+     * Untrusted: the client ID (only the token's clients, else 404) and days (1-366, default 90; anything else is 400).
+     */
+    public function scoreHistory(array $p): Response
+    {
+        $c = $this->clientRow((int) $p['id']);
+        $raw = $this->request->query('days');
+        if ($raw !== '' && (!ctype_digit($raw) || (int) $raw < 1 || (int) $raw > 366)) {
+            throw new ApiError(400, 'days must be a whole number from 1 to 366.');
+        }
+        $days = $raw === '' ? 90 : (int) $raw;
+        $points = App::scoreHistory()->series((int) $c['id'], $days);
+        return ApiKernel::json(['data' => array_map(static fn (array $pt): array => [
+            'day' => $pt['day'], 'score' => $pt['score'],
+            'level' => ['risk' => 'at_risk', 'attention' => 'needs_attention', 'good' => 'good'][$pt['level']] ?? 'good',
+            'estimated' => $pt['estimated'],
+        ], $points), 'meta' => ['client_id' => (int) $c['id'], 'days' => $days]]);
+    }
+
     /** POST /api/v1/clients/{id}/scans: queue a scan (runs in the client's scan window). */
     public function queueScan(array $p): Response
     {

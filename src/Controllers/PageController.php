@@ -77,6 +77,8 @@ final class PageController extends Controller
             'clients' => $clients,
             'totals' => $totals,
             'trend' => $data->trend(90, null, $totals['fail'], $totals['warn']),
+            // 1.62: the clients whose risk score changed most in 30 days (only the user's clients: $clients is filtered).
+            'movers' => App::scoreHistory()->movers($clients, 30, 6),
             'activity' => $data->activity(12),
             'surface' => $data->surface(),
             'top' => $data->topExposures(6),

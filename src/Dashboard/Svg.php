@@ -172,6 +172,68 @@ final class Svg
     }
 
     /**
+     * Risk score over time (1.62): a 0-100 line over the three level bands (Good 0-14, Needs attention 15-49, At risk
+     * 50-100), placed by date so gaps show as gaps in time. Estimated days (before exact scores were recorded) are
+     * drawn dashed; exact days solid. The first and last scores are written on the chart, and the label says them too.
+     * Classes only (no inline styles), so it works under the app's CSP and in report documents.
+     *
+     * @param list<array{day:string, score:int, level:string, estimated:bool}> $points oldest first, at least one
+     */
+    public static function scoreHistory(array $points, string $label, int $days): string
+    {
+        $w = 600;
+        $h = 190;
+        $l = 34;
+        $r = 34;
+        $t = 10;
+        $b = 24;
+        $end = strtotime(gmdate('Y-m-d') . ' 00:00:00 UTC');
+        $start = $end - max(1, $days) * 86400;
+        $x = static fn (string $day): float => $l + ($w - $l - $r) * max(0, min(1, (strtotime($day . ' 00:00:00 UTC') - $start) / max(1, $end - $start)));
+        $y = static fn (int $v): float => $t + ($h - $t - $b) * (1 - max(0, min(100, $v)) / 100);
+        $first = $points[0];
+        $last = $points[count($points) - 1];
+        $spoken = $label . ': ' . __('now {s}; {d}: {s0}', ['s' => $last['score'], 'd' => $first['day'], 's0' => $first['score']])
+            . ($first['estimated'] ? ' (' . __('estimated') . ')' : '');
+        $out = '<svg class="score-history" viewBox="0 0 ' . $w . ' ' . $h . '" role="img" aria-label="' . e($spoken) . '" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">';
+        // Level bands behind the line.
+        foreach ([['sh-band-risk', 100, 50], ['sh-band-attention', 50, 15], ['sh-band-good', 15, 0]] as [$cls, $top, $bottom]) {
+            $out .= sprintf('<rect class="%s" x="%d" y="%.1f" width="%d" height="%.1f"/>', $cls, $l, $y($top), $w - $l - $r, $y($bottom) - $y($top));
+        }
+        foreach ([0, 15, 50, 100] as $v) {
+            $out .= sprintf('<text class="sh-axis" x="%d" y="%.1f" text-anchor="end">%d</text>', $l - 6, $y($v) + 4, $v);
+        }
+        // Estimated part dashed, exact part solid; the dashed part runs up to the first exact point so the line is unbroken.
+        $est = [];
+        $exact = [];
+        foreach ($points as $p) {
+            $xy = sprintf('%.1f,%.1f', $x($p['day']), $y($p['score']));
+            if ($p['estimated']) {
+                $est[] = $xy;
+            } else {
+                if ($exact === [] && $est !== []) {
+                    $est[] = $xy;
+                }
+                $exact[] = $xy;
+            }
+        }
+        if (count($est) > 1) {
+            $out .= '<polyline class="sh-line sh-est" points="' . implode(' ', $est) . '"/>';
+        }
+        if (count($exact) > 1) {
+            $out .= '<polyline class="sh-line" points="' . implode(' ', $exact) . '"/>';
+        }
+        $out .= sprintf('<circle class="sh-dot sh-%s" cx="%.1f" cy="%.1f" r="5"/>', e($last['level']), $x($last['day']), $y($last['score']));
+        $out .= sprintf('<text class="sh-val" x="%.1f" y="%.1f">%d</text>', $x($last['day']) + 8, $y($last['score']) + 4, $last['score']);
+        if (count($points) > 1) {
+            $out .= sprintf('<text class="sh-val sh-val-first" x="%.1f" y="%.1f" text-anchor="middle">%d</text>', $x($first['day']), max(12.0, $y($first['score']) - 8), $first['score']);
+        }
+        $out .= sprintf('<text class="sh-axis" x="%d" y="%d">%s</text>', $l, $h - 6, e(gmdate('Y-m-d', $start)));
+        $out .= sprintf('<text class="sh-axis" x="%d" y="%d" text-anchor="end">%s</text>', $w - $r, $h - 6, e(__('today')));
+        return $out . '</svg>';
+    }
+
+    /**
      * Horizontal bars with the count written at the end of each bar.
      *
      * @param list<array{label:string, count:int, risk:bool}> $rows
