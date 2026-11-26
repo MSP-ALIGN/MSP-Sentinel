@@ -92,6 +92,20 @@ return [
         Assert::contains('<span class="bname">Example MSP</span>', $cover(['logo' => '', 'logo_has_name' => true]), 'no logo: the name is shown');
         Assert::contains('<span class="bname">Example MSP</span>', $cover(['logo' => $logo]), 'snapshots from before 1.60 (no key): name beside the logo');
     },
+    'logo background (1.61): a panel only where the logo would not show' => function (TestContext $ctx): void {
+        $T = \Sentinel\Reports\ReportTheme::class;
+        // [style, on dark?] => panel
+        foreach ([['panel', true, 'white'], ['panel', false, ''], ['light', true, ''], ['light', false, 'brand'], ['dark', true, 'white'], ['dark', false, ''], ['bogus', true, 'white']] as [$bg, $dark, $want]) {
+            Assert::same($want, $T::logoPanel($bg, $dark), "{$bg} on " . ($dark ? 'dark' : 'white'));
+        }
+        $logo = 'data:image/png;base64,' . base64_encode("\x89PNG\r\n\x1a\nx");
+        $o = ['eyebrow' => 'E', 'title' => 'T', 'client' => 'C', 'period' => 'P', 'date' => 'D'];
+        Assert::contains('class="plate bare"', $T::cover(['logo' => $logo, 'logo_bg' => 'light', 'cover' => 'color'], $o), 'light logo bare on the color cover');
+        Assert::contains('class="plate p-brand"', $T::docHead(['logo' => $logo, 'logo_bg' => 'light'], 'T', 'S'), 'light logo on a brand panel on white pages');
+        Assert::contains('class="plate p-white"', $T::cover(['logo' => $logo, 'logo_bg' => 'dark', 'cover' => 'color'], $o), 'dark logo on a white panel on the color cover');
+        Assert::contains('class="plate bare"', $T::cover(['logo' => $logo, 'logo_bg' => 'dark', 'cover' => 'white'], $o));
+        Assert::contains('class="plate p-white"', $T::cover(['logo' => $logo, 'cover' => 'color'], $o), 'older snapshots: the white panel as before');
+    },
     'branded report email (1.59): text + HTML alternative, inline logo, escaped, then attachments' => function (TestContext $ctx): void {
         $png = "\x89PNG\r\n\x1a\n" . 'made-up-image-bytes';
         $msg = SmtpMailer::buildMessage('s@msp.example', ['a@msp.example'], 'Reports', 'Plain text.',
@@ -112,7 +126,7 @@ return [
         // The HTML itself: branding from settings, every value escaped, colors only when valid.
         $settings = new \Sentinel\Core\Settings($ctx->db);
         $old = [];
-        foreach (['brand_logo_has_name' => '0', 'brand_name' => 'Example <MSP>', 'brand_color' => 'red;x', 'brand_accent' => '#123abc', 'brand_address' => "1 Example Road\nTown", 'brand_email' => 'hi@msp.example'] as $k => $v) {
+        foreach (['brand_logo_bg' => 'panel', 'brand_logo_has_name' => '0', 'brand_name' => 'Example <MSP>', 'brand_color' => 'red;x', 'brand_accent' => '#123abc', 'brand_address' => "1 Example Road\nTown", 'brand_email' => 'hi@msp.example'] as $k => $v) {
             $old[$k] = $settings->get($k);
             $settings->set($k, $v);
         }
@@ -133,6 +147,9 @@ return [
             $alone = \Sentinel\Reports\ReportEmail::build($settings, $png, 'S', 'B')['html'];
             Assert::notContains('font-size:16px;font-weight:600', $alone, 'a logo with the name stands alone');
             Assert::contains('height:52px', $alone, 'and gets a little more room');
+            Assert::contains('background:#ffffff;border-radius:6px', $alone, 'any logo: white panel in the brand-colored header');
+            $settings->set('brand_logo_bg', 'light');
+            Assert::notContains('background:#ffffff;border-radius:6px', \Sentinel\Reports\ReportEmail::build($settings, $png, 'S', 'B')['html'], 'a light logo stands bare');
             Assert::contains('font-size:16px;font-weight:600', \Sentinel\Reports\ReportEmail::build($settings, '', 'S', 'B')['html'], 'without a logo the name is always shown');
         } finally {
             foreach ($old as $k => $v) {

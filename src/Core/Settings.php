@@ -63,6 +63,10 @@ final class Settings
         'report_confidential' => 'Confidential: prepared for {client}',
         // '1' when the logo already shows the company name (1.60): the cover and emails then show the logo alone.
         'brand_logo_has_name' => '0',
+        // The logo's background (1.61): 'panel' = a white panel on dark backgrounds (any logo); 'light' = a light logo,
+        // shown bare on dark backgrounds and on a brand-color panel on white ones; 'dark' = a dark logo, bare on white
+        // backgrounds and on a white panel on dark ones. See ReportTheme::logo().
+        'brand_logo_bg' => 'panel',
         // Outbound events for other systems (step 10). URL and signing secret are stored encrypted.
         'event_webhook_enabled' => '0',
         'event_webhook_url' => '',

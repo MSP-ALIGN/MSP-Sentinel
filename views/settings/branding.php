@@ -44,9 +44,16 @@ $text = static function (string $name, string $label, int $max, string $placehol
                     <div class="mt-2 d-flex align-items-center gap-2"><img src="<?= e($bv['logo']) ?>" alt="<?= e(__('Current logo')) ?>" class="branding-logo">
                         <div class="form-check small"><input class="form-check-input" type="checkbox" id="remove_logo" name="remove_logo" value="1"><label class="form-check-label" for="remove_logo"><?= e(__('Remove logo')) ?></label></div></div>
                     <?php endif; ?>
+                    <label class="form-label small mb-0 mt-2" for="brand_logo_bg"><?= e(__('Logo background')) ?></label>
+                    <select class="form-select form-select-sm" id="brand_logo_bg" name="brand_logo_bg" aria-describedby="brand_logo_bg-help">
+                        <?php foreach (['panel' => __('White panel behind the logo (works with any logo)'), 'light' => __('No panel: my logo is light (white) for dark backgrounds'), 'dark' => __('No panel: my logo is dark for light backgrounds')] as $k => $label): ?>
+                        <option value="<?= e($k) ?>" <?= $bv['brand_logo_bg'] === $k ? 'selected' : '' ?>><?= e($label) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <div class="form-text" id="brand_logo_bg-help"><?= e(__('For "no panel", upload a PNG with a transparent background. Where the logo would not show (a light logo on a white page, or a dark logo on the brand color), it gets a small panel in the brand color or white.')) ?></div>
                     <div class="form-check small mt-1"><input class="form-check-input" type="checkbox" id="brand_logo_has_name" name="brand_logo_has_name" value="1" <?= $bv['brand_logo_has_name'] === '1' ? 'checked' : '' ?>>
                         <label class="form-check-label" for="brand_logo_has_name"><?= e(__('My logo includes the company name (show the logo alone on the cover and in emails)')) ?></label></div>
-                    <div class="form-text"><?= e(__('On a full-color cover the logo sits on a white panel, so dark logos stay readable. The company name is still used as text in the footer, sign-off and contact details.')) ?></div></div>
+                    <div class="form-text"><?= e(__('The company name is still used as text in the footer, sign-off and contact details.')) ?></div></div>
                 <div class="col-4"><label class="form-label small mb-0" for="report_paper"><?= e(__('Paper size')) ?></label>
                     <select class="form-select form-select-sm" id="report_paper" name="report_paper">
                         <?php foreach (['A4', 'Letter'] as $p): ?><option value="<?= e($p) ?>" <?= $bv['report_paper'] === $p ? 'selected' : '' ?>><?= e($p) ?></option><?php endforeach; ?>

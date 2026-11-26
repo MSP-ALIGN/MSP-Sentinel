@@ -216,7 +216,7 @@ return [
         Assert::contains('The color must look like', $admin->get('/admin/settings')->body);
         // Every new field is checked: accent color, cover style, email, website, line breaks in one-line fields, lengths.
         foreach ([['brand_accent' => 'blue'], ['report_cover' => 'neon'], ['brand_email' => 'not-an-address'], ['brand_website' => 'javascript:alert(1)'],
-                  ['report_prepared_by' => "Sam\nExample"], ['report_confidential' => str_repeat('x', 121)], ['report_signoff' => str_repeat('x', 601)]] as $bad) {
+                  ['report_prepared_by' => "Sam\nExample"], ['brand_logo_bg' => 'transparent'], ['report_confidential' => str_repeat('x', 121)], ['report_signoff' => str_repeat('x', 601)]] as $bad) {
             $admin->submit('/admin/settings', '/admin/branding', $bad + $fields);
             Assert::true(App::settings()->fresh('brand_name') !== 'Example MSP Ltd', 'refused: ' . json_encode($bad));
         }

@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.60.0](https://img.shields.io/badge/version-1.60.0-ff5a1f?style=flat-square)
+![Version 1.61.0](https://img.shields.io/badge/version-1.61.0-ff5a1f?style=flat-square)
 ![License AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,16 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.61.0 (2026-11-26): Logo without the white panel
+
+- New **Logo background** choice under Report branding:
+  - **White panel** (the default) works with any logo.
+  - **Light logo** shows your white or light logo on the brand-color cover and in the report emails without a
+    panel.
+  - **Dark logo** shows it without a panel on white pages and on the white cover.
+- Where the logo would not show (a light logo on a white page, or a dark logo on the brand color), it gets a small
+  panel in the brand color or in white. Upload a PNG with a transparent background for the best result.
+
 ### 1.60.0 (2026-11-26): Logo with the company name
 
 - If your logo already shows the company name, tick **My logo includes the company name** under Report branding.
@@ -141,15 +151,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
   network. They no longer say that internal networks were not tested.
 - Fixes from review: spaces after punctuation are kept in the printed header and footer; a settings page opened
   before the upgrade can still be saved; the pen-test report's last line says "Issued by".
-
-### 1.58.2 (2026-11-26): Reports match the dashboard
-
-- Reports now rate a client with the dashboard's score and level, so both always agree. For example, a few
-  Warnings show Good in both places, and one Fail inside the network shows Needs attention in both. Each report
-  shows "Risk score N of 100" under its rating. Reports made before this update keep their rating.
-- The API's client summary uses the same rule and adds a `score` field.
-- Fixes from review: a client At risk from many Warnings alone gets the right reason; the report's Fail count
-  says "serious, fix first"; the API docs describe `score`.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

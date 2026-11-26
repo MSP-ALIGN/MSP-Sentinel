@@ -48,6 +48,7 @@ final class ReportTheme
         $out['paper'] = ($b['paper'] ?? 'A4') === 'Letter' ? 'Letter' : 'A4';
         $out['powered_by'] = !empty($b['powered_by']);
         $out['logo_has_name'] = !empty($b['logo_has_name']);
+        $out['logo_bg'] = in_array($b['logo_bg'] ?? 'panel', ['light', 'dark'], true) ? $b['logo_bg'] : 'panel';
         return $out;
     }
 
@@ -113,7 +114,7 @@ h3 { font-size: 11pt; margin: 16px 0 6px; break-after: avoid; page-break-after: 
 .cover::before { content: ""; position: absolute; right: -40mm; top: -30mm; width: 140mm; height: 140mm; border-radius: 50%; border: 18mm solid rgba(255,255,255,.06); }
 .cover::after { content: ""; position: absolute; left: 0; bottom: 0; width: 100%; height: 5mm; background: var(--accent); }
 .cover .brandrow { display: flex; align-items: center; gap: 14px; position: relative; }
-.cover .plate { background: #fff; border-radius: 8px; padding: 8px 12px; display: inline-flex; }
+.plate { border-radius: 8px; padding: 8px 12px; display: inline-flex; } .plate.p-white { background: #fff; } .plate.p-brand { background: var(--brand); } .plate.bare { padding: 0; }
 .cover .plate img { max-height: 46px; max-width: 190px; display: block; }
 .cover .bname { font-size: 13pt; font-weight: 600; }
 .cover .logo-only .plate img { max-height: 64px; max-width: 260px; }
@@ -133,7 +134,6 @@ h3 { font-size: 11pt; margin: 16px 0 6px; break-after: avoid; page-break-after: 
 .cover.white { background: #fff; color: var(--ink); border-top: 16mm solid var(--brand); }
 .cover.white::before { border-color: var(--soft); }
 .cover.white .scorecard { background: var(--soft); }
-.cover.white .plate { padding: 0; }
 .cover.white .title { color: var(--brand); }
 .cover.white .bname { color: var(--brand); }
 /* Gauge */
@@ -146,7 +146,7 @@ h3 { font-size: 11pt; margin: 16px 0 6px; break-after: avoid; page-break-after: 
 .sheet { max-width: 178mm; margin: 0 auto; }
 .doc-head { display: flex; align-items: flex-end; gap: 12px; padding-bottom: 10px; margin-bottom: 14px; border-bottom: 3px solid var(--brand); }
 .doc-head .who { margin-left: auto; text-align: right; }
-.doc-head img { max-height: 34px; max-width: 150px; }
+.doc-head img { max-height: 34px; max-width: 150px; display: block; } .doc-head .plate { padding: 5px 9px; border-radius: 6px; }
 .glance { display: grid; grid-template-columns: 62mm 1fr; gap: 14px; align-items: center; background: var(--soft); border-radius: 10px; padding: 12px 16px; margin: 8px 0 12px; break-inside: avoid; }
 .glance .gauge { width: 100%; color: var(--ink); }
 .verdict { font-size: 16pt; font-weight: 700; margin: 0 0 4px; }
@@ -230,6 +230,28 @@ CSS;
     }
 
     /**
+     * Which panel the logo needs on a dark (brand-color) or a white background (1.61): 'white', 'brand' or '' (none).
+     * A light logo needs a brand-color panel on white; a dark or unknown logo needs a white panel on brand color.
+     */
+    public static function logoPanel(string $logoBg, bool $onDark): string
+    {
+        if ($onDark) {
+            return $logoBg === 'light' ? '' : 'white';
+        }
+        return $logoBg === 'light' ? 'brand' : '';
+    }
+
+    /** The logo image ('' when there is none) with the panel it needs on this background. */
+    private static function logo(array $b, bool $onDark): string
+    {
+        if (!str_starts_with($b['logo'], 'data:image/png;base64,')) {
+            return '';
+        }
+        $panel = self::logoPanel($b['logo_bg'], $onDark);
+        return '<span class="plate' . ($panel === '' ? ' bare' : ' p-' . $panel) . '"><img src="' . e($b['logo']) . '" alt="' . e($b['name']) . '"></span>';
+    }
+
+    /**
      * The cover page.
      *
      * @param array<string,mixed> $b brand() output.
@@ -238,7 +260,7 @@ CSS;
     public static function cover(array $b, array $o): string
     {
         $b = self::brand($b);
-        $logo = str_starts_with($b['logo'], 'data:image/png;base64,') ? '<span class="plate"><img src="' . e($b['logo']) . '" alt="' . e($b['name']) . '"></span>' : '';
+        $logo = self::logo($b, $b['cover'] === 'color');
         $html = '<section class="cover' . ($b['cover'] === 'white' ? ' white' : '') . '">'
             // A logo that already shows the company name (1.60) stands alone, a little larger; otherwise the name sits beside it.
             . '<div class="brandrow' . ($logo !== '' && $b['logo_has_name'] ? ' logo-only' : '') . '">' . $logo
@@ -265,7 +287,8 @@ CSS;
     public static function docHead(array $b, string $title, string $sub): string
     {
         $b = self::brand($b);
-        $mark = str_starts_with($b['logo'], 'data:image/png;base64,') ? '<img src="' . e($b['logo']) . '" alt="' . e($b['name']) . '">' : '<span class="label">' . e($b['name']) . '</span>';
+        $mark = self::logo($b, false);
+        $mark = $mark !== '' ? $mark : '<span class="label">' . e($b['name']) . '</span>';
         return '<header class="doc-head">' . $mark . '<div class="who small muted"><span class="label">' . e($title) . '</span><br>' . e($sub) . '</div></header>';
     }
 

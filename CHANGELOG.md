@@ -2,6 +2,16 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.61.0 (2026-11-26): Logo without the white panel
+
+- New **Logo background** choice under Report branding:
+  - **White panel** (the default) works with any logo.
+  - **Light logo** shows your white or light logo on the brand-color cover and in the report emails without a
+    panel.
+  - **Dark logo** shows it without a panel on white pages and on the white cover.
+- Where the logo would not show (a light logo on a white page, or a dark logo on the brand color), it gets a small
+  panel in the brand color or in white. Upload a PNG with a transparent background for the best result.
+
 ### 1.60.0 (2026-11-26): Logo with the company name
 
 - If your logo already shows the company name, tick **My logo includes the company name** under Report branding.

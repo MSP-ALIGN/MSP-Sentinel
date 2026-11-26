@@ -228,6 +228,8 @@ final class ReportController extends Controller
             'report_paper' => $request->input('report_paper'),
             'report_powered_by' => $request->input('report_powered_by') === '1' ? '1' : '0',
             'brand_logo_has_name' => $request->input('brand_logo_has_name') === '1' ? '1' : '0',
+            // A form from before 1.61 has no logo background field: keep the saved value.
+            'brand_logo_bg' => $request->input('brand_logo_bg') !== '' ? $request->input('brand_logo_bg') : $s->get('brand_logo_bg'),
         ];
         $errors = [];
         foreach (self::BRAND_TEXT as $k => [$max, $multi, $message]) {
@@ -246,6 +248,9 @@ final class ReportController extends Controller
             if (!preg_match('/^#[0-9a-f]{6}$/', $v[$k])) {
                 $errors[] = __('The color must look like #1f4e79.');
             }
+        }
+        if (!in_array($v['brand_logo_bg'], ['panel', 'light', 'dark'], true)) {
+            $errors[] = __('Choose a logo background.');
         }
         if (!in_array($v['report_cover'], ['color', 'white'], true)) {
             $errors[] = __('Choose a full-color or a white cover.');
@@ -318,7 +323,7 @@ final class ReportController extends Controller
     {
         $s = App::settings();
         $values = [];
-        foreach (array_merge(array_keys(self::BRAND_TEXT), ['brand_color', 'brand_accent', 'report_cover', 'report_paper', 'report_powered_by', 'brand_logo_has_name']) as $k) {
+        foreach (array_merge(array_keys(self::BRAND_TEXT), ['brand_color', 'brand_accent', 'report_cover', 'report_paper', 'report_powered_by', 'brand_logo_has_name', 'brand_logo_bg']) as $k) {
             $values[$k] = $s->get($k);
         }
         return $values + ['logo' => App::branding()->dataUri($s->get('brand_logo')), 'product_name' => $s->get('product_name')];
