@@ -3,164 +3,215 @@
 declare(strict_types=1);
 
 /**
- * End-to-end tests for the automatic "Sign in with Microsoft" setup (1.46): the one-time setup code on the
- * Integrations page and POST /sso-setup/v1/receive, which entra-sso-setup.ps1 calls with the new Entra app's details.
- * The script itself talks to Microsoft Graph and is not run here (tests/unit/powershell_test.php checks it parses);
- * these tests send what it sends. Made-up IDs and secrets only; never contacts Microsoft.
+ * End-to-end tests for "Connect to Microsoft 365" (1.63), which replaced the PowerShell setup script: an Admin signs in
+ * at Microsoft with a code (device authorization) and Sentinel creates the Entra app through Microsoft Graph. Uses the
+ * mock sign-in service and the mock Microsoft Graph (tests/mocks/entra_mock.php, graph_mock.php); made-up tenants, apps
+ * and secrets only. Never contacts Microsoft. Also: the secret-expiry reminders (1.46).
  */
 
 use Sentinel\Core\App;
 use Sentinel\Tests\Assert;
 use Sentinel\Tests\TestContext;
 
-const SETUP_TENANT = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
-const SETUP_CLIENT = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+const CONNECT_TENANT = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const CONNECT_OTHER = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 
-/** Send what the setup script sends; returns [HTTP status, decoded answer]. */
-$receive = static function (TestContext $ctx, array $body): array {
-    $raw = (string) @file_get_contents($ctx->baseUrl . '/sso-setup/v1/receive', false, stream_context_create(['http' => ['method' => 'POST',
-        'header' => "Content-Type: application/json\r\n", 'content' => json_encode($body), 'ignore_errors' => true]]));
-    $status = (int) substr((string) ($http_response_header[0] ?? ''), 9, 3);
-    return [$status, (array) json_decode($raw, true)];
+/** The mocks' scenario ("device" and "graph" options, see the mocks); a fresh Graph state unless $keepGraph. */
+$mock = static function (TestContext $ctx, array $device = [], array $graph = [], bool $keepGraph = false): string {
+    $dir = dirname($ctx->configPath) . '/entra';
+    @mkdir($dir, 0700, true);
+    file_put_contents($dir . '/scenario.json', json_encode(['device' => (object) $device, 'graph' => (object) ($graph + ['tenant' => CONNECT_TENANT])]));
+    if (!$keepGraph) {
+        @unlink($dir . '/graph.json');
+    }
+    @unlink($dir . '/graph-log.json');
+    return $dir;
 };
-/** A setup code, created on the Integrations page by the admin (with their password). */
-$newCode = static function (TestContext $ctx, bool $newTenant = false): string {
+/** Start a connection as the admin (with their password); returns the signed-in client. */
+$start = static function (TestContext $ctx, array $extra = []) {
     $admin = $ctx->login('admin', 'Admin-Pass-0001!');
-    $admin->submit('/admin/integrations', '/admin/integrations/sso/setup-code', ['my_password' => 'Admin-Pass-0001!'] + ($newTenant ? ['new_tenant' => '1'] : []));
-    $page = $admin->get('/admin/integrations')->body;
-    Assert::true(preg_match('/data-testid="sso-setup-code">(SSO(?:-[A-Z2-9]{5}){4})</', $page, $m) === 1, 'the code is shown');
-    return $m[1];
+    $admin->submit('/admin/integrations', '/admin/integrations/sso/connect', ['my_password' => 'Admin-Pass-0001!'] + $extra);
+    return $admin;
 };
-$body = static fn (string $code, array $over = []): array => $over + ['code' => $code, 'tenant_id' => SETUP_TENANT, 'client_id' => SETUP_CLIENT,
-    'client_secret' => 'Made~Up.Secret_Value-0123456789abcdefABCDEF', 'secret_expires' => gmdate('Y-m-d\TH:i:s\Z', time() + 365 * 86400),
-    'redirect_uri' => 'https://sentinel.example/login/sso/callback'];
+/** One check as the page's script does it (JSON). */
+$check = static function ($client): array {
+    $res = $client->post('/admin/integrations/sso/connect/check', ['_csrf' => $client->get('/admin/integrations')->csrf()], ['Accept' => 'application/json']);
+    return (array) json_decode($res->body, true);
+};
+/** Forget the saved app (tenant, client, secret) so a test starts clean. */
+$reset = static function (): void {
+    $s = App::settings();
+    foreach (['sso_entra_tenant', 'sso_entra_client', 'sso_entra_secret_expires', 'sso_secret_warned'] as $k) {
+        $s->set($k, '');
+    }
+    $s->setSecret('sso_entra_secret', '');
+    $s->setSecret('sso_connect', '');
+    $s->set('sso_entra_enabled', '0');
+};
 
 return [
-    'SSO setup (1.46): only an Admin with every client and their password gets a setup code, shown once' => function (TestContext $ctx) use ($newCode): void {
+    'connect (1.63): only an Admin with every client and their password can start; CSRF; the code is shown with the link' => function (TestContext $ctx) use ($mock, $start, $reset): void {
+        $reset();
+        $mock($ctx);
         if ((int) $ctx->db->query("SELECT COUNT(*) FROM users WHERE username = 'setuptech'")->fetchColumn() === 0) {
             $ctx->createUser('setuptech', 'technician', 'Setuptech-Pass-001!');
         }
         $tech = $ctx->login('setuptech', 'Setuptech-Pass-001!');
-        Assert::status(403, $tech->post('/admin/integrations/sso/setup-code', ['_csrf' => $tech->get('/')->csrf(), 'my_password' => 'Setuptech-Pass-001!']));
+        Assert::status(403, $tech->post('/admin/integrations/sso/connect', ['_csrf' => $tech->get('/')->csrf(), 'my_password' => 'Setuptech-Pass-001!']));
+        Assert::status(403, $tech->post('/admin/integrations/sso/connect/check', ['_csrf' => $tech->get('/')->csrf()]));
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
-        Assert::status(400, $admin->post('/admin/integrations/sso/setup-code', ['my_password' => 'Admin-Pass-0001!']), 'CSRF checked');
-        $admin->submit('/admin/integrations', '/admin/integrations/sso/setup-code', ['my_password' => 'wrong-password-123']);
-        $page = $admin->get('/admin/integrations')->body;
-        Assert::notContains('data-testid="sso-setup-code"', $page, 'no code without the right password');
-        Assert::same('', App::settings()->fresh('sso_setup_code'));
+        Assert::status(400, $admin->post('/admin/integrations/sso/connect', ['my_password' => 'Admin-Pass-0001!']), 'CSRF checked');
+        $admin->submit('/admin/integrations', '/admin/integrations/sso/connect', ['my_password' => 'wrong-password-123']);
+        Assert::notContains('data-testid="sso-user-code"', $admin->get('/admin/integrations')->body, 'nothing without the right password');
+        Assert::same('', App::settings()->getSecret('sso_connect'));
         $ctx->clearThrottle();
-        $code = $newCode($ctx);
-        $raw = App::settings()->fresh('sso_setup_code');
-        Assert::true($raw !== '' && !str_contains($raw, $code), 'only a hash of the code is stored');
-        $page = $admin->get('/admin/integrations')->body;
-        Assert::notContains($code, $page, 'shown once');
-        Assert::contains('A setup code is waiting to be used', $page);
-        Assert::true((int) $ctx->db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'settings.sso_setup_code' AND username = 'admin'")->fetchColumn() >= 1, 'audited');
         // An Admin limited to some clients can't.
         if ((int) $ctx->db->query("SELECT COUNT(*) FROM users WHERE username = 'setupadmin'")->fetchColumn() === 0) {
             $uid = $ctx->createUser('setupadmin', 'admin', 'Setupadmin-Pass-01!');
             $ctx->db->exec("UPDATE users SET all_clients = 0 WHERE id = {$uid}");
         }
         $limited = $ctx->login('setupadmin', 'Setupadmin-Pass-01!');
-        Assert::status(403, $limited->post('/admin/integrations/sso/setup-code', ['_csrf' => $limited->get('/')->csrf(), 'my_password' => 'Setupadmin-Pass-01!']));
+        Assert::status(403, $limited->post('/admin/integrations/sso/connect', ['_csrf' => $limited->get('/')->csrf(), 'my_password' => 'Setupadmin-Pass-01!']));
+
+        $admin = $start($ctx);
+        $page = $admin->get('/admin/integrations')->body;
+        Assert::contains('data-testid="sso-user-code">MOCK1234<', $page);
+        Assert::contains('href="https://microsoft.com/devicelogin"', $page);
+        Assert::contains('data-sso-poll', $page);
+        $req = (array) json_decode((string) file_get_contents(dirname($ctx->configPath) . '/entra/device-request.json'), true);
+        Assert::same('14d82eec-204b-4c2f-b7e8-296a70dab67e', $req['client_id'] ?? '', 'Microsoft Graph command-line tools client');
+        foreach (['Application.ReadWrite.All', 'DelegatedPermissionGrant.ReadWrite.All', 'User.Read'] as $scope) {
+            Assert::contains($scope, (string) ($req['scope'] ?? ''));
+        }
+        $stored = App::settings()->fresh('sso_connect');
+        Assert::true($stored !== '' && !str_contains($stored, 'mock-device-'), 'the device code is stored encrypted');
+        Assert::true((int) $ctx->db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'settings.sso_connect_started' AND username = 'admin'")->fetchColumn() >= 1, 'audited');
+        // Another admin sees that one is in progress, not its code.
+        Assert::status(303, $admin->post('/admin/integrations/sso/connect/cancel', ['_csrf' => $admin->get('/admin/integrations')->csrf()]));
+        Assert::same('', App::settings()->getSecret('sso_connect'), 'cancelled');
+        Assert::notContains('data-testid="sso-user-code"', $admin->get('/admin/integrations')->body);
     },
-    'SSO setup (1.46): the script hands over the app once, with the code; nothing is turned on by it' => function (TestContext $ctx) use ($receive, $newCode, $body): void {
+    'connect (1.63): waits while pending, then creates the app, consent and a 24-month secret; never turns sign-in on' => function (TestContext $ctx) use ($mock, $start, $check, $reset): void {
+        $reset();
+        $dir = $mock($ctx, ['pending' => 1]);
+        $admin = $start($ctx);
+        $r = $check($admin);
+        Assert::same('pending', $r['status'] ?? '', 'still waiting for the sign-in');
+        Assert::same('', App::settings()->fresh('sso_entra_client'), 'nothing saved while pending');
+        sleep(1); // the mock asks for 1 second between checks
+        $r = $check($admin);
+        Assert::same('done', $r['status'] ?? '', json_encode($r));
+        Assert::contains('Connected to Example MSP Tenant', $r['message']);
         $s = App::settings();
-        $before = ['sso_entra_tenant' => $s->fresh('sso_entra_tenant'), 'sso_entra_client' => $s->fresh('sso_entra_client'), 'sso_entra_enabled' => $s->fresh('sso_entra_enabled')];
-        $beforeSecret = $s->getSecret('sso_entra_secret');
-        $s->set('sso_entra_enabled', '0');
-        $s->set('sso_entra_tenant', ''); // a first setup: any tenant
-        $code = $newCode($ctx);
-        // Only POST, with the usual safety headers.
-        $get = @file_get_contents($ctx->baseUrl . '/sso-setup/v1/receive', false, stream_context_create(['http' => ['ignore_errors' => true]]));
-        Assert::contains('404', (string) ($http_response_header[0] ?? ''), 'GET is not found');
-        $raw = @file_get_contents($ctx->baseUrl . '/sso-setup/v1/receive', false, stream_context_create(['http' => ['method' => 'POST', 'header' => "Content-Type: application/json\r\n", 'content' => '{}', 'ignore_errors' => true]]));
-        Assert::true(preg_grep('/^Cache-Control:.*no-store/i', $http_response_header) !== [] && preg_grep('/^Content-Security-Policy:/i', $http_response_header) !== [], 'no-store and CSP headers');
-        // Wrong, malformed or missing codes are refused.
-        Assert::same(403, $receive($ctx, $body('SSO-AAAAA-AAAAA-AAAAA-AAAAA'))[0], 'wrong code');
-        Assert::same(403, $receive($ctx, $body('not-a-code'))[0], 'malformed code');
-        Assert::same(403, $receive($ctx, ['tenant_id' => SETUP_TENANT])[0], 'no code');
-        // Bad details are refused without using the code.
-        Assert::same(422, $receive($ctx, $body($code, ['tenant_id' => 'not-a-guid']))[0], 'bad tenant ID');
-        Assert::same(422, $receive($ctx, $body($code, ['client_secret' => "bad\nsecret"]))[0], 'bad secret');
-        [$st, $ans] = $receive($ctx, $body($code, ['redirect_uri' => 'https://other.example/login/sso/callback']));
-        Assert::same(422, $st, 'another redirect address');
-        Assert::contains('Sentinel expects https://sentinel.example/login/sso/callback', (string) ($ans['message'] ?? ''));
-        // Wrong details sent with the right code don't count toward the address's limit (only wrong codes do).
-        for ($i = 0; $i < 12; $i++) {
-            $receive($ctx, $body($code, ['client_id' => 'bad']));
+        Assert::same(CONNECT_TENANT, $s->fresh('sso_entra_tenant'));
+        Assert::true(\Sentinel\Auth\EntraSso::validGuid($s->fresh('sso_entra_client')), 'client ID saved');
+        Assert::true(str_starts_with($s->getSecret('sso_entra_secret'), 'Mock~Secret.'), 'secret saved');
+        $days = \Sentinel\Auth\SsoSetup::secretDaysLeft();
+        Assert::true($days !== null && $days >= 728 && $days <= 730, '24-month secret: ' . var_export($days, true));
+        Assert::same('0', $s->fresh('sso_entra_enabled'), 'never switched on');
+        Assert::same('', $s->getSecret('sso_connect'), 'the connection is used up');
+        // What Graph was asked: the app (single tenant, Sentinel's callback, sign-in permissions, auth_time), its service
+        // principal, consent for openid/profile/email only, a secret.
+        $log = (array) json_decode((string) file_get_contents($dir . '/graph-log.json'), true);
+        $post = array_values(array_filter($log, static fn (array $l): bool => $l['method'] === 'POST' && $l['path'] === '/graph/v1.0/applications'))[0]['body'] ?? [];
+        Assert::same('AzureADMyOrg', $post['signInAudience'] ?? '');
+        Assert::same(['https://sentinel.example/login/sso/callback'], $post['web']['redirectUris'] ?? []);
+        Assert::same(['msp-sentinel-sso:sentinel.example'], $post['tags'] ?? []);
+        Assert::same('auth_time', $post['optionalClaims']['idToken'][0]['name'] ?? '');
+        Assert::same(3, count($post['requiredResourceAccess'][0]['resourceAccess'] ?? []), 'openid, profile, email only');
+        $grant = array_values(array_filter($log, static fn (array $l): bool => $l['method'] === 'POST' && $l['path'] === '/graph/v1.0/oauth2PermissionGrants'))[0]['body'] ?? [];
+        Assert::same(['AllPrincipals', 'openid profile email', 'graph-sp-id'], [$grant['consentType'] ?? '', $grant['scope'] ?? '', $grant['resourceId'] ?? '']);
+        $pw = array_values(array_filter($log, static fn (array $l): bool => str_ends_with($l['path'], '/addPassword')))[0]['body'] ?? [];
+        Assert::true(str_starts_with((string) ($pw['passwordCredential']['displayName'] ?? ''), 'MSP Sentinel sign-in'), 'named secret');
+        // Audited (without the secret), and the admin is told.
+        $audit = (string) $ctx->db->query("SELECT details FROM audit_log WHERE action = 'settings.sso_connect_done' ORDER BY id DESC LIMIT 1")->fetchColumn();
+        Assert::true($audit !== '' && !str_contains($audit, 'Mock~Secret'), 'audited without the secret');
+        Assert::contains('the Entra app is set up', (string) $ctx->db->query("SELECT title FROM notifications ORDER BY id DESC LIMIT 1")->fetchColumn());
+        Assert::contains('Connected to Example MSP Tenant', $admin->get('/admin/integrations')->body, 'the result is shown after the reload');
+
+        // Renewing: the same app is updated (found by its tag), a new secret is saved and the older one removed.
+        $client = $s->fresh('sso_entra_client');
+        $secret = $s->getSecret('sso_entra_secret');
+        $mock($ctx, [], [], true);
+        $admin = $start($ctx);
+        Assert::same('done', $check($admin)['status'] ?? '');
+        Assert::same($client, $s->fresh('sso_entra_client'), 'same app');
+        Assert::true($s->getSecret('sso_entra_secret') !== $secret, 'new secret');
+        $state = (array) json_decode((string) file_get_contents($dir . '/graph.json'), true);
+        Assert::same(1, count($state['apps']), 'no second app');
+        Assert::same(1, count(array_values($state['apps'])[0]['passwordCredentials']), 'the older secret was removed');
+        Assert::true(count(array_filter((array) json_decode((string) file_get_contents($dir . '/graph-log.json'), true), static fn (array $l): bool => $l['method'] === 'PATCH')) >= 1, 'existing app updated');
+    },
+    'connect (1.63): wrong tenant, declined, blocked, no permission and replication delays are handled' => function (TestContext $ctx) use ($mock, $start, $check, $reset): void {
+        $reset();
+        $s = App::settings();
+        $s->set('sso_entra_tenant', CONNECT_TENANT);
+        $s->set('sso_entra_client', 'dddddddd-dddd-4ddd-8ddd-dddddddddddd');
+        $s->setSecret('sso_entra_secret', 'existing-secret-value');
+        // Another tenant: nothing is created in it and nothing changes here.
+        $dir = $mock($ctx, [], ['tenant' => CONNECT_OTHER, 'org' => 'Other Example Tenant']);
+        $admin = $start($ctx);
+        $r = $check($admin);
+        Assert::same('failed', $r['status'] ?? '');
+        Assert::contains('but Sentinel uses tenant ' . CONNECT_TENANT, $r['message']);
+        Assert::same(0, count(array_filter((array) json_decode((string) file_get_contents($dir . '/graph-log.json'), true), static fn (array $l): bool => $l['method'] !== 'GET')), 'nothing created in the other tenant');
+        Assert::same('existing-secret-value', $s->getSecret('sso_entra_secret'));
+        // ...unless switching was allowed: every Microsoft link is cleared and password sign-in turned back on.
+        $uid = (int) $ctx->db->query("SELECT id FROM users WHERE username = 'admin'")->fetchColumn();
+        $ctx->db->exec("UPDATE users SET sso_subject = 'made-up-subject', password_login = 1 WHERE id = {$uid}");
+        $mock($ctx, [], ['tenant' => CONNECT_OTHER]);
+        $admin = $start($ctx, ['new_tenant' => '1']);
+        Assert::same('done', $check($admin)['status'] ?? '');
+        Assert::same(CONNECT_OTHER, $s->fresh('sso_entra_tenant'));
+        Assert::same(null, $ctx->db->query("SELECT sso_subject FROM users WHERE id = {$uid}")->fetchColumn() ?: null, 'links cleared');
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!'); // the switch signed everyone out
+
+        // Declined at Microsoft; a blocked code sign-in (Conditional Access) is explained; Microsoft's text never shown.
+        foreach (['authorization_declined' => 'declined', 'invalid_grant' => 'set the app up by hand'] as $error => $want) {
+            $mock($ctx, ['error' => $error], ['tenant' => CONNECT_OTHER]);
+            $admin = $start($ctx);
+            $r = $check($admin);
+            Assert::same('failed', $r['status'] ?? '', $error);
+            Assert::contains($want, $r['message']);
+            Assert::notContains('<script>', $r['message']);
+            Assert::notContains('AADSTS', $r['message']);
+            Assert::same('', $s->getSecret('sso_connect'), 'cleared after a failure');
         }
-        App::limiter()->clear('sso-setup:' . \Sentinel\Auth\Auth::ipBucketKey('127.0.0.1')); // the three wrong codes above
-        // The right details: saved, the secret encrypted, the expiry kept, sign-in still off.
-        [$st, $ans] = $receive($ctx, $body($code));
-        Assert::same(200, $st, json_encode($ans));
-        Assert::true(($ans['ok'] ?? false) === true, 'ok');
-        Assert::contains('turn on "Sign in with Microsoft"', (string) $ans['message']);
-        Assert::same([SETUP_TENANT, SETUP_CLIENT, '0'], [$s->fresh('sso_entra_tenant'), $s->fresh('sso_entra_client'), $s->fresh('sso_entra_enabled')]);
-        Assert::same('Made~Up.Secret_Value-0123456789abcdefABCDEF', $s->getSecret('sso_entra_secret'));
-        Assert::notContains('Made~Up.Secret', (string) $ctx->db->query("SELECT value FROM settings WHERE name = 'sso_entra_secret'")->fetchColumn(), 'stored encrypted');
-        Assert::notContains('Made~Up.Secret', implode("\n", $ctx->db->query('SELECT details FROM audit_log')->fetchAll(PDO::FETCH_COLUMN)), 'never audited');
-        Assert::same(gmdate('Y-m-d', time() + 365 * 86400), substr($s->fresh('sso_entra_secret_expires'), 0, 10), 'expiry kept');
-        Assert::same('admin', (string) $ctx->db->query("SELECT username FROM audit_log WHERE action = 'settings.sso_setup_received' ORDER BY id DESC LIMIT 1")->fetchColumn(), 'audited as the admin who made the code');
-        Assert::true((int) $ctx->db->query("SELECT COUNT(*) FROM notifications WHERE title LIKE 'Sign in with Microsoft: the setup script sent%'")->fetchColumn() >= 1, 'the admin is told');
-        // Used once.
-        Assert::same(403, $receive($ctx, $body($code))[0], 'a used code is refused');
-        // The card shows the expiry; a renewal into another tenant clears every Microsoft link.
-        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
-        Assert::contains('The client secret expires on ' . gmdate('Y-m-d', time() + 365 * 86400), $admin->get('/admin/integrations')->body);
-        $ctx->db->exec("UPDATE users SET sso_subject = '" . SETUP_TENANT . ":eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', password_login = 0 WHERE username = 'setuptech'");
-        // A renewal in the same tenant keeps every link.
-        $code = $newCode($ctx);
-        Assert::same(200, $receive($ctx, $body($code, ['client_secret' => 'Renewed~Secret-0123456789']))[0]);
-        Assert::same(1, (int) $ctx->db->query('SELECT COUNT(*) FROM users WHERE sso_subject IS NOT NULL')->fetchColumn(), 'same tenant: links kept');
-        // Another tenant (signed in to the wrong one?) is refused, the code kept, unless the code allows switching.
-        $code = $newCode($ctx);
-        [$st, $ans] = $receive($ctx, $body($code, ['tenant_id' => 'ffffffff-ffff-4fff-8fff-ffffffffffff']));
-        Assert::same(409, $st, 'another tenant refused');
-        Assert::contains('Sentinel uses tenant ' . SETUP_TENANT, (string) $ans['message']);
-        Assert::same(SETUP_TENANT, $s->fresh('sso_entra_tenant'));
-        Assert::same(1, (int) $ctx->db->query('SELECT COUNT(*) FROM users WHERE sso_subject IS NOT NULL')->fetchColumn(), 'refused: links kept');
-        $code = $newCode($ctx, true);
-        [$st] = $receive($ctx, $body($code, ['tenant_id' => 'ffffffff-ffff-4fff-8fff-ffffffffffff']));
-        Assert::same(200, $st);
-        Assert::same(0, (int) $ctx->db->query('SELECT COUNT(*) FROM users WHERE sso_subject IS NOT NULL')->fetchColumn(), 'switching tenant clears the links');
-        Assert::same(1, (int) $ctx->db->query("SELECT password_login FROM users WHERE username = 'setuptech'")->fetchColumn(), 'and turns password sign-in back on (no lock-out)');
-        // A code whose admin was disabled meanwhile is refused.
-        $ctx->createUser('setupadmin2', 'admin', 'Setupadmin2-Pass-1!');
-        $a2 = $ctx->login('setupadmin2', 'Setupadmin2-Pass-1!');
-        $a2->submit('/admin/integrations', '/admin/integrations/sso/setup-code', ['my_password' => 'Setupadmin2-Pass-1!']);
-        preg_match('/data-testid="sso-setup-code">(SSO(?:-[A-Z2-9]{5}){4})</', $a2->get('/admin/integrations')->body, $m);
-        $ctx->db->exec("UPDATE users SET is_active = 0 WHERE username = 'setupadmin2'");
-        Assert::same(403, $receive($ctx, $body($m[1] ?? 'x', ['tenant_id' => 'ffffffff-ffff-4fff-8fff-ffffffffffff']))[0], 'the code\'s admin is gone');
-        // Expiry dates that make no sense are stored as unknown (no wrong reminders).
-        foreach (['garbage', gmdate('Y-m-d\TH:i:s\Z', time() - 86400), gmdate('Y-m-d\TH:i:s\Z', time() + 900 * 86400)] as $bad) {
-            $code = $newCode($ctx);
-            Assert::same(200, $receive($ctx, $body($code, ['tenant_id' => 'ffffffff-ffff-4fff-8fff-ffffffffffff', 'secret_expires' => $bad]))[0]);
-            Assert::same('', $s->fresh('sso_entra_secret_expires'), 'unknown expiry for ' . $bad);
+        // An account that can't register apps.
+        $mock($ctx, [], ['tenant' => CONNECT_OTHER, 'forbidden' => true]);
+        $admin = $start($ctx);
+        $r = $check($admin);
+        Assert::same('failed', $r['status'] ?? '');
+        Assert::contains('Application Administrator', $r['message']);
+        // A slow_down answer waits longer; a new app's service principal that isn't replicated yet is retried; consent
+        // that can't be granted is reported but doesn't stop the setup.
+        $mock($ctx, ['slow_down' => true], ['tenant' => CONNECT_OTHER, 'sp_fail' => 2, 'consent_fail' => true]);
+        $admin = $start($ctx);
+        Assert::same('pending', $check($admin)['status'] ?? '', 'slow_down');
+        Assert::same('pending', $check($admin)['status'] ?? '', 'waits the longer interval before asking again');
+        $state = (array) json_decode((string) $s->getSecret('sso_connect'), true);
+        $state['next'] = time();
+        $s->setSecret('sso_connect', (string) json_encode($state));
+        $r = $check($admin);
+        Assert::same('done', $r['status'] ?? '', json_encode($r));
+        Assert::contains('Grant admin consent', $r['message']);
+        // Only the admin who started can finish.
+        $mock($ctx, [], ['tenant' => CONNECT_OTHER]);
+        $start($ctx);
+        if ((int) $ctx->db->query("SELECT COUNT(*) FROM users WHERE username = 'setupadmin3'")->fetchColumn() === 0) {
+            $ctx->createUser('setupadmin3', 'admin', 'Setupadmin3-Pass-1!');
         }
-        // An expired code is refused.
-        $code = $newCode($ctx);
-        $s->set('sso_setup_expires', (string) (time() - 1));
-        Assert::same(403, $receive($ctx, $body($code))[0], 'expired');
-        // Typing a secret in by hand forgets the script's expiry date.
-        $admin->submit('/admin/integrations', '/admin/integrations/sso', ['tenant_id' => 'ffffffff-ffff-4fff-8fff-ffffffffffff', 'client_id' => SETUP_CLIENT,
-            'client_secret' => 'typed-by-hand-secret-0123', 'my_password' => 'Admin-Pass-0001!']);
-        Assert::same('', $s->fresh('sso_entra_secret_expires'), 'expiry unknown after a typed secret');
-        // Too many failures from one address: refused for a while, even with a right code.
-        for ($i = 0; $i < 10; $i++) {
-            $receive($ctx, $body('SSO-BBBBB-BBBBB-BBBBB-BBBBB'));
-        }
-        $code = $newCode($ctx);
-        Assert::same(429, $receive($ctx, $body($code))[0], 'rate limited');
-        $ctx->clearThrottle();
-        App::limiter()->clear('sso-setup:' . \Sentinel\Auth\Auth::ipBucketKey('127.0.0.1'));
-        // Put back what the earlier tests set.
-        foreach ($before as $k => $v) {
-            $s->set($k, $v);
-        }
-        $s->setSecret('sso_entra_secret', $beforeSecret);
-        $s->set('sso_entra_secret_expires', '');
-        $s->set('sso_setup_code', '');
+        $other = $ctx->login('setupadmin3', 'Setupadmin3-Pass-1!');
+        Assert::same('failed', $check($other)['status'] ?? '', 'another admin cannot finish it');
+        Assert::notContains('data-testid="sso-user-code"', $other->get('/admin/integrations')->body, 'nor see its code');
+        Assert::contains('Another admin has a connection in progress', $other->get('/admin/integrations')->body);
+        $reset();
+    },
+    'connect (1.63): the old setup-script endpoint is gone' => function (TestContext $ctx): void {
+        $raw = @file_get_contents($ctx->baseUrl . '/sso-setup/v1/receive', false, stream_context_create(['http' => ['method' => 'POST',
+            'header' => "Content-Type: application/json\r\n", 'content' => '{}', 'ignore_errors' => true]]));
+        Assert::true(!str_contains((string) ($http_response_header[0] ?? ''), ' 200'), 'no longer answers');
+        Assert::true(!is_file(SENTINEL_ROOT . '/entra-sso-setup.ps1'), 'script removed');
     },
     'SSO setup (1.46): admins are reminded 30 and 7 days before the secret expires, and when it has' => function (TestContext $ctx): void {
         $s = App::settings();
@@ -180,7 +231,7 @@ return [
         App::alerts()->ssoSecretExpiring($s);
         Assert::same($first, $count(), 'once per stage');
         $admin = $ctx->login('admin', 'Admin-Pass-0001!');
-        Assert::contains('Renew it: create a setup code below', $admin->get('/admin/integrations')->body);
+        Assert::contains('Renew it: click &quot;Connect to Microsoft 365&quot; below', $admin->get('/admin/integrations')->body);
         $s->set('sso_entra_secret_expires', gmdate('Y-m-d H:i:s', time() + 3 * 86400));
         App::alerts()->ssoSecretExpiring($s);
         Assert::true($count() > $first, 'reminded again at 7 days');

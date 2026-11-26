@@ -154,10 +154,8 @@ final class Settings
         'sso_entra_secret' => '',
         // Automatic setup (1.46): when the script-made secret expires, the one-time setup code (HMAC), and warnings.
         'sso_entra_secret_expires' => '',
-        'sso_setup_code' => '',
-        'sso_setup_expires' => '',
-        'sso_setup_by' => '',
-        'sso_setup_new_tenant' => '0',
+        // A pending "Connect to Microsoft 365" sign-in (1.63): encrypted JSON with Microsoft's device code (EntraAppSetup).
+        'sso_connect' => '',
         'sso_secret_warned' => '',
         'breach_last_run' => '',
         'breach_last_ok_run' => '',
@@ -182,7 +180,7 @@ final class Settings
     ];
 
     /** Settings that hold secrets: stored encrypted with the app key, never shown again. */
-    public const SECRETS = ['smtp_password', 'webhook_url', 'event_webhook_url', 'event_webhook_secret', 'ninjaone_client_secret', 'mspalign_api_key', 'itflow_api_key', 'agent_move', 'release_key', 'xon_api_key', 'sso_entra_secret'];
+    public const SECRETS = ['smtp_password', 'webhook_url', 'event_webhook_url', 'event_webhook_secret', 'ninjaone_client_secret', 'mspalign_api_key', 'itflow_api_key', 'agent_move', 'release_key', 'xon_api_key', 'sso_entra_secret', 'sso_connect'];
 
     /** @var array<string,string>|null */
     private ?array $cache = null;

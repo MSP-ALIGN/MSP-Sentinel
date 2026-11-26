@@ -117,9 +117,10 @@ final class HttpClient
     }
 
     /** @param array<string,string> $fields */
-    public function post(string $path, array $fields): HttpResult
+    /** POST a form; $headers (name => value) are sent with this request only. */
+    public function post(string $path, array $fields, array $headers = []): HttpResult
     {
-        return $this->request('POST', $path, $fields);
+        return $this->request('POST', $path, $fields, false, $headers);
     }
 
     /**
@@ -157,10 +158,11 @@ final class HttpClient
     }
 
     /** @param array<string,mixed>|null $fields */
-    private function request(string $method, string $path, ?array $fields, bool $multipart = false): HttpResult
+    private function request(string $method, string $path, ?array $fields, bool $multipart = false, array $send = []): HttpResult
     {
         $headers = [];
         curl_setopt_array($this->curl, [
+            CURLOPT_HTTPHEADER => array_map(static fn (string $k, string $v): string => $k . ': ' . $v, array_keys($send), array_values($send)),
             CURLOPT_URL => $this->baseUrl . $path,
             CURLOPT_CUSTOMREQUEST => $method,
             CURLOPT_POST => $method === 'POST',

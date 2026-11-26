@@ -2,6 +2,18 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.63.0 (2026-11-26): Connect to Microsoft 365
+
+- **Sign in with Microsoft sets itself up from the browser.** Under Administration → Integrations, click **Connect to
+  Microsoft 365**. Open microsoft.com/devicelogin, enter the code Sentinel shows and sign in as an Entra admin.
+  Sentinel then creates the app registration itself: sign-in permissions only, consent for your organization and a
+  24-month client secret. The page checks by itself and shows the result. Nothing to copy, install or run.
+- **Renewing** the secret is the same button. Sentinel finds its app, adds a new secret and removes the old one.
+- **The PowerShell setup script is gone**, together with its one-time codes and the endpoint it called. Apps it
+  created are found and reused. Setting the app up by hand still works, for tenants that block sign-in with a code.
+- Sentinel's server must be able to reach login.microsoftonline.com and graph.microsoft.com. Sign-in with Microsoft
+  stays off until you turn it on.
+
 ### 1.62.0 (2026-11-26): Risk score history
 
 - **Score over time on every client.** The client's Overview has a **Risk score history** chart: the score as a

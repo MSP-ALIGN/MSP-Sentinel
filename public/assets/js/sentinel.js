@@ -112,6 +112,43 @@
         });
     });
 
+    // Connect to Microsoft 365 (1.63): while the admin signs in at Microsoft, ask Sentinel every 5 seconds whether it is
+    // done. Uses the "Check now" form (same origin, its CSRF field); the answer is JSON {status, message} and only its
+    // text is shown (textContent, never HTML). Done or failed: reload, so the page shows the saved state.
+    document.querySelectorAll('form[data-sso-poll]').forEach(function (form) {
+        var status = document.getElementById(form.getAttribute('data-status') || '');
+        var target;
+        try { target = new URL(form.getAttribute('action') || '', window.location.href); } catch (e) { return; }
+        if (target.origin !== window.location.origin) {
+            return;
+        }
+        var busy = false;
+        var tries = 0;
+        var timer = window.setInterval(function () {
+            if (busy || document.visibilityState !== 'visible') {
+                return;
+            }
+            if (++tries > 200) { // about 17 minutes: the code has expired by then
+                window.clearInterval(timer);
+                return;
+            }
+            busy = true;
+            window.fetch(target.href, { method: 'POST', body: new FormData(form), credentials: 'same-origin', redirect: 'error', headers: { 'Accept': 'application/json' } })
+                .then(function (res) { return res.ok ? res.json() : Promise.reject(new Error('http')); })
+                .then(function (r) {
+                    if (r && typeof r.message === 'string' && status) {
+                        status.textContent = r.message;
+                    }
+                    if (r && (r.status === 'done' || r.status === 'failed')) {
+                        window.clearInterval(timer);
+                        window.setTimeout(function () { window.location.reload(); }, r.status === 'done' ? 600 : 2500);
+                    }
+                })
+                .catch(function () { /* network trouble or signed out: the next tick tries again; "Check now" still works */ })
+                .then(function () { busy = false; });
+        }, 5000);
+    });
+
     // Tabs whose panes are addressed by the page's #hash (Settings): open the tab named in the address, and keep the
     // address in step when another tab is chosen, so a redirect after saving ("#alerts") lands on the right tab.
     document.querySelectorAll('[data-hash-tabs]').forEach(function (list) {

@@ -28,6 +28,52 @@ if (!is_file($keyFile)) {
 $key = openssl_pkey_get_private((string) file_get_contents($keyFile));
 $b64 = static fn (string $s): string => rtrim(strtr(base64_encode($s), '+/', '-_'), '=');
 $path = (string) parse_url((string) $_SERVER['REQUEST_URI'], PHP_URL_PATH);
+
+// "Connect to Microsoft 365" (1.63): the device authorization flow, as Microsoft's public Graph client uses it.
+// scenario.json "device": {"pending": n (authorization_pending answers before the token), "slow_down": true (the first
+// answer is slow_down), "error": "authorization_declined" | "expired_token" | ... (instead of a token)}.
+if (preg_match('#^/entra/organizations/oauth2/v2\.0/(devicecode|token)$#', $path, $dm) === 1) {
+    $sc = is_file($dir . '/scenario.json') ? (array) json_decode((string) file_get_contents($dir . '/scenario.json'), true) : [];
+    $dev = (array) ($sc['device'] ?? []);
+    header('Content-Type: application/json');
+    if (($_POST['client_id'] ?? '') !== '14d82eec-204b-4c2f-b7e8-296a70dab67e') {
+        http_response_code(400);
+        echo json_encode(['error' => 'unauthorized_client']);
+        exit;
+    }
+    if ($dm[1] === 'devicecode') {
+        file_put_contents($dir . '/device-request.json', json_encode($_POST));
+        $device = 'mock-device-' . bin2hex(random_bytes(8));
+        file_put_contents($dir . '/device.json', json_encode(['device_code' => $device, 'polls' => 0]));
+        echo json_encode(['device_code' => $device, 'user_code' => 'MOCK1234', 'verification_uri' => 'https://microsoft.com/devicelogin', 'expires_in' => 900, 'interval' => 1,
+            'message' => 'To sign in, use a web browser to open the page https://microsoft.com/devicelogin and enter the code MOCK1234 to authenticate.']);
+        exit;
+    }
+    $st = is_file($dir . '/device.json') ? (array) json_decode((string) file_get_contents($dir . '/device.json'), true) : [];
+    if (($_POST['grant_type'] ?? '') !== 'urn:ietf:params:oauth:grant-type:device_code' || ($_POST['device_code'] ?? '') !== ($st['device_code'] ?? null)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'bad_verification_code']);
+        exit;
+    }
+    $st['polls'] = (int) $st['polls'] + 1;
+    file_put_contents($dir . '/device.json', json_encode($st));
+    http_response_code(400);
+    if (!empty($dev['slow_down']) && $st['polls'] === 1) {
+        echo json_encode(['error' => 'slow_down']);
+        exit;
+    }
+    if ($st['polls'] <= (int) ($dev['pending'] ?? 0)) {
+        echo json_encode(['error' => 'authorization_pending', 'error_description' => 'AADSTS70016: pending. Trace ID: made-up']);
+        exit;
+    }
+    if (isset($dev['error'])) {
+        echo json_encode(['error' => (string) $dev['error'], 'error_description' => 'AADSTS made-up description <script>']);
+        exit;
+    }
+    http_response_code(200);
+    echo json_encode(['token_type' => 'Bearer', 'access_token' => 'mock-graph-token', 'expires_in' => 3600, 'scope' => (string) ($_POST['scope'] ?? '')]);
+    exit;
+}
 if (preg_match('#^/entra/([0-9a-f-]{36})/(oauth2/v2\.0/authorize|oauth2/v2\.0/token|discovery/v2\.0/keys)$#', $path, $m) !== 1) {
     http_response_code(404);
     echo json_encode(['error' => 'not_found']);
