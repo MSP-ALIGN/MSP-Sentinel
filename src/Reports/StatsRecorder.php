@@ -32,18 +32,20 @@ final class StatsRecorder
         if (!$force && (int) $this->db->query('SELECT COUNT(*) FROM finding_stats WHERE day = UTC_DATE() AND recorded_at > UTC_TIMESTAMP() - INTERVAL 1 HOUR')->fetchColumn() > 0) {
             return;
         }
-        $this->db->exec(
+        // The day is read once, so the counts and the score land on the same row even if this runs across midnight UTC.
+        $day = gmdate('Y-m-d');
+        $this->db->prepare(
             "INSERT INTO finding_stats (client_id, day, fail_open, warn_open, recorded_at)
-             SELECT c.id, UTC_DATE(),
+             SELECT c.id, :day,
                     COALESCE(SUM(f.status = 'open' AND f.severity = 'fail'), 0), COALESCE(SUM(f.status = 'open' AND f.severity = 'warn'), 0), UTC_TIMESTAMP()
              FROM clients c LEFT JOIN findings f ON f.client_id = c.id
              WHERE c.is_archived = 0 GROUP BY c.id
              ON DUPLICATE KEY UPDATE fail_open = VALUES(fail_open), warn_open = VALUES(warn_open), recorded_at = VALUES(recorded_at)"
-        );
+        )->execute(['day' => $day]);
         // 1.62: today's exact risk score and level, by the dashboard's rule, for the score history.
-        $set = $this->db->prepare('UPDATE finding_stats SET score = :s, level = :l WHERE client_id = :c AND day = UTC_DATE()');
+        $set = $this->db->prepare('UPDATE finding_stats SET score = :s, level = :l WHERE client_id = :c AND day = :day');
         foreach ((new DashboardData($this->db, new Settings($this->db)))->clients() as $c) {
-            $set->execute(['s' => $c['score'], 'l' => $c['level'], 'c' => $c['id']]);
+            $set->execute(['s' => $c['score'], 'l' => $c['level'], 'c' => $c['id'], 'day' => $day]);
         }
     }
 }

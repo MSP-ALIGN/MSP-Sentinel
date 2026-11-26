@@ -131,16 +131,13 @@ final class ReportBuilder
      * The risk score over the last six months and at the start of the period (1.62), for the executive summary. Today's
      * point is the report's own score, so the chart always ends where the rating does (also for archived clients).
      *
-     * @param array{score:int, level:string} $rate DashboardData::rate() for this report
+     * @param array{score:int, level:string, fail:int, warn:int} $rate DashboardData::rate() for this report (also calibrates estimates)
      * @return array{points:list<array{day:string, score:int, level:string, estimated:bool}>, from:?array{day:string, score:int, level:string, estimated:bool}, days:int}
      */
     private function scoreHistory(int $clientId, string $start, array $rate): array
     {
         $history = new ScoreHistory($this->db, $this->settings);
-        $today = gmdate('Y-m-d');
-        $points = array_values(array_filter($history->series($clientId, 182), static fn (array $p): bool => $p['day'] !== $today));
-        $points[] = ['day' => $today, 'score' => $rate['score'], 'level' => $rate['level'], 'estimated' => false];
-        return ['points' => $points, 'from' => $history->on($clientId, $start), 'days' => 182];
+        return ['points' => $history->series($clientId, 182, $rate), 'from' => $history->on($clientId, $start, $rate), 'days' => 182];
     }
 
     /**

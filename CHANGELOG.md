@@ -12,7 +12,8 @@ All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` 
   of the report period.
 - **API:** `GET /api/v1/clients/{id}/score-history?days=90`.
 - **History from day one.** Exact scores are recorded daily from this release. Earlier days are estimated from
-  their Fail and Warning counts and shown dashed, marked "estimated".
+  their Fail and Warning counts, calibrated to each client's mix of internal and known-exploited findings, and
+  shown dashed, marked "estimated". A client that changed nothing shows no change.
 
 ### 1.61.0 (2026-11-26): Logo without the white panel
 

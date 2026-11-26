@@ -38,6 +38,20 @@ return [
             Assert::true($then !== null && $then['score'] === 43 && $then['estimated'], 'the score 30 days ago is the latest day on or before it');
             Assert::same(null, App::scoreHistory()->on($cid, gmdate('Y-m-d', time() - 400 * 86400)));
             Assert::same(null, App::scoreHistory()->on($cid, "2026-01-01' OR '1'='1"), 'a malformed day is refused');
+            Assert::same(null, App::scoreHistory()->on($cid, gmdate('Y-m-d', time() - 25 * 86400)), 'a recorded day more than 31 days earlier is not "the score then"');
+
+            // Calibration: a client with 5 internal Fails then and now. Uncalibrated, the old day would read 57 (as if all
+            // were internet-facing) against an exact 28 today: a change that never happened.
+            $ctx->db->exec("INSERT INTO clients (name, timezone, created_at, updated_at) VALUES ('Score History Internal Example', 'UTC', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+            $internal = (int) $ctx->db->lastInsertId();
+            $ctx->db->exec("INSERT INTO finding_stats (client_id, day, fail_open, warn_open, recorded_at) VALUES ({$internal}, UTC_DATE() - INTERVAL 35 DAY, 5, 0, UTC_TIMESTAMP())");
+            for ($i = 1; $i <= 5; $i++) {
+                $ctx->db->exec("INSERT INTO findings (client_id, finding_key, finding_type, severity, title, target, status, source, first_seen, last_seen)
+                                VALUES ({$internal}, 'port:10.0.0.{$i}:445', 'port', 'fail', 'Internal test finding', '10.0.0.{$i}:445', 'open', 'agent', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+            }
+            Assert::same(57, ScoreHistory::estimate(5, 0)['score'], 'raw estimate');
+            Assert::same([[28, true], [28, false]], array_map(static fn (array $p): array => [$p['score'], $p['estimated']], App::scoreHistory()->series($internal, 90)), 'calibrated: no change');
+            Assert::same([], array_values(array_filter(App::scoreHistory()->movers((new \Sentinel\Dashboard\DashboardData($ctx->db, App::settings()))->clients(), 30, 500), static fn (array $m): bool => $m['id'] === $internal)), 'not a mover');
 
             // Biggest changes: from the estimated 43 to 15.
             $mine = array_values(array_filter(App::scoreHistory()->movers((new \Sentinel\Dashboard\DashboardData($ctx->db, App::settings()))->clients(), 30, 500), static fn (array $m): bool => $m['id'] === $cid));
@@ -60,6 +74,15 @@ return [
             Assert::true((bool) preg_match('/<section class="hud hud-score".*?<\/section>/s', $page, $panel), 'the panel is there');
             Assert::notContains('style=', $panel[0], 'no inline styles in the new panel (strict CSP)');
             Assert::contains('Biggest changes, last 30 days', $admin->get('/')->body);
+            // A user limited to another client never sees this client's change.
+            $limited = $ctx->createUser('scorelimited', 'technician', 'Scorelimited-Pass-01!');
+            $ctx->db->exec("UPDATE users SET all_clients = 0 WHERE id = {$limited}");
+            $ctx->db->exec("INSERT INTO user_clients (user_id, client_id) VALUES ({$limited}, {$other})");
+            $mine = $ctx->login('scorelimited', 'Scorelimited-Pass-01!');
+            $dash = $mine->get('/')->body;
+            Assert::contains('Biggest changes, last 30 days', $dash);
+            Assert::notContains('Score History Example', $dash, 'only the user\'s clients');
+            Assert::status(404, $mine->get('/clients/' . $cid . '/overview?range=30'));
 
             // Executive summary: change since the start of the period and the chart.
             $id = App::reportService()->generate(App::clients()->find($cid), 'executive', gmdate('Y-m-d', time() - 45 * 86400), gmdate('Y-m-d'), null, 'Test');
@@ -93,7 +116,14 @@ return [
             $ctx->db->exec("DELETE FROM findings WHERE client_id IN ({$cid}, {$other})");
             $ctx->db->exec("DELETE FROM finding_stats WHERE client_id IN ({$cid}, {$other})");
             $ctx->db->exec("DELETE FROM api_tokens WHERE name = 'Score history token'");
-            $ctx->db->exec("DELETE FROM clients WHERE id IN ({$cid}, {$other})");
+            $ctx->db->exec("DELETE uc FROM user_clients uc JOIN users u ON u.id = uc.user_id WHERE u.username = 'scorelimited'");
+            $ctx->db->exec("UPDATE users SET is_active = 0 WHERE username = 'scorelimited'");
+            $extra = (int) $ctx->db->query("SELECT COALESCE(MAX(id), 0) FROM clients WHERE name = 'Score History Internal Example'")->fetchColumn();
+            foreach ([$cid, $other, $extra] as $x) {
+                $ctx->db->exec("DELETE FROM findings WHERE client_id = {$x}");
+                $ctx->db->exec("DELETE FROM finding_stats WHERE client_id = {$x}");
+                $ctx->db->exec("DELETE FROM clients WHERE id = {$x}");
+            }
         }
     },
 ];

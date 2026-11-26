@@ -54,7 +54,9 @@ $w = $ov['window'];
             </nav>
         </div>
         <?php $sh = $ov['score_history']; ?>
-        <?php if (count($sh) < 2): ?>
+        <?php if (($c['last_scan'] ?? null) === null && (int) $c['fail'] === 0 && (int) $c['warn'] === 0): ?>
+        <p class="trend-note"><i class="bi bi-hourglass" aria-hidden="true"></i><?= e(__('The score history starts after the first scan.')) ?></p>
+        <?php elseif (count($sh) < 2): ?>
         <p class="trend-note"><i class="bi bi-graph-up" aria-hidden="true"></i><?= e(__('The score history builds up day by day: check back tomorrow.')) ?></p>
         <?php else: $from = $sh[0]; $to = $sh[count($sh) - 1]; $delta = $to['score'] - $from['score']; ?>
         <?= Svg::scoreHistory($sh, __('Risk score for this client over time'), (int) $ov['range']) ?>
