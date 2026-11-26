@@ -146,7 +146,7 @@ h3 { font-size: 11pt; margin: 16px 0 6px; break-after: avoid; page-break-after: 
 .sheet { max-width: 178mm; margin: 0 auto; }
 .doc-head { display: flex; align-items: flex-end; gap: 12px; padding-bottom: 10px; margin-bottom: 14px; border-bottom: 3px solid var(--brand); }
 .doc-head .who { margin-left: auto; text-align: right; }
-.doc-head img { max-height: 34px; max-width: 150px; display: block; } .doc-head .plate { padding: 5px 9px; border-radius: 6px; }
+.doc-head img { max-height: 34px; max-width: 150px; display: block; } .doc-head .plate:not(.bare) { padding: 5px 9px; border-radius: 6px; }
 .glance { display: grid; grid-template-columns: 62mm 1fr; gap: 14px; align-items: center; background: var(--soft); border-radius: 10px; padding: 12px 16px; margin: 8px 0 12px; break-inside: avoid; }
 .glance .gauge { width: 100%; color: var(--ink); }
 .verdict { font-size: 16pt; font-weight: 700; margin: 0 0 4px; }

@@ -105,6 +105,15 @@ return [
         Assert::contains('class="plate p-white"', $T::cover(['logo' => $logo, 'logo_bg' => 'dark', 'cover' => 'color'], $o), 'dark logo on a white panel on the color cover');
         Assert::contains('class="plate bare"', $T::cover(['logo' => $logo, 'logo_bg' => 'dark', 'cover' => 'white'], $o));
         Assert::contains('class="plate p-white"', $T::cover(['logo' => $logo, 'cover' => 'color'], $o), 'older snapshots: the white panel as before');
+        Assert::contains('class="plate bare"', $T::cover(['logo' => $logo, 'cover' => 'white'], $o), 'white cover, default: bare as before');
+        Assert::contains('class="plate p-brand"', $T::cover(['logo' => $logo, 'logo_bg' => 'light', 'cover' => 'white'], $o), 'light logo on the white cover');
+        foreach (['panel', 'dark'] as $bg) {
+            Assert::contains('class="plate bare"', $T::docHead(['logo' => $logo, 'logo_bg' => $bg], 'T', 'S'), "page header, {$bg}: bare");
+        }
+        // A bare logo in the page header has no padding (the header rule only pads real panels).
+        $css = $T::css([], 'f', 'h');
+        Assert::contains('.plate.bare { padding: 0; }', $css);
+        Assert::contains('.doc-head .plate:not(.bare) {', $css);
     },
     'branded report email (1.59): text + HTML alternative, inline logo, escaped, then attachments' => function (TestContext $ctx): void {
         $png = "\x89PNG\r\n\x1a\n" . 'made-up-image-bytes';
@@ -150,6 +159,8 @@ return [
             Assert::contains('background:#ffffff;border-radius:6px', $alone, 'any logo: white panel in the brand-colored header');
             $settings->set('brand_logo_bg', 'light');
             Assert::notContains('background:#ffffff;border-radius:6px', \Sentinel\Reports\ReportEmail::build($settings, $png, 'S', 'B')['html'], 'a light logo stands bare');
+            $settings->set('brand_logo_bg', 'dark');
+            Assert::contains('background:#ffffff;border-radius:6px', \Sentinel\Reports\ReportEmail::build($settings, $png, 'S', 'B')['html'], 'a dark logo keeps the white panel on the brand color');
             Assert::contains('font-size:16px;font-weight:600', \Sentinel\Reports\ReportEmail::build($settings, '', 'S', 'B')['html'], 'without a logo the name is always shown');
         } finally {
             foreach ($old as $k => $v) {
