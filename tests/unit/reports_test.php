@@ -83,6 +83,15 @@ return [
         Assert::same('"x\\000022 \\00003C \\00002F style\\00003E \\00005C "', \Sentinel\Reports\ReportTheme::cssString('x"</style>\\'));
         Assert::same('"line one line two"', \Sentinel\Reports\ReportTheme::cssString("line one\nline two"), 'control characters become spaces');
     },
+    'a logo with the company name stands alone on the cover, but only when there is a logo (1.60)' => function (TestContext $ctx): void {
+        $logo = 'data:image/png;base64,' . base64_encode("\x89PNG\r\n\x1a\nx");
+        $o = ['eyebrow' => 'E', 'title' => 'T', 'client' => 'Client Example', 'period' => 'P', 'date' => 'D'];
+        $cover = static fn (array $b): string => \Sentinel\Reports\ReportTheme::cover($b + ['name' => 'Example MSP'], $o);
+        Assert::notContains('class="bname"', $cover(['logo' => $logo, 'logo_has_name' => true]));
+        Assert::contains('class="brandrow logo-only"', $cover(['logo' => $logo, 'logo_has_name' => true]));
+        Assert::contains('<span class="bname">Example MSP</span>', $cover(['logo' => '', 'logo_has_name' => true]), 'no logo: the name is shown');
+        Assert::contains('<span class="bname">Example MSP</span>', $cover(['logo' => $logo]), 'snapshots from before 1.60 (no key): name beside the logo');
+    },
     'branded report email (1.59): text + HTML alternative, inline logo, escaped, then attachments' => function (TestContext $ctx): void {
         $png = "\x89PNG\r\n\x1a\n" . 'made-up-image-bytes';
         $msg = SmtpMailer::buildMessage('s@msp.example', ['a@msp.example'], 'Reports', 'Plain text.',
@@ -121,7 +130,9 @@ return [
             Assert::same([], \Sentinel\Reports\ReportEmail::build($settings, 'not a png', 'S', 'B')['inline'], 'no logo unless it is a PNG');
             Assert::contains('font-size:16px;font-weight:600', $mail['html'], 'the name sits beside the logo by default');
             $settings->set('brand_logo_has_name', '1');
-            Assert::notContains('font-size:16px;font-weight:600', \Sentinel\Reports\ReportEmail::build($settings, $png, 'S', 'B')['html'], 'a logo with the name stands alone');
+            $alone = \Sentinel\Reports\ReportEmail::build($settings, $png, 'S', 'B')['html'];
+            Assert::notContains('font-size:16px;font-weight:600', $alone, 'a logo with the name stands alone');
+            Assert::contains('height:52px', $alone, 'and gets a little more room');
             Assert::contains('font-size:16px;font-weight:600', \Sentinel\Reports\ReportEmail::build($settings, '', 'S', 'B')['html'], 'without a logo the name is always shown');
         } finally {
             foreach ($old as $k => $v) {

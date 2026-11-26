@@ -275,7 +275,9 @@ return [
         $logoOnly = (string) $ctx->db->query("SELECT html FROM reports WHERE client_id = {$cid} ORDER BY id DESC LIMIT 1")->fetchColumn();
         Assert::contains('class="brandrow logo-only"', $logoOnly);
         Assert::notContains('class="bname"', $logoOnly);
-        Assert::contains('Example MSP Ltd', $logoOnly, 'the name is still in the sign-off and footer');
+        Assert::contains('<div class="contact"><b>Example MSP Ltd</b>', $logoOnly, 'the name is still in the contact block');
+        Assert::contains('<br><span class="small muted">Example MSP Ltd</span>', $logoOnly, 'and in the sign-off');
+        App::settings()->set('brand_logo_has_name', '0'); // back to the default for later tests
         array_map('unlink', glob($dir . '/*'));
         rmdir($dir);
     },

@@ -35,7 +35,10 @@ final class ReportEmail
             'footer' => $s->get('brand_footer'), 'logo_has_name' => $s->get('brand_logo_has_name') === '1',
         ]);
         $logo = str_starts_with($logoPng, "\x89PNG\r\n\x1a\n")
-            ? '<img src="cid:' . self::LOGO_CID . '" alt="' . e($b['name']) . '" height="40" style="display:block;height:40px;max-width:180px;border:0">'
+            // A logo that already shows the company name (1.60) stands alone, so it gets a little more room.
+            ? ($b['logo_has_name']
+                ? '<img src="cid:' . self::LOGO_CID . '" alt="' . e($b['name']) . '" height="52" style="display:block;height:52px;max-width:240px;border:0">'
+                : '<img src="cid:' . self::LOGO_CID . '" alt="' . e($b['name']) . '" height="40" style="display:block;height:40px;max-width:180px;border:0">')
             : '';
         // The body: paragraphs separated by blank lines; lines starting with "- " become a list; the signature
         // ("-- " line) and everything after it is small print.
