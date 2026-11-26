@@ -157,6 +157,16 @@ final class App
         return new \Sentinel\Auth\EntraSso($tenant, $client, $secret, $authority, self::webhookTestMode());
     }
 
+    /** "Connect to Microsoft 365" (1.63); the test suite points it at its mocks. */
+    public static function entraAppSetup(): \Sentinel\Auth\EntraAppSetup
+    {
+        if (self::webhookTestMode()) {
+            return new \Sentinel\Auth\EntraAppSetup((string) self::config()->get('testing.entra_authority', \Sentinel\Auth\EntraAppSetup::AUTHORITY),
+                (string) self::config()->get('testing.graph_base', \Sentinel\Auth\EntraAppSetup::GRAPH), true);
+        }
+        return new \Sentinel\Auth\EntraAppSetup();
+    }
+
     /** The address Microsoft sends the browser back to (app.public_url + /login/sso/callback), or '' when not set. */
     public static function ssoRedirectUri(): string
     {
@@ -324,7 +334,7 @@ final class App
                 if ($problem !== null) {
                     self::alerts()->backupProblem($problem);
                 }
-                self::alerts()->ssoSecretExpiring(self::settings()); // 1.46: the setup script's secret runs out
+                self::alerts()->ssoSecretExpiring(self::settings()); // 1.46: the app's client secret runs out
             });
     }
 
@@ -695,10 +705,6 @@ final class App
         // On-premises agents have their own kernel too: agent tokens, signed jobs, JSON only.
         if (str_starts_with($request->path, '/agent/v1/')) {
             return SecurityHeaders::apply(\Sentinel\Agent\AgentKernel::handle($request), $secure);
-        }
-        // The Sign in with Microsoft setup script hands over the new app here (1.46): JSON, a one-time code, no session.
-        if ($request->path === '/sso-setup/v1/receive') {
-            return SecurityHeaders::apply(\Sentinel\Auth\SsoSetup::handle($request), $secure);
         }
         // The API has its own kernel: bearer tokens, no session or cookies, JSON errors.
         if ($request->path === '/api' || str_starts_with($request->path, '/api/')) {

@@ -2,6 +2,12 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.60.0 (2026-11-26): Logo with the company name
+
+- If your logo already shows the company name, tick **My logo includes the company name** under Report branding.
+  The report cover and the report emails then show the logo alone, a little larger, instead of the logo with the
+  name beside it. The name is still used as text in the footer, the sign-off and the contact details.
+
 ### 1.59.0 (2026-11-26): Professional, fully branded reports
 
 - **A new look for every report.** The executive summary, technical findings, pen-test report and retest letter

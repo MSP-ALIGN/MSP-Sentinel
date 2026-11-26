@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.62.0](https://img.shields.io/badge/version-1.62.0-ff5a1f?style=flat-square)
+![Version 1.63.0](https://img.shields.io/badge/version-1.63.0-ff5a1f?style=flat-square)
 ![License AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,24 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.63.0 (2026-11-26): Connect to Microsoft 365
+
+- **Sign in with Microsoft sets itself up from the browser.** Under Administration → Integrations, click **Connect to
+  Microsoft 365**. Open microsoft.com/devicelogin, enter the code Sentinel shows and sign in as an Entra admin.
+  Sentinel then creates the app registration itself: sign-in permissions only, consent for your organization and a
+  24-month client secret. The page checks by itself and shows the result. Nothing to copy, install or run.
+- **Renewing** the secret is the same button. Sentinel finds its app, adds a new secret and removes the old one.
+- **The PowerShell setup script is gone**, together with its one-time codes and the endpoint it called. Apps it
+  created are found and reused. Setting the app up by hand still works, for tenants that block sign-in with a code.
+- Sentinel's server must be able to reach login.microsoftonline.com and graph.microsoft.com. Sign-in with Microsoft
+  stays off until you turn it on.
+- Fixes from review:
+  - Canceling or starting again can't be undone by a check that is still running.
+  - A setup that takes longer than the browser waits still reports success.
+  - Permissions added by hand to an existing app are kept.
+  - An address ending in `:443` finds the app the old script made.
+  - A second open tab no longer logs false failures.
+
 ### 1.62.0 (2026-11-26): Risk score history
 
 - **Score over time on every client.** The client's Overview has a **Risk score history** chart: the score as a
@@ -142,12 +160,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 - Where the logo would not show (a light logo on a white page, or a dark logo on the brand color), it gets a small
   panel in the brand color or in white. Upload a PNG with a transparent background for the best result.
 - Fix from review: the logo at the top of content pages sits flush again with the default setting.
-
-### 1.60.0 (2026-11-26): Logo with the company name
-
-- If your logo already shows the company name, tick **My logo includes the company name** under Report branding.
-  The report cover and the report emails then show the logo alone, a little larger, instead of the logo with the
-  name beside it. The name is still used as text in the footer, the sign-off and the contact details.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

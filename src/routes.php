@@ -201,7 +201,9 @@ $router->add('POST', '/admin/integrations/itflow/tickets', [IntegrationsControll
 $router->add('POST', '/admin/integrations/mspalign', [IntegrationsController::class, 'saveAlign'], ['perm' => 'integrations.manage', 'all_clients' => true]);
 $router->add('POST', '/admin/integrations/mspalign/test', [IntegrationsController::class, 'testAlign'], ['perm' => 'integrations.manage', 'all_clients' => true]);
 $router->add('POST', '/admin/integrations/sso', [IntegrationsController::class, 'saveSso'], ['perm' => 'integrations.manage', 'all_clients' => true]);
-$router->add('POST', '/admin/integrations/sso/setup-code', [IntegrationsController::class, 'ssoSetupCode'], ['perm' => 'integrations.manage', 'all_clients' => true]);
+$router->add('POST', '/admin/integrations/sso/connect', [IntegrationsController::class, 'ssoConnect'], ['perm' => 'integrations.manage', 'all_clients' => true]);
+$router->add('POST', '/admin/integrations/sso/connect/check', [IntegrationsController::class, 'ssoConnectCheck'], ['perm' => 'integrations.manage', 'all_clients' => true]);
+$router->add('POST', '/admin/integrations/sso/connect/cancel', [IntegrationsController::class, 'ssoConnectCancel'], ['perm' => 'integrations.manage', 'all_clients' => true]);
 $router->add('POST', '/admin/integrations/breach', [IntegrationsController::class, 'saveBreach'], ['perm' => 'integrations.manage', 'all_clients' => true]);
 $router->add('POST', '/admin/integrations/breach/check', [IntegrationsController::class, 'checkBreach'], ['perm' => 'integrations.manage', 'all_clients' => true]);
 $router->add('POST', '/clients/{id}/compliance/link', [ComplianceController::class, 'link'], ['perm' => 'integrations.link']);

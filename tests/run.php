@@ -289,6 +289,7 @@ try {
     $cfg['testing']['ninjaone_base_url'] = "http://127.0.0.1:{$feedsPort}/ninja"; // mock NinjaOne API, never the real one
     $cfg['testing']['xon_base_url'] = "http://127.0.0.1:{$feedsPort}/xon"; // mock XposedOrNot API, never the real one
     $cfg['testing']['entra_authority'] = "http://127.0.0.1:{$feedsPort}/entra"; // mock Microsoft sign-in, never the real one
+    $cfg['testing']['graph_base'] = "http://127.0.0.1:{$feedsPort}/graph/v1.0"; // mock Microsoft Graph (1.63), never the real one
     $cfg['app']['public_url'] = 'https://sentinel.example';
 
     // Fake mail servers on 127.0.0.1: plain (local relay style) and STARTTLS with a test certificate for "localhost".

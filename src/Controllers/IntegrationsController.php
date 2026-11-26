@@ -69,13 +69,8 @@ final class IntegrationsController extends Controller
                 'has_secret' => $s->getSecret('sso_entra_secret') !== '',
                 'redirect' => App::ssoRedirectUri(),
                 'linked' => (int) App::db()->query('SELECT COUNT(*) FROM users WHERE sso_subject IS NOT NULL')->fetchColumn(),
-                // Automatic setup (1.46): a code just created is shown once; when the script-made secret expires.
-                'setup' => (static function (): ?array {
-                    $show = Session::get('sso_setup_show');
-                    Session::remove('sso_setup_show');
-                    return is_array($show) && is_string($show['code'] ?? null) && is_int($show['until'] ?? null) && $show['until'] > time() ? $show : null;
-                })(),
-                'setup_pending' => \Sentinel\Auth\SsoSetup::pending(),
+                // Connect to Microsoft 365 (1.63): a sign-in in progress (its code and link), for the admin who started it.
+                'connect' => \Sentinel\Auth\EntraAppSetup::pending(),
                 'secret_expires' => $s->get('sso_entra_secret_expires'),
                 'secret_days' => \Sentinel\Auth\SsoSetup::secretDaysLeft(),
                 'public_url' => rtrim((string) App::config()->get('app.public_url', ''), '/'),
@@ -309,17 +304,23 @@ final class IntegrationsController extends Controller
         return $back;
     }
 
-    /**
-     * POST /admin/integrations/sso/setup-code: a one-time code (30 minutes) for entra-sso-setup.ps1, which creates the
-     * Entra app and sends its details back with it (1.46, see SsoSetup). Same rule as saveSso: only an Admin who holds
-     * every permission and sees every client, with their own password. The code is shown once, on the next page.
-     */
-    public function ssoSetupCode(Request $request): Response
+    /** Only an Admin who holds every permission and sees every client may change Sign in with Microsoft (as saveSso). */
+    private function requireSsoAdmin(): void
     {
-        $back = Response::redirect('/admin/integrations#sso');
         if (!\Sentinel\Auth\Permissions::isComplete((array) ($this->user()['permissions'] ?? [])) || ($this->user()['client_ids'] ?? null) !== null) {
             throw new HttpException(403, __('Only someone who holds every permission (an Admin) and sees every client can change Sign in with Microsoft.'));
         }
+    }
+
+    /**
+     * POST /admin/integrations/sso/connect (1.63): start "Connect to Microsoft 365". With the admin's own password, Sentinel
+     * asks Microsoft for a sign-in code; the page then shows it with the link, and checks until the admin has signed in.
+     * Untrusted: the password and the "switch tenant" box. CSRF is checked for every POST.
+     */
+    public function ssoConnect(Request $request): Response
+    {
+        $back = Response::redirect('/admin/integrations#sso');
+        $this->requireSsoAdmin();
         if (App::ssoRedirectUri() === '') {
             Session::flash('warning', __('Set Sentinel\'s public address first (app.public_url in the config file): the Entra app is registered for it.'));
             return $back;
@@ -328,10 +329,63 @@ final class IntegrationsController extends Controller
             Session::flash('danger', $why);
             return $back;
         }
-        $code = \Sentinel\Auth\SsoSetup::issue((int) $this->user()['id'], $request->input('new_tenant') === '1');
-        Session::set('sso_setup_show', ['code' => $code, 'until' => time() + \Sentinel\Auth\SsoSetup::TTL]);
-        $this->audit($request, 'settings.sso_setup_code', null, null, ['new_tenant' => $request->input('new_tenant') === '1']);
+        $newTenant = $request->input('new_tenant') === '1';
+        try {
+            App::entraAppSetup()->start((int) $this->user()['id'], $newTenant);
+        } catch (\Sentinel\Auth\SsoException $ex) {
+            Session::flash('danger', $ex->getMessage());
+            return $back;
+        }
+        $this->audit($request, 'settings.sso_connect_started', null, null, ['new_tenant' => $newTenant]);
         return $back;
+    }
+
+    /**
+     * POST /admin/integrations/sso/connect/check (1.63): has the admin signed in at Microsoft yet? When they have, Sentinel
+     * creates the app and saves its details (EntraAppSetup::check). The page's script calls this every few seconds and gets
+     * JSON ({status, message}); without the script, the "Check now" button gets the page back with the result.
+     */
+    public function ssoConnectCheck(Request $request): Response
+    {
+        $this->requireSsoAdmin();
+        // The setup makes several Graph calls: finish it even if the browser stops waiting (the result is kept for its
+        // next poll), and allow it the time it needs.
+        ignore_user_abort(true);
+        set_time_limit(180);
+        $r = App::entraAppSetup()->check((int) $this->user()['id']);
+        $quiet = !empty($r['quiet']); // nothing new (another tab, or a result already reported): no audit or flash
+        if ($quiet) {
+            // nothing to record
+        } elseif ($r['status'] === 'done') {
+            $this->audit($request, 'settings.sso_connect_done', null, null, ['changed' => $r['changed'] ?? []]);
+            App::db()->prepare("INSERT INTO notifications (user_id, kind, severity, title, body, link, created_at) VALUES (:u, 'security', 'info', :t, :b, '/admin/integrations#sso', UTC_TIMESTAMP())")
+                ->execute(['u' => (int) $this->user()['id'], 't' => mb_substr(__('Sign in with Microsoft: the Entra app is set up'), 0, 300),
+                           'b' => mb_substr(__('Sentinel created the app registration and saved its client secret. If you didn\'t do this, check the audit log.'), 0, 2000)]);
+        } elseif ($r['status'] === 'failed') {
+            $this->audit($request, 'settings.sso_connect_failed', null, null, ['message' => mb_substr($r['message'], 0, 300)]);
+        }
+        $json = str_contains($request->header('accept'), 'application/json');
+        if ((!$json || $r['status'] !== 'pending') && !($quiet && $r['status'] === 'failed')) {
+            // Shown on the next page: the redirect, or the reload the page's script does when it is done or failed.
+            Session::flash(['done' => 'success', 'failed' => 'danger'][$r['status']] ?? 'info', $r['message']);
+        }
+        if ($json) {
+            return \Sentinel\Api\ApiKernel::json(['status' => $r['status'], 'message' => $r['message']]);
+        }
+        return Response::redirect('/admin/integrations#sso');
+    }
+
+    /** POST /admin/integrations/sso/connect/cancel (1.63): forget a sign-in in progress. */
+    public function ssoConnectCancel(Request $request): Response
+    {
+        $this->requireSsoAdmin();
+        if (!\Sentinel\Auth\EntraAppSetup::cancel()) {
+            Session::flash('warning', __('The connection is being finished right now. Wait a moment and reload the page.'));
+            return Response::redirect('/admin/integrations#sso');
+        }
+        $this->audit($request, 'settings.sso_connect_canceled', null, null, []);
+        Session::flash('info', __('The Microsoft 365 connection was canceled. Nothing was changed.'));
+        return Response::redirect('/admin/integrations#sso');
     }
 
     /** POST /admin/integrations/breach: save the XposedOrNot API key and on/off (breach monitoring, 1.33). */
