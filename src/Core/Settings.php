@@ -152,10 +152,12 @@ final class Settings
         'sso_entra_tenant' => '',
         'sso_entra_client' => '',
         'sso_entra_secret' => '',
-        // Automatic setup (1.46): when the script-made secret expires, the one-time setup code (HMAC), and warnings.
+        // When the app's client secret expires (1.46; set by Connect to Microsoft 365 since 1.63), and warnings.
         'sso_entra_secret_expires' => '',
         // A pending "Connect to Microsoft 365" sign-in (1.63): encrypted JSON with Microsoft's device code (EntraAppSetup).
         'sso_connect' => '',
+        // The last finished connection's result for its starter's next poll (JSON: user, status, message, at; no secrets).
+        'sso_connect_result' => '',
         'sso_secret_warned' => '',
         'breach_last_run' => '',
         'breach_last_ok_run' => '',

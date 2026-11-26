@@ -88,7 +88,7 @@ return [
         Assert::true((int) $ctx->db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'settings.sso_connect_started' AND username = 'admin'")->fetchColumn() >= 1, 'audited');
         // Another admin sees that one is in progress, not its code.
         Assert::status(303, $admin->post('/admin/integrations/sso/connect/cancel', ['_csrf' => $admin->get('/admin/integrations')->csrf()]));
-        Assert::same('', App::settings()->getSecret('sso_connect'), 'cancelled');
+        Assert::same('', App::settings()->getSecret('sso_connect'), 'canceled');
         Assert::notContains('data-testid="sso-user-code"', $admin->get('/admin/integrations')->body);
     },
     'connect (1.63): waits while pending, then creates the app, consent and a 24-month secret; never turns sign-in on' => function (TestContext $ctx) use ($mock, $start, $check, $reset): void {
@@ -120,7 +120,7 @@ return [
         Assert::same('auth_time', $post['optionalClaims']['idToken'][0]['name'] ?? '');
         Assert::same(3, count($post['requiredResourceAccess'][0]['resourceAccess'] ?? []), 'openid, profile, email only');
         $grant = array_values(array_filter($log, static fn (array $l): bool => $l['method'] === 'POST' && $l['path'] === '/graph/v1.0/oauth2PermissionGrants'))[0]['body'] ?? [];
-        Assert::same(['AllPrincipals', 'openid profile email', 'graph-sp-id'], [$grant['consentType'] ?? '', $grant['scope'] ?? '', $grant['resourceId'] ?? '']);
+        Assert::same(['AllPrincipals', 'openid profile email', '99999999-9999-4999-8999-999999999999'], [$grant['consentType'] ?? '', $grant['scope'] ?? '', $grant['resourceId'] ?? '']);
         $pw = array_values(array_filter($log, static fn (array $l): bool => str_ends_with($l['path'], '/addPassword')))[0]['body'] ?? [];
         Assert::true(str_starts_with((string) ($pw['passwordCredential']['displayName'] ?? ''), 'MSP Sentinel sign-in'), 'named secret');
         // Audited (without the secret), and the admin is told.
@@ -141,6 +141,28 @@ return [
         Assert::same(1, count($state['apps']), 'no second app');
         Assert::same(1, count(array_values($state['apps'])[0]['passwordCredentials']), 'the older secret was removed');
         Assert::true(count(array_filter((array) json_decode((string) file_get_contents($dir . '/graph-log.json'), true), static fn (array $l): bool => $l['method'] === 'PATCH')) >= 1, 'existing app updated');
+        // Permissions an admin added by hand are kept when the app is updated (1.63 fix from review).
+        $state = (array) json_decode((string) file_get_contents($dir . '/graph.json'), true);
+        $id = array_key_first($state['apps']);
+        $state['apps'][$id]['requiredResourceAccess'][0]['resourceAccess'][] = ['id' => 'e1fe6dd8-ba31-4d61-89e7-88639da4683d', 'type' => 'Scope'];
+        $state['apps'][$id]['requiredResourceAccess'][] = ['resourceAppId' => '00000002-0000-0ff1-ce00-000000000000', 'resourceAccess' => [['id' => 'made-up', 'type' => 'Scope']]];
+        file_put_contents($dir . '/graph.json', json_encode($state));
+        $mock($ctx, [], [], true);
+        $admin = $start($ctx);
+        Assert::same('done', $check($admin)['status'] ?? '');
+        $access = ((array) json_decode((string) file_get_contents($dir . '/graph.json'), true))['apps'][$id]['requiredResourceAccess'];
+        Assert::same(2, count($access), 'the other API is kept');
+        Assert::same(4, count($access[0]['resourceAccess']), 'the hand-added Graph permission is kept');
+        // Another tab polling after the connection ended gets a quiet answer: nothing audited.
+        $before = (int) $ctx->db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'settings.sso_connect_failed'")->fetchColumn();
+        $check($admin);
+        Assert::same($before, (int) $ctx->db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'settings.sso_connect_failed'")->fetchColumn(), 'no false failure logged');
+        // A check that outlived the browser's request: the next poll still reports the result.
+        $mock($ctx, [], [], true);
+        $admin = $start($ctx);
+        App::entraAppSetup()->check((int) $ctx->db->query("SELECT id FROM users WHERE username = 'admin'")->fetchColumn());
+        $r = $check($admin);
+        Assert::same('done', $r['status'] ?? '', 'the result is kept for the next poll: ' . json_encode($r));
     },
     'connect (1.63): wrong tenant, declined, blocked, no permission and replication delays are handled' => function (TestContext $ctx) use ($mock, $start, $check, $reset): void {
         $reset();

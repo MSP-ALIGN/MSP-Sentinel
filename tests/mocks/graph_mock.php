@@ -96,7 +96,7 @@ if ($p === '/servicePrincipals') {
     if ($method === 'GET') {
         preg_match("/appId eq '([0-9a-f-]+)'/", $filter, $m);
         if (($m[1] ?? '') === '00000003-0000-0000-c000-000000000000') {
-            $out(200, ['value' => [['id' => 'graph-sp-id']]]);
+            $out(200, ['value' => [['id' => '99999999-9999-4999-8999-999999999999']]]);
         }
         $out(200, ['value' => array_values(array_filter($state['sps'], static fn (array $s): bool => $s['appId'] === ($m[1] ?? '')))]);
     }
@@ -106,7 +106,7 @@ if ($p === '/servicePrincipals') {
             $save();
             $out(400, ['error' => ['code' => 'Request_BadRequest', 'message' => 'not replicated yet']]);
         }
-        $sp = ['id' => 'sp-' . bin2hex(random_bytes(4)), 'appId' => (string) ($body['appId'] ?? '')];
+        $sp = ['id' => $guid(), 'appId' => (string) ($body['appId'] ?? '')];
         $state['sps'][] = $sp;
         $save();
         $out(201, $sp);

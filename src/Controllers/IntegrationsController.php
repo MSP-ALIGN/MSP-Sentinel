@@ -348,8 +348,15 @@ final class IntegrationsController extends Controller
     public function ssoConnectCheck(Request $request): Response
     {
         $this->requireSsoAdmin();
+        // The setup makes several Graph calls: finish it even if the browser stops waiting (the result is kept for its
+        // next poll), and allow it the time it needs.
+        ignore_user_abort(true);
+        set_time_limit(180);
         $r = App::entraAppSetup()->check((int) $this->user()['id']);
-        if ($r['status'] === 'done') {
+        $quiet = !empty($r['quiet']); // nothing new (another tab, or a result already reported): no audit or flash
+        if ($quiet) {
+            // nothing to record
+        } elseif ($r['status'] === 'done') {
             $this->audit($request, 'settings.sso_connect_done', null, null, ['changed' => $r['changed'] ?? []]);
             App::db()->prepare("INSERT INTO notifications (user_id, kind, severity, title, body, link, created_at) VALUES (:u, 'security', 'info', :t, :b, '/admin/integrations#sso', UTC_TIMESTAMP())")
                 ->execute(['u' => (int) $this->user()['id'], 't' => mb_substr(__('Sign in with Microsoft: the Entra app is set up'), 0, 300),
@@ -358,7 +365,7 @@ final class IntegrationsController extends Controller
             $this->audit($request, 'settings.sso_connect_failed', null, null, ['message' => mb_substr($r['message'], 0, 300)]);
         }
         $json = str_contains($request->header('accept'), 'application/json');
-        if (!$json || $r['status'] !== 'pending') {
+        if ((!$json || $r['status'] !== 'pending') && !($quiet && $r['status'] === 'failed')) {
             // Shown on the next page: the redirect, or the reload the page's script does when it is done or failed.
             Session::flash(['done' => 'success', 'failed' => 'danger'][$r['status']] ?? 'info', $r['message']);
         }
@@ -372,9 +379,12 @@ final class IntegrationsController extends Controller
     public function ssoConnectCancel(Request $request): Response
     {
         $this->requireSsoAdmin();
-        \Sentinel\Auth\EntraAppSetup::cancel();
-        $this->audit($request, 'settings.sso_connect_cancelled', null, null, []);
-        Session::flash('info', __('The Microsoft 365 connection was cancelled. Nothing was changed.'));
+        if (!\Sentinel\Auth\EntraAppSetup::cancel()) {
+            Session::flash('warning', __('The connection is being finished right now. Wait a moment and reload the page.'));
+            return Response::redirect('/admin/integrations#sso');
+        }
+        $this->audit($request, 'settings.sso_connect_canceled', null, null, []);
+        Session::flash('info', __('The Microsoft 365 connection was canceled. Nothing was changed.'));
         return Response::redirect('/admin/integrations#sso');
     }
 

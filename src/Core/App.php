@@ -157,7 +157,6 @@ final class App
         return new \Sentinel\Auth\EntraSso($tenant, $client, $secret, $authority, self::webhookTestMode());
     }
 
-    /** The address Microsoft sends the browser back to (app.public_url + /login/sso/callback), or '' when not set. */
     /** "Connect to Microsoft 365" (1.63); the test suite points it at its mocks. */
     public static function entraAppSetup(): \Sentinel\Auth\EntraAppSetup
     {
@@ -168,6 +167,7 @@ final class App
         return new \Sentinel\Auth\EntraAppSetup();
     }
 
+    /** The address Microsoft sends the browser back to (app.public_url + /login/sso/callback), or '' when not set. */
     public static function ssoRedirectUri(): string
     {
         $base = rtrim((string) self::config()->get('app.public_url', ''), '/');
@@ -334,7 +334,7 @@ final class App
                 if ($problem !== null) {
                     self::alerts()->backupProblem($problem);
                 }
-                self::alerts()->ssoSecretExpiring(self::settings()); // 1.46: the setup script's secret runs out
+                self::alerts()->ssoSecretExpiring(self::settings()); // 1.46: the app's client secret runs out
             });
     }
 

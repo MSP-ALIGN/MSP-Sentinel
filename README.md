@@ -130,6 +130,12 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
   created are found and reused. Setting the app up by hand still works, for tenants that block sign-in with a code.
 - Sentinel's server must be able to reach login.microsoftonline.com and graph.microsoft.com. Sign-in with Microsoft
   stays off until you turn it on.
+- Fixes from review:
+  - Canceling or starting again can't be undone by a check that is still running.
+  - A setup that takes longer than the browser waits still reports success.
+  - Permissions added by hand to an existing app are kept.
+  - An address ending in `:443` finds the app the old script made.
+  - A second open tab no longer logs false failures.
 
 ### 1.62.0 (2026-11-26): Risk score history
 

@@ -23,14 +23,18 @@ use Sentinel\Core\App;
  *   then removes the older secrets it made. "Sign in with Microsoft" is never switched on here.
  *
  * Untrusted: every answer from Microsoft (token endpoint and Graph). IDs must be GUIDs, the secret must look like one,
- * the expiry must be a date within 25 months; error texts shown are Sentinel's own, never Microsoft's raw text.
+ * the expiry must be a date within 25 months. Error texts are Sentinel's own (Microsoft's error descriptions are never
+ * shown); the only Microsoft text shown is the tenant's display name, escaped like every other value.
  *
  * Security assumptions:
  * - Only an Admin who holds every permission, sees every client and typed their own password can start (the controller
  *   checks); only that same Admin can finish, and only while still such an Admin.
  * - The device code is stored encrypted (it could be exchanged for the Admin's Graph token until it expires, 15 minutes
  *   at most); the Graph access token is used in memory for this one request and never stored or logged.
- * - One pending connection at a time; a database lock stops two checks from finishing it twice.
+ * - One pending connection at a time. Start, cancel and check all take one database lock, so a check can't bring back a
+ *   canceled connection or overwrite a newer one, and two checks can't finish it twice.
+ * - A finished check leaves a short-lived result (sso_connect_result, no secrets) for the starter's next poll, so a check
+ *   that outlived the browser's request still reports success.
  * - Requests go only to Microsoft's fixed addresses over HTTPS (the test suite points them at its mock).
  */
 final class EntraAppSetup
@@ -47,6 +51,9 @@ final class EntraAppSetup
     public const SECRET_PREFIX = 'MSP Sentinel sign-in';
     public const SECRET_DAYS = 730;
     private const MAX_BYTES = 1_000_000;
+    private const LOCK = 'sentinel_sso_connect';
+    /** How long a finished check's result is kept for the starter's next poll (seconds). */
+    private const RESULT_TTL = 600;
 
     /**
      * @param string $authority Microsoft's sign-in address (the test suite: its mock)
@@ -69,6 +76,22 @@ final class EntraAppSetup
      */
     public function start(int $userId, bool $newTenant): array
     {
+        if (!self::lock(10)) {
+            throw new SsoException(__('A Microsoft 365 connection is being finished right now. Try again in a minute.'));
+        }
+        try {
+            return $this->startLocked($userId, $newTenant);
+        } finally {
+            self::unlock();
+        }
+    }
+
+    /**
+     * @return array{user_code:string, verification_uri:string, expires:int}
+     * @throws SsoException
+     */
+    private function startLocked(int $userId, bool $newTenant): array
+    {
         $r = $this->form($this->authority . '/organizations/oauth2/v2.0/devicecode', ['client_id' => self::CLIENT_ID, 'scope' => self::SCOPES]);
         $code = is_string($r['device_code'] ?? null) ? $r['device_code'] : '';
         $user = is_string($r['user_code'] ?? null) ? $r['user_code'] : '';
@@ -81,6 +104,7 @@ final class EntraAppSetup
         $state = ['device_code' => $code, 'user_code' => $user, 'verification_uri' => $uri, 'user' => $userId, 'expires' => $expires,
                   'interval' => max(1, min(30, (int) ($r['interval'] ?? 5))), 'next' => time(), 'new_tenant' => $newTenant];
         App::settings()->setSecret('sso_connect', (string) json_encode($state));
+        App::settings()->set('sso_connect_result', '');
         return ['user_code' => $user, 'verification_uri' => $uri, 'expires' => $expires];
     }
 
@@ -95,23 +119,50 @@ final class EntraAppSetup
         return $s === null ? null : ['user_code' => $s['user_code'], 'verification_uri' => $s['verification_uri'], 'expires' => $s['expires'], 'user' => $s['user']];
     }
 
-    /** Forget the pending connection. */
-    public static function cancel(): void
+    /** Forget the pending connection (waits for a running check). False when a check is still busy. */
+    public static function cancel(): bool
     {
-        App::settings()->setSecret('sso_connect', '');
+        if (!self::lock(10)) {
+            return false;
+        }
+        try {
+            App::settings()->setSecret('sso_connect', '');
+            return true;
+        } finally {
+            self::unlock();
+        }
+    }
+
+    /** The connection lock (MySQL GET_LOCK), waiting up to $wait seconds. */
+    private static function lock(int $wait): bool
+    {
+        return (int) App::db()->query("SELECT GET_LOCK('" . self::LOCK . "', " . max(0, $wait) . ')')->fetchColumn() === 1;
+    }
+
+    private static function unlock(): void
+    {
+        App::db()->query("SELECT RELEASE_LOCK('" . self::LOCK . "')");
     }
 
     /**
      * Check the pending connection for $userId: still waiting, finished (the app is created and its details saved), or
      * failed (the connection is then cleared).
      *
-     * @return array{status:string, message:string, changed?:array<string,mixed>}
+     * 'quiet' marks answers that report nothing new (another tab after the connection ended): not audited or flashed.
+     *
+     * @return array{status:string, message:string, changed?:array<string,mixed>, quiet?:bool}
      */
     public function check(int $userId): array
     {
         $state = self::state();
         if ($state === null) {
-            return ['status' => 'failed', 'message' => __('The Microsoft sign-in expired or was cancelled. Click "Connect to Microsoft 365" to start again.')];
+            // Finished by a check that outlived its request (or another tab): report that once to the starter.
+            $res = json_decode(App::settings()->fresh('sso_connect_result'), true);
+            if (is_array($res) && (int) ($res['user'] ?? 0) === $userId && (int) ($res['at'] ?? 0) > time() - self::RESULT_TTL) {
+                App::settings()->set('sso_connect_result', '');
+                return ['status' => (string) $res['status'], 'message' => (string) $res['message'], 'quiet' => true];
+            }
+            return ['status' => 'failed', 'message' => __('The Microsoft sign-in expired or was canceled. Click "Connect to Microsoft 365" to start again.'), 'quiet' => true];
         }
         if ((int) $state['user'] !== $userId) {
             return ['status' => 'failed', 'message' => __('Another admin started this connection. Only they can finish it, or start a new one.')];
@@ -119,14 +170,18 @@ final class EntraAppSetup
         if (time() < (int) $state['next']) {
             return ['status' => 'pending', 'message' => __('Waiting for you to sign in at Microsoft…')];
         }
-        $db = App::db();
-        if ((int) $db->query("SELECT GET_LOCK('sentinel_sso_connect', 0)")->fetchColumn() !== 1) {
+        if (!self::lock(0)) {
             return ['status' => 'pending', 'message' => __('Waiting for you to sign in at Microsoft…')]; // another check is running
         }
         try {
-            return $this->checkLocked($state);
+            $r = $this->checkLocked($state);
+            if ($r['status'] !== 'pending') {
+                // Kept briefly for the starter's next poll, in case this request outlived the browser's.
+                App::settings()->set('sso_connect_result', (string) json_encode(['user' => $userId, 'status' => $r['status'], 'message' => $r['message'], 'at' => time()]));
+            }
+            return $r;
         } finally {
-            $db->query("SELECT RELEASE_LOCK('sentinel_sso_connect')");
+            self::unlock();
         }
     }
 
@@ -136,12 +191,12 @@ final class EntraAppSetup
      */
     private function checkLocked(array $state): array
     {
-        $fresh = self::state(); // the connection may have been finished or cancelled while we waited
+        $fresh = self::state(); // the connection may have been finished or canceled while we waited
         if ($fresh === null || $fresh['device_code'] !== $state['device_code']) {
-            return ['status' => 'failed', 'message' => __('This Microsoft sign-in was already used or cancelled.')];
+            return ['status' => 'failed', 'message' => __('This Microsoft sign-in was already used or canceled.'), 'quiet' => true];
         }
         $fail = static function (string $message): array {
-            self::cancel();
+            App::settings()->setSecret('sso_connect', ''); // the lock is already held
             return ['status' => 'failed', 'message' => $message];
         };
         try {
@@ -204,10 +259,12 @@ final class EntraAppSetup
 
         // The app: the one made before for this Sentinel (by its tag; the old setup script used the same tag), else new.
         $p = parse_url($redirect);
-        $hostName = strtolower(($p['host'] ?? '') . (isset($p['port']) ? ':' . $p['port'] : '') . rtrim(substr((string) ($p['path'] ?? ''), 0, -strlen('/login/sso/callback')), '/'));
+        // As the old setup script built it (.NET Uri.Authority leaves out the default port 443), so its apps are found.
+        $port = isset($p['port']) && (int) $p['port'] !== 443 ? ':' . $p['port'] : '';
+        $hostName = strtolower(($p['host'] ?? '') . $port . rtrim(substr((string) ($p['path'] ?? ''), 0, -strlen('/login/sso/callback')), '/'));
         $tag = 'msp-sentinel-sso:' . $hostName;
         $access = ['resourceAppId' => self::GRAPH_APP_ID, 'resourceAccess' => array_map(static fn (string $id): array => ['id' => $id, 'type' => 'Scope'], self::SIGN_IN_SCOPES)];
-        $app = $this->first($token, '/applications?$filter=' . rawurlencode("tags/any(t:t eq '" . str_replace("'", "''", $tag) . "')") . '&$select=id,appId,displayName,web,optionalClaims');
+        $app = $this->first($token, '/applications?$filter=' . rawurlencode("tags/any(t:t eq '" . str_replace("'", "''", $tag) . "')") . '&$select=id,appId,displayName,web,optionalClaims,requiredResourceAccess');
         if ($app === null) {
             $app = $this->graph('POST', $token, '/applications', [
                 'displayName' => 'MSP Sentinel (' . $hostName . ')', 'signInAudience' => 'AzureADMyOrg', 'tags' => [$tag],
@@ -230,7 +287,7 @@ final class EntraAppSetup
                 $idClaims[] = ['name' => 'auth_time', 'essential' => false];
             }
             $claims['idToken'] = $idClaims;
-            $this->graph('PATCH', $token, '/applications/' . rawurlencode((string) $app['id']), ['web' => $web, 'requiredResourceAccess' => [$access], 'optionalClaims' => $claims]);
+            $this->graph('PATCH', $token, '/applications/' . rawurlencode((string) $app['id']), ['web' => $web, 'requiredResourceAccess' => self::mergeAccess($app['requiredResourceAccess'] ?? null, $access), 'optionalClaims' => $claims]);
         }
         $objectId = is_string($app['id'] ?? null) ? $app['id'] : '';
         $client = strtolower(is_string($app['appId'] ?? null) ? $app['appId'] : '');
@@ -239,7 +296,7 @@ final class EntraAppSetup
         }
 
         // Its service principal (the app's presence in the tenant). A brand-new app takes a few seconds to reach every
-        // Microsoft server, so creating it is retried for about 20 seconds.
+        // Microsoft server, so creating it is retried for about 10 seconds.
         $sp = $this->first($token, '/servicePrincipals?$filter=' . rawurlencode("appId eq '{$client}'") . '&$select=id');
         for ($try = 1; $sp === null; $try++) {
             try {
@@ -248,19 +305,29 @@ final class EntraAppSetup
                 if ($try >= 5) {
                     throw $ex;
                 }
-                sleep($this->allowHttp ? 0 : 2 * $try);
+                sleep($this->allowHttp ? 0 : $try);
             }
         }
 
         // Organization-wide consent for the sign-in permissions only (otherwise each user is asked, or blocked by policy).
         $consentNote = '';
         try {
+            $spId = strtolower((string) ($sp['id'] ?? ''));
             $graphSp = $this->first($token, '/servicePrincipals?$filter=' . rawurlencode("appId eq '" . self::GRAPH_APP_ID . "'") . '&$select=id');
-            $grant = $this->first($token, '/oauth2PermissionGrants?$filter=' . rawurlencode("clientId eq '" . $sp['id'] . "' and consentType eq 'AllPrincipals' and resourceId eq '" . ($graphSp['id'] ?? '') . "'"));
+            $graphSpId = strtolower((string) ($graphSp['id'] ?? ''));
+            if (!EntraSso::validGuid($spId) || !EntraSso::validGuid($graphSpId)) {
+                throw new SsoException('unexpected IDs'); // only Graph's own GUIDs go into the filter below
+            }
+            $grant = $this->first($token, '/oauth2PermissionGrants?$filter=' . rawurlencode("clientId eq '{$spId}' and consentType eq 'AllPrincipals' and resourceId eq '{$graphSpId}'"));
             if ($grant === null) {
-                $this->graph('POST', $token, '/oauth2PermissionGrants', ['clientId' => $sp['id'], 'consentType' => 'AllPrincipals', 'resourceId' => $graphSp['id'] ?? '', 'scope' => 'openid profile email']);
-            } elseif (count(array_intersect(['openid', 'profile', 'email'], explode(' ', (string) ($grant['scope'] ?? '')))) < 3) {
-                $this->graph('PATCH', $token, '/oauth2PermissionGrants/' . rawurlencode((string) $grant['id']), ['scope' => 'openid profile email']);
+                $this->graph('POST', $token, '/oauth2PermissionGrants', ['clientId' => $spId, 'consentType' => 'AllPrincipals', 'resourceId' => $graphSpId, 'scope' => 'openid profile email']);
+            } else {
+                // Keep scopes someone granted by hand; add the sign-in ones.
+                $have = array_values(array_filter(explode(' ', (string) ($grant['scope'] ?? '')), static fn (string $x): bool => $x !== ''));
+                $want = array_values(array_unique(array_merge($have, ['openid', 'profile', 'email'])));
+                if (count($want) !== count($have)) {
+                    $this->graph('PATCH', $token, '/oauth2PermissionGrants/' . rawurlencode((string) $grant['id']), ['scope' => implode(' ', $want)]);
+                }
             }
         } catch (SsoException) {
             $consentNote = ' ' . __('Consent for the organization could not be granted: in the Entra admin center, open the app\'s API permissions and click "Grant admin consent", or each user is asked the first time.');
@@ -330,6 +397,40 @@ final class EntraAppSetup
             . ($on ? __('The app details are saved; Sign in with Microsoft keeps working with them.') : __('The app is ready. Link your own Microsoft account under My profile, test it, then turn on Sign in with Microsoft below.'))
             . $consentNote;
         return ['message' => $message, 'expires' => $expires, 'changed' => $changed];
+    }
+
+    /**
+     * The app's requiredResourceAccess with the sign-in permissions added to Microsoft Graph's entry: permissions an
+     * admin added by hand (to Graph or other APIs) are kept.
+     *
+     * @param mixed $current what Graph returned for the app
+     * @param array{resourceAppId:string, resourceAccess:list<array{id:string, type:string}>} $signIn
+     * @return list<array<string,mixed>>
+     */
+    public static function mergeAccess(mixed $current, array $signIn): array
+    {
+        $out = [];
+        $merged = false;
+        foreach (is_array($current) ? $current : [] as $r) {
+            if (!is_array($r) || !is_string($r['resourceAppId'] ?? null)) {
+                continue;
+            }
+            if ($r['resourceAppId'] === $signIn['resourceAppId']) {
+                $have = array_values(array_filter((array) ($r['resourceAccess'] ?? []), 'is_array'));
+                foreach ($signIn['resourceAccess'] as $want) {
+                    if (!in_array($want['id'], array_column($have, 'id'), true)) {
+                        $have[] = $want;
+                    }
+                }
+                $r['resourceAccess'] = $have;
+                $merged = true;
+            }
+            $out[] = $r;
+        }
+        if (!$merged) {
+            $out[] = $signIn;
+        }
+        return $out;
     }
 
     /**
