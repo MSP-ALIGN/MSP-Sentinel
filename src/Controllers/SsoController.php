@@ -167,7 +167,8 @@ final class SsoController extends Controller
             if (!$who['mfa']) {
                 App::audit()->log('auth.sso_trusted', (int) $user['id'], (string) $user['username'], null, null, ['mfa' => 'trusted (admin setting)'], $request->ip());
             }
-            App::auth()->completeLogin($user, $request, 'sso');
+            // The login record says which: MFA proven by Microsoft's token, or skipped by the admin's setting.
+            App::auth()->completeLogin($user, $request, $who['mfa'] ? 'sso' : 'sso_trusted');
             return Response::redirect('/');
         }
         // Microsoft didn't confirm a recent MFA: Sentinel's own code, as after a password.

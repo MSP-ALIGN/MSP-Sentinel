@@ -12,6 +12,7 @@ All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` 
   audited. While it's off, Sentinel still skips its code when Microsoft's token proves a recent MFA, which Microsoft
   often doesn't include.
 - Password sign-ins always need Sentinel's code. Unlinked Microsoft accounts still can't sign in.
+- Fixes from review: the login entry says when the code was skipped by this setting (`sso_trusted`); more tests.
 
 ### 1.63.1 (2026-11-27): Linking a Microsoft account works
 

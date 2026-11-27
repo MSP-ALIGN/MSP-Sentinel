@@ -141,7 +141,9 @@ secrets. Password sign-in keeps working throughout.
   token, so the code is usually still asked. If Entra requires MFA for this app (Conditional Access or Security
   defaults), an Admin can tick **Microsoft sign-in replaces Sentinel's 2FA code** (1.64): every Microsoft sign-in
   then goes straight in, and is recorded in the audit log. Sentinel can't see how someone signed in at Microsoft, so
-  only turn it on when Entra enforces MFA. Password sign-ins always need Sentinel's code.
+  only turn it on when Entra enforces MFA. Password sign-ins always need Sentinel's code. Users who only ever sign in
+  with Microsoft never set up Sentinel's code; if you turn the switch off later, they are asked to set it up at their
+  next sign-in (the Users page shows who hasn't).
 - **Passwords stay as a fallback.** An admin can turn **Password sign-in allowed** off for a user (SSO only).
   At least one active Admin who sees every client always keeps it, so a Microsoft outage can't lock you out.
 - **Unlink** a Microsoft account on the user's page (this also turns password sign-in back on) or under My profile;
