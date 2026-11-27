@@ -211,7 +211,7 @@ return [
         Assert::same(null, $subject($ctx), 'links cleared with the tenant');
         $admin->submit('/admin/integrations', '/admin/integrations/sso', $ssoForm());
     },
-    'sso (1.63.1): forms may lead to Microsoft sign-in; linking works before the sign-in button is switched on' => function (TestContext $ctx) use ($setup, $link, $subject): void {
+    'sso (1.63.1): forms may lead to Microsoft sign-in; linking works before the sign-in button is switched on' => function (TestContext $ctx) use ($setup, $follow, $subject): void {
         $setup($ctx);
         // "Link my Microsoft account" is a form whose answer redirects to Microsoft: browsers apply form-action to that
         // redirect, so Microsoft's sign-in address must be allowed there (it spun forever without it).
@@ -227,16 +227,36 @@ return [
             if ((int) $ctx->db->query("SELECT COUNT(*) FROM users WHERE username = 'ssolinkfirst'")->fetchColumn() === 0) {
                 $ctx->createUser('ssolinkfirst', 'technician', 'Ssolinkfirst-Pass-01!');
             }
+            // Other users' links are put back afterwards (a Microsoft account links to one user only).
+            $saved = $ctx->db->query("SELECT id, sso_subject, sso_name FROM users WHERE sso_subject IS NOT NULL AND username <> 'ssolinkfirst'")->fetchAll();
             $ctx->db->exec("UPDATE users SET sso_subject = NULL WHERE sso_subject IS NOT NULL AND username <> 'ssolinkfirst'");
             Assert::notContains('Sign in with Microsoft', $ctx->client()->get('/login')->body);
             Assert::true(!str_contains((string) $ctx->client()->get('/login/sso')->location(), '/entra/'), 'no sign-in while off');
             $first = $ctx->login('ssolinkfirst', 'Ssolinkfirst-Pass-01!');
             Assert::contains('Link my Microsoft account', $first->get('/profile')->body, 'the card shows while off');
-            $link($ctx, 'ssolinkfirst', 'Ssolinkfirst-Pass-01!');
+            $ctx->clearThrottle();
+            $follow($first, $first->post('/profile/sso-link', ['_csrf' => $first->get('/profile')->csrf(), 'my_password' => 'Ssolinkfirst-Pass-01!']));
             Assert::true($subject($ctx, 'ssolinkfirst') !== null, 'linked while the button is off');
+            Assert::contains('works once an admin turns it on', $first->get('/profile')->body, 'the message says sign-in is still off');
+            // A sign-in flow can't get through the callback while the switch is off.
+            $anon = $ctx->client();
+            Assert::true(!str_contains((string) $anon->get('/login/sso')->location(), '/entra/'), 'no sign-in flow starts');
+            // Password sign-in can't be turned off while Microsoft sign-in is off (the user couldn't sign in at all).
+            $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+            $uid = (int) $ctx->db->query("SELECT id FROM users WHERE username = 'ssolinkfirst'")->fetchColumn();
+            $ctx->db->exec("UPDATE users SET all_clients = 1 WHERE id = {$uid}");
+            $res = $admin->post('/users/' . $uid, ['_csrf' => $admin->get('/users/' . $uid . '/edit')->csrf(), 'display_name' => 'Ssolinkfirst Example', 'email' => '',
+                'role_id' => (string) $ctx->db->query("SELECT role_id FROM users WHERE id = {$uid}")->fetchColumn(), 'all_clients' => '1', 'is_active' => '1',
+                'password_field' => '1', 'my_password' => 'Admin-Pass-0001!']);
+            Assert::contains('Turn on Sign in with Microsoft under Integrations first', $res->body, 'refused with a reason');
+            Assert::same('1', (string) $ctx->db->query("SELECT password_login FROM users WHERE id = {$uid}")->fetchColumn(), 'password sign-in stays on while Microsoft sign-in is off');
         } finally {
             App::settings()->set('sso_entra_enabled', '1');
             $ctx->db->exec("UPDATE users SET sso_subject = NULL WHERE username = 'ssolinkfirst'");
+            $put = $ctx->db->prepare('UPDATE users SET sso_subject = :s, sso_name = :n WHERE id = :id');
+            foreach ($saved ?? [] as $row) {
+                $put->execute(['s' => $row['sso_subject'], 'n' => $row['sso_name'], 'id' => $row['id']]);
+            }
         }
     },
 ];

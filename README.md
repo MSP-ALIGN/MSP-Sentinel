@@ -126,6 +126,8 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
   browsers blocked that redirect. Microsoft's sign-in address is now allowed for forms, and nothing else is.
 - **Link and test before switching it on.** Linking now works as soon as the app is set up, even while "Show Sign in
   with Microsoft" is off, as the setup steps say. Signing in with Microsoft still needs the switch on.
+- Fixes from review: after linking, the message says whether Sign in with Microsoft is on yet, and password
+  sign-in can't be turned off for a user while Sign in with Microsoft is off (they couldn't sign in at all).
 
 ### 1.63.0 (2026-11-26): Connect to Microsoft 365
 

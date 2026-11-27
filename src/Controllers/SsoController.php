@@ -147,7 +147,9 @@ final class SsoController extends Controller
                 ->execute(['u' => (int) $me['id'], 't' => mb_substr(__('A Microsoft account was linked to your Sentinel user'), 0, 300),
                            'b' => mb_substr(__('{who} can now sign in as you. If this wasn\'t you, unlink it under My profile and tell an admin.', ['who' => $label]), 0, 2000)]);
             $limiter->clear($bucket);
-            Session::flash('success', __('Your Microsoft account is linked. You can now use "Sign in with Microsoft".'));
+            // 1.63.1: linking works before the sign-in button is on; say which it is.
+            Session::flash('success', App::entraSso() !== null ? __('Your Microsoft account is linked. You can now use "Sign in with Microsoft".')
+                : __('Your Microsoft account is linked. "Sign in with Microsoft" works once an admin turns it on under Integrations; until then, sign in with your password.'));
             return Response::redirect('/profile');
         }
 

@@ -156,6 +156,10 @@ final class UserController extends Controller
         $passwordChanged = $values['password_login'] !== (int) ($target['password_login'] ?? 1);
         $accessChanged = $roleChanged || $clientsChanged || $passwordChanged || $values['is_active'] !== (int) $target['is_active'];
         $errors = $this->validateAccount($values, $roleChanged, $clientsChanged);
+        // 1.63.1: password sign-in can't be turned off while Sign in with Microsoft is off: they couldn't sign in at all.
+        if ($passwordChanged && $values['password_login'] === 0 && App::entraSso() === null) {
+            $errors['password_login'] = __('Turn on Sign in with Microsoft under Integrations first: without it, this user could not sign in at all.');
+        }
         // Changing someone's role or access is confirmed with your own password.
         if ($errors === [] && $accessChanged && ($why = $this->confirmWithOwnPassword($request)) !== null) {
             $errors['my_password'] = $why;
