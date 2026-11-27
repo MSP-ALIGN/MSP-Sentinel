@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.63.0](https://img.shields.io/badge/version-1.63.0-ff5a1f?style=flat-square)
+![Version 1.63.1](https://img.shields.io/badge/version-1.63.1-ff5a1f?style=flat-square)
 ![License AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,16 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.63.1 (2026-11-27): Linking a Microsoft account works
+
+- **"Link my Microsoft account" no longer spins forever.** Sentinel's security policy only let forms lead back to
+  Sentinel itself. The link button is a form (it asks for your password) that ends in a redirect to Microsoft, and
+  browsers blocked that redirect. Microsoft's sign-in address is now allowed for forms, and nothing else is.
+- **Link and test before switching it on.** Linking now works as soon as the app is set up, even while "Show Sign in
+  with Microsoft" is off, as the setup steps say. Signing in with Microsoft still needs the switch on.
+- Fixes from review: after linking, the message says whether Sign in with Microsoft is on yet, and password
+  sign-in can't be turned off for a user while Sign in with Microsoft is off (they couldn't sign in at all).
+
 ### 1.63.0 (2026-11-26): Connect to Microsoft 365
 
 - **Sign in with Microsoft sets itself up from the browser.** Under Administration → Integrations, click **Connect to
@@ -149,17 +159,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 - **History from day one.** Exact scores are recorded daily from this release. Earlier days are estimated from
   their Fail and Warning counts, calibrated to each client's mix of internal and known-exploited findings, and
   shown dashed, marked "estimated". A client that changed nothing shows no change.
-
-### 1.61.0 (2026-11-26): Logo without the white panel
-
-- New **Logo background** choice under Report branding:
-  - **White panel** (the default) works with any logo.
-  - **Light logo** shows your white or light logo on the brand-color cover and in the report emails without a
-    panel.
-  - **Dark logo** shows it without a panel on white pages and on the white cover.
-- Where the logo would not show (a light logo on a white page, or a dark logo on the brand color), it gets a small
-  panel in the brand color or in white. Upload a PNG with a transparent background for the best result.
-- Fix from review: the logo at the top of content pages sits flush again with the default setting.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

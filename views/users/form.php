@@ -75,6 +75,7 @@ $invalid = static fn (string $f): string => !empty($errors[$f]) ? ' is-invalid' 
             <input type="hidden" name="password_field" value="1">
             <input type="checkbox" class="form-check-input" id="password_login" name="password_login" value="1" <?= (int) ($values['password_login'] ?? 1) === 1 ? 'checked' : '' ?> <?= $isSelf || $outranks ? 'disabled' : '' ?>>
             <label class="form-check-label" for="password_login"><?= e(__('Password sign-in allowed')) ?></label>
+            <?php if (!empty($errors['password_login'])): ?><div class="text-danger small" role="alert"><?= e($errors['password_login']) ?></div><?php endif; ?>
         </div>
         <div class="form-text mb-3"><?= e(__('Off: this user can only use "Sign in with Microsoft". One active Admin who sees every client always keeps it.')) ?>
             <?= e(($target['sso_subject'] ?? null) !== null ? __('Linked to a Microsoft account.') : __('Not linked to a Microsoft account yet (the user links it under My profile).')) ?></div>

@@ -22,6 +22,21 @@ namespace Sentinel\Core;
  */
 final class SecurityHeaders
 {
+    /**
+     * Microsoft's sign-in origin for form-action (1.63.1): the real one, or in the test suite its mock's (a plain
+     * 127.0.0.1 address, so the browser tests can follow the same redirect).
+     */
+    private static function microsoftOrigin(): string
+    {
+        if (App::webhookTestMode()) {
+            $p = parse_url((string) App::config()->get('testing.entra_authority', ''));
+            if (is_array($p) && ($p['host'] ?? '') === '127.0.0.1' && isset($p['port'])) {
+                return 'http://127.0.0.1:' . (int) $p['port'];
+            }
+        }
+        return \Sentinel\Auth\EntraSso::DEFAULT_AUTHORITY;
+    }
+
     /** Add the headers to a response. HSTS only when $secure. */
     public static function apply(Response $response, bool $secure): Response
     {
@@ -37,7 +52,9 @@ final class SecurityHeaders
                 "connect-src 'self'",
                 "object-src 'none'",
                 "base-uri 'none'",
-                "form-action 'self'",
+                // 1.63.1: forms may also lead to Microsoft's sign-in. "Link my Microsoft account" is a form (it asks for the
+                // password) that ends in a redirect to Microsoft, and browsers apply form-action to that redirect too.
+                "form-action 'self' " . self::microsoftOrigin(),
                 "frame-ancestors 'none'",
             ]));
         }

@@ -103,7 +103,7 @@ final class SsoController extends Controller
         if ($request->query('error') !== '') {
             return $fail('microsoft:' . preg_replace('/[^a-z_]/', '', $request->query('error')), __('Microsoft sign-in was canceled or refused.'));
         }
-        $sso = App::entraSso();
+        $sso = App::entraSso($mode === 'link'); // linking works before the sign-in button is switched on (1.63.1)
         if ($sso === null || App::ssoRedirectUri() === '') {
             return $fail('not_configured', __('Sign in with Microsoft is not set up.'));
         }
@@ -147,7 +147,9 @@ final class SsoController extends Controller
                 ->execute(['u' => (int) $me['id'], 't' => mb_substr(__('A Microsoft account was linked to your Sentinel user'), 0, 300),
                            'b' => mb_substr(__('{who} can now sign in as you. If this wasn\'t you, unlink it under My profile and tell an admin.', ['who' => $label]), 0, 2000)]);
             $limiter->clear($bucket);
-            Session::flash('success', __('Your Microsoft account is linked. You can now use "Sign in with Microsoft".'));
+            // 1.63.1: linking works before the sign-in button is on; say which it is.
+            Session::flash('success', App::entraSso() !== null ? __('Your Microsoft account is linked. You can now use "Sign in with Microsoft".')
+                : __('Your Microsoft account is linked. "Sign in with Microsoft" works once an admin turns it on under Integrations; until then, sign in with your password.'));
             return Response::redirect('/profile');
         }
 
@@ -172,7 +174,7 @@ final class SsoController extends Controller
     /** Start a flow: remember state, nonce and verifier in this session, then send the browser to Microsoft. */
     private function toMicrosoft(string $mode, ?int $uid, string $back): Response
     {
-        $sso = App::entraSso();
+        $sso = App::entraSso($mode === 'link');
         $redirect = App::ssoRedirectUri();
         if ($sso === null || $redirect === '') {
             Session::flash('warning', __('Sign in with Microsoft is not set up. Ask an admin.'));

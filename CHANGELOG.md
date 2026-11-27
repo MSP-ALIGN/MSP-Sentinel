@@ -2,6 +2,16 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.63.1 (2026-11-27): Linking a Microsoft account works
+
+- **"Link my Microsoft account" no longer spins forever.** Sentinel's security policy only let forms lead back to
+  Sentinel itself. The link button is a form (it asks for your password) that ends in a redirect to Microsoft, and
+  browsers blocked that redirect. Microsoft's sign-in address is now allowed for forms, and nothing else is.
+- **Link and test before switching it on.** Linking now works as soon as the app is set up, even while "Show Sign in
+  with Microsoft" is off, as the setup steps say. Signing in with Microsoft still needs the switch on.
+- Fixes from review: after linking, the message says whether Sign in with Microsoft is on yet, and password
+  sign-in can't be turned off for a user while Sign in with Microsoft is off (they couldn't sign in at all).
+
 ### 1.63.0 (2026-11-26): Connect to Microsoft 365
 
 - **Sign in with Microsoft sets itself up from the browser.** Under Administration → Integrations, click **Connect to

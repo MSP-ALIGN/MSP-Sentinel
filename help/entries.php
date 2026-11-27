@@ -371,6 +371,13 @@ return [
     ],
     'releases' => [
         [
+            'version' => '1.63.1',
+            'date' => '2026-11-27',
+            'items' => [
+                'Link my Microsoft account works again (the browser blocked the step to Microsoft), and linking works before Sign in with Microsoft is switched on, so you can test first.',
+            ],
+        ],
+        [
             'version' => '1.63.0',
             'date' => '2026-11-26',
             'items' => [

@@ -35,7 +35,7 @@ use Sentinel\Core\Csrf;
             <div class="card-footer"><button type="submit" class="btn btn-outline-primary btn-sm"><?= e(__('Save preference')) ?></button></div>
             </form>
         </div>
-        <?php if (\Sentinel\Core\App::entraSso() !== null || ($currentUser['sso_subject'] ?? null) !== null): ?>
+        <?php if (\Sentinel\Core\App::entraSso(true) !== null || ($currentUser['sso_subject'] ?? null) !== null): // set up, even before the sign-in button is on (1.63.1) ?>
         <div class="card mb-3" id="microsoft">
             <div class="card-header"><h2 class="card-title h5 mb-0"><?= e(__('Microsoft account')) ?></h2></div>
             <div class="card-body small">

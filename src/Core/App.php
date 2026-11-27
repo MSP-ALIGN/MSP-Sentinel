@@ -143,14 +143,16 @@ final class App
     /**
      * "Sign in with Microsoft" (1.43), or null while it is off or not fully set up. The test suite points it at its
      * mock (testing.entra_authority); a real install always uses Microsoft's address.
+     * $forLink (1.63.1): for linking a Microsoft account on My profile, which works as soon as the app is set up, before
+     * the button is shown on the sign-in page, so admins can link and test first. Signing in always needs the switch on.
      */
-    public static function entraSso(): ?\Sentinel\Auth\EntraSso
+    public static function entraSso(bool $forLink = false): ?\Sentinel\Auth\EntraSso
     {
         $s = self::settings();
         $tenant = $s->get('sso_entra_tenant');
         $client = $s->get('sso_entra_client');
         $secret = $s->getSecret('sso_entra_secret');
-        if ($s->get('sso_entra_enabled') !== '1' || !\Sentinel\Auth\EntraSso::validGuid($tenant) || !\Sentinel\Auth\EntraSso::validGuid($client) || $secret === '') {
+        if ((!$forLink && $s->get('sso_entra_enabled') !== '1') || !\Sentinel\Auth\EntraSso::validGuid($tenant) || !\Sentinel\Auth\EntraSso::validGuid($client) || $secret === '') {
             return null;
         }
         $authority = self::webhookTestMode() ? (string) self::config()->get('testing.entra_authority', \Sentinel\Auth\EntraSso::DEFAULT_AUTHORITY) : \Sentinel\Auth\EntraSso::DEFAULT_AUTHORITY;
