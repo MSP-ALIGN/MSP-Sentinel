@@ -259,4 +259,53 @@ return [
             }
         }
     },
+    'sso (1.64): an Admin can let a Microsoft sign-in replace Sentinel\'s code; off, the code is asked without proof of MFA' => function (TestContext $ctx) use ($setup, $ssoForm, $scenario, $signIn, $link, $subject): void {
+        $setup($ctx);
+        if ($subject($ctx) === null) {
+            $scenario($ctx, ['email' => 'user@msp.example']);
+            $link($ctx);
+        }
+        // Microsoft didn't report MFA (as for most real Entra ID tokens): Sentinel asks its code while the switch is off.
+        $scenario($ctx, ['amr' => ['pwd']]);
+        Assert::same('0', App::settings()->fresh('sso_trust_mfa'), 'off by default');
+        Assert::true(in_array($signIn($ctx->client())->location(), ['/2fa/setup', '/login/2fa'], true), 'code asked while off');
+        // Only through the Admin's form, with their password.
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $page = $admin->get('/admin/integrations')->body;
+        Assert::contains('Microsoft sign-in replaces Sentinel', $page);
+        Assert::contains('Conditional Access', $page, 'the admin is told what it relies on');
+        $admin->submit('/admin/integrations', '/admin/integrations/sso', ['trust_mfa' => '1', 'my_password' => 'Wrong-Pass-0001!'] + $ssoForm());
+        Assert::same('0', App::settings()->fresh('sso_trust_mfa'), 'needs the right password');
+        $ctx->clearThrottle();
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $admin->submit('/admin/integrations', '/admin/integrations/sso', ['trust_mfa' => '1'] + $ssoForm());
+        Assert::same('1', App::settings()->fresh('sso_trust_mfa'));
+        Assert::contains('sso_trust_mfa', (string) $ctx->db->query("SELECT details FROM audit_log WHERE action = 'settings.sso_updated' ORDER BY id DESC LIMIT 1")->fetchColumn(), 'audited');
+        // On: straight in after Microsoft, recorded as trusted.
+        $c = $ctx->client();
+        Assert::redirect('/', $signIn($c), 'straight in when the admin trusts Microsoft');
+        Assert::contains('Ssouser Example', $c->get('/')->body);
+        Assert::true((int) $ctx->db->query("SELECT COUNT(*) FROM audit_log WHERE action = 'auth.sso_trusted' AND username = 'ssouser'")->fetchColumn() >= 1, 'recorded as trusted');
+        Assert::contains('sso_trusted', (string) $ctx->db->query("SELECT details FROM audit_log WHERE action = 'auth.login' AND username = 'ssouser' ORDER BY id DESC LIMIT 1")->fetchColumn(), 'the login record says the code was skipped by the setting');
+        // A disabled user still gets nothing.
+        $ctx->db->exec("UPDATE users SET is_active = 0 WHERE username = 'ssouser'");
+        Assert::redirect('/login', $signIn($ctx->client()), 'disabled: refused even when trusted');
+        $ctx->db->exec("UPDATE users SET is_active = 1 WHERE username = 'ssouser'");
+        // Someone who may manage integrations but isn't a full Admin can't turn it on.
+        if ((int) $ctx->db->query("SELECT COUNT(*) FROM users WHERE username = 'intkeeper'")->fetchColumn() > 0) {
+            $k = $ctx->login('intkeeper', 'Intkeeper-Pass-0001!');
+            Assert::status(403, $k->post('/admin/integrations/sso', ['_csrf' => $k->get('/admin/integrations')->csrf(), 'trust_mfa' => '1', 'my_password' => 'Intkeeper-Pass-0001!'] + $ssoForm()));
+        }
+        // Never for an unlinked Microsoft account, and password sign-ins still need the code.
+        $scenario($ctx, ['oid' => '9a9a9a9a-9a9a-4a9a-8a9a-9a9a9a9a9a9a', 'amr' => ['pwd']]);
+        Assert::redirect('/login', $signIn($ctx->client()), 'an unlinked account still gets nothing');
+        $p = $ctx->client();
+        $res = $p->submit('/login', '/login', ['username' => 'ssouser', 'password' => 'Ssouser-Pass-0001!']);
+        Assert::true(in_array($res->location(), ['/2fa/setup', '/login/2fa'], true), 'password sign-in still asks the code');
+        // Off again.
+        $admin = $ctx->login('admin', 'Admin-Pass-0001!');
+        $admin->submit('/admin/integrations', '/admin/integrations/sso', $ssoForm());
+        Assert::same('0', App::settings()->fresh('sso_trust_mfa'), 'unticking turns it off');
+        $scenario($ctx);
+    },
 ];

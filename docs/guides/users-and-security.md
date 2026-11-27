@@ -136,8 +136,14 @@ secrets. Password sign-in keeps working throughout.
   profile, and you get a notification when one is linked. An existing link must be unlinked before linking another. Only linked accounts
   can use Microsoft sign-in: an email address alone is never enough, guests from other directories never can, and no
   account is ever created. Roles and clients stay managed in Sentinel.
-- **Two-factor.** Sentinel skips its own 6-digit code only when Microsoft confirms MFA within the last hour;
-  otherwise it asks for it, as after a password.
+- **Two-factor.** By default Sentinel skips its own 6-digit code only when Microsoft's sign-in token confirms MFA
+  within the last hour, and asks for it otherwise, as after a password. Microsoft often doesn't report MFA in that
+  token, so the code is usually still asked. If Entra requires MFA for this app (Conditional Access or Security
+  defaults), an Admin can tick **Microsoft sign-in replaces Sentinel's 2FA code** (1.64): every Microsoft sign-in
+  then goes straight in, and is recorded in the audit log. Sentinel can't see how someone signed in at Microsoft, so
+  only turn it on when Entra enforces MFA. Password sign-ins always need Sentinel's code. Users who only ever sign in
+  with Microsoft never set up Sentinel's code; if you turn the switch off later, they are asked to set it up at their
+  next sign-in (the Users page shows who hasn't).
 - **Passwords stay as a fallback.** An admin can turn **Password sign-in allowed** off for a user (SSO only).
   At least one active Admin who sees every client always keeps it, so a Microsoft outage can't lock you out.
 - **Unlink** a Microsoft account on the user's page (this also turns password sign-in back on) or under My profile;

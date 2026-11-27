@@ -161,8 +161,14 @@ final class SsoController extends Controller
             return $fail('inactive', __('This account is disabled.'));
         }
         $limiter->clear($bucket);
-        if ($who['mfa']) {
-            App::auth()->completeLogin($user, $request, 'sso');
+        // 1.64: the admin may trust Microsoft's sign-in for the second step (they confirmed Entra enforces MFA).
+        $trusted = App::settings()->fresh('sso_trust_mfa') === '1';
+        if ($who['mfa'] || $trusted) {
+            if (!$who['mfa']) {
+                App::audit()->log('auth.sso_trusted', (int) $user['id'], (string) $user['username'], null, null, ['mfa' => 'trusted (admin setting)'], $request->ip());
+            }
+            // The login record says which: MFA proven by Microsoft's token, or skipped by the admin's setting.
+            App::auth()->completeLogin($user, $request, $who['mfa'] ? 'sso' : 'sso_trusted');
             return Response::redirect('/');
         }
         // Microsoft didn't confirm a recent MFA: Sentinel's own code, as after a password.

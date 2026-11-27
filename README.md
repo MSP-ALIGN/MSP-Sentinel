@@ -7,7 +7,7 @@
 **Self-hosted security monitoring for MSPs.** Find what attackers can see and reach, across every client,
 inside and outside the network, and get it fixed on time.
 
-![Version 1.63.1](https://img.shields.io/badge/version-1.63.1-ff5a1f?style=flat-square)
+![Version 1.64.0](https://img.shields.io/badge/version-1.64.0-ff5a1f?style=flat-square)
 ![License AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-blue?style=flat-square)
 ![PHP 8.4](https://img.shields.io/badge/PHP-8.4-777bb4?style=flat-square&logo=php&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-10.6%2B-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -119,6 +119,18 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
 
 ## What's new
 
+### 1.64.0 (2026-11-27): Microsoft sign-in without Sentinel's code
+
+- **New switch: "Microsoft sign-in replaces Sentinel's 2FA code"** (Administration → Integrations → Sign in with
+  Microsoft). When it's on, a Microsoft sign-in goes straight in, with no 6-digit code from Sentinel, and the audit
+  log records it as trusted. Turn it on only if Entra requires MFA for this app (Conditional Access or Security
+  defaults): Sentinel can't see how someone signed in at Microsoft.
+- **Off by default.** Only an Admin who sees every client can change it, with their password, and the change is
+  audited. While it's off, Sentinel still skips its code when Microsoft's token proves a recent MFA, which Microsoft
+  often doesn't include.
+- Password sign-ins always need Sentinel's code. Unlinked Microsoft accounts still can't sign in.
+- Fixes from review: the login entry says when the code was skipped by this setting (`sso_trusted`); more tests.
+
 ### 1.63.1 (2026-11-27): Linking a Microsoft account works
 
 - **"Link my Microsoft account" no longer spins forever.** Sentinel's security policy only let forms lead back to
@@ -146,19 +158,6 @@ Reference: [install](docs/install.md), [configuration](docs/configuration.md), [
   - Permissions added by hand to an existing app are kept.
   - An address ending in `:443` finds the app the old script made.
   - A second open tab no longer logs false failures.
-
-### 1.62.0 (2026-11-26): Risk score history
-
-- **Score over time on every client.** The client's Overview has a **Risk score history** chart: the score as a
-  line over the Good, Needs attention and At risk bands, for 30 days, 90 days or 12 months, with the change
-  ("76 → 23: down 53, better").
-- **Biggest changes** on the dashboard: the clients whose score rose or fell most in the last 30 days.
-- **Executive summary:** a "Risk score over time" section with the last six months, and the change since the start
-  of the report period.
-- **API:** `GET /api/v1/clients/{id}/score-history?days=90`.
-- **History from day one.** Exact scores are recorded daily from this release. Earlier days are estimated from
-  their Fail and Warning counts, calibrated to each client's mix of internal and known-exploited findings, and
-  shown dashed, marked "estimated". A client that changed nothing shows no change.
 
 Older releases: [release history](docs/whats-new.md). Every change: [CHANGELOG.md](CHANGELOG.md).
 

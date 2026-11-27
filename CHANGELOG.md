@@ -2,6 +2,18 @@
 
 All notable changes, newest first. Versions follow semantic versioning: `x.Y.0` adds features, `x.y.Z` only fixes.
 
+### 1.64.0 (2026-11-27): Microsoft sign-in without Sentinel's code
+
+- **New switch: "Microsoft sign-in replaces Sentinel's 2FA code"** (Administration → Integrations → Sign in with
+  Microsoft). When it's on, a Microsoft sign-in goes straight in, with no 6-digit code from Sentinel, and the audit
+  log records it as trusted. Turn it on only if Entra requires MFA for this app (Conditional Access or Security
+  defaults): Sentinel can't see how someone signed in at Microsoft.
+- **Off by default.** Only an Admin who sees every client can change it, with their password, and the change is
+  audited. While it's off, Sentinel still skips its code when Microsoft's token proves a recent MFA, which Microsoft
+  often doesn't include.
+- Password sign-ins always need Sentinel's code. Unlinked Microsoft accounts still can't sign in.
+- Fixes from review: the login entry says when the code was skipped by this setting (`sso_trusted`); more tests.
+
 ### 1.63.1 (2026-11-27): Linking a Microsoft account works
 
 - **"Link my Microsoft account" no longer spins forever.** Sentinel's security policy only let forms lead back to
