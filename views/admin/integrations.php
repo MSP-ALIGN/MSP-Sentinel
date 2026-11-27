@@ -276,7 +276,7 @@ use Sentinel\Core\Csrf;
         <span class="ms-auto small text-body-secondary"><?= e(__('{n} user(s) linked', ['n' => $so['linked']])) ?></span>
     </div>
     <div class="card-body">
-        <p class="small"><?= e(__('Your team signs in with their Microsoft 365 work account. Each user links their own Microsoft account once, under My profile, while signed in with their password and Sentinel\'s code; only linked accounts can sign in, and guests from other directories never can. Roles and clients stay managed here. Sentinel\'s own code is skipped only when Microsoft confirms MFA within the last hour. Password sign-in keeps working as a fallback unless you turn it off for a user.')) ?></p>
+        <p class="small"><?= e(__('Your team signs in with their Microsoft 365 work account. Each user links their own Microsoft account once, under My profile, while signed in with their password and Sentinel\'s code; only linked accounts can sign in, and guests from other directories never can. Roles and clients stay managed here. Sentinel\'s own code is skipped when Microsoft confirms a recent MFA, or for every Microsoft sign-in if you trust Microsoft below. Password sign-in keeps working as a fallback unless you turn it off for a user.')) ?></p>
         <?php // Connect to Microsoft 365 (1.63): sign in at Microsoft with a code, and Sentinel creates the Entra app itself. ?>
         <?php if ($so['secret_days'] !== null): ?>
         <div class="alert <?= $so['secret_days'] <= 30 ? 'alert-warning' : 'alert-light' ?> small py-2" role="status">
@@ -344,6 +344,9 @@ use Sentinel\Core\Csrf;
             </div>
             <div class="form-check mt-3"><input class="form-check-input" type="checkbox" id="sso-enabled" name="enabled" value="1" <?= $so['enabled'] ? 'checked' : '' ?>>
                 <label class="form-check-label" for="sso-enabled"><?= e(__('Show "Sign in with Microsoft" on the sign-in page')) ?></label></div>
+            <div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="sso-trust-mfa" name="trust_mfa" value="1" aria-describedby="sso-trust-mfa-help" <?= $so['trust_mfa'] ? 'checked' : '' ?>>
+                <label class="form-check-label" for="sso-trust-mfa"><?= e(__('Microsoft sign-in replaces Sentinel\'s 2FA code')) ?></label></div>
+            <div class="form-text" id="sso-trust-mfa-help"><?= e(__('Only turn this on if Microsoft Entra requires MFA for everyone who signs in to this app (Conditional Access, or Security defaults): Sentinel can\'t see how someone signed in at Microsoft. Off: Sentinel asks its own code unless Microsoft reports a recent MFA. Password sign-ins always need Sentinel\'s code.')) ?></div>
             <div class="mt-3"><label class="form-label" for="sso-mine"><?= e(__('Your own password (to confirm)')) ?></label>
                 <input class="form-control sn-w-20" type="password" id="sso-mine" name="my_password" required autocomplete="current-password"></div>
             <div class="form-text"><?= e(__('Only an Admin who sees every client can change this. Changing the tenant clears every user\'s Microsoft link.')) ?></div>

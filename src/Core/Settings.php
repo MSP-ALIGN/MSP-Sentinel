@@ -158,6 +158,9 @@ final class Settings
         'sso_connect' => '',
         // The last finished connection's result for its starter's next poll (JSON: user, status, message, at; no secrets).
         'sso_connect_result' => '',
+        // '1': a Microsoft sign-in replaces Sentinel's own 2FA code (1.64). The admin confirms Entra enforces MFA; Sentinel
+        // can't see it. Off: the code is skipped only when Microsoft's token proves a recent MFA (1.43).
+        'sso_trust_mfa' => '0',
         'sso_secret_warned' => '',
         'breach_last_run' => '',
         'breach_last_ok_run' => '',

@@ -2,6 +2,19 @@
 
 Earlier releases of MSP Sentinel, newest first. The latest ones are under [What's new](../README.md#whats-new) in the README, and every change is in [CHANGELOG.md](../CHANGELOG.md).
 
+### 1.62.0 (2026-11-26): Risk score history
+
+- **Score over time on every client.** The client's Overview has a **Risk score history** chart: the score as a
+  line over the Good, Needs attention and At risk bands, for 30 days, 90 days or 12 months, with the change
+  ("76 → 23: down 53, better").
+- **Biggest changes** on the dashboard: the clients whose score rose or fell most in the last 30 days.
+- **Executive summary:** a "Risk score over time" section with the last six months, and the change since the start
+  of the report period.
+- **API:** `GET /api/v1/clients/{id}/score-history?days=90`.
+- **History from day one.** Exact scores are recorded daily from this release. Earlier days are estimated from
+  their Fail and Warning counts, calibrated to each client's mix of internal and known-exploited findings, and
+  shown dashed, marked "estimated". A client that changed nothing shows no change.
+
 ### 1.61.0 (2026-11-26): Logo without the white panel
 
 - New **Logo background** choice under Report branding:

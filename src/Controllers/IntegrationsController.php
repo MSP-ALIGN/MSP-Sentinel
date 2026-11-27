@@ -64,6 +64,7 @@ final class IntegrationsController extends Controller
             ],
             'sso' => [
                 'enabled' => $s->get('sso_entra_enabled') === '1',
+                'trust_mfa' => $s->get('sso_trust_mfa') === '1',
                 'tenant' => $s->get('sso_entra_tenant'),
                 'client' => $s->get('sso_entra_client'),
                 'has_secret' => $s->getSecret('sso_entra_secret') !== '',
@@ -296,6 +297,13 @@ final class IntegrationsController extends Controller
         if ($s->get('sso_entra_enabled') !== ($enabled ? '1' : '0')) {
             $s->set('sso_entra_enabled', $enabled ? '1' : '0');
             $changed['sso_entra_enabled'] = $enabled;
+        }
+        // 1.64: trust Microsoft's sign-in for the second step (the admin confirms Entra enforces MFA). Same form, so the
+        // same rule applies: an Admin who sees every client, with their own password; audited like every change here.
+        $trust = $request->input('trust_mfa') === '1';
+        if ($s->get('sso_trust_mfa') !== ($trust ? '1' : '0')) {
+            $s->set('sso_trust_mfa', $trust ? '1' : '0');
+            $changed['sso_trust_mfa'] = $trust;
         }
         if ($changed !== []) {
             $this->audit($request, 'settings.sso_updated', null, null, ['changed' => $changed]);
