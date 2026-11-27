@@ -103,7 +103,7 @@ final class SsoController extends Controller
         if ($request->query('error') !== '') {
             return $fail('microsoft:' . preg_replace('/[^a-z_]/', '', $request->query('error')), __('Microsoft sign-in was canceled or refused.'));
         }
-        $sso = App::entraSso();
+        $sso = App::entraSso($mode === 'link'); // linking works before the sign-in button is switched on (1.63.1)
         if ($sso === null || App::ssoRedirectUri() === '') {
             return $fail('not_configured', __('Sign in with Microsoft is not set up.'));
         }
@@ -172,7 +172,7 @@ final class SsoController extends Controller
     /** Start a flow: remember state, nonce and verifier in this session, then send the browser to Microsoft. */
     private function toMicrosoft(string $mode, ?int $uid, string $back): Response
     {
-        $sso = App::entraSso();
+        $sso = App::entraSso($mode === 'link');
         $redirect = App::ssoRedirectUri();
         if ($sso === null || $redirect === '') {
             Session::flash('warning', __('Sign in with Microsoft is not set up. Ask an admin.'));

@@ -211,4 +211,32 @@ return [
         Assert::same(null, $subject($ctx), 'links cleared with the tenant');
         $admin->submit('/admin/integrations', '/admin/integrations/sso', $ssoForm());
     },
+    'sso (1.63.1): forms may lead to Microsoft sign-in; linking works before the sign-in button is switched on' => function (TestContext $ctx) use ($setup, $link, $subject): void {
+        $setup($ctx);
+        // "Link my Microsoft account" is a form whose answer redirects to Microsoft: browsers apply form-action to that
+        // redirect, so Microsoft's sign-in address must be allowed there (it spun forever without it).
+        $u = $ctx->login('ssouser', 'Ssouser-Pass-0001!');
+        $csp = (string) $u->get('/profile')->header('content-security-policy');
+        // In the test suite the "Microsoft" sign-in is the mock on 127.0.0.1; a real install allows login.microsoftonline.com.
+        Assert::true(preg_match("~form-action 'self' http://127\\.0\\.0\\.1:[0-9]+(;|$)~", $csp) === 1, 'Microsoft sign-in (the mock here) allowed for forms: ' . $csp);
+        Assert::same('https://login.microsoftonline.com', \Sentinel\Auth\EntraSso::DEFAULT_AUTHORITY, 'the real address');
+        // Switch off: no button on the sign-in page and no sign-in, but linking (and the profile card) still work, so
+        // admins can link and test before turning it on.
+        App::settings()->set('sso_entra_enabled', '0');
+        try {
+            if ((int) $ctx->db->query("SELECT COUNT(*) FROM users WHERE username = 'ssolinkfirst'")->fetchColumn() === 0) {
+                $ctx->createUser('ssolinkfirst', 'technician', 'Ssolinkfirst-Pass-01!');
+            }
+            $ctx->db->exec("UPDATE users SET sso_subject = NULL WHERE sso_subject IS NOT NULL AND username <> 'ssolinkfirst'");
+            Assert::notContains('Sign in with Microsoft', $ctx->client()->get('/login')->body);
+            Assert::true(!str_contains((string) $ctx->client()->get('/login/sso')->location(), '/entra/'), 'no sign-in while off');
+            $first = $ctx->login('ssolinkfirst', 'Ssolinkfirst-Pass-01!');
+            Assert::contains('Link my Microsoft account', $first->get('/profile')->body, 'the card shows while off');
+            $link($ctx, 'ssolinkfirst', 'Ssolinkfirst-Pass-01!');
+            Assert::true($subject($ctx, 'ssolinkfirst') !== null, 'linked while the button is off');
+        } finally {
+            App::settings()->set('sso_entra_enabled', '1');
+            $ctx->db->exec("UPDATE users SET sso_subject = NULL WHERE username = 'ssolinkfirst'");
+        }
+    },
 ];
